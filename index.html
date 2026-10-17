@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html style="background-color: #0C0C0E; height: 100%; width: 100%;">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/LAYERS-Agentic/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="LAYERS - Layered Project Management for Indie Game Developers.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LAYERS">
+  <meta name="theme-color" content="#0C0C0E">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>LAYERS - Layered Project Management</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #0C0C0E;
+      color: #F4F4F5;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+    #layers-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #0C0C0E;
+      z-index: 99999;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .layers-brand-box {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .layers-brand-box svg {
+      width: 26px;
+      height: 26px;
+      fill: none;
+      stroke: #38BDF8;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .layers-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #F4F4F5;
+      margin-bottom: 6px;
+    }
+    .layers-sub {
+      font-size: 11px;
+      font-weight: 500;
+      color: #71717A;
+      letter-spacing: 0.5px;
+      margin-bottom: 22px;
+    }
+    .layers-pulse-bar {
+      width: 140px;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .layers-pulse-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 45%;
+      background: linear-gradient(90deg, #38BDF8, #A855F7);
+      border-radius: 2px;
+      animation: layersSlide 1.2s infinite ease-in-out;
+    }
+    @keyframes layersSlide {
+      0% { transform: translateX(-100%); }
+      50% { transform: translateX(120%); }
+      100% { transform: translateX(250%); }
+    }
+  </style>
+</head>
+<body style="background-color: #0C0C0E;">
+  <div id="layers-loader">
+    <div class="layers-brand-box">
+      <svg viewBox="0 0 24 24">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+      </svg>
+    </div>
+    <div class="layers-title">LAYERS</div>
+    <div class="layers-sub">LAYERED PROJECT MANAGEMENT</div>
+    <div class="layers-pulse-bar"></div>
+  </div>
+
+  <script>
+    // Automatically remove loader when Flutter renders its first frame
+    window.addEventListener('flutter-first-frame', function () {
+      var loader = document.getElementById('layers-loader');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(function () { loader.remove(); }, 350);
+      }
+    });
+  </script>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
