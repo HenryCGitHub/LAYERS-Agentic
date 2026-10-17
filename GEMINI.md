@@ -1,4 +1,19 @@
-# Workspace Rules for Tier Project Management
+# Workspace Rules for LAYERS-Agentic
+
+## 0. Project Architecture & Context (Quick Onboarding for New Agent Sessions)
+- **Repository**: `https://github.com/HenryCGitHub/LAYERS-Agentic`
+- **Live Web App (GitHub Pages)**: `https://henrycgithub.github.io/LAYERS-Agentic/`
+- **Deploy Command**: Run `./scripts/deploy.sh` from the project root (automatically encodes `$GEMINI_API_KEY` into base64 `--dart-define=GEMINI_API_KEY_B64=...` so GitHub Push Protection never blocks `gh-pages` pushes).
+- **Dual-Model AI Routing (`lib/agents/gemini_agent_client.dart` & `lib/providers/workbench_provider.dart`)**:
+  - **Conversation / Interview Model**: `gemini-flash-latest` with `thinkingLevel: "LOW"` for fast turn-by-turn co-design chat.
+  - **Planning & Architecture Model**: `gemini-4-argon` with `thinkingLevel: "LOW"` for Project Concept synthesis and Release Plan Gate blueprint generation.
+- **3-Stage Antigravity Workflow (One Release at a Time)**:
+  1. **Stage 1 — Turn-by-Turn Co-Design Chat + Live Project Blueprint (`lib/screens/project_pitch_screen.dart` & `lib/agents/project_concept_agent.dart`)**:
+     - 50/50 split view: Turn-by-turn conversational chat on the left (with clickable quick-reply chips + freeform chat input) and a live-updating **Project Concept & Release Train** artifact on the right (`Goal`, `In Scope: 30s Core Loop Beats`, `Out of Scope: Hard Exclusions`, `Done When`, `Release Train`).
+  2. **Stage 2 — Antigravity Release Plan Gate (`lib/screens/release_plan_gate_screen.dart` & `lib/agents/release_planner_agent.dart`)**:
+     - Proposes a single-Release Blueprint (`ReleaseBlueprint`) with a conversational refinement chat bar, clarifying questions, and Beat/Feature keep/defer checkboxes (unchecked features automatically defer to `Out of Scope`).
+  3. **Stage 3 — Active Release Workbench (`lib/screens/release_workbench_screen.dart` & `ReleaseExecutorAgent`)**:
+     - Autonomously builds the active Release (`Release → Core Loop Beats → Features → 60/40 Playable Checkpoints`) with Actionable Checklist Tasks on the left (`60%`) and Playtest Criteria + Absorbed Scope + Tuning Params + Edge Cases on the right (`40%`).
 
 ## 1. Mandatory Planning & Confirmation Gate
 - **NEVER** edit, create, or modify any project code files (using `replace_file_content`, `write_to_file`, or modifying commands) without first presenting an `implementation_plan.md` artifact and waiting for explicit user confirmation.
@@ -20,22 +35,22 @@
 
 ### 1. KISS (Keep It Simple & Playable)
 - **Codebase**: Write the simplest, most direct working Flutter code. Avoid complex state machines, micro-factories, or multi-step prompt pipelines when simple Provider mixins and single-pass prompts work.
-- **App & AI**: 
+- **App & AI**:
   - **The Playtest Rule**: If a player or QA tester cannot see, hear, or feel it on screen during gameplay, rephrase it into an observable deliverable.
   - **Cohesive Playable Units**: Group mechanics and game feel (controls, physics, SFX, animations, particle cues) into single, unified cards. Do NOT split a feature into artificial technical micro-tickets.
   - **Punchy Titles**: Keep card titles short and direct (2–4 plain English words).
 
 ### 2. DRY (Don't Repeat Yourself / Single Source of Truth)
-- **Codebase**: 
+- **Codebase**:
   - Centralize shared tokens (theme, tier colors, prompts).
   - **Rule of Three**: Only create shared abstractions after writing the exact same logic three times.
-- **App & AI**: 
+- **App & AI**:
   - **Single Source of Truth**: Every system, mechanic, and deliverable lives under exactly one parent in the 4-tier document hierarchy (Project, Release, Epic, Feature). No duplicate cards scattered across sibling epics.
   - **Automatic Rollups**: Hours, checklist counts, and progress rollup dynamically from Feature Checklist Steps and Playable Stages all the way up to Project (Tier 1) without manual duplicate entry.
 
 ### 3. YAGNI (You Aren't Gonna Need It / Scope Discipline)
 - **Codebase**: Build strictly what the immediate feature requires today. Strip out hypothetical future-proofing, extra database columns, or unneeded packages before writing code.
-- **App & AI**: 
+- **App & AI**:
   - **Milestone Scope Discipline**: Breakdowns generate *only* the immediate next-step deliverables suited for the active release scope (Prototype, MVP, Vertical Slice, Standard).
   - **Focus Mode**: Dim out-of-scope sibling tasks to prevent scope creep during production.
 
