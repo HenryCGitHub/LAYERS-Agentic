@@ -62,7 +62,8 @@ if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
     git fetch origin gh-pages
     git worktree add -B gh-pages "$WORKTREE_DIR" origin/gh-pages
 else
-    git worktree add --orphan -b gh-pages "$WORKTREE_DIR"
+    git worktree add --detach "$WORKTREE_DIR"
+    (cd "$WORKTREE_DIR" && git checkout --orphan gh-pages)
 fi
 
 # Clean previous build files from worktree except .git
