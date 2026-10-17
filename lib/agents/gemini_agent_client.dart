@@ -29,7 +29,8 @@ class GeminiAgentClient {
   static Future<Map<String, dynamic>?> generateJson({
     required String prompt,
     required String apiKey,
-    String preferredModel = 'gemini-2.5-flash',
+    String preferredModel = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
     double temperature = 0.5,
   }) async {
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
@@ -37,52 +38,67 @@ class GeminiAgentClient {
 
     final modelsToTry = <String>{
       preferredModel,
+      'gemini-flash-latest',
+      'gemini-3-flash-preview',
       'gemini-2.5-flash',
-      'gemini-2.0-flash',
     }.toList();
 
     for (final model in modelsToTry) {
-      try {
-        final uri = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
-        );
-        final response = await http
-            .post(
-              uri,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'contents': [
-                  {
-                    'parts': [
-                      {'text': prompt},
-                    ],
-                  },
-                ],
-                'generationConfig': {
-                  'temperature': temperature,
-                  'responseMimeType': 'application/json',
-                },
-              }),
-            )
-            .timeout(const Duration(seconds: 25));
+      // Try first with thinkingConfig (for Gemini 3/4/latest models), then retry without if rejected
+      for (final includeThinking in [true, false]) {
+        try {
+          final uri = Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
+          );
+          final genConfig = <String, dynamic>{
+            'temperature': temperature,
+            'responseMimeType': 'application/json',
+          };
+          if (includeThinking && thinkingLevel.trim().isNotEmpty) {
+            genConfig['thinkingConfig'] = {
+              'thinkingLevel': thinkingLevel.trim().toUpperCase(),
+            };
+          }
 
-        if (response.statusCode == 200) {
-          final body = jsonDecode(response.body) as Map<String, dynamic>;
-          final candidates = body['candidates'] as List?;
-          if (candidates != null && candidates.isNotEmpty) {
-            final content = candidates.first['content'] as Map<String, dynamic>?;
-            final parts = content?['parts'] as List?;
-            if (parts != null && parts.isNotEmpty) {
-              final rawText = parts.first['text']?.toString() ?? '';
-              final cleaned = _extractJsonObject(rawText);
-              if (cleaned.isNotEmpty) {
-                return jsonDecode(cleaned) as Map<String, dynamic>;
+          final response = await http
+              .post(
+                uri,
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'contents': [
+                    {
+                      'parts': [
+                        {'text': prompt},
+                      ],
+                    },
+                  ],
+                  'generationConfig': genConfig,
+                }),
+              )
+              .timeout(const Duration(seconds: 25));
+
+          if (response.statusCode == 200) {
+            final body = jsonDecode(response.body) as Map<String, dynamic>;
+            final candidates = body['candidates'] as List?;
+            if (candidates != null && candidates.isNotEmpty) {
+              final content = candidates.first['content'] as Map<String, dynamic>?;
+              final parts = content?['parts'] as List?;
+              if (parts != null && parts.isNotEmpty) {
+                for (final part in parts.reversed) {
+                  if (part is Map && part['thought'] != true) {
+                    final rawText = part['text']?.toString() ?? '';
+                    final cleaned = _extractJsonObject(rawText);
+                    if (cleaned.isNotEmpty) {
+                      return jsonDecode(cleaned) as Map<String, dynamic>;
+                    }
+                  }
+                }
               }
             }
           }
+        } catch (_) {
+          // Retry without thinkingConfig or fall back to next model
         }
-      } catch (_) {
-        // Try next fallback model in list
       }
     }
     return null;

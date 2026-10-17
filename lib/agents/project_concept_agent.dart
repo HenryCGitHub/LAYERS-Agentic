@@ -10,7 +10,8 @@ class ProjectConceptAgent {
   static Future<ProjectConceptBlueprint> startConceptInterview(
     String rawSpark, {
     String apiKey = '',
-    String modelName = 'gemini-2.5-flash',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
   }) async {
     final cleanSpark = rawSpark.trim().isEmpty
         ? 'High-speed grappling hook parkour roguelite'
@@ -77,6 +78,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" (do not use generi
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
+      thinkingLevel: thinkingLevel,
       temperature: 0.55,
     );
 
@@ -136,7 +138,8 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" (do not use generi
   static Future<ProjectConceptBlueprint> synthesizeFromInterview(
     ProjectConceptBlueprint draft, {
     String apiKey = '',
-    String modelName = 'gemini-2.5-flash',
+    String modelName = 'gemini-4-argon',
+    String thinkingLevel = 'LOW',
   }) async {
     final qaSummary = draft.questions
         .map((q) => '- Q: ${q.question}\n  A: ${_stripRecommendedPrefix(q.effectiveAnswer)}')
@@ -174,6 +177,7 @@ Synthesize these exact choices into a cohesive Project Concept JSON object (no c
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
+      thinkingLevel: thinkingLevel,
       temperature: 0.45,
     );
 

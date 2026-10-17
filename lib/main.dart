@@ -163,7 +163,7 @@ class WorkbenchShell extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            workbench.modelName,
+                            workbench.modelBadgeLabel,
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
@@ -201,7 +201,9 @@ class WorkbenchShell extends StatelessWidget {
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final keyController = TextEditingController(text: workbench.apiKey);
-    String selectedModel = workbench.modelName;
+    String selectedConversationModel = workbench.conversationModel;
+    String selectedPlanningModel = workbench.planningModel;
+    String selectedThinking = workbench.thinkingLevel;
 
     showDialog<void>(
       context: context,
@@ -219,7 +221,7 @@ class WorkbenchShell extends StatelessWidget {
                   const Icon(Icons.auto_awesome, size: 18, color: AppTheme.accentBlue),
                   const SizedBox(width: 8),
                   Text(
-                    'Antigravity AI Agent Settings',
+                    'Antigravity Dual-Model AI Settings',
                     style: GoogleFonts.inter(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -229,93 +231,135 @@ class WorkbenchShell extends StatelessWidget {
                 ],
               ),
               content: SizedBox(
-                width: 440,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ACTIVE GEMINI MODEL',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.accentBlue,
+                width: 460,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'CONVERSATION & INTERVIEW MODEL (FAST)',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.accentBlue,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    for (final m in WorkbenchProvider.availableModels)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: InkWell(
-                          onTap: () => setModalState(() => selectedModel = m),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: selectedModel == m
-                                  ? AppTheme.accentBlue.withValues(alpha: 0.15)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: selectedModel == m ? AppTheme.accentBlue : borderColor,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  selectedModel == m
-                                      ? Icons.radio_button_checked
-                                      : Icons.radio_button_off,
-                                  size: 15,
-                                  color: selectedModel == m ? AppTheme.accentBlue : textSecondary,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    m == 'gemini-2.5-flash'
-                                        ? 'gemini-2.5-flash (Recommended Default — Fast & Smart)'
-                                        : m == 'gemini-2.5-pro'
-                                            ? 'gemini-2.5-pro (Deep Reasoning — Release Architecture)'
-                                            : 'gemini-2.0-flash (Ultra-Low Latency Fallback)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight:
-                                          selectedModel == m ? FontWeight.w700 : FontWeight.w500,
-                                      color: textPrimary,
+                      const SizedBox(height: 6),
+                      for (final m in WorkbenchProvider.availableConversationModels)
+                        _buildModelOptionTile(
+                          modelId: m,
+                          subtitle: m == 'gemini-flash-latest'
+                              ? 'Default — Latest Gemini Flash for instant Concept Interviews'
+                              : m == 'gemini-3.8-flash'
+                                  ? 'Gemini 3.8 Flash'
+                                  : 'Ultra-lightweight Flash-Lite',
+                          isSelected: selectedConversationModel == m,
+                          borderColor: borderColor,
+                          textPrimary: textPrimary,
+                          textSecondary: textSecondary,
+                          onTap: () => setModalState(() => selectedConversationModel = m),
+                        ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'PLANNING & ARCHITECTURE MODEL (DEEP)',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.tierProject,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      for (final m in WorkbenchProvider.availablePlanningModels)
+                        _buildModelOptionTile(
+                          modelId: m,
+                          subtitle: m == 'gemini-4-argon'
+                              ? 'Default — Gemini 4 Argon for Concept Synthesis & Release Blueprints'
+                              : m == 'gemini-flash-latest'
+                                  ? 'Gemini Flash Latest (Fastest single-model mode)'
+                                  : 'Gemini 3.8 Flash',
+                          isSelected: selectedPlanningModel == m,
+                          borderColor: borderColor,
+                          textPrimary: textPrimary,
+                          textSecondary: textSecondary,
+                          onTap: () => setModalState(() => selectedPlanningModel = m),
+                        ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'THINKING LEVEL (REASONING DEPTH)',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.accentGreen,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          for (final lvl in WorkbenchProvider.availableThinkingLevels)
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: InkWell(
+                                  onTap: () => setModalState(() => selectedThinking = lvl),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: selectedThinking == lvl
+                                          ? AppTheme.accentGreen.withValues(alpha: 0.16)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: selectedThinking == lvl
+                                            ? AppTheme.accentGreen
+                                            : borderColor,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      lvl == 'LOW' ? 'LOW (Default)' : lvl,
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        fontWeight: selectedThinking == lvl
+                                            ? FontWeight.w800
+                                            : FontWeight.w500,
+                                        color: textPrimary,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'GEMINI API KEY',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.tierRelease,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: keyController,
+                        obscureText: true,
+                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: textPrimary),
+                        decoration: InputDecoration(
+                          hintText: 'AIzaSy... (pre-configured if built with key)',
+                          hintStyle: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: borderColor),
                           ),
                         ),
                       ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'GEMINI API KEY',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.tierRelease,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: keyController,
-                      obscureText: true,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: textPrimary),
-                      decoration: InputDecoration(
-                        hintText: 'AIzaSy... (pre-configured if built with key)',
-                        hintStyle: GoogleFonts.inter(fontSize: 12, color: textSecondary),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: borderColor),
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -334,7 +378,9 @@ class WorkbenchShell extends StatelessWidget {
                   onPressed: () {
                     workbench.updateAiConfig(
                       apiKey: keyController.text,
-                      modelName: selectedModel,
+                      conversationModel: selectedConversationModel,
+                      planningModel: selectedPlanningModel,
+                      thinkingLevel: selectedThinking,
                     );
                     Navigator.of(ctx).pop();
                   },
@@ -348,6 +394,68 @@ class WorkbenchShell extends StatelessWidget {
           },
         );
       },
+    );
+  }
+
+  Widget _buildModelOptionTile({
+    required String modelId,
+    required String subtitle,
+    required bool isSelected,
+    required Color borderColor,
+    required Color textPrimary,
+    required Color textSecondary,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.accentBlue.withValues(alpha: 0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isSelected ? AppTheme.accentBlue : borderColor,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                size: 15,
+                color: isSelected ? AppTheme.accentBlue : textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      modelId,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11.5,
+                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                        color: textPrimary,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

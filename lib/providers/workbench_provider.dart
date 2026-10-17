@@ -35,21 +35,57 @@ class WorkbenchProvider extends ChangeNotifier {
   String get apiKey => _apiKey;
   bool get hasLiveAiKey => GeminiAgentClient.hasKey(_apiKey);
 
-  String _modelName = 'gemini-2.5-flash';
-  String get modelName => _modelName;
+  String _conversationModel = 'gemini-flash-latest';
+  String get conversationModel => _conversationModel;
 
-  static const List<String> availableModels = [
-    'gemini-2.5-flash',
-    'gemini-2.5-pro',
-    'gemini-2.0-flash',
+  String _planningModel = 'gemini-4-argon';
+  String get planningModel => _planningModel;
+
+  String _thinkingLevel = 'LOW';
+  String get thinkingLevel => _thinkingLevel;
+
+  /// Short label displayed in the top bar pill.
+  String get modelBadgeLabel {
+    final convShort = _conversationModel.replaceAll('gemini-', '');
+    final planShort = _planningModel.replaceAll('gemini-', '');
+    return '$convShort + $planShort · ${_thinkingLevel.toLowerCase()}';
+  }
+
+  static const List<String> availableConversationModels = [
+    'gemini-flash-latest',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
   ];
 
-  void updateAiConfig({String? apiKey, String? modelName}) {
+  static const List<String> availablePlanningModels = [
+    'gemini-4-argon',
+    'gemini-flash-latest',
+    'gemini-3.8-flash',
+  ];
+
+  static const List<String> availableThinkingLevels = [
+    'LOW',
+    'MEDIUM',
+    'HIGH',
+  ];
+
+  void updateAiConfig({
+    String? apiKey,
+    String? conversationModel,
+    String? planningModel,
+    String? thinkingLevel,
+  }) {
     if (apiKey != null) {
       _apiKey = apiKey.trim();
     }
-    if (modelName != null && modelName.trim().isNotEmpty) {
-      _modelName = modelName.trim();
+    if (conversationModel != null && conversationModel.trim().isNotEmpty) {
+      _conversationModel = conversationModel.trim();
+    }
+    if (planningModel != null && planningModel.trim().isNotEmpty) {
+      _planningModel = planningModel.trim();
+    }
+    if (thinkingLevel != null && thinkingLevel.trim().isNotEmpty) {
+      _thinkingLevel = thinkingLevel.trim().toUpperCase();
     }
     notifyListeners();
   }
@@ -133,14 +169,16 @@ class WorkbenchProvider extends ChangeNotifier {
   /// Step 1A -> 1B: User submits their 1-line Spark idea and starts the Concept Interview.
   Future<void> startConceptInterview(String sparkText) async {
     _isAgentBusy = true;
-    _agentProgressStep = 'Preparing tailored Concept Interview...';
+    _agentProgressStep =
+        'Preparing tailored Concept Interview ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
       _conceptDraft = await ProjectConceptAgent.startConceptInterview(
         sparkText,
         apiKey: _apiKey,
-        modelName: _modelName,
+        modelName: _conversationModel,
+        thinkingLevel: _thinkingLevel,
       );
     } finally {
       _isAgentBusy = false;
@@ -155,14 +193,16 @@ class WorkbenchProvider extends ChangeNotifier {
     if (draft == null) return;
 
     _isAgentBusy = true;
-    _agentProgressStep = 'Synthesizing Project Concept Blueprint & Release Train...';
+    _agentProgressStep =
+        'Synthesizing Project Concept Blueprint ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
       await ProjectConceptAgent.synthesizeFromInterview(
         draft,
         apiKey: _apiKey,
-        modelName: _modelName,
+        modelName: _planningModel,
+        thinkingLevel: _thinkingLevel,
       );
       _commitConceptToVault(draft);
     } finally {
@@ -229,7 +269,8 @@ class WorkbenchProvider extends ChangeNotifier {
     if (relDoc == null) return;
 
     _isAgentBusy = true;
-    _agentProgressStep = 'Drafting Release Blueprint for ${relDoc.title}...';
+    _agentProgressStep =
+        'Drafting Release Blueprint for ${relDoc.title} ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
@@ -237,7 +278,8 @@ class WorkbenchProvider extends ChangeNotifier {
         projectDoc: proj,
         releaseDoc: relDoc,
         apiKey: _apiKey,
-        modelName: _modelName,
+        modelName: _planningModel,
+        thinkingLevel: _thinkingLevel,
       );
       _currentStage = WorkbenchStage.releasePlanGate;
     } finally {

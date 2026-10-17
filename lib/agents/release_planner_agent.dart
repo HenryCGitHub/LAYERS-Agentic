@@ -17,7 +17,8 @@ class ReleasePlannerAgent {
     required TierDocument releaseDoc,
     List<TierDocument> completedReleases = const [],
     String apiKey = '',
-    String modelName = 'gemini-2.5-flash',
+    String modelName = 'gemini-4-argon',
+    String thinkingLevel = 'LOW',
   }) async {
     final preset = releaseDoc.releaseScope;
     final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
@@ -110,6 +111,7 @@ Return ONLY a JSON object with this exact schema:
         prompt: prompt,
         apiKey: apiKey,
         preferredModel: modelName,
+        thinkingLevel: thinkingLevel,
         temperature: 0.35,
       );
 
