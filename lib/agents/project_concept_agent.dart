@@ -1,89 +1,120 @@
-import 'dart:convert';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
+import 'gemini_agent_client.dart';
 
 /// Stage 1 Agent: Turns a 1-sentence "Spark" idea into an Antigravity-style
 /// 3-question multiple-choice Concept Interview, and synthesizes the answers
 /// into a structured `ProjectConceptBlueprint` + Release Train roadmap.
 class ProjectConceptAgent {
-  static const String _envApiKey = String.fromEnvironment('GEMINI_API_KEY');
-
   /// Step 1B: Generates 3 tailored multiple-choice clarifying questions from a 1-line spark.
   static Future<ProjectConceptBlueprint> startConceptInterview(
     String rawSpark, {
-    String? apiKey,
+    String apiKey = '',
+    String modelName = 'gemini-2.5-flash',
   }) async {
     final cleanSpark = rawSpark.trim().isEmpty
         ? 'High-speed grappling hook parkour roguelite'
         : rawSpark.trim();
     final shortTitle = _derivePunchyTitle(cleanSpark);
 
-    final effectiveKey = (apiKey != null && apiKey.trim().isNotEmpty)
-        ? apiKey.trim()
-        : _envApiKey;
+    final prompt = '''
+You are an expert indie game design producer interviewing a developer about their new game idea.
+The developer pitched this 1-line spark: "$cleanSpark"
 
-    if (effectiveKey.isNotEmpty) {
-      try {
-        final model = GenerativeModel(
-          model: 'gemini-2.5-flash',
-          apiKey: effectiveKey,
-          generationConfig: GenerationConfig(
-            responseMimeType: 'application/json',
-            temperature: 0.4,
-          ),
-        );
-
-        final prompt = '''
-You are an expert indie game producer helping a developer lock in their initial game concept.
-The user pitched this 1-line spark: "$cleanSpark"
-
-Return a JSON object with:
-- "title": Punchy 2-4 word game working title
-- "questions": Exactly 3 multiple-choice questions (1: Camera & Control Feel, 2: Core 30-Second Gameplay Loop, 3: First Milestone Target). Prefix the first option of each with "(Recommended) ".
-- "goal": 1 plain-English sentence stating what is being built and why it feels great (no corporate buzzwords).
-- "coreLoopBeats": 3-4 concise observable gameplay loop bullets.
-- "exclusions": 3 concrete scope bloat items strictly cut from v0.1.
-- "doneWhen": Clear practical condition for when the v0.1 prototype proves the fun.
-- "releaseTrainTitles": 3 sequential release titles (e.g. "v0.1: Core Loop Prototype", "v0.2: Combat & Hazard Loop", "v0.3: Vertical Slice").
+Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" (do not use generic filler; reference the exact genres/mechanics mentioned in "$cleanSpark"):
+{
+  "title": "A punchy, memorable 2-3 word game working title fitting '$cleanSpark'",
+  "questions": [
+    {
+      "id": "q_perspective",
+      "question": "Tailored question asking about camera perspective, movement speed, and control feel for '$cleanSpark'",
+      "options": [
+        "(Recommended) Specific perspective + control scheme #1 tailored to $cleanSpark",
+        "Specific perspective + control scheme #2 tailored to $cleanSpark",
+        "Specific perspective + control scheme #3 tailored to $cleanSpark"
+      ]
+    },
+    {
+      "id": "q_loop",
+      "question": "Tailored question asking how the core mechanics of '$cleanSpark' connect in a 30-second playable loop",
+      "options": [
+        "(Recommended) Concrete 30-second gameplay loop option #1 combining the mechanics of $cleanSpark",
+        "Concrete 30-second gameplay loop option #2 combining the mechanics of $cleanSpark",
+        "Concrete 30-second gameplay loop option #3 combining the mechanics of $cleanSpark"
+      ]
+    },
+    {
+      "id": "q_milestone",
+      "question": "What should we prove first in the Release v0.1 Greybox Prototype?",
+      "options": [
+        "(Recommended) Specific v0.1 prototype sandbox goal #1 for $cleanSpark",
+        "Specific v0.1 prototype sandbox goal #2 for $cleanSpark",
+        "Specific v0.1 prototype sandbox goal #3 for $cleanSpark"
+      ]
+    }
+  ],
+  "goal": "1 plain-English sentence stating what is being built and why it feels great (no corporate buzzwords).",
+  "coreLoopBeats": [
+    "Beat 1: Concrete observable action",
+    "Beat 2: Concrete observable interaction/payoff",
+    "Beat 3: Concrete observable loop resolution/reset"
+  ],
+  "exclusions": [
+    "Specific scope-creep feature #1 to exclude from v0.1",
+    "Specific scope-creep feature #2 to exclude from v0.1",
+    "Specific scope-creep feature #3 to exclude from v0.1"
+  ],
+  "doneWhen": "Clear practical condition for when the v0.1 prototype proves the core loop is fun.",
+  "releaseTrainTitles": [
+    "v0.1: [Specific Prototype Milestone Title] - Prototype",
+    "v0.2: [Specific Core Loop Expansion Title] - MVP",
+    "v0.3: [Specific Polished Content Milestone Title] - Vertical Slice"
+  ]
+}
 ''';
 
-        final response = await model.generateContent([Content.text(prompt)]);
-        final text = response.text;
-        if (text != null && text.isNotEmpty) {
-          final parsed = jsonDecode(text) as Map<String, dynamic>;
-          final qList = (parsed['questions'] as List?)
-                  ?.whereType<Map<String, dynamic>>()
-                  .map(AgentQuestion.fromJson)
-                  .toList() ??
-              _defaultQuestionsForSpark(cleanSpark);
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: modelName,
+      temperature: 0.55,
+    );
 
-          return ProjectConceptBlueprint(
-            title: parsed['title']?.toString() ?? shortTitle,
-            sparkIdea: cleanSpark,
-            questions: qList.isNotEmpty ? qList : _defaultQuestionsForSpark(cleanSpark),
-            goal: parsed['goal']?.toString() ??
-                'Build a playable $shortTitle prototype with responsive controls and immediate on-screen feedback.',
-            coreLoopBeats: (parsed['coreLoopBeats'] as List?)
-                    ?.map((e) => e.toString())
-                    .toList() ??
-                _defaultCoreLoopForSpark(cleanSpark),
-            exclusions: (parsed['exclusions'] as List?)
-                    ?.map((e) => e.toString())
-                    .toList() ??
-                _defaultExclusions(),
-            doneWhen: parsed['doneWhen']?.toString() ??
-                'A playtester can complete 3 consecutive 30-second gameplay loops without UI prompts or Physics bugs.',
-            releaseTrainTitles: (parsed['releaseTrainTitles'] as List?)
-                    ?.map((e) => e.toString())
-                    .toList() ??
-                _defaultReleaseTrain(shortTitle),
-            isInterviewComplete: false,
-          );
-        }
-      } catch (_) {
-        // Fallback to instant deterministic synthesis below.
-      }
+    if (json != null) {
+      final qList = (json['questions'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(AgentQuestion.fromJson)
+              .where((q) => q.question.isNotEmpty && q.options.isNotEmpty)
+              .toList() ??
+          const <AgentQuestion>[];
+
+      final aiTitle = json['title']?.toString().trim() ?? '';
+      return ProjectConceptBlueprint(
+        title: aiTitle.isNotEmpty ? aiTitle : shortTitle,
+        sparkIdea: cleanSpark,
+        questions: qList.isNotEmpty ? qList : _defaultQuestionsForSpark(cleanSpark),
+        goal: json['goal']?.toString() ??
+            'Build a playable $shortTitle prototype centered on $cleanSpark with immediate game feel.',
+        coreLoopBeats: (json['coreLoopBeats'] as List?)
+                ?.map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList() ??
+            _defaultCoreLoopForSpark(cleanSpark),
+        exclusions: (json['exclusions'] as List?)
+                ?.map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList() ??
+            _defaultExclusions(),
+        doneWhen: json['doneWhen']?.toString() ??
+            'Playtester completes a full 30-second core loop cycle with responsive controls and clear feedback.',
+        firstReleasePreset: ReleaseScope.featurePrototype,
+        releaseTrainTitles: (json['releaseTrainTitles'] as List?)
+                ?.map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .toList() ??
+            _defaultReleaseTrain(shortTitle),
+        isInterviewComplete: false,
+      );
     }
 
     return ProjectConceptBlueprint(
@@ -100,8 +131,85 @@ Return a JSON object with:
     );
   }
 
-  /// Step 1C: Refines the `ProjectConceptBlueprint` once the user answers the 2-3 interview questions.
-  static ProjectConceptBlueprint synthesizeFromInterview(
+  /// Step 1C: Synthesizes the `ProjectConceptBlueprint` once the user answers the 2-3 interview questions.
+  /// Calls Gemini when an API key is available, with instant deterministic fallback for unit tests/offline.
+  static Future<ProjectConceptBlueprint> synthesizeFromInterview(
+    ProjectConceptBlueprint draft, {
+    String apiKey = '',
+    String modelName = 'gemini-2.5-flash',
+  }) async {
+    final qaSummary = draft.questions
+        .map((q) => '- Q: ${q.question}\n  A: ${_stripRecommendedPrefix(q.effectiveAnswer)}')
+        .join('\n');
+
+    final prompt = '''
+You are an expert game producer finalizing a Project Concept Blueprint after interviewing the developer.
+Original Spark Idea: "${draft.sparkIdea}"
+Working Title: "${draft.title}"
+Developer's Interview Answers:
+$qaSummary
+
+Synthesize these exact choices into a cohesive Project Concept JSON object (no corporate buzzwords; use concrete, observable gameplay terms):
+{
+  "title": "Refined 2-3 word game title fitting the spark and answers",
+  "goal": "Exactly 1 plain-English sentence stating what is being built and why it feels great, incorporating the developer's interview answers.",
+  "coreLoopBeats": [
+    "Beat 1: [Name] — Concrete observable player action & game feel",
+    "Beat 2: [Name] — Concrete observable interaction/system hook",
+    "Beat 3: [Name] — Concrete observable payoff & loop reset"
+  ],
+  "exclusions": [
+    "3 concrete scope-creep mechanics strictly cut from v0.1"
+  ],
+  "doneWhen": "1 clear, testable condition for when the v0.1 prototype proves the core loop works in-game.",
+  "releaseTrainTitles": [
+    "v0.1: [Tailored Prototype Title] - Prototype",
+    "v0.2: [Tailored Expansion Title] - MVP",
+    "v0.3: [Tailored Vertical Slice Title] - Vertical Slice"
+  ]
+}
+''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: modelName,
+      temperature: 0.45,
+    );
+
+    if (json != null) {
+      final newTitle = json['title']?.toString().trim() ?? '';
+      if (newTitle.isNotEmpty) draft.title = newTitle;
+      final newGoal = json['goal']?.toString().trim() ?? '';
+      if (newGoal.isNotEmpty) draft.goal = newGoal;
+      final beats = (json['coreLoopBeats'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (beats != null && beats.isNotEmpty) draft.coreLoopBeats = beats;
+      final excl = (json['exclusions'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (excl != null && excl.isNotEmpty) draft.exclusions = excl;
+      final done = json['doneWhen']?.toString().trim() ?? '';
+      if (done.isNotEmpty) draft.doneWhen = done;
+      final releases = (json['releaseTrainTitles'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (releases != null && releases.isNotEmpty) {
+        draft.releaseTrainTitles = releases;
+      }
+      draft.isInterviewComplete = true;
+      return draft;
+    }
+
+    return synthesizeDeterministic(draft);
+  }
+
+  /// Synchronous deterministic synthesis fallback (also used by unit tests).
+  static ProjectConceptBlueprint synthesizeDeterministic(
     ProjectConceptBlueprint draft,
   ) {
     final perspective = draft.questions.isNotEmpty
@@ -126,7 +234,6 @@ Return a JSON object with:
     draft.goal =
         'Build a $perspective ${draft.title} prototype where the player executes "$loopFocus" with crisp visual and audio feedback.';
 
-    // Ensure the user's chosen loop focus is reflected in the first Core Loop Beat
     if (draft.coreLoopBeats.isNotEmpty) {
       draft.coreLoopBeats[0] = 'Primary Loop: $loopFocus ($perspective)';
     } else {
@@ -144,10 +251,14 @@ Return a JSON object with:
   }
 
   static String _derivePunchyTitle(String spark) {
+    const stopWords = {
+      'the', 'and', 'with', 'for', 'game', 'about', 'fast', 'that', 'also',
+      'combines', 'like', 'where', 'you', 'can', 'into', 'from',
+    };
     final words = spark
         .replaceAll(RegExp(r'[^\w\s-]'), '')
         .split(RegExp(r'\s+'))
-        .where((w) => w.length > 2 && !{'the', 'and', 'with', 'for', 'game', 'about', 'fast'}.contains(w.toLowerCase()))
+        .where((w) => w.length > 2 && !stopWords.contains(w.toLowerCase()))
         .take(3)
         .toList();
     if (words.isEmpty) return 'Core Prototype';

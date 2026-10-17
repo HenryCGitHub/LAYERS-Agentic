@@ -129,20 +129,225 @@ class WorkbenchShell extends StatelessWidget {
                   ),
                 ],
               ),
-              IconButton(
-                tooltip: 'Toggle Theme',
-                onPressed: workbench.toggleTheme,
-                icon: Icon(
-                  isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                  size: 17,
-                  color: textMuted,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    key: const ValueKey('ai_settings_btn'),
+                    onTap: () => _showAiSettingsDialog(context),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: workbench.hasLiveAiKey
+                            ? AppTheme.accentGreen.withValues(alpha: 0.14)
+                            : AppTheme.tierRelease.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: workbench.hasLiveAiKey
+                              ? AppTheme.accentGreen.withValues(alpha: 0.45)
+                              : AppTheme.tierRelease.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            workbench.hasLiveAiKey
+                                ? Icons.bolt_rounded
+                                : Icons.key_outlined,
+                            size: 13,
+                            color: workbench.hasLiveAiKey
+                                ? AppTheme.accentGreen
+                                : AppTheme.tierRelease,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            workbench.modelName,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: 'Toggle Theme',
+                    onPressed: workbench.toggleTheme,
+                    icon: Icon(
+                      isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                      size: 17,
+                      color: textMuted,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
       body: _buildActiveStageBody(),
+    );
+  }
+
+  void _showAiSettingsDialog(BuildContext context) {
+    final isDark = workbench.isDark;
+    final bgSurface = AppTheme.bgSurfaceFor(isDark);
+    final borderColor = AppTheme.borderFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final keyController = TextEditingController(text: workbench.apiKey);
+    String selectedModel = workbench.modelName;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return AlertDialog(
+              backgroundColor: bgSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: borderColor),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.auto_awesome, size: 18, color: AppTheme.accentBlue),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Antigravity AI Agent Settings',
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ACTIVE GEMINI MODEL',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.accentBlue,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    for (final m in WorkbenchProvider.availableModels)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: InkWell(
+                          onTap: () => setModalState(() => selectedModel = m),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: selectedModel == m
+                                  ? AppTheme.accentBlue.withValues(alpha: 0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: selectedModel == m ? AppTheme.accentBlue : borderColor,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  selectedModel == m
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_off,
+                                  size: 15,
+                                  color: selectedModel == m ? AppTheme.accentBlue : textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    m == 'gemini-2.5-flash'
+                                        ? 'gemini-2.5-flash (Recommended Default — Fast & Smart)'
+                                        : m == 'gemini-2.5-pro'
+                                            ? 'gemini-2.5-pro (Deep Reasoning — Release Architecture)'
+                                            : 'gemini-2.0-flash (Ultra-Low Latency Fallback)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight:
+                                          selectedModel == m ? FontWeight.w700 : FontWeight.w500,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'GEMINI API KEY',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.tierRelease,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: keyController,
+                      obscureText: true,
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: textPrimary),
+                      decoration: InputDecoration(
+                        hintText: 'AIzaSy... (pre-configured if built with key)',
+                        hintStyle: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: borderColor),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.inter(fontSize: 12.5, color: textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentBlue,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    workbench.updateAiConfig(
+                      apiKey: keyController.text,
+                      modelName: selectedModel,
+                    );
+                    Navigator.of(ctx).pop();
+                  },
+                  child: Text(
+                    'Save AI Config',
+                    style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

@@ -32,6 +32,12 @@ BUILD_ARGS=(
     "--no-web-resources-cdn"
 )
 
+if [ -n "$GEMINI_API_KEY" ]; then
+    B64_KEY=$(printf "%s" "$GEMINI_API_KEY" | base64 | tr -d '\n')
+    echo "Injecting GEMINI_API_KEY_B64 from environment..."
+    BUILD_ARGS+=("--dart-define=GEMINI_API_KEY_B64=$B64_KEY")
+fi
+
 flutter build "${BUILD_ARGS[@]}"
 
 if [ ! -d "build/web" ]; then

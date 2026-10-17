@@ -3,6 +3,7 @@ import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
 import '../utils/section_text_utils.dart';
+import 'gemini_agent_client.dart';
 
 /// Stage 2 Agent: Inspects the Project Concept (and any completed prior Releases)
 /// and proposes a single-Release Blueprint (`ReleaseBlueprint`) with:
@@ -15,6 +16,8 @@ class ReleasePlannerAgent {
     required TierDocument projectDoc,
     required TierDocument releaseDoc,
     List<TierDocument> completedReleases = const [],
+    String apiKey = '',
+    String modelName = 'gemini-2.5-flash',
   }) async {
     final preset = releaseDoc.releaseScope;
     final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
@@ -22,6 +25,106 @@ class ReleasePlannerAgent {
       projectDoc.sections,
       splitSingleSentence: false,
     );
+
+    if (GeminiAgentClient.hasKey(apiKey)) {
+      final prompt = '''
+You are the Antigravity Release Planner Agent for a game studio.
+We are planning a single milestone Release: "${releaseDoc.title}" (Scope Preset: ${preset.label} — ${preset.description}).
+
+Project Title: "${projectDoc.title}"
+Project Concept Scope:
+${projectDoc.sections['scope'] ?? ''}
+
+Task:
+Generate a bespoke, game-specific Release Blueprint for "${releaseDoc.title}" in strict JSON format.
+Rules:
+- Pure KISS, DRY, and YAGNI: Focus ONLY on observable, playtestable mechanics for this specific game and milestone.
+- Generate 2 custom clarifying questions (`questions`) specific to this game's release feel and scope. Prefix the first option of each with "(Recommended) ".
+- Generate 2 to 3 Core Loop Beats (`beats`) tailored to this game.
+- Under each Beat, generate 1 to 2 cohesive Playable Features (`features`). Include 1 optional stretch feature with `"included": false` in the last beat so the user can see YAGNI scope deferral in action; all other features must have `"included": true`.
+- Each Feature must have:
+  - `title` (2-4 words)
+  - `goal` (1 plain-English sentence)
+  - `doneWhen` (1 observable playtest condition)
+  - `estimatedHours` (integer 3-8)
+  - `included` (boolean)
+  - `inScope` (2-3 concrete bullet strings)
+  - `outOfScope` (1 concrete exclusion string)
+  - `tuningParams` (2-3 concrete `variableName: value unit` strings specific to this mechanic)
+  - `edgeCases` (1-2 concrete `[TAG] condition -> expected behavior` strings)
+  - `checkpoints` (1-2 `ProposedCheckpointBlueprint` items where `coveredScope`, `tuningParams`, and `edgeCases` are subsets of the Feature's lists, and `tasks` are 2-3 concrete engineering steps with `(Xh)` hour tags).
+
+Return ONLY a JSON object with this exact schema:
+{
+  "goal": "One plain-English sentence stating the goal of ${releaseDoc.title}",
+  "doneWhen": "One concrete playtest condition for when ${releaseDoc.title} is ready to ship",
+  "explicitExclusions": ["Exclusion 1", "Exclusion 2", "Exclusion 3"],
+  "questions": [
+    {
+      "id": "rel_q_1",
+      "question": "Specific release question 1?",
+      "options": ["(Recommended) Option A", "Option B", "Option C"]
+    },
+    {
+      "id": "rel_q_2",
+      "question": "Specific release question 2?",
+      "options": ["(Recommended) Option A", "Option B"]
+    }
+  ],
+  "beats": [
+    {
+      "id": "beat_1",
+      "title": "Beat Title",
+      "goal": "1-sentence beat goal",
+      "doneWhen": "1-sentence beat completion criteria",
+      "features": [
+        {
+          "id": "feat_1_1",
+          "title": "Feature Title",
+          "goal": "1-sentence feature goal",
+          "doneWhen": "1-sentence feature doneWhen",
+          "estimatedHours": 6,
+          "included": true,
+          "inScope": ["Scope item 1", "Scope item 2"],
+          "outOfScope": ["Deferred item"],
+          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.15 s"],
+          "edgeCases": ["[TAG] Specific edge case behavior"],
+          "checkpoints": [
+            {
+              "title": "Checkpoint Title",
+              "playtestCriteria": "Action -> observable result on screen",
+              "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
+              "coveredScope": ["Scope item 1"],
+              "tuningParams": ["paramOne: 10.0 m/s"],
+              "edgeCases": ["[TAG] Specific edge case behavior"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+''';
+
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: apiKey,
+        preferredModel: modelName,
+        temperature: 0.35,
+      );
+
+      if (json != null) {
+        final parsed = _parseDynamicReleaseBlueprint(
+          json: json,
+          releaseDoc: releaseDoc,
+          preset: preset,
+          fallbackExclusions: projectExclusions,
+        );
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
 
     final questions = <AgentQuestion>[
       AgentQuestion(
@@ -329,6 +432,173 @@ class ReleasePlannerAgent {
       explicitExclusions: projectExclusions.isNotEmpty
           ? projectExclusions
           : const ['Online multiplayer', 'Skill trees & inventory menus'],
+    );
+  }
+
+  static ReleaseBlueprint? _parseDynamicReleaseBlueprint({
+    required Map<String, dynamic> json,
+    required TierDocument releaseDoc,
+    required ReleaseScope preset,
+    required List<String> fallbackExclusions,
+  }) {
+    final rawBeats = json['beats'];
+    if (rawBeats is! List || rawBeats.isEmpty) return null;
+
+    final questions = <AgentQuestion>[];
+    final rawQs = json['questions'];
+    if (rawQs is List) {
+      for (int i = 0; i < rawQs.length; i++) {
+        final item = rawQs[i];
+        if (item is Map) {
+          final qText = (item['question'] ?? '').toString().trim();
+          final rawOpts = item['options'];
+          final opts = rawOpts is List
+              ? rawOpts
+                  .map((e) => e.toString().trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList()
+              : <String>[];
+          if (qText.isNotEmpty && opts.length >= 2) {
+            questions.add(
+              AgentQuestion(
+                id: (item['id'] ?? 'rel_q_${i + 1}').toString(),
+                question: qText,
+                options: opts,
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    final beats = <ProposedBeatBlueprint>[];
+    for (int bIdx = 0; bIdx < rawBeats.length; bIdx++) {
+      final bMap = rawBeats[bIdx];
+      if (bMap is! Map) continue;
+      final bTitle = (bMap['title'] ?? 'Beat ${bIdx + 1}').toString().trim();
+      final bGoal = (bMap['goal'] ?? '').toString().trim();
+      final bDone = (bMap['doneWhen'] ?? '').toString().trim();
+      final rawFeats = bMap['features'];
+      if (rawFeats is! List || rawFeats.isEmpty) continue;
+
+      final features = <ProposedFeatureBlueprint>[];
+      for (int fIdx = 0; fIdx < rawFeats.length; fIdx++) {
+        final fMap = rawFeats[fIdx];
+        if (fMap is! Map) continue;
+        final fTitle = (fMap['title'] ?? 'Feature ${fIdx + 1}').toString().trim();
+        final fGoal = (fMap['goal'] ?? '').toString().trim();
+        final fDone = (fMap['doneWhen'] ?? '').toString().trim();
+        final hours = (fMap['estimatedHours'] is num)
+            ? (fMap['estimatedHours'] as num).round().clamp(1, 24)
+            : 4;
+        final included = fMap['included'] is bool ? fMap['included'] as bool : true;
+
+        List<String> toStrList(dynamic v) => v is List
+            ? v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
+            : <String>[];
+
+        final inScope = toStrList(fMap['inScope']);
+        final outOfScope = toStrList(fMap['outOfScope']);
+        final tuning = toStrList(fMap['tuningParams']);
+        final edges = toStrList(fMap['edgeCases']);
+
+        final checkpoints = <ProposedCheckpointBlueprint>[];
+        final rawCps = fMap['checkpoints'];
+        if (rawCps is List) {
+          for (int cIdx = 0; cIdx < rawCps.length; cIdx++) {
+            final cMap = rawCps[cIdx];
+            if (cMap is! Map) continue;
+            final cpTitle =
+                (cMap['title'] ?? 'Stage ${cIdx + 1}').toString().trim();
+            final cpCriteria =
+                (cMap['playtestCriteria'] ?? fDone).toString().trim();
+            final cpTasks = toStrList(cMap['tasks']);
+            checkpoints.add(
+              ProposedCheckpointBlueprint(
+                title: cpTitle,
+                playtestCriteria: cpCriteria,
+                tasks: cpTasks.isNotEmpty
+                    ? cpTasks
+                    : ['Implement $cpTitle (${(hours / 2).ceil()}h)'],
+                coveredScope: toStrList(cMap['coveredScope']).isNotEmpty
+                    ? toStrList(cMap['coveredScope'])
+                    : inScope,
+                tuningParams: toStrList(cMap['tuningParams']).isNotEmpty
+                    ? toStrList(cMap['tuningParams'])
+                    : tuning,
+                edgeCases: toStrList(cMap['edgeCases']).isNotEmpty
+                    ? toStrList(cMap['edgeCases'])
+                    : edges,
+              ),
+            );
+          }
+        }
+
+        if (checkpoints.isEmpty) {
+          checkpoints.add(
+            ProposedCheckpointBlueprint(
+              title: fTitle,
+              playtestCriteria: fDone,
+              tasks: ['Implement $fTitle ($hours h)'],
+              coveredScope: inScope,
+              tuningParams: tuning,
+              edgeCases: edges,
+            ),
+          );
+        }
+
+        features.add(
+          ProposedFeatureBlueprint(
+            id: (fMap['id'] ?? 'feat_${bIdx + 1}_${fIdx + 1}').toString(),
+            title: fTitle,
+            goal: fGoal,
+            doneWhen: fDone,
+            estimatedHours: hours,
+            included: included,
+            inScope: inScope,
+            outOfScope: outOfScope,
+            tuningParams: tuning,
+            edgeCases: edges,
+            checkpoints: checkpoints,
+          ),
+        );
+      }
+
+      if (features.isNotEmpty) {
+        beats.add(
+          ProposedBeatBlueprint(
+            id: (bMap['id'] ?? 'beat_${bIdx + 1}').toString(),
+            title: bTitle,
+            goal: bGoal,
+            doneWhen: bDone,
+            features: features,
+          ),
+        );
+      }
+    }
+
+    if (beats.isEmpty) return null;
+
+    final rawEx = json['explicitExclusions'];
+    final exclusions = rawEx is List
+        ? rawEx.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
+        : fallbackExclusions;
+
+    return ReleaseBlueprint(
+      releaseDocId: releaseDoc.id,
+      releaseTitle: releaseDoc.title,
+      preset: preset,
+      goal: (json['goal'] ??
+              'Prove the core 30-second playable loop in one greybox test arena.')
+          .toString()
+          .trim(),
+      doneWhen: (json['doneWhen'] ??
+              'A playtester can play, clear, and reset the arena 3 times in a row.')
+          .toString()
+          .trim(),
+      questions: questions,
+      beats: beats,
+      explicitExclusions: exclusions,
     );
   }
 

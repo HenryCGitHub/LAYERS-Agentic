@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
 import '../agents/release_planner_agent.dart';
 import '../constants/tiers.dart';
@@ -29,6 +30,29 @@ class WorkbenchProvider extends ChangeNotifier {
 
   bool _isDark = true;
   bool get isDark => _isDark;
+
+  String _apiKey = GeminiAgentClient.resolveDefaultApiKey();
+  String get apiKey => _apiKey;
+  bool get hasLiveAiKey => GeminiAgentClient.hasKey(_apiKey);
+
+  String _modelName = 'gemini-2.5-flash';
+  String get modelName => _modelName;
+
+  static const List<String> availableModels = [
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash',
+  ];
+
+  void updateAiConfig({String? apiKey, String? modelName}) {
+    if (apiKey != null) {
+      _apiKey = apiKey.trim();
+    }
+    if (modelName != null && modelName.trim().isNotEmpty) {
+      _modelName = modelName.trim();
+    }
+    notifyListeners();
+  }
 
   String? _activeProjectId;
   String? get activeProjectId => _activeProjectId;
@@ -113,7 +137,11 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _conceptDraft = await ProjectConceptAgent.startConceptInterview(sparkText);
+      _conceptDraft = await ProjectConceptAgent.startConceptInterview(
+        sparkText,
+        apiKey: _apiKey,
+        modelName: _modelName,
+      );
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -122,12 +150,26 @@ class WorkbenchProvider extends ChangeNotifier {
   }
 
   /// Step 1B -> 1C: User completes the multiple-choice Concept Interview to generate the Project Blueprint.
-  void completeConceptInterview() {
+  Future<void> completeConceptInterview() async {
     final draft = _conceptDraft;
     if (draft == null) return;
-    ProjectConceptAgent.synthesizeFromInterview(draft);
-    _commitConceptToVault(draft);
+
+    _isAgentBusy = true;
+    _agentProgressStep = 'Synthesizing Project Concept Blueprint & Release Train...';
     notifyListeners();
+
+    try {
+      await ProjectConceptAgent.synthesizeFromInterview(
+        draft,
+        apiKey: _apiKey,
+        modelName: _modelName,
+      );
+      _commitConceptToVault(draft);
+    } finally {
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
   }
 
   void _commitConceptToVault(ProjectConceptBlueprint draft) {
@@ -145,11 +187,6 @@ class WorkbenchProvider extends ChangeNotifier {
     for (int i = 0; i < draft.releaseTrainTitles.length; i++) {
       final relId = 'rel_v0_${i + 1}';
       final relTitle = draft.releaseTrainTitles[i];
-      final existing = documents[relId];
-      if (existing != null) {
-        releaseIds.add(relId);
-        continue;
-      }
 
       final relDoc = TierDocument(
         id: relId,
@@ -170,7 +207,7 @@ class WorkbenchProvider extends ChangeNotifier {
     projDoc.childrenIds = releaseIds;
     documents[projId] = projDoc;
     _activeProjectId = projId;
-    _activeReleaseId ??= releaseIds.isNotEmpty ? releaseIds.first : null;
+    _activeReleaseId = releaseIds.isNotEmpty ? releaseIds.first : null;
   }
 
   /// Step 1C -> Stage 2: Lock in the Project Concept and open the Release Plan Gate for the active Release.
@@ -199,6 +236,8 @@ class WorkbenchProvider extends ChangeNotifier {
       _releaseBlueprint = await ReleasePlannerAgent.planRelease(
         projectDoc: proj,
         releaseDoc: relDoc,
+        apiKey: _apiKey,
+        modelName: _modelName,
       );
       _currentStage = WorkbenchStage.releasePlanGate;
     } finally {

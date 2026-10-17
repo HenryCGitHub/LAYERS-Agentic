@@ -16,7 +16,7 @@ void main() {
 
       // Select option 2 on Question 1 and synthesize
       draft.questions[0].selectedOption = draft.questions[0].options[1];
-      final synthesized = ProjectConceptAgent.synthesizeFromInterview(draft);
+      final synthesized = await ProjectConceptAgent.synthesizeFromInterview(draft);
 
       expect(synthesized.isInterviewComplete, isTrue);
       expect(synthesized.goal, contains('2D Side-Scrolling Precision Platformer'));

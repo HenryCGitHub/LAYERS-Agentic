@@ -209,25 +209,57 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             if (i < draft.questions.length - 1) const SizedBox(height: 14),
           ],
           const SizedBox(height: 16),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
-              key: const ValueKey('synthesize_concept_btn'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.accentBlue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (widget.workbench.isAgentBusy &&
+                  widget.workbench.agentProgressStep != null)
+                Expanded(
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.accentBlue,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.workbench.agentProgressStep!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                const Spacer(),
+              ElevatedButton.icon(
+                key: const ValueKey('synthesize_concept_btn'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: widget.workbench.isAgentBusy
+                    ? null
+                    : () => widget.workbench.completeConceptInterview(),
+                icon: const Icon(Icons.check_circle_outline, size: 16),
+                label: Text(
+                  draft.isInterviewComplete
+                      ? 'Update Project Blueprint'
+                      : 'Generate Project Blueprint ✦',
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
               ),
-              onPressed: () => widget.workbench.completeConceptInterview(),
-              icon: const Icon(Icons.check_circle_outline, size: 16),
-              label: Text(
-                draft.isInterviewComplete
-                    ? 'Update Project Blueprint'
-                    : 'Generate Project Blueprint ✦',
-                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
-              ),
-            ),
+            ],
           ),
         ],
       ),
@@ -311,6 +343,35 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                 ),
             ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            style: GoogleFonts.inter(fontSize: 12, color: _textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Or type a custom direction for this question...',
+              hintStyle: GoogleFonts.inter(fontSize: 11.5, color: _textMuted),
+              isDense: true,
+              filled: true,
+              fillColor: _bgSurface,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: _borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(
+                  color: q.customWriteIn.trim().isNotEmpty
+                      ? AppTheme.accentBlue
+                      : _borderColor,
+                ),
+              ),
+            ),
+            onChanged: (val) {
+              setState(() {
+                q.customWriteIn = val;
+              });
+            },
           ),
         ],
       ),
@@ -470,7 +531,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: () => widget.workbench.openReleasePlanGate(),
+              onPressed: widget.workbench.isAgentBusy
+                  ? null
+                  : () => widget.workbench.openReleasePlanGate(),
               icon: const Icon(Icons.rocket_launch_rounded, size: 16),
               label: Text(
                 'Approve Concept & Plan v0.1 Release ✦',
