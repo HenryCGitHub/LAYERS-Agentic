@@ -32,13 +32,6 @@ BUILD_ARGS=(
     "--no-web-resources-cdn"
 )
 
-if [ -n "$GEMINI_API_KEY" ]; then
-    echo "Injecting GEMINI_API_KEY from environment..."
-    BUILD_ARGS+=("--dart-define=GEMINI_API_KEY=$GEMINI_API_KEY")
-else
-    echo "Notice: GEMINI_API_KEY not set in environment."
-fi
-
 flutter build "${BUILD_ARGS[@]}"
 
 if [ ! -d "build/web" ]; then
