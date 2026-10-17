@@ -22,6 +22,8 @@ class ReleasePlanGateScreen extends StatefulWidget {
 }
 
 class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
+  final TextEditingController _releaseChatController = TextEditingController();
+
   bool get _isDark => widget.workbench.isDark;
   Color get _bgSurface => AppTheme.bgSurfaceFor(_isDark);
   Color get _cardBg => _isDark ? const Color(0xFF141822) : const Color(0xFFF8FAFC);
@@ -29,6 +31,19 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   Color get _textPrimary => AppTheme.textPrimaryFor(_isDark);
   Color get _textSecondary => AppTheme.textSecondaryFor(_isDark);
   Color get _textMuted => AppTheme.textMutedFor(_isDark);
+
+  @override
+  void dispose() {
+    _releaseChatController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitReleaseChat() async {
+    final text = _releaseChatController.text.trim();
+    if (text.isEmpty || widget.workbench.isAgentBusy) return;
+    _releaseChatController.clear();
+    await widget.workbench.sendReleasePlanChatMessage(text);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +66,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildGateBanner(bp),
+              const SizedBox(height: 16),
+              _buildReleaseChatBar(bp),
               const SizedBox(height: 16),
               if (bp.questions.isNotEmpty) ...[
                 _buildReleaseQuestionsCard(bp),
@@ -93,6 +110,93 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildReleaseChatBar(ReleaseBlueprint bp) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.accentBlue.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (bp.chatHistory.isNotEmpty) ...[
+            for (final msg in bp.chatHistory.reversed.take(2).toList().reversed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      msg.isUser ? Icons.person_outline : Icons.auto_awesome,
+                      size: 14,
+                      color: msg.isUser ? AppTheme.tierRelease : AppTheme.accentBlue,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        msg.text,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('release_plan_chat_input'),
+                  controller: _releaseChatController,
+                  style: GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
+                  decoration: InputDecoration(
+                    hintText:
+                        'Chat with Argon to adjust this Release Plan (e.g., "Add a wall-run feature to Beat 1", "Cut Beat 3")...',
+                    hintStyle: GoogleFonts.inter(fontSize: 12, color: _textMuted),
+                    isDense: true,
+                    filled: true,
+                    fillColor: _cardBg,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: _borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: _borderColor),
+                    ),
+                  ),
+                  onSubmitted: (_) => _submitReleaseChat(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                key: const ValueKey('send_release_chat_btn'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: widget.workbench.isAgentBusy ? null : _submitReleaseChat,
+                icon: const Icon(Icons.send_rounded, size: 14),
+                label: Text(
+                  widget.workbench.isAgentBusy ? 'Updating...' : 'Refine Plan',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

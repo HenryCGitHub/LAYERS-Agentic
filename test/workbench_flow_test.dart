@@ -6,24 +6,27 @@ import 'package:layers_agentic/providers/workbench_provider.dart';
 
 void main() {
   group('LAYERS-Agentic 3-Stage End-to-End Flow Tests', () {
-    test('ProjectConceptAgent generates 3-question interview and synthesizes Concept Blueprint', () async {
+    test('ProjectConceptAgent seeds turn-by-turn chat and updates Live Concept Blueprint on each turn', () async {
       final draft = await ProjectConceptAgent.startConceptInterview(
         'High-speed grappling hook parkour roguelite',
       );
       expect(draft.questions.length, 3);
-      expect(draft.isInterviewComplete, isFalse);
+      expect(draft.isInterviewComplete, isTrue);
+      expect(draft.chatHistory.length, 2);
       expect(draft.releaseTrainTitles.length, 3);
 
-      // Select option 2 on Question 1 and synthesize
-      draft.questions[0].selectedOption = draft.questions[0].options[1];
-      final synthesized = await ProjectConceptAgent.synthesizeFromInterview(draft);
+      // Send a user turn in the chat and verify the Blueprint updates in real time
+      final updated = await ProjectConceptAgent.sendConceptChatTurn(
+        draft,
+        '2D Side-Scrolling Precision Platformer',
+      );
 
-      expect(synthesized.isInterviewComplete, isTrue);
-      expect(synthesized.goal, contains('2D Side-Scrolling Precision Platformer'));
-      expect(synthesized.toFormattedScopeSection(), contains('Goal:'));
-      expect(synthesized.toFormattedScopeSection(), contains('In Scope:'));
-      expect(synthesized.toFormattedScopeSection(), contains('Out of Scope:'));
-      expect(synthesized.toFormattedScopeSection(), contains('Done When:'));
+      expect(updated.chatHistory.length, 4);
+      expect(updated.goal, contains('2D Side-Scrolling Precision Platformer'));
+      expect(updated.toFormattedScopeSection(), contains('Goal:'));
+      expect(updated.toFormattedScopeSection(), contains('In Scope:'));
+      expect(updated.toFormattedScopeSection(), contains('Out of Scope:'));
+      expect(updated.toFormattedScopeSection(), contains('Done When:'));
     });
 
     testWidgets(

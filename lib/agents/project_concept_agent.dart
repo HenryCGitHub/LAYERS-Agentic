@@ -91,12 +91,16 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" (do not use generi
           const <AgentQuestion>[];
 
       final aiTitle = json['title']?.toString().trim() ?? '';
+      final resolvedTitle = aiTitle.isNotEmpty ? aiTitle : shortTitle;
+      final resolvedQuestions =
+          qList.isNotEmpty ? qList : _defaultQuestionsForSpark(cleanSpark);
+
       return ProjectConceptBlueprint(
-        title: aiTitle.isNotEmpty ? aiTitle : shortTitle,
+        title: resolvedTitle,
         sparkIdea: cleanSpark,
-        questions: qList.isNotEmpty ? qList : _defaultQuestionsForSpark(cleanSpark),
+        questions: resolvedQuestions,
         goal: json['goal']?.toString() ??
-            'Build a playable $shortTitle prototype centered on $cleanSpark with immediate game feel.',
+            'Build a playable $resolvedTitle prototype centered on $cleanSpark with immediate game feel.',
         coreLoopBeats: (json['coreLoopBeats'] as List?)
                 ?.map((e) => e.toString())
                 .where((s) => s.isNotEmpty)
@@ -114,22 +118,298 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" (do not use generi
                 ?.map((e) => e.toString())
                 .where((s) => s.isNotEmpty)
                 .toList() ??
-            _defaultReleaseTrain(shortTitle),
-        isInterviewComplete: false,
+            _defaultReleaseTrain(resolvedTitle),
+        isInterviewComplete: true,
+        lastUpdatedFields: const ['Title', 'Goal', 'Core Loop', 'Exclusions', 'Release Train'],
+        chatHistory: _buildInitialChatHistory(
+          spark: cleanSpark,
+          title: resolvedTitle,
+          questions: resolvedQuestions,
+          modelUsed: modelName,
+        ),
       );
     }
 
+    final fallbackQuestions = _defaultQuestionsForSpark(cleanSpark);
     return ProjectConceptBlueprint(
       title: shortTitle,
       sparkIdea: cleanSpark,
-      questions: _defaultQuestionsForSpark(cleanSpark),
+      questions: fallbackQuestions,
       goal: 'Build a playable $shortTitle prototype centered on $cleanSpark with immediate game feel.',
       coreLoopBeats: _defaultCoreLoopForSpark(cleanSpark),
       exclusions: _defaultExclusions(),
       doneWhen: 'A playtester can complete a full 30-second core loop cycle with responsive controls and clear hit/motion feedback.',
       firstReleasePreset: ReleaseScope.featurePrototype,
       releaseTrainTitles: _defaultReleaseTrain(shortTitle),
-      isInterviewComplete: false,
+      isInterviewComplete: true,
+      lastUpdatedFields: const ['Title', 'Goal', 'Core Loop', 'Exclusions', 'Release Train'],
+      chatHistory: _buildInitialChatHistory(
+        spark: cleanSpark,
+        title: shortTitle,
+        questions: fallbackQuestions,
+        modelUsed: modelName,
+      ),
+    );
+  }
+
+  static List<AgentChatMessage> _buildInitialChatHistory({
+    required String spark,
+    required String title,
+    required List<AgentQuestion> questions,
+    required String modelUsed,
+  }) {
+    final firstQ = questions.isNotEmpty
+        ? questions.first.question
+        : 'How does the initial 30-second core loop look to you?';
+    final quickChips = <String>[
+      if (questions.isNotEmpty)
+        for (final opt in questions.first.options.take(3))
+          _stripRecommendedPrefix(opt),
+      'Looks great — ready to plan v0.1!',
+    ];
+
+    return [
+      AgentChatMessage(
+        id: 'msg_user_0',
+        role: 'user',
+        text: spark,
+      ),
+      AgentChatMessage(
+        id: 'msg_ai_0',
+        role: 'assistant',
+        modelUsed: modelUsed,
+        updatedFields: const ['Drafted Initial Concept Blueprint'],
+        text: 'I drafted the initial **$title** Concept Blueprint on the right based on your idea!\n\n'
+            'We can go back and forth right here to tweak anything (Title, Goal, 30s Core Loop Beats, Exclusions, or Release Train).\n\n'
+            '**First up:** $firstQ',
+        quickReplies: quickChips,
+      ),
+    ];
+  }
+
+  /// Turn-by-turn Co-Design Chat: Takes the user's message, updates the live
+  /// `ProjectConceptBlueprint` in place, and appends the AI's conversational reply
+  /// + next follow-up question / quick replies.
+  static Future<ProjectConceptBlueprint> sendConceptChatTurn(
+    ProjectConceptBlueprint draft,
+    String userMessage, {
+    String apiKey = '',
+    String conversationModel = 'gemini-flash-latest',
+    String planningModel = 'gemini-4-argon',
+    String thinkingLevel = 'LOW',
+  }) async {
+    final cleanMsg = userMessage.trim();
+    if (cleanMsg.isEmpty) return draft;
+
+    draft.chatHistory.add(
+      AgentChatMessage(
+        id: 'msg_user_${draft.chatHistory.length}',
+        role: 'user',
+        text: cleanMsg,
+      ),
+    );
+
+    final recentHistory = draft.chatHistory
+        .map((m) => '${m.isUser ? "Developer" : "Antigravity"}: ${m.text}')
+        .join('\n\n');
+
+    final prompt = '''
+You are Antigravity, an expert game producer pair-designing a game concept with a developer in a turn-by-turn chat.
+Original Spark: "${draft.sparkIdea}"
+
+Current Live Project Concept Blueprint:
+- Title: "${draft.title}"
+- Goal: "${draft.goal}"
+- In Scope (30s Core Loop Beats):
+${draft.coreLoopBeats.map((b) => '  * $b').join('\n')}
+- Out of Scope (Hard Exclusions):
+${draft.exclusions.map((e) => '  * $e').join('\n')}
+- Done When: "${draft.doneWhen}"
+- Release Train:
+${draft.releaseTrainTitles.map((r) => '  * $r').join('\n')}
+
+Conversation History:
+$recentHistory
+
+Developer's Latest Turn: "$cleanMsg"
+
+Task:
+1. Apply the developer's latest direction, answer, or adjustment directly to the Project Concept Blueprint fields (`title`, `goal`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Keep everything concrete, playtestable, and free of corporate buzzwords.
+2. Write a concise, natural conversational `reply` (2-3 sentences max) confirming what you updated on the Blueprint and asking 1 natural follow-up question (or inviting any final tweaks before Release v0.1 planning).
+3. Provide 2-3 short clickable `quickReplies` the developer can click for their next turn.
+4. List which blueprint sections changed in `updatedFields` (e.g. `["Goal", "Core Loop"]`).
+
+Return ONLY a JSON object with this schema:
+{
+  "reply": "Conversational response + 1 follow-up question",
+  "quickReplies": ["Short reply option 1", "Short reply option 2", "Short reply option 3"],
+  "updatedFields": ["Goal", "Core Loop"],
+  "title": "Updated or existing title",
+  "goal": "Updated 1-sentence goal",
+  "coreLoopBeats": [
+    "Beat 1: ...",
+    "Beat 2: ...",
+    "Beat 3: ..."
+  ],
+  "exclusions": [
+    "Exclusion 1",
+    "Exclusion 2",
+    "Exclusion 3"
+  ],
+  "doneWhen": "Updated Done When condition",
+  "releaseTrainTitles": [
+    "v0.1: ... - Prototype",
+    "v0.2: ... - MVP",
+    "v0.3: ... - Vertical Slice"
+  ]
+}
+''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: planningModel,
+      thinkingLevel: thinkingLevel,
+      temperature: 0.45,
+    );
+
+    if (json != null) {
+      final updated = <String>[];
+      final newTitle = json['title']?.toString().trim() ?? '';
+      if (newTitle.isNotEmpty && newTitle != draft.title) {
+        draft.title = newTitle;
+        updated.add('Title');
+      }
+      final newGoal = json['goal']?.toString().trim() ?? '';
+      if (newGoal.isNotEmpty && newGoal != draft.goal) {
+        draft.goal = newGoal;
+        updated.add('Goal');
+      }
+      final beats = (json['coreLoopBeats'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (beats != null && beats.isNotEmpty) {
+        draft.coreLoopBeats = beats;
+        updated.add('Core Loop');
+      }
+      final excl = (json['exclusions'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (excl != null && excl.isNotEmpty) {
+        draft.exclusions = excl;
+        updated.add('Exclusions');
+      }
+      final done = json['doneWhen']?.toString().trim() ?? '';
+      if (done.isNotEmpty && done != draft.doneWhen) {
+        draft.doneWhen = done;
+        updated.add('Done When');
+      }
+      final releases = (json['releaseTrainTitles'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (releases != null && releases.isNotEmpty) {
+        draft.releaseTrainTitles = releases;
+        updated.add('Release Train');
+      }
+
+      final explicitUpdated = (json['updatedFields'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      final effectiveUpdated = (explicitUpdated != null && explicitUpdated.isNotEmpty)
+          ? explicitUpdated
+          : (updated.isNotEmpty ? updated : const ['Concept Refined']);
+
+      final quickReplies = (json['quickReplies'] as List?)
+              ?.map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList() ??
+          const <String>[];
+
+      final replyText = json['reply']?.toString().trim() ??
+          'Updated the Project Concept Blueprint with your direction! Anything else you want to adjust before we plan v0.1?';
+
+      draft.lastUpdatedFields = effectiveUpdated;
+      draft.isInterviewComplete = true;
+      draft.chatHistory.add(
+        AgentChatMessage(
+          id: 'msg_ai_${draft.chatHistory.length}',
+          role: 'assistant',
+          modelUsed: planningModel,
+          text: replyText,
+          quickReplies: quickReplies,
+          updatedFields: effectiveUpdated,
+        ),
+      );
+      return draft;
+    }
+
+    // Offline / deterministic turn update fallback
+    _applyDeterministicChatTurn(draft, cleanMsg, planningModel);
+    return draft;
+  }
+
+  static void _applyDeterministicChatTurn(
+    ProjectConceptBlueprint draft,
+    String userMsg,
+    String modelUsed,
+  ) {
+    final lower = userMsg.toLowerCase();
+    final updated = <String>[];
+
+    if (lower.contains('exclude') ||
+        lower.contains('cut') ||
+        lower.contains('remove') ||
+        lower.contains('out of scope')) {
+      draft.exclusions.add(userMsg);
+      updated.add('Exclusions');
+    } else if (lower.contains('title') || lower.startsWith('rename')) {
+      final cleanedTitle = userMsg
+          .replaceFirst(RegExp(r'^(rename|change title|title)\s*(to|:)?\s*', caseSensitive: false), '')
+          .trim();
+      if (cleanedTitle.isNotEmpty) {
+        draft.title = cleanedTitle;
+        updated.add('Title');
+      }
+    } else {
+      draft.goal =
+          'Build a ${draft.title} prototype focused on "$userMsg" with responsive controls and clear feedback.';
+      if (draft.coreLoopBeats.isNotEmpty) {
+        draft.coreLoopBeats[0] = 'Core Focus: $userMsg';
+      } else {
+        draft.coreLoopBeats.add('Core Focus: $userMsg');
+      }
+      updated.addAll(['Goal', 'Core Loop']);
+    }
+
+    // Pick next unanswered question if available
+    final assistantTurnCount = draft.chatHistory.where((m) => !m.isUser).length;
+    final nextQIdx = assistantTurnCount < draft.questions.length ? assistantTurnCount : -1;
+    final followUp = nextQIdx != -1
+        ? '\n\n**Next question:** ${draft.questions[nextQIdx].question}'
+        : '\n\nHow does the updated Blueprint on the right look now? Feel free to ask for more tweaks or click **Approve Concept & Plan v0.1 Release ✦**.';
+    final nextChips = nextQIdx != -1
+        ? draft.questions[nextQIdx].options.map(_stripRecommendedPrefix).toList()
+        : <String>[
+            'Tighten scope to 2 core beats',
+            'Add a boss/hazard challenge beat',
+            'Looks great — ready for v0.1!',
+          ];
+
+    draft.lastUpdatedFields = updated;
+    draft.isInterviewComplete = true;
+    draft.chatHistory.add(
+      AgentChatMessage(
+        id: 'msg_ai_${draft.chatHistory.length}',
+        role: 'assistant',
+        modelUsed: modelUsed,
+        updatedFields: updated,
+        text: 'Got it — I updated the **${updated.join(" & ")}** on the live Blueprint to incorporate *"$userMsg"*.$followUp',
+        quickReplies: nextChips,
+      ),
     );
   }
 

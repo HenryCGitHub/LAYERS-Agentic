@@ -166,11 +166,11 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Step 1A -> 1B: User submits their 1-line Spark idea and starts the Concept Interview.
+  /// Step 1A -> 1B: User submits their 1-line Spark idea and starts the turn-by-turn Co-Design Chat.
   Future<void> startConceptInterview(String sparkText) async {
     _isAgentBusy = true;
     _agentProgressStep =
-        'Preparing tailored Concept Interview ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Drafting initial Concept Blueprint ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
@@ -180,11 +180,56 @@ class WorkbenchProvider extends ChangeNotifier {
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
+      if (_conceptDraft != null) {
+        _commitConceptToVault(_conceptDraft!);
+      }
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
     }
+  }
+
+  /// Sends a user turn in the Stage 1 Co-Design Chat and updates the live Project Concept Blueprint.
+  Future<void> sendConceptChatMessage(String message) async {
+    final clean = message.trim();
+    if (clean.isEmpty) return;
+
+    // If no concept exists yet, treat the first message as the opening Spark!
+    if (_conceptDraft == null) {
+      await startConceptInterview(clean);
+      return;
+    }
+
+    _isAgentBusy = true;
+    _agentProgressStep =
+        'Updating Concept Blueprint ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
+    notifyListeners();
+
+    try {
+      await ProjectConceptAgent.sendConceptChatTurn(
+        _conceptDraft!,
+        clean,
+        apiKey: _apiKey,
+        conversationModel: _conversationModel,
+        planningModel: _planningModel,
+        thinkingLevel: _thinkingLevel,
+      );
+      _commitConceptToVault(_conceptDraft!);
+    } finally {
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
+  }
+
+  /// Allows direct inline adjustments to the ProjectConceptBlueprint if needed.
+  void updateConceptDraft(void Function(ProjectConceptBlueprint draft) mutator) {
+    final draft = _conceptDraft;
+    if (draft == null) return;
+    mutator(draft);
+    _commitConceptToVault(draft);
+    notifyListeners();
   }
 
   /// Step 1B -> 1C: User completes the multiple-choice Concept Interview to generate the Project Blueprint.
@@ -282,6 +327,31 @@ class WorkbenchProvider extends ChangeNotifier {
         thinkingLevel: _thinkingLevel,
       );
       _currentStage = WorkbenchStage.releasePlanGate;
+    } finally {
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
+  }
+
+  /// Sends a user turn in the Stage 2 Release Plan Gate Chat to refine Beats, Features, or Scope.
+  Future<void> sendReleasePlanChatMessage(String message) async {
+    final bp = _releaseBlueprint;
+    if (bp == null || message.trim().isEmpty) return;
+
+    _isAgentBusy = true;
+    _agentProgressStep =
+        'Refining Release Plan ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
+    notifyListeners();
+
+    try {
+      await ReleasePlannerAgent.sendReleasePlanChatTurn(
+        blueprint: bp,
+        userMessage: message,
+        apiKey: _apiKey,
+        modelName: _planningModel,
+        thinkingLevel: _thinkingLevel,
+      );
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;

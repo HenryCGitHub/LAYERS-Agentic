@@ -604,6 +604,143 @@ Return ONLY a JSON object with this exact schema:
     );
   }
 
+  /// Turn-by-turn Release Plan Gate Chat: Takes the user's message, updates
+  /// the live `ReleaseBlueprint` in place, and appends the AI's reply.
+  static Future<ReleaseBlueprint> sendReleasePlanChatTurn({
+    required ReleaseBlueprint blueprint,
+    required String userMessage,
+    String apiKey = '',
+    String modelName = 'gemini-4-argon',
+    String thinkingLevel = 'LOW',
+  }) async {
+    final cleanMsg = userMessage.trim();
+    if (cleanMsg.isEmpty) return blueprint;
+
+    blueprint.chatHistory.add(
+      AgentChatMessage(
+        id: 'rel_msg_user_${blueprint.chatHistory.length}',
+        role: 'user',
+        text: cleanMsg,
+      ),
+    );
+
+    if (GeminiAgentClient.hasKey(apiKey)) {
+      final currentBeatsSummary = blueprint.beats
+          .map(
+            (b) => '- Beat "${b.title}" (${b.goal}):\n'
+                '${b.features.map((f) => '  * Feature "${f.title}" [${f.included ? "IN SCOPE" : "DEFERRED"}] (${f.estimatedHours}h): ${f.goal}').join('\n')}',
+          )
+          .join('\n');
+
+      final prompt = '''
+You are the Antigravity Release Planner Agent pair-planning "${blueprint.releaseTitle}" with a game developer.
+Current Release Blueprint:
+- Goal: "${blueprint.goal}"
+- Done When: "${blueprint.doneWhen}"
+- Explicit Exclusions: ${blueprint.explicitExclusions.join(', ')}
+- Beats & Features:
+$currentBeatsSummary
+
+Developer's Latest Chat Message: "$cleanMsg"
+
+Task:
+Apply the developer's requested changes to the Release Blueprint and reply conversationally in 1-2 sentences confirming what you changed.
+Return ONLY a JSON object with this schema:
+{
+  "reply": "1-2 sentence confirmation of the changes made to the Release Plan",
+  "goal": "Updated release goal",
+  "doneWhen": "Updated release doneWhen",
+  "explicitExclusions": ["Exclusion 1", "Exclusion 2"],
+  "beats": [
+    {
+      "id": "beat_1",
+      "title": "Beat Title",
+      "goal": "1-sentence beat goal",
+      "doneWhen": "1-sentence beat completion criteria",
+      "features": [
+        {
+          "id": "feat_1_1",
+          "title": "Feature Title",
+          "goal": "1-sentence feature goal",
+          "doneWhen": "1-sentence feature doneWhen",
+          "estimatedHours": 6,
+          "included": true,
+          "inScope": ["Scope item 1", "Scope item 2"],
+          "outOfScope": ["Deferred item"],
+          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.15 s"],
+          "edgeCases": ["[TAG] Specific edge case behavior"],
+          "checkpoints": [
+            {
+              "title": "Checkpoint Title",
+              "playtestCriteria": "Action -> observable result on screen",
+              "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
+              "coveredScope": ["Scope item 1"],
+              "tuningParams": ["paramOne: 10.0 m/s"],
+              "edgeCases": ["[TAG] Specific edge case behavior"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+''';
+
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: apiKey,
+        preferredModel: modelName,
+        thinkingLevel: thinkingLevel,
+        temperature: 0.35,
+      );
+
+      if (json != null) {
+        final dummyDoc = TierDocument(
+          id: blueprint.releaseDocId,
+          title: blueprint.releaseTitle,
+          tier: TierType.release,
+        );
+        final updatedBp = _parseDynamicReleaseBlueprint(
+          json: json,
+          releaseDoc: dummyDoc,
+          preset: blueprint.preset,
+          fallbackExclusions: blueprint.explicitExclusions,
+        );
+        if (updatedBp != null) {
+          blueprint.goal = updatedBp.goal;
+          blueprint.doneWhen = updatedBp.doneWhen;
+          blueprint.beats = updatedBp.beats;
+          blueprint.explicitExclusions = updatedBp.explicitExclusions;
+          final reply = json['reply']?.toString().trim() ??
+              'Updated the Release Plan Blueprint with your changes!';
+          blueprint.chatHistory.add(
+            AgentChatMessage(
+              id: 'rel_msg_ai_${blueprint.chatHistory.length}',
+              role: 'assistant',
+              modelUsed: modelName,
+              text: reply,
+              updatedFields: const ['Release Plan Updated'],
+            ),
+          );
+          return blueprint;
+        }
+      }
+    }
+
+    // Offline / deterministic fallback
+    blueprint.goal = '${blueprint.goal} (Adjusted: $cleanMsg)';
+    blueprint.chatHistory.add(
+      AgentChatMessage(
+        id: 'rel_msg_ai_${blueprint.chatHistory.length}',
+        role: 'assistant',
+        modelUsed: modelName,
+        text: 'Updated the Release Plan goal and scope to reflect "$cleanMsg".',
+        updatedFields: const ['Release Plan Updated'],
+      ),
+    );
+    return blueprint;
+  }
+
   static String _extractBeatTitle(String rawBullet, {required String fallback}) {
     final cleaned = rawBullet.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim();
     if (cleaned.isEmpty) return fallback;
