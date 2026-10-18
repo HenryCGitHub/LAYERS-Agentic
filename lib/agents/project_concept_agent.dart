@@ -33,9 +33,10 @@ STRICT NAMING & WORDING RULES:
    - A pillar is NOT a feature ("has a skill tree") and NOT a genre ("a roguelike"); it is the experience those things exist to hold up (e.g., "Every run teaches you something new", "Crashes and recoveries feel just as fun as clean speed").
 4. TRADE-OFFS (PRIORITIZE X OVER Y):
    - Provide explicit "X over Y" priority rules so production knows what to protect when mechanics conflict (e.g., "Instant arcade response over realistic physics simulation").
-5. COMPLETE SEQUENTIAL CORE LOOP BEATS:
-   - Decompose the complete playable game loop into sequential Beats from start to finish.
-   - Give each distinct player action, system interaction, escalation step, resource/reward step, and loop reset its own separate Beat instead of bundling multiple mechanics into a single line.
+5. COMPLETE SEQUENTIAL CORE LOOP BEATS (NO ARTIFICIAL TIME LIMIT):
+   - Decompose the complete playable game loop into sequential Beats from start to finish (a game's core loop can take 30 seconds, 5 minutes, or 20 minutes depending on the genre—never force an artificial 30-second limit).
+   - Include prep/staging areas, active gameplay beats, shop/upgrade/inventory menus, and loop resolution/reset whenever they are genuinely part of this game's loop.
+   - Give each distinct player action, system interaction, escalation step, resource/reward step, and loop reset its own separate Beat (`Beat Name: Observable player action and system response`) instead of bundling multiple mechanics into a single line.
 6. PROTOTYPE-FIRST RELEASE FOCUS:
    - In Stage 1, only define the Phase 1 Prototype release(s) needed to prove the Core Game Loop in greybox. Later phases (MVP Releases per Beat, Vertical Slice, Full Production) are unlocked after the Prototype completes.
 
@@ -88,6 +89,52 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
       ]
     }
   ],
+  "sectionOptions": {
+    "goal": [
+      "Option 1 for framing the v0.1 prototype goal of '$cleanSpark'",
+      "Option 2 for framing the v0.1 prototype goal of '$cleanSpark'",
+      "Option 3 for framing the v0.1 prototype goal of '$cleanSpark'"
+    ],
+    "gameSpec": [
+      "Camera · Controls · Mode · Level Layout option 1 tailored to '$cleanSpark'",
+      "Camera · Controls · Mode · Level Layout option 2 tailored to '$cleanSpark'",
+      "Camera · Controls · Mode · Level Layout option 3 tailored to '$cleanSpark'"
+    ],
+    "techSpec": [
+      "Engine · Platform · Asset Pipeline · Save option 1 tailored to '$cleanSpark'",
+      "Engine · Platform · Asset Pipeline · Save option 2 tailored to '$cleanSpark'",
+      "Engine · Platform · Asset Pipeline · Save option 3 tailored to '$cleanSpark'"
+    ],
+    "designPillars": [
+      "Player experience focus option 1 tailored to '$cleanSpark'",
+      "Player experience focus option 2 tailored to '$cleanSpark'",
+      "Player experience focus option 3 tailored to '$cleanSpark'"
+    ],
+    "tradeOffs": [
+      "Explicit X over Y trade-off option 1 tailored to '$cleanSpark'",
+      "Explicit X over Y trade-off option 2 tailored to '$cleanSpark'",
+      "Explicit X over Y trade-off option 3 tailored to '$cleanSpark'"
+    ],
+    "coreLoop": [
+      "Core loop structure option 1 tailored to '$cleanSpark' (e.g. Beat 1 → Beat 2 → Beat 3...)",
+      "Core loop structure option 2 tailored to '$cleanSpark'",
+      "Core loop structure option 3 tailored to '$cleanSpark'"
+    ],
+    "exclusions": [
+      "Prototype scope-cut option 1 tailored to '$cleanSpark'",
+      "Prototype scope-cut option 2 tailored to '$cleanSpark'",
+      "Prototype scope-cut option 3 tailored to '$cleanSpark'"
+    ],
+    "doneWhen": [
+      "Observable playtest verification option 1 tailored to '$cleanSpark'",
+      "Observable playtest verification option 2 tailored to '$cleanSpark'",
+      "Observable playtest verification option 3 tailored to '$cleanSpark'"
+    ],
+    "prototypeRelease": [
+      "Single Greybox Prototype (v0.1) proving the complete '$cleanSpark' core loop",
+      "Two-Step Prototype: v0.1 Core Mechanics Sandbox → v0.2 Full '$cleanSpark' Loop"
+    ]
+  },
   "goal": "Plain-English sentence starting with 'Build...' stating what mechanics are being built and why (zero corporate buzzwords or thematic fluff).",
   "coreLoopBeats": [
     "Plain Beat Name: Literal player action and mechanic",
@@ -99,7 +146,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
   ],
   "doneWhen": "Clear practical condition for when a playtester can complete the Prototype loop.",
   "releaseTrainTitles": [
-    "v0.1: [Plain Functional Prototype Name, e.g. Core Toy & Movement Loop] - Prototype"
+    "v0.1: [Plain Functional Prototype Name, e.g. Core Movement & Game Loop] - Prototype"
   ]
 }
 ''';
@@ -124,6 +171,11 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
       final resolvedTitle = aiTitle.isNotEmpty ? aiTitle : shortTitle;
       final resolvedQuestions =
           qList.isNotEmpty ? qList : _defaultQuestionsForSpark(cleanSpark);
+      final parsedSectionOptions = _parseSectionOptions(
+        json['sectionOptions'],
+        spark: cleanSpark,
+        title: resolvedTitle,
+      );
 
       return ProjectConceptBlueprint(
         title: resolvedTitle,
@@ -181,6 +233,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
           'Exclusions',
           'Prototype Release',
         ],
+        sectionOptions: parsedSectionOptions,
         chatHistory: _buildInitialChatHistory(
           spark: cleanSpark,
           title: resolvedTitle,
@@ -217,6 +270,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
         'Exclusions',
         'Prototype Release',
       ],
+      sectionOptions: _defaultSectionOptionsForSpark(cleanSpark, shortTitle),
       chatHistory: _buildInitialChatHistory(
         spark: cleanSpark,
         title: shortTitle,
@@ -812,7 +866,7 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
         question: 'What is our target scope for the Phase 1 Prototype?',
         options: [
           '(Recommended) Prototype — 1 Greybox Arena proving the core loop beats work together',
-          'Two-Step Prototype — v0.1 Movement Toy followed by v0.2 Target & Hazard Loop',
+          'Two-Step Prototype — v0.1 Player Movement & Controls followed by v0.2 Full Core Loop Arena',
         ],
       ),
     ];
@@ -840,7 +894,85 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
 
   static List<String> _defaultReleaseTrain(String title) {
     return [
-      'v0.1: Core Toy & Movement Loop - Prototype',
+      'v0.1: Core Movement & Game Loop - Prototype',
     ];
+  }
+
+  static Map<String, List<String>> _parseSectionOptions(
+    dynamic rawSectionOptions, {
+    required String spark,
+    required String title,
+  }) {
+    final defaults = _defaultSectionOptionsForSpark(spark, title);
+    if (rawSectionOptions is! Map) return defaults;
+
+    final result = <String, List<String>>{};
+    for (final entry in defaults.entries) {
+      final rawList = rawSectionOptions[entry.key];
+      if (rawList is List) {
+        final cleaned = rawList
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty && s != '...')
+            .toList();
+        if (cleaned.isNotEmpty) {
+          result[entry.key] = cleaned;
+          continue;
+        }
+      }
+      result[entry.key] = entry.value;
+    }
+    return result;
+  }
+
+  static Map<String, List<String>> _defaultSectionOptionsForSpark(
+    String spark,
+    String title,
+  ) {
+    return {
+      'goal': [
+        'Build a playable $title prototype centered on $spark in a single test arena',
+        'Include an interactive prep & staging zone before entering the core $title gameplay loop',
+        'Focus v0.1 on the primary $title player controls and core mechanic feel first',
+      ],
+      'gameSpec': [
+        '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Single-Screen Arena',
+        '2D Side-Scrolling · Precision Controls · Multi-Room Stages',
+        '3D First-Person / Third-Person · Mouse + WASD · Enclosed Sandbox',
+      ],
+      'techSpec': [
+        'Godot 4 · PC Desktop · 2D Sprites / Greybox · Offline Local Save',
+        'Unity 6 · PC & Steam Deck · 2D/3D Hybrid · Steam Cloud Save',
+        'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Local Save',
+      ],
+      'designPillars': [
+        'Prioritize unbroken movement momentum and readable telegraphs for $title',
+        'Prioritize deliberate tactical decisions and high-clarity feedback for $title',
+        'Prioritize fast chain-reactions and rewarding loop mastery for $title',
+      ],
+      'tradeOffs': [
+        'Instant arcade input response over realistic physics inertia',
+        'Deliberate animation commitment over instant cancelable movement',
+        'Clean greybox readability over heavy visual shaders in v0.1',
+      ],
+      'coreLoop': [
+        'Complete $title Loop: Prep & Loadout → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
+        'Direct Action $title Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
+        'Mastery $title Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
+      ],
+      'exclusions': [
+        'Cut multi-branch skill trees, online co-op, and story cutscenes from the $title Prototype',
+        'Defer deep inventory crafting and multi-phase bosses until MVP releases',
+        'Defer persistent meta-progression save files and custom audio menus until MVP',
+      ],
+      'doneWhen': [
+        'Playtester completes a full $title core loop cycle at 60 FPS with zero soft-locks',
+        'Playtester executes all $title core beats, collects rewards, and resets cleanly',
+        'Playtester completes 3 consecutive $title loop cycles with responsive controls and clear feedback',
+      ],
+      'prototypeRelease': [
+        'Single Greybox Prototype (v0.1) proving all $title Core Loop Beats work together',
+        'Two-Step Prototype: v0.1 Player Movement & Controls → v0.2 Full $title Core Loop Arena',
+      ],
+    };
   }
 }

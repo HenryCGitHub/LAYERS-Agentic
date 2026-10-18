@@ -128,6 +128,7 @@ class ProjectConceptBlueprint {
   bool isInterviewComplete;
   List<AgentChatMessage> chatHistory;
   List<String> lastUpdatedFields;
+  Map<String, List<String>> sectionOptions;
 
   ProjectConceptBlueprint({
     required this.title,
@@ -164,7 +165,9 @@ class ProjectConceptBlueprint {
     this.isInterviewComplete = false,
     List<AgentChatMessage>? chatHistory,
     this.lastUpdatedFields = const [],
-  }) : chatHistory = chatHistory ?? <AgentChatMessage>[];
+    Map<String, List<String>>? sectionOptions,
+  })  : chatHistory = chatHistory ?? <AgentChatMessage>[],
+        sectionOptions = sectionOptions ?? <String, List<String>>{};
 
   /// Formats the Project Concept into the strict 3-part Scope & Goal layout.
   String toFormattedScopeSection() {

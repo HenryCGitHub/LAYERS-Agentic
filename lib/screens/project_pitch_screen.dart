@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 /// Metadata and Agent guidance for each of the 9 focused sections in Stage 1.
 class _SectionConfig {
   final String numLabel;
+  final String optionKey;
   final String shortTitle;
   final String title;
   final String purpose;
@@ -16,6 +17,7 @@ class _SectionConfig {
 
   const _SectionConfig({
     required this.numLabel,
+    required this.optionKey,
     required this.shortTitle,
     required this.title,
     required this.purpose,
@@ -80,30 +82,33 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   static const List<_SectionConfig> _sections = [
     _SectionConfig(
       numLabel: '01',
+      optionKey: 'goal',
       shortTitle: 'Goal',
       title: 'Goal',
       purpose: 'Plain-English statement of what we are building and why.',
       question: 'How should we frame the core prototype goal for v0.1?',
       options: [
-        'Focus v0.1 strictly on the core movement & combat loop in a single arena',
-        'Include an interactive staging area before entering wave rounds in v0.1',
-        'Focus v0.1 on pure movement traversal before adding enemy waves',
+        'Focus v0.1 strictly on the core gameplay loop in a single test arena',
+        'Include an interactive prep & staging zone before entering the active loop in v0.1',
+        'Focus v0.1 on primary player controls and core mechanic feel first',
       ],
     ),
     _SectionConfig(
       numLabel: '02',
+      optionKey: 'gameSpec',
       shortTitle: 'Game Spec',
       title: 'Game Spec',
       purpose: 'Camera view, player controls, mode, and arena layout.',
       question: 'Which camera perspective and control scheme fits best?',
       options: [
         '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Single-Screen Arena',
-        '2D Side-Scrolling · Precision Platformer · Multi-Room Stages',
-        '3D First-Person · Mouse + WASD · Enclosed Wave Arena',
+        '2D Side-Scrolling · Precision Controls · Multi-Room Stages',
+        '3D First-Person · Mouse + WASD · Enclosed Sandbox',
       ],
     ),
     _SectionConfig(
       numLabel: '03',
+      optionKey: 'techSpec',
       shortTitle: 'Tech Spec',
       title: 'Tech Spec',
       purpose: 'Engine, target platform, asset pipeline, and save/network architecture.',
@@ -116,18 +121,20 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     ),
     _SectionConfig(
       numLabel: '04',
+      optionKey: 'designPillars',
       shortTitle: 'Design Pillars',
       title: 'Design Pillars',
       purpose: 'Core player experience truths (how the game feels, never a feature list).',
       question: 'Which player experience truth should anchor our design decisions?',
       options: [
-        'Prioritize unbroken movement momentum and readable enemy telegraphs',
-        'Prioritize deliberate tactical positioning and high-risk parries',
-        'Prioritize fast chaotic chain-reactions and screen-clearing combos',
+        'Prioritize unbroken movement momentum and readable telegraphs',
+        'Prioritize deliberate tactical positioning and high-clarity feedback',
+        'Prioritize fast chain-reactions and rewarding loop mastery',
       ],
     ),
     _SectionConfig(
       numLabel: '05',
+      optionKey: 'tradeOffs',
       shortTitle: 'Trade-Offs',
       title: 'Trade-Offs (X over Y)',
       purpose: 'Explicit engineering & design priority rules when mechanics conflict.',
@@ -140,52 +147,65 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     ),
     _SectionConfig(
       numLabel: '06',
+      optionKey: 'coreLoop',
       shortTitle: 'Core Loop',
       title: 'In Scope: Core Loop Beats',
       purpose: 'The sequential playable beats that make up the complete game loop.',
       question: 'How should the playable core loop Beats flow from start to reset?',
       options: [
-        'Full Action Loop: Staging Prep → Traversal Entry → Wave Spawning → Primary Combat → Resource Pickup → Upgrade Choice → Loop Reset',
-        'Wave Survival Loop: Loadout Select → Arena Entry → Hazard Escalation → Target Elimination → Loot Tally → Next Wave or Reset',
-        'Speed Traversal Loop: Start Gate → Grapple & Dash Chain → Hazard Dodge → Target Strike → Split Time Evaluation → Instant Retry',
+        'Complete Loop: Staging & Prep → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
+        'Direct Action Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
+        'Mastery Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
       ],
     ),
     _SectionConfig(
       numLabel: '07',
+      optionKey: 'exclusions',
       shortTitle: 'Out of Scope',
       title: 'Out of Scope (Exclusions)',
       purpose: 'Hard exclusions cut from the Prototype to prevent scope creep.',
       question: 'Which scope-creep features should we explicitly cut from the Prototype?',
       options: [
-        'Cut skill trees, online co-op, and story cutscenes from Prototype',
-        'Also cut multi-phase bosses and town shop menus until MVP releases',
-        'Also cut persistent meta-progression saves and audio settings until MVP',
+        'Cut multi-branch skill trees, online co-op, and story cutscenes from Prototype',
+        'Also defer multi-phase bosses and deep inventory crafting until MVP releases',
+        'Also defer persistent meta-progression saves and audio settings until MVP',
       ],
     ),
     _SectionConfig(
       numLabel: '08',
+      optionKey: 'doneWhen',
       shortTitle: 'Done When',
       title: 'Done When',
       purpose: 'Observable playtest condition that proves the Prototype is complete.',
       question: 'How will we verify that the Prototype loop is done?',
       options: [
         'Playtester completes a full core loop cycle at 60 FPS with zero soft-locks',
-        'Playtester clears escalating waves, collects drops, and resets cleanly',
-        'Playtester beats target par time in the greybox arena without clipping',
+        'Playtester executes all core loop beats, collects rewards, and resets cleanly',
+        'Playtester completes 3 consecutive loop cycles with responsive controls and clear feedback',
       ],
     ),
     _SectionConfig(
       numLabel: '09',
+      optionKey: 'prototypeRelease',
       shortTitle: 'Prototype Release',
       title: 'Phase 1: Prototype Release',
       purpose: 'Focuses strictly on proving the Core Loop first. Subsequent phases (MVPs per Beat → Vertical Slice → Full Production) unlock as each phase completes.',
       question: 'How should we scope Phase 1 (Prototype) before unlocking MVP Beat Releases?',
       options: [
         'Single Greybox Prototype (v0.1) proving the Core Loop Beats work together',
-        'Two-Step Prototype: v0.1 Movement & Controls Toy → v0.2 Core Loop Beat Connection',
+        'Two-Step Prototype: v0.1 Player Movement & Controls → v0.2 Full Core Loop Arena',
       ],
     ),
   ];
+
+  List<String> _optionsForSection(ProjectConceptBlueprint draft, int sectionIdx) {
+    final sec = _sections[sectionIdx];
+    final dynamicOpts = draft.sectionOptions[sec.optionKey];
+    if (dynamicOpts != null && dynamicOpts.isNotEmpty) {
+      return dynamicOpts;
+    }
+    return sec.options;
+  }
 
   @override
   void dispose() {
@@ -212,37 +232,80 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     });
   }
 
-  void _selectSectionOption(ProjectConceptBlueprint draft, int sectionIdx, int optIdx) {
-    final optionText = _sections[sectionIdx].options[optIdx];
+  Future<void> _selectSectionOption(
+    ProjectConceptBlueprint draft,
+    int sectionIdx,
+    int optIdx,
+  ) async {
+    final opts = _optionsForSection(draft, sectionIdx);
+    if (optIdx < 0 || optIdx >= opts.length) return;
+    final optionText = opts[optIdx];
+    final sec = _sections[sectionIdx];
+
     setState(() {
       _selectedOptionBySection[sectionIdx] = optIdx;
       _agentNotesBySection[sectionIdx] =
-          'Agent updated ${_sections[sectionIdx].title}: Applied "$optionText".';
+          'Agent updating ${sec.title}: "$optionText"...';
     });
-    _applySectionOptionDeterministic(draft, sectionIdx, optIdx);
+
+    // When a live AI key is configured, ask the Agent to update this specific section
+    // for the user's actual game concept rather than overwriting with a hardcoded list!
+    if (widget.workbench.hasLiveAiKey) {
+      await widget.workbench.sendConceptChatMessage(
+        '[Section ${sec.numLabel} ${sec.title}] Update ONLY the ${sec.title} section for "${draft.title}" (${draft.sparkIdea}) to apply this choice: "$optionText". Keep all other sections intact.',
+      );
+      if (!mounted) return;
+      setState(() {
+        _agentNotesBySection[sectionIdx] =
+            'Agent updated ${sec.title}: Applied "$optionText".';
+      });
+      return;
+    }
+
+    _applySectionOptionDeterministic(draft, sectionIdx, optIdx, optionText);
+    if (!mounted) return;
+    setState(() {
+      _agentNotesBySection[sectionIdx] =
+          'Agent updated ${sec.title}: Applied "$optionText".';
+    });
   }
 
   void _applySectionOptionDeterministic(
     ProjectConceptBlueprint draft,
     int sectionIdx,
     int optIdx,
+    String optionText,
   ) {
     widget.workbench.updateConceptDraft((d) {
       switch (sectionIdx) {
         case 0:
-          if (optIdx == 0) {
+          if (optionText.toLowerCase().startsWith('build ')) {
+            d.goal = optionText;
+          } else if (optIdx == 0) {
             d.goal =
                 'Build a playable ${d.title} prototype centered on ${d.sparkIdea} with immediate loop feedback in a single arena.';
           } else if (optIdx == 1) {
             d.goal =
-                'Build a ${d.title} prototype connecting an interactive prep room to repeatable arena waves.';
+                'Build a ${d.title} prototype connecting an interactive prep & staging zone to repeatable core loop rounds.';
           } else {
             d.goal =
-                'Build a high-speed ${d.title} movement traversal prototype proving core control feel before adding combat.';
+                'Build a ${d.title} prototype proving primary player controls and core mechanic feel for ${d.sparkIdea}.';
           }
           break;
         case 1:
-          if (optIdx == 0) {
+          final specParts = optionText
+              .split('·')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          if (specParts.length >= 3) {
+            d.gameSpec = [
+              specParts[0],
+              specParts[1],
+              specParts.length >= 4 ? specParts[2] : 'Singleplayer',
+              specParts.last,
+            ];
+          } else if (optIdx == 0) {
             d.gameSpec = [
               '2D Top-Down',
               'Twin-Stick (WASD + Aim)',
@@ -252,21 +315,28 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           } else if (optIdx == 1) {
             d.gameSpec = [
               '2D Side-Scrolling',
-              'Precision Platformer',
+              'Precision Controls',
               'Singleplayer',
-              'Multi-Room Obstacle Course',
+              'Multi-Room Stages',
             ];
           } else {
             d.gameSpec = [
               '3D First-Person',
               'Mouse + WASD',
               'Singleplayer',
-              'Enclosed Wave Arena',
+              'Enclosed Sandbox',
             ];
           }
           break;
         case 2:
-          if (optIdx == 0) {
+          final techParts = optionText
+              .split('·')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          if (techParts.length >= 4) {
+            d.techSpec = techParts.take(4).toList();
+          } else if (optIdx == 0) {
             d.techSpec = [
               'Godot 4 (2D)',
               'PC (Steam / Desktop)',
@@ -290,121 +360,62 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           }
           break;
         case 3:
-          if (optIdx == 0) {
-            d.designPillars = [
-              'Flow-State Momentum: Never force the player to stop moving to act or aim.',
-              'Readable Chaos: Every hazard and attack is clearly telegraphed before impact.',
-              'Every Run Teaches Something: Failures feel fair, fast to recover from, and immediately repeatable.',
-            ];
-          } else if (optIdx == 1) {
-            d.designPillars = [
-              'Tactical Positioning: Every dodge and parry rewards reading enemy spacing.',
-              'High-Clarity Telegraphs: Audio and visual cues always precede heavy strikes.',
-              'Fast Recovery: Mistakes punish health, never control responsiveness.',
-            ];
+          if (d.designPillars.isNotEmpty) {
+            d.designPillars[0] = 'Core Focus: $optionText';
           } else {
-            d.designPillars = [
-              'Chain-Reaction Payoff: Every combo triggers visible arena-wide feedback.',
-              'Relentless Tempo: Zero downtime between wave spawns and movement bursts.',
-              'Instant Readability: Silhouettes stay crisp even during peak particle bursts.',
-            ];
+            d.designPillars = ['Core Focus: $optionText'];
           }
           break;
         case 4:
-          if (optIdx == 0) {
-            d.tradeOffs = [
-              'Instant arcade input response over realistic physics inertia',
-              'Clear silhouette readability over dense particle clutter',
-              'Fast 1-key loop reset over multi-screen menu flows',
-            ];
-          } else if (optIdx == 1) {
-            d.tradeOffs = [
-              'Deliberate animation commitment over instant cancelable movement',
-              'Crisp hitbox accuracy over forgiving auto-aim assist',
-              'Fast 1-key loop reset over multi-screen menu flows',
-            ];
-          } else {
-            d.tradeOffs = [
-              'Clean greybox readability over heavy visual shaders in v0.1',
-              'Locked 60 FPS frame pacing over high-poly environment detail',
-              'Single-arena depth over multiple unfinished levels',
-            ];
+          if (optionText.toLowerCase().contains(' over ')) {
+            if (d.tradeOffs.isNotEmpty) {
+              d.tradeOffs[0] = optionText;
+            } else {
+              d.tradeOffs = [optionText];
+            }
           }
           break;
         case 5:
-          if (optIdx == 0) {
-            d.coreLoopBeats = [
-              'Staging & Loadout Prep: Select active tool or movement modifier in the starting zone',
-              'Arena Entry & Traversal: Enter the arena and chain primary movement impulses across terrain',
-              'Hazard & Wave Spawning: Trigger room encounters with telegraphed enemy waves and active hazards',
-              'Primary Combat & Timing: Strike targets using momentum windows, deflection, and dodge recovery',
-              'Resource Drop & Pickup: Collect dropped energy, ammo, or health orbs mid-encounter',
-              'Room Clear & Upgrade Choice: Complete wave objective and select a run-modifying upgrade',
-              'Loop Resolution & Instant Reset: Bank round results or trigger 1-key arena reset on failure',
-            ];
-          } else if (optIdx == 1) {
-            d.coreLoopBeats = [
-              'Loadout Select: Pick primary weapon and passive perk in the staging room',
-              'Arena Entry: Drop into the active wave arena and establish movement flow',
-              'Hazard Escalation: Dodge telegraphed floor hazards and incoming enemy projectiles',
-              'Target Elimination: Defeat wave enemies using primary and secondary attacks',
-              'Loot Tally: Gather dropped currency and health pickups before timer expires',
-              'Wave Upgrade Choice: Pick a stat boost between waves',
-              'Run Resolution & Reset: Clear final wave or reset immediately on defeat',
-            ];
-          } else {
-            d.coreLoopBeats = [
-              'Start Gate Launch: Trigger initial speed burst out of the starting gate',
-              'Grapple & Dash Chain: Link grappling swings and air dashes across gaps',
-              'Hazard Dodge: Navigate moving obstacles without losing velocity',
-              'Target Strike: Hit checkpoint targets mid-flight to extend boost meter',
-              'Split Time Evaluation: Cross finish beacon and compare split rank',
-              'Instant Retry: Reset to start gate in a single keypress',
-            ];
+          // Parse arrow-separated beats if the option describes a loop sequence,
+          // otherwise preserve the concept's existing beats and adjust Beat 1!
+          if (optionText.contains('→')) {
+            final colonSplit = optionText.contains(':')
+                ? optionText.substring(optionText.indexOf(':') + 1)
+                : optionText;
+            final steps = colonSplit
+                .split('→')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+            if (steps.length >= 3) {
+              d.coreLoopBeats = [
+                for (final step in steps)
+                  step.contains(':')
+                      ? step
+                      : '$step: Execute $step for ${d.title} (${d.sparkIdea})',
+              ];
+            }
           }
           break;
         case 6:
-          if (optIdx == 0) {
-            d.exclusions = [
-              'Multi-branch skill trees and deep inventory crafting menus',
-              'Online multiplayer matchmaking and netcode replication',
-              'Cinematic story cutscenes and NPC dialogue trees',
-            ];
-          } else if (optIdx == 1) {
-            d.exclusions = [
-              'Multi-branch skill trees and deep inventory crafting menus',
-              'Multi-phase boss encounters and town shop menus (deferred to MVP releases)',
-              'Online multiplayer matchmaking and netcode replication',
-            ];
+          if (d.exclusions.isNotEmpty) {
+            d.exclusions[0] = optionText;
           } else {
-            d.exclusions = [
-              'Persistent meta-progression save files (deferred to MVP releases)',
-              'Custom keybind & audio mixer menus in v0.1',
-              'Online multiplayer matchmaking and story cutscenes',
-            ];
+            d.exclusions = [optionText];
           }
           break;
         case 7:
-          if (optIdx == 0) {
-            d.doneWhen =
-                'Playtester completes a full core loop cycle at 60 FPS with responsive controls and zero state soft-locks.';
-          } else if (optIdx == 1) {
-            d.doneWhen =
-                'Playtester clears 3 escalating waves, collects drops, and resets the arena with zero collisions or soft-locks.';
-          } else {
-            d.doneWhen =
-                'Playtester completes the greybox obstacle course under par time at 60 FPS with zero wall-clipping or input drops.';
-          }
+          d.doneWhen = optionText;
           break;
         case 8:
           if (optIdx == 0) {
             d.releaseTrainTitles = [
-              'v0.1: Core Toy & Movement Loop - Prototype',
+              'v0.1: ${d.title} Core Loop - Prototype',
             ];
           } else {
             d.releaseTrainTitles = [
-              'v0.1: Greybox Movement & Control Toy - Prototype',
-              'v0.2: Core Loop Beat Connection - Prototype',
+              'v0.1: ${d.title} Controls & Mechanics - Prototype',
+              'v0.2: Full ${d.title} Core Loop - Prototype',
             ];
           }
           break;
@@ -1259,12 +1270,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     const SizedBox(height: 12),
 
                     // Clickable Radio Option Cards
-                    for (int optIdx = 0; optIdx < sec.options.length; optIdx++) ...[
+                    for (int optIdx = 0;
+                        optIdx < _optionsForSection(draft, sectionIdx).length;
+                        optIdx++) ...[
                       _buildAgentOptionCard(
                         draft: draft,
                         sectionIdx: sectionIdx,
                         optIdx: optIdx,
-                        label: sec.options[optIdx],
+                        label: _optionsForSection(draft, sectionIdx)[optIdx],
                         isSelected: selectedOpt == optIdx,
                       ),
                       const SizedBox(height: 7),
@@ -2981,7 +2994,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        for (int optIdx = 0; optIdx < sec.options.length; optIdx++)
+                        for (int optIdx = 0;
+                            optIdx < _optionsForSection(draft, sectionIdx).length;
+                            optIdx++)
                           InkWell(
                             onTap: () => _selectSectionOption(draft, sectionIdx, optIdx),
                             borderRadius: BorderRadius.circular(4),
@@ -2997,7 +3012,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                 ),
                               ),
                               child: Text(
-                                sec.options[optIdx],
+                                _optionsForSection(draft, sectionIdx)[optIdx],
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   color: _textSecondary,

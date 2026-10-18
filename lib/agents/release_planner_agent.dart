@@ -61,6 +61,13 @@ class ReleasePlannerAgent {
       }
     }
 
+    final numberedCoreLoopSummary = coreLoopItems.isNotEmpty
+        ? [
+            for (int i = 0; i < coreLoopItems.length; i++)
+              '  BEAT-${(i + 1).toString().padLeft(2, '0')}: ${coreLoopItems[i]}',
+          ].join('\n')
+        : '  (Decompose the project goal into sequential playable loop beats)';
+
     if (GeminiAgentClient.hasKey(apiKey)) {
       final prompt = '''
 You are the Antigravity Release Planner Agent (`gemini-4-argon`) for a game studio.
@@ -76,23 +83,30 @@ $tradeOffsText
 Project Concept Scope:
 ${projectDoc.sections['scope'] ?? ''}
 
+Approved Stage 1 Core Gameplay Loop Beats (${coreLoopItems.length} Beats):
+$numberedCoreLoopSummary
+
 ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
 
 STRICT NAMING & ARCHITECTURE RULES:
-1. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
+1. 1-TO-1 STAGE 1 CORE LOOP → STAGE 2 BEATS & PLAYABLE FEATURES CONTINUITY:
+   - You MUST preserve and map EVERY Stage 1 Core Loop Beat (`BEAT-01` through `BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) into a corresponding Beat (`beats` array entry) in this Release Blueprint! NEVER drop or collapse Stage 1 Core Loop Beats down to 2 or 3 beats.
+   - Under each Beat, generate the cohesive Playable Features (`1–3 Features per Beat`) that build the actual gameplay systems needed to playtest that Beat on screen in $versionTag (including prep/staging zones, active mechanics, shop/upgrade menus, or loop reset when part of that Beat).
+   - No artificial "30-second" loop time limit: a core loop takes whatever natural duration fits "${projectDoc.title}".
+2. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
    - Every Beat, Feature, and Checkpoint `title` MUST use plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Greybox Test Room").
    - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition Prep", "Wasteland", "Adrenaline", "Ordinance").
-2. PERMANENT MECHANICS vs. TEMPORARY TESTBEDS:
+3. PERMANENT MECHANICS vs. TEMPORARY TESTBEDS:
    - Keep permanent mechanics (movement, weapons, farming, AI, UI) in their own Features so they evolve cleanly from $versionTag onward.
    - Keep temporary greybox test rooms or debug spawners in a separate testbed Feature so they can be marked `"lifecycle": "superseded"` in later releases without throwing away core mechanics.
-3. FEATURE LIFECYCLE STATUS (`lifecycle`):
+4. FEATURE LIFECYCLE STATUS (`lifecycle`):
    - For v0.1 (first release): all features use `"lifecycle": "new"`.
    - For v0.2+ (subsequent releases evolving an existing tree):
      * `"stable"` — Existing feature from a prior release that works and needs 0 new hours (`"estimatedHours": 0`, `"checkpoints": []`). Leave it alone!
      * `"upgrade"` — Existing feature getting new $versionTag checkpoints, scope items, or tuning parameters (`"estimatedHours"` = ONLY the new delta hours for $versionTag, and `"checkpoints"` = ONLY the new $versionTag checkpoints).
      * `"new"` — Brand new feature added in $versionTag (or promoted from prior Out of Scope).
      * `"superseded"` — Temporary v0.1 testbed replaced by a real level/arena in $versionTag (`"included": false`, `"supersedesFeatureTitle"` set on the new replacement feature).
-4. BANNED CORPORATE JARGON:
+5. BANNED CORPORATE JARGON:
    - Never use words like "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "staging", "synergy", or "seamlessly". Start goals with concrete verbs like "Build...", "Add...", or "Connect...".
 
 Return ONLY a JSON object with this exact schema:
@@ -178,325 +192,198 @@ Return ONLY a JSON object with this exact schema:
       );
     }
 
+    final effectiveLoopItems = coreLoopItems.isNotEmpty
+        ? coreLoopItems
+        : <String>[
+            'Player Controls & Entry: Spawn in the test arena and execute primary movement controls',
+            'Core Mechanic & Target Interaction: Engage active targets and hazards with clear feedback',
+            'Loop Resolution & Instant Reset: Complete round objective, tally results, and reset cleanly',
+          ];
+
     final questions = <AgentQuestion>[
       AgentQuestion(
         id: 'rel_q_feel',
         question: 'For ${releaseDoc.title}, what should we prioritize during greybox playtesting?',
         options: [
-          '(Recommended) Crisp input responsiveness, velocity tuning, and collision recovery',
-          'Target hit-stop, screen shake, and audio/visual combat telegraphing',
-          'Full round timer, scoring loop, and instant restart flow',
+          '(Recommended) Crisp input responsiveness, core mechanic feel, and state transitions',
+          'Target hit confirmation, visual/audio telegraphs, and feedback cues',
+          'Complete loop progression, reward/upgrade selection, and instant restart flow',
         ],
       ),
       AgentQuestion(
         id: 'rel_q_scope',
         question: 'How strict should our hour budget be for ${releaseDoc.title}?',
         options: [
-          '(Recommended) Lean Prototype (~16–24h across 2–3 core beats)',
-          'Standard Milestone (~32–40h including secondary polish features)',
+          '(Recommended) Lean Prototype covering all ${effectiveLoopItems.length} Core Loop Beats in greybox',
+          'Expanded Prototype including secondary bonus challenges and tuning polish',
         ],
       ),
     ];
 
-    final beat1Title = coreLoopItems.isNotEmpty
-        ? _extractBeatTitle(coreLoopItems[0], fallback: 'Core Movement & Control Feel')
-        : 'Core Movement & Control Feel';
-    final beat2Title = coreLoopItems.length > 1
-        ? _extractBeatTitle(coreLoopItems[1], fallback: 'Target Interaction & Challenge')
-        : 'Target Interaction & Challenge';
-    final beat3Title = coreLoopItems.length > 2
-        ? _extractBeatTitle(coreLoopItems[2], fallback: 'Loop Resolution & Arena Reset')
-        : 'Loop Resolution & Arena Reset';
+    final beats = <ProposedBeatBlueprint>[];
+    for (int i = 0; i < effectiveLoopItems.length; i++) {
+      final rawBeat = effectiveLoopItems[i];
+      final beatNum = i + 1;
+      final beatTitle = _extractBeatTitle(
+        rawBeat,
+        fallback: 'Core Loop Beat $beatNum',
+      );
+      final beatDesc = rawBeat.contains(':')
+          ? rawBeat.substring(rawBeat.indexOf(':') + 1).trim()
+          : rawBeat.trim();
+      final isLastBeat = i == effectiveLoopItems.length - 1;
 
-    final beats = <ProposedBeatBlueprint>[
-      ProposedBeatBlueprint(
-        id: 'beat_1',
-        title: beat1Title,
-        goal: 'Player controls character movement with immediate velocity, camera, and audio feedback.',
-        doneWhen: 'Player traverses the test arena cleanly with zero wall-clipping or input delay.',
-        features: [
+      final beatFeatures = <ProposedFeatureBlueprint>[
+        ProposedFeatureBlueprint(
+          id: 'feat_${beatNum}_1',
+          title: '$beatTitle Mechanics & Controls',
+          goal: 'Build the playable mechanics and feedback for $beatTitle ($beatDesc).',
+          doneWhen: 'Playtester can execute $beatTitle reliably at 60 FPS with clear visual and audio cues.',
+          estimatedHours: 5,
+          included: true,
+          lifecycle: FeatureLifecycleStatus.newFeature,
+          originVersion: versionTag,
+          inScope: [
+            'Core player input, state logic, and on-screen feedback for $beatTitle',
+            'Clean transition into the next beat of the ${projectDoc.title} core loop',
+          ],
+          outOfScope: [
+            'Final production art shaders and multi-branch meta unlocks for $beatTitle',
+          ],
+          tuningParams: [
+            'beat${beatNum}ResponseTime: 0.10 s',
+            'beat${beatNum}CooldownWindow: 0.25 s',
+          ],
+          edgeCases: [
+            '[INPUT GUARD] Rapid repeated inputs during $beatTitle transition cleanly without state lock',
+          ],
+          checkpoints: [
+            ProposedCheckpointBlueprint(
+              title: '$beatTitle Core Implementation & Playtest',
+              playtestCriteria: 'Execute $beatTitle in the test arena -> verify "$beatDesc" responds immediately on screen.',
+              releaseVersion: versionTag,
+              tasks: [
+                'Implement core state and player interaction for $beatTitle (3h)',
+                'Hook visual/audio feedback cues and transition guard for $beatTitle (2h)',
+              ],
+              coveredScope: [
+                'Core player input, state logic, and on-screen feedback for $beatTitle',
+                'Clean transition into the next beat of the ${projectDoc.title} core loop',
+              ],
+              tuningParams: [
+                'beat${beatNum}ResponseTime: 0.10 s',
+                'beat${beatNum}CooldownWindow: 0.25 s',
+              ],
+              edgeCases: [
+                '[INPUT GUARD] Rapid repeated inputs during $beatTitle transition cleanly without state lock',
+              ],
+            ),
+          ],
+        ),
+        if (i == 0)
           ProposedFeatureBlueprint(
-            id: 'feat_1_1',
-            title: 'Primary Locomotion & Burst',
-            goal: 'Build responsive directional movement and burst impulse with FOV kick.',
-            doneWhen: 'Player chains 3 burst impulses across gaps at 60 FPS.',
-            estimatedHours: 6,
-            included: true,
-            lifecycle: FeatureLifecycleStatus.newFeature,
-            originVersion: versionTag,
-            inScope: [
-              'Directional acceleration and ground/air velocity curve',
-              'Burst impulse trigger with camera FOV kick and whoosh SFX',
-            ],
-            outOfScope: [
-              'Unlockable elemental dash upgrades',
-            ],
-            tuningParams: [
-              'maxMoveSpeed: 12.0 m/s',
-              'burstImpulse: 18.5 m/s',
-              'coyoteTimeWindow: 0.12 s',
-            ],
-            edgeCases: [
-              '[WALL CLIP] High-speed burst into acute corner clamps velocity cleanly',
-              '[INPUT BUFFER] Queued jump/burst within 100ms before landing fires on touchdown',
-            ],
-            checkpoints: [
-              ProposedCheckpointBlueprint(
-                title: 'Velocity Curve & Input Buffer',
-                playtestCriteria: 'Sprint and trigger burst off a ledge -> verify 0.12s coyote window and 100ms landing buffer.',
-                releaseVersion: versionTag,
-                tasks: const [
-                  'Implement directional acceleration & maxMoveSpeed clamp (2h)',
-                  'Add 100ms input buffer and coyoteTimeWindow check (2h)',
-                ],
-                coveredScope: const [
-                  'Directional acceleration and ground/air velocity curve',
-                ],
-                tuningParams: const [
-                  'maxMoveSpeed: 12.0 m/s',
-                  'coyoteTimeWindow: 0.12 s',
-                ],
-                edgeCases: const [
-                  '[INPUT BUFFER] Queued jump/burst within 100ms before landing fires on touchdown',
-                ],
-              ),
-              ProposedCheckpointBlueprint(
-                title: 'Burst Impulse & Corner Deflection',
-                playtestCriteria: 'Trigger burst into a 45-degree wall corner -> character slides along surface without clipping.',
-                releaseVersion: versionTag,
-                tasks: const [
-                  'Hook burstImpulse velocity vector with camera FOV kick & SFX (1h)',
-                  'Add capsule sweep deflection against steep wall normals (1h)',
-                ],
-                coveredScope: const [
-                  'Burst impulse trigger with camera FOV kick and whoosh SFX',
-                ],
-                tuningParams: const [
-                  'burstImpulse: 18.5 m/s',
-                ],
-                edgeCases: const [
-                  '[WALL CLIP] High-speed burst into acute corner clamps velocity cleanly',
-                ],
-              ),
-            ],
-          ),
-          ProposedFeatureBlueprint(
-            id: 'feat_1_2',
-            title: 'Momentum Slide & Recovery',
-            goal: 'Allow player to preserve burst speed down slopes and transition smoothly out of landings.',
-            doneWhen: 'Landing into a slide preserves momentum and decelerates predictably on flat ground.',
-            estimatedHours: 5,
-            included: true,
-            lifecycle: FeatureLifecycleStatus.newFeature,
-            originVersion: versionTag,
-            inScope: [
-              'Slope-aware slide speed multiplier and friction decay',
-              'Camera tilt and particle dust trail while sliding',
-            ],
-            outOfScope: [
-              'Slide enemy disarm skill',
-            ],
-            tuningParams: [
-              'slideEntrySpeed: 14.0 m/s',
-              'flatFrictionDecel: 6.5 m/s²',
-            ],
-            edgeCases: [
-              '[CEILING STAND] Uncrouching under low geometry stays in crouched state until clear',
-            ],
-            checkpoints: [
-              ProposedCheckpointBlueprint(
-                title: 'Slide Entry & Friction Decay',
-                playtestCriteria: 'Enter slide on flat vs sloped ramp -> verify speed boost on incline and smooth stop on flat.',
-                releaseVersion: versionTag,
-                tasks: const [
-                  'Apply slideEntrySpeed impulse and slope dot-product multiplier (2h)',
-                  'Add flatFrictionDecel curve, camera roll tilt, and dust VFX (2h)',
-                  'Guard uncrouch state transition with vertical capsule clearance raycast (1h)',
-                ],
-                coveredScope: const [
-                  'Slope-aware slide speed multiplier and friction decay',
-                  'Camera tilt and particle dust trail while sliding',
-                ],
-                tuningParams: const [
-                  'slideEntrySpeed: 14.0 m/s',
-                  'flatFrictionDecel: 6.5 m/s²',
-                ],
-                edgeCases: const [
-                  '[CEILING STAND] Uncrouching under low geometry stays in crouched state until clear',
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-      ProposedBeatBlueprint(
-        id: 'beat_2',
-        title: beat2Title,
-        goal: 'Player engages active targets in the arena with clear telegraphing, hit-stop, and knockback.',
-        doneWhen: 'Player can defeat 3 arena targets in a row with readable hit confirmation.',
-        features: [
-          ProposedFeatureBlueprint(
-            id: 'feat_2_1',
-            title: 'Target Strike & Hit Feedback',
-            goal: 'Connect player attacks against targets with crisp hit-stop, knockback, and damage flash.',
-            doneWhen: 'Every strike registers hit-stop, audio cue, and health reduction without ghost hits.',
-            estimatedHours: 6,
-            included: true,
-            lifecycle: FeatureLifecycleStatus.newFeature,
-            originVersion: versionTag,
-            inScope: [
-              'Attack hitbox sweep and target hurtbox registration',
-              '60ms hit-stop freeze, material flash, and directional knockback',
-            ],
-            outOfScope: [
-              'Elemental status effect stacking',
-            ],
-            tuningParams: [
-              'attackRange: 3.2 m',
-              'hitStopDuration: 0.06 s',
-              'knockbackForce: 11.0 N',
-            ],
-            edgeCases: [
-              '[MULTI HIT] Single attack swing only damages the same target ID once per active frame window',
-            ],
-            checkpoints: [
-              ProposedCheckpointBlueprint(
-                title: 'Hitbox Sweep & Single-Hit Guard',
-                playtestCriteria: 'Strike a cluster of 2 targets -> each takes damage exactly once per swing.',
-                releaseVersion: versionTag,
-                tasks: const [
-                  'Build active hitbox sweep and per-swing hit target ID set (2h)',
-                  'Apply knockbackForce impulse along impact normal (1h)',
-                ],
-                coveredScope: const [
-                  'Attack hitbox sweep and target hurtbox registration',
-                ],
-                tuningParams: const [
-                  'attackRange: 3.2 m',
-                  'knockbackForce: 11.0 N',
-                ],
-                edgeCases: const [
-                  '[MULTI HIT] Single attack swing only damages the same target ID once per active frame window',
-                ],
-              ),
-              ProposedCheckpointBlueprint(
-                title: 'Hit-Stop & Visual Impact Cues',
-                playtestCriteria: 'Land a direct hit -> verify 60ms hit-stop frame pause, white flash, and impact SFX.',
-                releaseVersion: versionTag,
-                tasks: const [
-                  'Trigger hitStopDuration time-scale pause and target emissive flash (2h)',
-                  'Hook impact spark particles and hit confirmation SFX (1h)',
-                ],
-                coveredScope: const [
-                  '60ms hit-stop freeze, material flash, and directional knockback',
-                ],
-                tuningParams: const [
-                  'hitStopDuration: 0.06 s',
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-      ProposedBeatBlueprint(
-        id: 'beat_3',
-        title: beat3Title,
-        goal: 'Close the 30-second gameplay loop with objective completion, round summary, and instant reset.',
-        doneWhen: 'Clearing all arena targets displays clear completion feedback and resets in 1 button press.',
-        features: [
-          ProposedFeatureBlueprint(
-            id: 'feat_3_1',
-            title: 'Arena Clear & Instant Reset',
-            goal: 'Track remaining targets, celebrate arena completion, and reset the loop in under 1 second.',
-            doneWhen: 'Defeating the last target triggers clear banner and R-key resets all actors cleanly.',
+            id: 'feat_${beatNum}_2',
+            title: '$beatTitle Camera & HUD Feedback',
+            goal: 'Provide clear camera tracking and immediate HUD state readout during $beatTitle.',
+            doneWhen: 'Camera and HUD indicators update in sync with player actions without jitter.',
             estimatedHours: 4,
             included: true,
             lifecycle: FeatureLifecycleStatus.newFeature,
             originVersion: versionTag,
             inScope: [
-              'Active target counter and arena clear banner with run timer',
-              'Instant 1-key arena state reset without reloading scene assets',
+              'Camera follow smoothing and active state indicator for $beatTitle',
             ],
             outOfScope: [
-              'Global online leaderboards',
+              'Custom HUD skin themes',
             ],
             tuningParams: [
-              'resetFadeDuration: 0.25 s',
+              'cameraFollowLerp: 14.0',
             ],
             edgeCases: [
-              '[SIMULTANEOUS KO] Player dying on the same frame as last target prioritizes failure reset cleanly',
+              '[BOUNDARY CLAMP] Camera clamps cleanly at arena bounds without snapping',
             ],
             checkpoints: [
               ProposedCheckpointBlueprint(
-                title: 'Clear Tracker & Instant Loop Reset',
-                playtestCriteria: 'Eliminate final target -> banner appears -> press Reset -> player and targets restore in 0.25s.',
+                title: 'Camera Follow & State Readout',
+                playtestCriteria: 'Trigger $beatTitle near arena boundary -> camera tracks smoothly and HUD updates state.',
                 releaseVersion: versionTag,
                 tasks: const [
-                  'Wire active target count listener and run timer HUD (2h)',
-                  'Implement pool-based actor reset and simultaneous KO guard (2h)',
+                  'Implement camera follow smoothing and boundary clamp (2h)',
+                  'Wire active state readout indicator on HUD (2h)',
                 ],
-                coveredScope: const [
-                  'Active target counter and arena clear banner with run timer',
-                  'Instant 1-key arena state reset without reloading scene assets',
+                coveredScope: [
+                  'Camera follow smoothing and active state indicator for $beatTitle',
                 ],
                 tuningParams: const [
-                  'resetFadeDuration: 0.25 s',
+                  'cameraFollowLerp: 14.0',
                 ],
                 edgeCases: const [
-                  '[SIMULTANEOUS KO] Player dying on the same frame as last target prioritizes failure reset cleanly',
+                  '[BOUNDARY CLAMP] Camera clamps cleanly at arena bounds without snapping',
                 ],
               ),
             ],
           ),
+        if (isLastBeat)
           ProposedFeatureBlueprint(
-            id: 'feat_3_2',
+            id: 'feat_${beatNum}_2',
             title: 'Bonus Time-Trial Medals',
-            goal: 'Award Bronze/Silver/Gold speed medals at the end of an arena clear.',
-            doneWhen: 'Clearing under target thresholds displays medal icon on summary card.',
+            goal: 'Award Bronze/Silver/Gold performance medals at the end of a completed loop.',
+            doneWhen: 'Completing the loop under target thresholds displays medal icon on summary card.',
             estimatedHours: 4,
             included: false, // Pre-unchecked to demonstrate YAGNI toggle -> Out of Scope
             lifecycle: FeatureLifecycleStatus.newFeature,
             originVersion: versionTag,
-            inScope: [
-              'Gold/Silver/Bronze time threshold evaluation and badge popup',
+            inScope: const [
+              'Gold/Silver/Bronze threshold evaluation and badge popup',
             ],
-            tuningParams: [
-              'goldTimeThreshold: 25.0 s',
+            tuningParams: const [
+              'goldMedalThreshold: 1000 pts',
             ],
-            edgeCases: [
-              '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+            edgeCases: const [
+              '[SCORE CLAMP] Simultaneous completion events award medal exactly once',
             ],
             checkpoints: [
               ProposedCheckpointBlueprint(
                 title: 'Medal Threshold Evaluation',
-                playtestCriteria: 'Clear arena in under 25s -> Gold medal badge animates on clear screen.',
+                playtestCriteria: 'Complete loop above target threshold -> Gold medal badge animates on summary screen.',
                 releaseVersion: versionTag,
                 tasks: const [
-                  'Compare final elapsed time against goldTimeThreshold and render badge (2h)',
+                  'Compare round performance against goldMedalThreshold and render badge (2h)',
                 ],
                 coveredScope: const [
-                  'Gold/Silver/Bronze time threshold evaluation and badge popup',
+                  'Gold/Silver/Bronze threshold evaluation and badge popup',
                 ],
                 tuningParams: const [
-                  'goldTimeThreshold: 25.0 s',
+                  'goldMedalThreshold: 1000 pts',
                 ],
                 edgeCases: const [
-                  '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+                  '[SCORE CLAMP] Simultaneous completion events award medal exactly once',
                 ],
               ),
             ],
           ),
-        ],
-      ),
-    ];
+      ];
+
+      beats.add(
+        ProposedBeatBlueprint(
+          id: 'beat_$beatNum',
+          title: beatTitle,
+          goal: beatDesc.isNotEmpty
+              ? beatDesc
+              : 'Execute $beatTitle with responsive controls and clear feedback.',
+          doneWhen: 'Playtester completes $beatTitle and transitions cleanly to the next beat.',
+          features: beatFeatures,
+        ),
+      );
+    }
 
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
       releaseTitle: releaseDoc.title,
       releaseVersionTag: versionTag,
       preset: preset,
-      goal: 'Prove the 30-second playable core loop in one greybox arena with responsive controls and instant reset.',
-      doneWhen: 'A playtester can play, clear, and reset the greybox arena 3 times in a row with zero debug intervention.',
+      goal: 'Build and playtest the complete ${projectDoc.title} core loop across all ${beats.length} beats in a greybox arena.',
+      doneWhen: 'A playtester can complete the full ${projectDoc.title} core loop cycle and reset cleanly 3 times in a row.',
       questions: questions,
       beats: beats,
       explicitExclusions: projectExclusions.isNotEmpty
@@ -852,7 +739,7 @@ Return ONLY a JSON object with this exact schema:
       releaseVersionTag: versionTag,
       preset: preset,
       goal: (json['goal'] ??
-              'Prove the core 30-second playable loop in one greybox test arena.')
+              'Build and playtest the complete core gameplay loop in one greybox test arena.')
           .toString()
           .trim(),
       doneWhen: (json['doneWhen'] ??

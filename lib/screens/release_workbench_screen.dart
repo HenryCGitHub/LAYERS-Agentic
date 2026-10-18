@@ -87,59 +87,62 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
   Widget _buildAgentExecutionProgress(TierDocument rel) {
     return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 520),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: _bgSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.buttonBreakdown),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2.2),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Building ${rel.title}...',
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: _textPrimary,
-                    ),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 520),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: _bgSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.buttonBreakdown),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2.2),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            for (final step in widget.workbench.executionLog)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle, size: 14, color: AppTheme.accentGreen),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        step,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          color: _textSecondary,
-                        ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Building ${rel.title}...',
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: _textPrimary,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-          ],
+              const SizedBox(height: 14),
+              for (final step in widget.workbench.executionLog)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, size: 14, color: AppTheme.accentGreen),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          step,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

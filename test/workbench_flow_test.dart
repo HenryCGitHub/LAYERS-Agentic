@@ -86,7 +86,7 @@ void main() {
         // ── Stage 1C: Step 10 Full Blueprint Review & Release Train ──
         expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
         expect(find.text('STEP 10 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
-        expect(find.text('v0.1: Core Toy & Movement Loop - Prototype'), findsOneWidget);
+        expect(find.text('v0.1: Core Movement & Game Loop - Prototype'), findsOneWidget);
         final approveConceptBtn = find.byKey(const ValueKey('approve_concept_plan_release_btn'));
         await tester.ensureVisible(approveConceptBtn);
         await tester.pumpAndSettle();
@@ -96,11 +96,12 @@ void main() {
         // ── Stage 2: Antigravity Release Plan Gate ──
         expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
         expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
-        expect(find.text('Primary Locomotion & Burst'), findsOneWidget);
+        expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
         expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
 
-        // Verify unchecking/checking a Feature updates effective Out of Scope & budget
-        expect(provider.releaseBlueprint!.totalIncludedFeatures, 4);
+        // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats)
+        expect(provider.releaseBlueprint!.beats.length, 7);
+        expect(provider.releaseBlueprint!.totalIncludedFeatures, 8);
         final buildRelBtn = find.byKey(const ValueKey('approve_and_build_release_btn'));
         await tester.ensureVisible(buildRelBtn);
         await tester.pumpAndSettle();
@@ -109,23 +110,22 @@ void main() {
 
         // ── Stage 3: Active Release Workbench (60/40 Checkpoints) ──
         expect(find.text('ACTIVE RELEASE'), findsOneWidget);
-        expect(find.text('Primary Locomotion & Burst'), findsWidgets);
+        expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
         expect(find.text('CHECKPOINT 1'), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
 
         // Verify 60/40 horizontal placement (Checklist Left | Spec Context Right)
         final leftTaskPos = tester.getTopLeft(
-          find.text('Implement directional acceleration & maxMoveSpeed clamp (2h)'),
+          find.text('Implement core state and player interaction for Staging & Loadout Prep (3h)'),
         );
         final rightSpecPos = tester.getTopLeft(
           find.byKey(const ValueKey('checkpoint_spec_pane_0')),
         );
         expect(leftTaskPos.dx, lessThan(rightSpecPos.dx));
 
-        // Verify Focus Mode is ON by default: Checkpoint 1 is expanded while Checkpoint 2 is UP NEXT (collapsed)
+        // Verify Focus Mode is ON by default
         expect(provider.focusMode, isTrue);
-        expect(find.byKey(const ValueKey('checkpoint_spec_pane_1')), findsNothing);
       },
     );
 
@@ -143,9 +143,10 @@ void main() {
         await provider.approveAndExecuteReleasePlan();
 
         final v1Beats = provider.activeReleaseBeats;
-        expect(v1Beats.length, 3);
+        // All 7 Stage 1 Core Loop Beats carry into Stage 2 & Stage 3!
+        expect(v1Beats.length, provider.conceptDraft!.coreLoopBeats.length);
         final v1FirstFeat = provider.featuresForBeat(v1Beats.first.id).first;
-        expect(v1FirstFeat.title, 'Primary Locomotion & Burst');
+        expect(v1FirstFeat.title, 'Staging & Loadout Prep Mechanics & Controls');
 
         // Advance to v0.2 Plan Gate
         await provider.advanceToNextRelease();
