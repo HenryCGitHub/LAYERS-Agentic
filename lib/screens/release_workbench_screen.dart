@@ -30,12 +30,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   final Set<String> _collapsedOpenCheckpoints = {};
 
   bool get _isDark => widget.workbench.isDark;
+  Color get _bgBase => AppTheme.bgBaseFor(_isDark);
   Color get _bgSurface => AppTheme.bgSurfaceFor(_isDark);
-  Color get _cardBg => _isDark ? const Color(0xFF141822) : const Color(0xFFF8FAFC);
-  Color get _borderColor => AppTheme.borderFor(_isDark);
+  Color get _bgRecessed => AppTheme.bgSurfaceRecessedFor(_isDark);
+  Color get _bgHover => AppTheme.bgSurfaceHoverFor(_isDark);
+  Color get _borderSubtle => AppTheme.borderSubtleFor(_isDark);
+  Color get _borderBright => AppTheme.borderBrightFor(_isDark);
   Color get _textPrimary => AppTheme.textPrimaryFor(_isDark);
   Color get _textSecondary => AppTheme.textSecondaryFor(_isDark);
   Color get _textMuted => AppTheme.textMutedFor(_isDark);
+  Color get _focalAccent => AppTheme.focalAccentFor(_isDark);
+  Color get _focalAccentFg => AppTheme.focalAccentFgFor(_isDark);
+  Color get _accentEmerald => AppTheme.accentGreenFor(_isDark);
+  Color get _accentCrimson => AppTheme.accentRedFor(_isDark);
+  Color get _accentAmber => AppTheme.accentAmberFor(_isDark);
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +69,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 280,
+                width: 288,
                 child: _buildLeftBeatFeatureRail(rel),
               ),
               Expanded(
@@ -94,8 +102,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: _bgSurface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.buttonBreakdown),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _borderBright),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -103,10 +111,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             children: [
               Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2.2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: _accentAmber,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -127,7 +138,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle, size: 14, color: AppTheme.accentGreen),
+                      Icon(Icons.check_circle, size: 14, color: _accentEmerald),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -163,7 +174,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: _borderColor)),
+            color: _bgRecessed,
+            border: Border(bottom: BorderSide(color: _borderSubtle)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,7 +191,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
                       fontWeight: FontWeight.w800,
-                      color: AppTheme.tierRelease,
+                      letterSpacing: 0.8,
+                      color: _accentAmber,
                     ),
                   ),
                   Row(
@@ -190,14 +203,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         onTap: () => widget.workbench.toggleFocusMode(),
                         borderRadius: BorderRadius.circular(5),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: isFocus
-                                ? AppTheme.accentBlue.withValues(alpha: 0.16)
-                                : _cardBg,
+                                ? _accentAmber.withValues(alpha: 0.14)
+                                : _bgSurface,
                             borderRadius: BorderRadius.circular(5),
                             border: Border.all(
-                              color: isFocus ? AppTheme.accentBlue : _borderColor,
+                              color: isFocus
+                                  ? _accentAmber.withValues(alpha: 0.45)
+                                  : _borderSubtle,
                             ),
                           ),
                           child: Text(
@@ -205,7 +220,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 8.5,
                               fontWeight: FontWeight.w800,
-                              color: isFocus ? AppTheme.accentBlue : _textMuted,
+                              color: isFocus ? _accentAmber : _textMuted,
                             ),
                           ),
                         ),
@@ -217,18 +232,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           color: relProgress >= 100
-                              ? AppTheme.accentGreen
-                              : AppTheme.tierRelease,
+                              ? _accentEmerald
+                              : _accentAmber,
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               // Compact Release Selector Dropdown (scales past v1.0+)
               PopupMenuButton<String>(
                 key: const ValueKey('release_selector_dropdown_btn'),
+                color: _bgSurface,
                 tooltip: 'Switch Release View or Evolve Scope',
                 onSelected: (value) {
                   if (value == '__evolve__') {
@@ -247,14 +263,21 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     value: 'active',
                     child: Text(
                       '● Active: ${rel.title} ($relProgress%)',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary,
+                      ),
                     ),
                   ),
                   PopupMenuItem<String>(
                     value: 'all',
                     child: Text(
                       '🌳 All Live Game Features ($activeVer)',
-                      style: GoogleFonts.inter(fontSize: 12),
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: _textPrimary,
+                      ),
                     ),
                   ),
                   if (archivedFeats.isNotEmpty)
@@ -262,7 +285,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       value: 'archived',
                       child: Text(
                         '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
-                        style: GoogleFonts.inter(fontSize: 12),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: _textSecondary,
+                        ),
                       ),
                     ),
                   const PopupMenuDivider(),
@@ -274,6 +300,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         style: GoogleFonts.inter(
                           fontSize: 11.5,
                           fontWeight: r.id == rel.id ? FontWeight.w700 : FontWeight.w500,
+                          color: _textPrimary,
                         ),
                       ),
                     ),
@@ -282,7 +309,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     value: '__replan__',
                     child: Text(
                       '✎ Edit ${rel.title} Scope in Plan Gate',
-                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.accentBlue),
+                      style: GoogleFonts.inter(fontSize: 12, color: _accentAmber),
                     ),
                   ),
                   PopupMenuItem<String>(
@@ -292,7 +319,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.accentGreen,
+                        color: _accentEmerald,
                       ),
                     ),
                   ),
@@ -300,9 +327,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   decoration: BoxDecoration(
-                    color: _cardBg,
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: _borderColor),
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _borderSubtle),
                   ),
                   child: Row(
                     children: [
@@ -347,26 +374,38 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           for (final arch in archivedFeats)
             _buildFeatureRailItem(arch, activeVer: activeVer),
         ] else
-          for (final beat in beats) ...[
+          for (int bIdx = 0; bIdx < beats.length; bIdx++) ...[
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              padding: const EdgeInsets.fromLTRB(12, 14, 12, 5),
               child: Row(
                 children: [
                   Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: AppTheme.tierEpic,
-                      shape: BoxShape.circle,
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _accentEmerald.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: _accentEmerald.withValues(alpha: 0.35),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Text(
+                      'BEAT·${(bIdx + 1).toString().padLeft(2, '0')}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        color: _accentEmerald,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      beat.title.toUpperCase(),
+                      beats[bIdx].title.toUpperCase(),
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
                         color: _textSecondary,
                       ),
                       maxLines: 1,
@@ -376,7 +415,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 ],
               ),
             ),
-            for (final feat in widget.workbench.featuresForBeat(beat.id))
+            for (final feat in widget.workbench.featuresForBeat(beats[bIdx].id))
               _buildFeatureRailItem(feat, activeVer: activeVer),
           ],
       ],
@@ -386,8 +425,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       return Container(
         decoration: BoxDecoration(
           color: _bgSurface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _borderColor),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: _borderSubtle),
         ),
         child: content,
       );
@@ -396,7 +435,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     return Container(
       decoration: BoxDecoration(
         color: _bgSurface,
-        border: Border(right: BorderSide(color: _borderColor)),
+        border: Border(right: BorderSide(color: _borderSubtle)),
       ),
       child: SingleChildScrollView(child: content),
     );
@@ -414,16 +453,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     Color vColor = _textMuted;
     if (lifecycle == 'stable') {
       vBadge = '$originVer ✓';
-      vColor = AppTheme.accentGreen;
+      vColor = _accentEmerald;
     } else if (lifecycle == 'upgrade') {
       vBadge = '$originVer→$activeVer';
-      vColor = AppTheme.accentBlue;
+      vColor = _accentAmber;
     } else if (lifecycle == 'superseded') {
       vBadge = 'ARCHIVED';
       vColor = _textMuted;
     } else if (activeVer != 'v0.1') {
       vBadge = 'NEW $activeVer';
-      vColor = AppTheme.tierFeature;
+      vColor = _accentEmerald;
     }
 
     final shouldDim = isFocus && !isSelected;
@@ -434,16 +473,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         key: ValueKey('rail_feat_${feat.id}'),
         onTap: () => widget.workbench.selectFeature(feat.id),
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected
-                ? AppTheme.tierFeature.withValues(alpha: 0.14)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
+            color: isSelected ? _bgHover : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: isSelected
-                  ? AppTheme.tierFeature.withValues(alpha: 0.5)
+                  ? _borderBright
                   : Colors.transparent,
             ),
           ),
@@ -453,8 +490,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 isDone ? Icons.check_circle : Icons.radio_button_unchecked,
                 size: 14,
                 color: isDone
-                    ? AppTheme.accentGreen
-                    : (isSelected ? AppTheme.tierFeature : _textMuted),
+                    ? _accentEmerald
+                    : (isSelected ? _accentAmber : _textMuted),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -492,7 +529,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: isDone ? AppTheme.accentGreen : _textMuted,
+                  color: isDone ? _accentEmerald : _textMuted,
                 ),
               ),
             ],
@@ -553,31 +590,51 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           isDone: isDone,
           presetLabel: rel.releaseScope.label,
         ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'PLAYABLE CHECKPOINTS (${states.length})',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.6,
-                color: _textPrimary,
+        const SizedBox(height: 20),
+        // De-boxed Stage 1 style section header for Playable Checkpoints
+        Container(
+          padding: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: _borderSubtle)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '01',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: _textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'PLAYABLE CHECKPOINTS (${states.length})',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.7,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            if (widget.workbench.focusMode && activeFocusIndex != -1)
-              Text(
-                '🎯 Focus Mode: Expanding Active Checkpoint ${activeFocusIndex + 1} of ${states.length}',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.accentBlue,
+              if (widget.workbench.focusMode && activeFocusIndex != -1)
+                Text(
+                  '🎯 Focus Mode: Expanding Active Checkpoint ${activeFocusIndex + 1} of ${states.length}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _accentAmber,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         for (int i = 0; i < states.length; i++)
           _buildCheckpointCard(
             feat,
@@ -591,12 +648,15 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     if (shrinkWrap) return body;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1040),
-          child: body,
+    return Container(
+      color: _bgBase,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: body,
+          ),
         ),
       ),
     );
@@ -610,9 +670,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       key: const ValueKey('next_feature_advance_banner'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.accentBlue.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.accentBlue),
+        color: _bgSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderBright),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -620,9 +680,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           Expanded(
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle_rounded,
-                  color: AppTheme.accentGreen,
+                  color: _accentEmerald,
                   size: 18,
                 ),
                 const SizedBox(width: 10),
@@ -643,12 +703,22 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           ElevatedButton.icon(
             key: const ValueKey('continue_to_next_feature_btn'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.accentBlue,
-              foregroundColor: Colors.white,
+              backgroundColor: _focalAccent,
+              foregroundColor: _focalAccentFg,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
             onPressed: () => widget.workbench.selectFeature(nextFeat.id),
             icon: const Icon(Icons.arrow_forward_rounded, size: 15),
-            label: Text('Continue to ${nextFeat.title} →'),
+            label: Text(
+              'Continue to ${nextFeat.title} →',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ],
       ),
@@ -660,16 +730,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       key: const ValueKey('release_complete_banner'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.accentGreen.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.accentGreen),
+        color: _accentEmerald.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _accentEmerald.withValues(alpha: 0.45)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              const Icon(Icons.verified_rounded, color: AppTheme.accentGreen, size: 18),
+              Icon(Icons.verified_rounded, color: _accentEmerald, size: 18),
               const SizedBox(width: 10),
               Text(
                 'All Checkpoints in ${rel.title} are VERIFIED ✓!',
@@ -684,12 +754,22 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           ElevatedButton.icon(
             key: const ValueKey('ship_and_plan_next_release_btn'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.accentGreen,
-              foregroundColor: Colors.white,
+              backgroundColor: _focalAccent,
+              foregroundColor: _focalAccentFg,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
             ),
             onPressed: () => widget.workbench.advanceToNextRelease(),
             icon: const Icon(Icons.arrow_forward_rounded, size: 15),
-            label: const Text('Ship & Plan Next Release ✦'),
+            label: Text(
+              'Ship & Plan Next Release ✦',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ],
       ),
@@ -712,10 +792,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       splitSingleSentence: false,
     );
 
-    Widget tag(String text, Color color) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+    Widget tag(String text, Color color, {double? width}) => Container(
+          width: width,
+          alignment: width != null ? Alignment.center : null,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.14),
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
           ),
@@ -734,14 +816,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: _bgSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _borderColor),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -754,18 +836,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        tag('F', AppTheme.tierFeature),
+                        tag('FEATURE', _accentAmber),
                         const SizedBox(width: 8),
                         Text(
                           feat.title,
                           style: GoogleFonts.inter(
-                            fontSize: 15,
+                            fontSize: 16,
                             fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
                             color: _textPrimary,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        tag(presetLabel.toUpperCase(), AppTheme.tierRelease),
+                        tag(presetLabel.toUpperCase(), _textSecondary),
                       ],
                     ),
                     Wrap(
@@ -776,9 +859,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             key: const ValueKey('feat_out_of_scope_btn'),
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                             decoration: BoxDecoration(
-                              color: _cardBg,
+                              color: _bgRecessed,
                               borderRadius: BorderRadius.circular(5),
-                              border: Border.all(color: _borderColor),
+                              border: Border.all(color: _borderSubtle),
                             ),
                             child: Text(
                               '⊘ ${outOfScope.length} Out',
@@ -794,10 +877,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             key: const ValueKey('feat_unassigned_spec_btn'),
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                              color: _accentAmber.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(5),
                               border: Border.all(
-                                color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                                color: _accentAmber.withValues(alpha: 0.35),
                               ),
                             ),
                             child: Text(
@@ -805,7 +888,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFFF59E0B),
+                                color: _accentAmber,
                               ),
                             ),
                           ),
@@ -813,33 +896,39 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 10),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    tag('GOAL', AppTheme.tierFeature),
-                    const SizedBox(width: 8),
+                    tag('GOAL', _accentAmber, width: 68),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         scopeGoal,
-                        style: GoogleFonts.inter(fontSize: 11.5, color: _textPrimary),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: _textPrimary,
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 6),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    tag('DONE WHEN', AppTheme.accentGreen),
-                    const SizedBox(width: 8),
+                    tag('DONE WHEN', _accentEmerald, width: 68),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         doneIf,
                         style: GoogleFonts.inter(
-                          fontSize: 11.5,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.accentGreen,
+                          color: _accentEmerald,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -858,13 +947,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           if (specBinding.hasUnassigned)
             Container(
               key: const ValueKey('feat_inline_spec_shelf'),
-              padding: const EdgeInsets.fromLTRB(14, 8, 12, 10),
+              padding: const EdgeInsets.fromLTRB(16, 8, 12, 10),
               decoration: BoxDecoration(
-                color: _cardBg,
-                border: Border(top: BorderSide(color: _borderColor)),
+                color: _bgRecessed,
+                border: Border(top: BorderSide(color: _borderSubtle)),
               ),
               child: Wrap(
-                spacing: 6,
+                spacing: 8,
                 runSpacing: 6,
                 children: [
                   for (final sc in specBinding.unassignedScope)
@@ -877,13 +966,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               ),
             ),
           Container(
-            height: 2,
-            color: _borderColor.withValues(alpha: 0.35),
+            height: 2.5,
+            color: _borderSubtle,
             child: FractionallySizedBox(
               alignment: Alignment.centerLeft,
               widthFactor: (progress / 100.0).clamp(0.0, 1.0),
               child: Container(
-                color: isDone ? AppTheme.accentGreen : AppTheme.tierFeature,
+                color: isDone ? _accentEmerald : _accentAmber,
               ),
             ),
           ),
@@ -923,7 +1012,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final verStamp = node.releaseVersion;
 
     final checklistPane = Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -934,7 +1023,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 node.checklist[tIdx].completed = !node.checklist[tIdx].completed;
                 widget.workbench.updateFeatureStates(feat.id, states);
               },
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
                 child: Row(
@@ -945,8 +1034,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           : Icons.check_box_outline_blank_rounded,
                       size: 16,
                       color: node.checklist[tIdx].completed
-                          ? AppTheme.accentGreen
-                          : AppTheme.tierFeature,
+                          ? _accentEmerald
+                          : _accentAmber,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -973,23 +1062,30 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     final specContextPane = Container(
       key: ValueKey('checkpoint_spec_pane_$index'),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      color: _cardBg,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      color: _bgRecessed,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'PLAYTEST',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.tierRelease,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: _accentAmber.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'PLAYTEST',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    color: _accentAmber,
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   node.playtestCondition,
@@ -1003,7 +1099,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             ],
           ),
           if (scopedItems.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               '↳ Scope: ${scopedItems.join(' · ')}',
               style: GoogleFonts.inter(fontSize: 11, color: _textSecondary),
@@ -1019,8 +1115,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(5),
+                      color: _accentAmber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: _accentAmber.withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
                     ),
                     child: Text(
                       t,
@@ -1044,8 +1144,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(5),
+                      color: _accentCrimson.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: _accentCrimson.withValues(alpha: 0.25),
+                        width: 0.8,
+                      ),
                     ),
                     child: Text(
                       e,
@@ -1064,14 +1168,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: _bgSurface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isActiveFocus
-              ? AppTheme.accentBlue.withValues(alpha: 0.65)
-              : _borderColor,
+              ? _borderBright
+              : _borderSubtle,
           width: isActiveFocus ? 1.4 : 1.0,
         ),
       ),
@@ -1081,40 +1185,50 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
+              color: isActiveFocus ? _bgHover : _bgSurface,
+              borderRadius: isCollapsed
+                  ? BorderRadius.circular(7)
+                  : const BorderRadius.vertical(top: Radius.circular(7)),
               border: Border(
-                bottom: isCollapsed ? BorderSide.none : BorderSide(color: _borderColor),
+                bottom: isCollapsed ? BorderSide.none : BorderSide(color: _borderSubtle),
               ),
             ),
             child: Row(
               children: [
-                const Text('🚩', style: TextStyle(fontSize: 12)),
-                const SizedBox(width: 6),
-                Text(
-                  'CHECKPOINT ${index + 1}',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: _textMuted,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _bgRecessed,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    'CHECKPOINT ${index + 1}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: _textSecondary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _cardBg,
+                    color: _bgRecessed,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _borderColor),
+                    border: Border.all(color: _borderSubtle),
                   ),
                   child: Text(
                     verStamp,
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 8.5,
                       fontWeight: FontWeight.w700,
-                      color: _textSecondary,
+                      color: _textMuted,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     node.cleanStageTitle,
@@ -1129,7 +1243,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentGreen.withValues(alpha: 0.14),
+                      color: _accentEmerald.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -1137,7 +1251,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.accentGreen,
+                        color: _accentEmerald,
                       ),
                     ),
                   )
@@ -1145,7 +1259,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentBlue.withValues(alpha: 0.15),
+                      color: _accentAmber.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -1153,7 +1267,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.accentBlue,
+                        color: _accentAmber,
                       ),
                     ),
                   )
@@ -1161,7 +1275,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: _cardBg,
+                      color: _bgRecessed,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -1215,7 +1329,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(flex: 60, child: checklistPane),
-                        Container(width: 0.8, color: _borderColor),
+                        Container(width: 0.8, color: _borderSubtle),
                         Expanded(flex: 40, child: specContextPane),
                       ],
                     ),

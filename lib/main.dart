@@ -209,9 +209,18 @@ class WorkbenchShell extends StatelessWidget {
   void _showAiSettingsDialog(BuildContext context) {
     final isDark = workbench.isDark;
     final bgSurface = AppTheme.bgSurfaceFor(isDark);
-    final borderColor = AppTheme.borderFor(isDark);
+    final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
+    final bgHover = AppTheme.bgSurfaceHoverFor(isDark);
+    final borderSubtle = AppTheme.borderSubtleFor(isDark);
+    final borderBright = AppTheme.borderBrightFor(isDark);
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final focalAccent = AppTheme.focalAccentFor(isDark);
+    final focalAccentFg = AppTheme.focalAccentFgFor(isDark);
+    final accentAmber = AppTheme.accentAmberFor(isDark);
+    final accentEmerald = AppTheme.accentGreenFor(isDark);
+
     final keyController = TextEditingController(text: workbench.apiKey);
     String selectedConversationModel = workbench.conversationModel;
     String selectedPlanningModel = workbench.planningModel;
@@ -225,13 +234,20 @@ class WorkbenchShell extends StatelessWidget {
             return AlertDialog(
               backgroundColor: bgSurface,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: borderColor),
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: borderBright),
               ),
               title: Row(
                 children: [
-                  const Icon(Icons.auto_awesome, size: 18, color: AppTheme.accentBlue),
-                  const SizedBox(width: 8),
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accentAmber,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
                   Text(
                     'Antigravity Dual-Model AI Settings',
                     style: GoogleFonts.inter(
@@ -243,90 +259,108 @@ class WorkbenchShell extends StatelessWidget {
                 ],
               ),
               content: SizedBox(
-                width: 460,
+                width: 480,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'CONVERSATION & INTERVIEW MODEL (FAST)',
+                        '01 · CONVERSATION & CONCEPT MODEL (STAGE 1)',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: AppTheme.accentBlue,
+                          letterSpacing: 0.4,
+                          color: textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       for (final m in WorkbenchProvider.availableConversationModels)
                         _buildModelOptionTile(
                           modelId: m,
                           subtitle: m == 'gemini-flash-latest'
-                              ? 'Default — Latest Gemini Flash for instant Concept Interviews'
+                              ? 'Default — Latest Gemini Flash for fast Concept Blueprints'
                               : m == 'gemini-3.8-flash'
                                   ? 'Gemini 3.8 Flash'
                                   : 'Ultra-lightweight Flash-Lite',
                           isSelected: selectedConversationModel == m,
-                          borderColor: borderColor,
+                          isRecommended: m == 'gemini-flash-latest',
+                          bgSurface: bgRecessed,
+                          bgHover: bgHover,
+                          borderSubtle: borderSubtle,
                           textPrimary: textPrimary,
                           textSecondary: textSecondary,
+                          textMuted: textMuted,
+                          focalAccent: focalAccent,
+                          focalAccentFg: focalAccentFg,
+                          accentEmerald: accentEmerald,
                           onTap: () => setModalState(() => selectedConversationModel = m),
                         ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       Text(
-                        'PLANNING & ARCHITECTURE MODEL (DEEP)',
+                        '02 · RELEASE ARCHITECTURE MODEL (STAGE 2)',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: AppTheme.tierProject,
+                          letterSpacing: 0.4,
+                          color: textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       for (final m in WorkbenchProvider.availablePlanningModels)
                         _buildModelOptionTile(
                           modelId: m,
                           subtitle: m == 'gemini-4-argon'
-                              ? 'Default — Gemini 4 Argon for Concept Synthesis & Release Blueprints'
+                              ? 'Default — Gemini 4 Argon for Release Blueprints & Evolution'
                               : m == 'gemini-flash-latest'
                                   ? 'Gemini Flash Latest (Fastest single-model mode)'
                                   : 'Gemini 3.8 Flash',
                           isSelected: selectedPlanningModel == m,
-                          borderColor: borderColor,
+                          isRecommended: m == 'gemini-4-argon',
+                          bgSurface: bgRecessed,
+                          bgHover: bgHover,
+                          borderSubtle: borderSubtle,
                           textPrimary: textPrimary,
                           textSecondary: textSecondary,
+                          textMuted: textMuted,
+                          focalAccent: focalAccent,
+                          focalAccentFg: focalAccentFg,
+                          accentEmerald: accentEmerald,
                           onTap: () => setModalState(() => selectedPlanningModel = m),
                         ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       Text(
-                        'THINKING LEVEL (REASONING DEPTH)',
+                        '03 · THINKING LEVEL (REASONING DEPTH)',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: AppTheme.accentGreen,
+                          letterSpacing: 0.4,
+                          color: textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           for (final lvl in WorkbenchProvider.availableThinkingLevels)
                             Expanded(
                               child: Padding(
-                                padding: const EdgeInsets.only(right: 6),
+                                padding: EdgeInsets.only(
+                                  right: lvl == WorkbenchProvider.availableThinkingLevels.last ? 0 : 6,
+                                ),
                                 child: InkWell(
                                   onTap: () => setModalState(() => selectedThinking = lvl),
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(5),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    padding: const EdgeInsets.symmetric(vertical: 9),
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
-                                      color: selectedThinking == lvl
-                                          ? AppTheme.accentGreen.withValues(alpha: 0.16)
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(6),
+                                      color: selectedThinking == lvl ? bgHover : bgRecessed,
+                                      borderRadius: BorderRadius.circular(5),
                                       border: Border.all(
                                         color: selectedThinking == lvl
-                                            ? AppTheme.accentGreen
-                                            : borderColor,
+                                            ? textPrimary
+                                            : borderSubtle,
+                                        width: selectedThinking == lvl ? 1.5 : 1.0,
                                       ),
                                     ),
                                     child: Text(
@@ -336,7 +370,7 @@ class WorkbenchShell extends StatelessWidget {
                                         fontWeight: selectedThinking == lvl
                                             ? FontWeight.w800
                                             : FontWeight.w500,
-                                        color: textPrimary,
+                                        color: selectedThinking == lvl ? textPrimary : textSecondary,
                                       ),
                                     ),
                                   ),
@@ -345,28 +379,39 @@ class WorkbenchShell extends StatelessWidget {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                       Text(
-                        'GEMINI API KEY',
+                        '04 · GEMINI API KEY',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: AppTheme.tierRelease,
+                          letterSpacing: 0.4,
+                          color: textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       TextField(
                         controller: keyController,
                         obscureText: true,
                         style: GoogleFonts.jetBrainsMono(fontSize: 12, color: textPrimary),
                         decoration: InputDecoration(
+                          filled: true,
+                          fillColor: bgRecessed,
                           hintText: 'AIzaSy... (pre-configured if built with key)',
-                          hintStyle: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+                          hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
                           isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: borderColor),
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: borderSubtle),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: borderSubtle),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: borderBright, width: 1.4),
                           ),
                         ),
                       ),
@@ -384,8 +429,13 @@ class WorkbenchShell extends StatelessWidget {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accentBlue,
-                    foregroundColor: Colors.white,
+                    backgroundColor: focalAccent,
+                    foregroundColor: focalAccentFg,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                   ),
                   onPressed: () {
                     workbench.updateAiConfig(
@@ -413,35 +463,59 @@ class WorkbenchShell extends StatelessWidget {
     required String modelId,
     required String subtitle,
     required bool isSelected,
-    required Color borderColor,
+    required bool isRecommended,
+    required Color bgSurface,
+    required Color bgHover,
+    required Color borderSubtle,
     required Color textPrimary,
     required Color textSecondary,
+    required Color textMuted,
+    required Color focalAccent,
+    required Color focalAccentFg,
+    required Color accentEmerald,
     required VoidCallback onTap,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 7),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(5),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
-            color: isSelected
-                ? AppTheme.accentBlue.withValues(alpha: 0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
+            color: isSelected ? bgHover : bgSurface,
+            borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: isSelected ? AppTheme.accentBlue : borderColor,
+              color: isSelected ? textPrimary : borderSubtle,
+              width: isSelected ? 1.5 : 1.0,
             ),
           ),
           child: Row(
             children: [
-              Icon(
-                isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                size: 15,
-                color: isSelected ? AppTheme.accentBlue : textSecondary,
+              Container(
+                width: 15,
+                height: 15,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? focalAccent : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected ? focalAccent : textMuted,
+                    width: 1.4,
+                  ),
+                ),
+                child: isSelected
+                    ? Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: focalAccentFg,
+                        ),
+                      )
+                    : null,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -454,6 +528,7 @@ class WorkbenchShell extends StatelessWidget {
                         color: textPrimary,
                       ),
                     ),
+                    const SizedBox(height: 1),
                     Text(
                       subtitle,
                       style: GoogleFonts.inter(
@@ -464,6 +539,25 @@ class WorkbenchShell extends StatelessWidget {
                   ],
                 ),
               ),
+              if (isRecommended) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: accentEmerald.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: accentEmerald.withValues(alpha: 0.42)),
+                  ),
+                  child: Text(
+                    'RECOMMENDED',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: accentEmerald,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

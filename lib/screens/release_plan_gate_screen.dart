@@ -25,12 +25,20 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   final TextEditingController _releaseChatController = TextEditingController();
 
   bool get _isDark => widget.workbench.isDark;
+  Color get _bgBase => AppTheme.bgBaseFor(_isDark);
   Color get _bgSurface => AppTheme.bgSurfaceFor(_isDark);
-  Color get _cardBg => _isDark ? const Color(0xFF141822) : const Color(0xFFF8FAFC);
-  Color get _borderColor => AppTheme.borderFor(_isDark);
+  Color get _bgRecessed => AppTheme.bgSurfaceRecessedFor(_isDark);
+  Color get _bgHover => AppTheme.bgSurfaceHoverFor(_isDark);
+  Color get _borderSubtle => AppTheme.borderSubtleFor(_isDark);
+  Color get _borderBright => AppTheme.borderBrightFor(_isDark);
   Color get _textPrimary => AppTheme.textPrimaryFor(_isDark);
   Color get _textSecondary => AppTheme.textSecondaryFor(_isDark);
   Color get _textMuted => AppTheme.textMutedFor(_isDark);
+  Color get _focalAccent => AppTheme.focalAccentFor(_isDark);
+  Color get _focalAccentFg => AppTheme.focalAccentFgFor(_isDark);
+  Color get _accentEmerald => AppTheme.accentGreenFor(_isDark);
+  Color get _accentCrimson => AppTheme.accentRedFor(_isDark);
+  Color get _accentAmber => AppTheme.accentAmberFor(_isDark);
 
   @override
   void dispose() {
@@ -49,154 +57,73 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   Widget build(BuildContext context) {
     final bp = widget.workbench.releaseBlueprint;
     if (bp == null) {
-      return Center(
-        child: Text(
-          'No active Release Blueprint.',
-          style: GoogleFonts.inter(color: _textMuted),
+      return Container(
+        color: _bgBase,
+        child: Center(
+          child: Text(
+            'No active Release Blueprint.',
+            style: GoogleFonts.inter(color: _textMuted),
+          ),
         ),
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 960),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildGateBanner(bp),
-              const SizedBox(height: 16),
-              _buildReleaseChatBar(bp),
-              const SizedBox(height: 16),
-              if (bp.questions.isNotEmpty) ...[
-                _buildReleaseQuestionsCard(bp),
-                const SizedBox(height: 16),
-              ],
-              _buildBeatsBlueprintCard(bp),
-              const SizedBox(height: 16),
-              _buildOutOfScopeSummaryCard(bp),
-              const SizedBox(height: 20),
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                runSpacing: 10,
-                children: [
-                  TextButton.icon(
-                    onPressed: () => widget.workbench.setStage(WorkbenchStage.projectPitch),
-                    icon: const Icon(Icons.arrow_back, size: 15),
-                    label: const Text('Back to Project Pitch'),
-                  ),
-                  ElevatedButton.icon(
-                    key: const ValueKey('approve_and_build_release_btn'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.buttonBreakdown,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: widget.workbench.isAgentBusy
-                        ? null
-                        : () => widget.workbench.approveAndExecuteReleasePlan(),
-                    icon: const Icon(Icons.bolt_rounded, size: 18),
-                    label: Text(
-                      'Approve & Build Release (${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h) ✦',
-                      style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800),
-                    ),
-                  ),
+    return Container(
+      color: _bgBase,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1160),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildGateBanner(bp),
+                const SizedBox(height: 18),
+                _buildReleaseChatBar(bp),
+                const SizedBox(height: 22),
+                if (bp.questions.isNotEmpty) ...[
+                  _buildReleaseQuestionsSection(bp),
+                  const SizedBox(height: 22),
                 ],
-              ),
-            ],
+                _buildBeatsBlueprintSection(bp),
+                const SizedBox(height: 22),
+                _buildOutOfScopeSummarySection(bp),
+                const SizedBox(height: 24),
+                _buildBottomApprovalBar(bp),
+                const SizedBox(height: 12),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildReleaseChatBar(ReleaseBlueprint bp) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.accentBlue.withValues(alpha: 0.45)),
+  Widget _buildPrimaryApproveButton(
+    ReleaseBlueprint bp, {
+    Key? key,
+  }) {
+    return ElevatedButton(
+      key: key,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _focalAccent,
+        foregroundColor: _focalAccentFg,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (bp.chatHistory.isNotEmpty) ...[
-            for (final msg in bp.chatHistory.reversed.take(2).toList().reversed)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      msg.isUser ? Icons.person_outline : Icons.auto_awesome,
-                      size: 14,
-                      color: msg.isUser ? AppTheme.tierRelease : AppTheme.accentBlue,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        msg.text,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: _textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('release_plan_chat_input'),
-                  controller: _releaseChatController,
-                  style: GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
-                  decoration: InputDecoration(
-                    hintText:
-                        'Chat with Argon to adjust this Release Plan (e.g., "Add a wall-run feature to Beat 1", "Cut Beat 3")...',
-                    hintStyle: GoogleFonts.inter(fontSize: 12, color: _textMuted),
-                    isDense: true,
-                    filled: true,
-                    fillColor: _cardBg,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: _borderColor),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: _borderColor),
-                    ),
-                  ),
-                  onSubmitted: (_) => _submitReleaseChat(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                key: const ValueKey('send_release_chat_btn'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.accentBlue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: widget.workbench.isAgentBusy ? null : _submitReleaseChat,
-                icon: const Icon(Icons.send_rounded, size: 14),
-                label: Text(
-                  widget.workbench.isAgentBusy ? 'Updating...' : 'Refine Plan',
-                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-        ],
+      onPressed: widget.workbench.isAgentBusy
+          ? null
+          : () => widget.workbench.approveAndExecuteReleasePlan(),
+      child: Text(
+        'Approve & Build Release (${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h) →',
+        style: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
@@ -204,330 +131,808 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   Widget _buildGateBanner(ReleaseBlueprint bp) {
     return Container(
       key: const ValueKey('release_plan_gate_banner'),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       decoration: BoxDecoration(
         color: _bgSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.tierRelease.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderBright),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Wrap(
-            spacing: 8,
-            runSpacing: 6,
+            spacing: 16,
+            runSpacing: 12,
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppTheme.tierRelease.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: AppTheme.tierRelease.withValues(alpha: 0.4)),
-                    ),
-                    child: Text(
-                      'STAGE 2 · RELEASE PLAN GATE',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.tierRelease,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'STAGE 2 · RELEASE PLAN GATE',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                          color: _accentAmber,
+                        ),
                       ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: _borderSubtle),
+                        ),
+                        child: Text(
+                          '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h Budget',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    bp.releaseTitle,
+                    style: GoogleFonts.inter(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(
-                      bp.releaseTitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: _textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 3),
+                  Text(
+                    'Review the proposed Core Loop Beats & Playable Features below. Uncheck any feature to defer it to Out of Scope.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: _textSecondary,
                     ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.accentBlue.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
+              _buildPrimaryApproveButton(bp),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // GOAL Callout Blockquote
+          _buildCalloutBar(
+            badgeLabel: 'GOAL',
+            statement: bp.goal,
+            accentColor: _focalAccent,
+            highlightMetrics: false,
+          ),
+          const SizedBox(height: 8),
+          // DONE WHEN Callout Blockquote with Metric Highlighting
+          _buildCalloutBar(
+            badgeLabel: 'DONE WHEN',
+            statement: bp.doneWhen,
+            accentColor: _accentEmerald,
+            highlightMetrics: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalloutBar({
+    required String badgeLabel,
+    required String statement,
+    required Color accentColor,
+    required bool highlightMetrics,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _bgRecessed,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: _borderSubtle),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 3,
+              color: accentColor,
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 68,
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: highlightMetrics
+                            ? _accentEmerald.withValues(alpha: 0.12)
+                            : _bgSurface,
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: highlightMetrics
+                              ? _accentEmerald.withValues(alpha: 0.45)
+                              : _borderBright,
+                        ),
+                      ),
+                      child: Text(
+                        badgeLabel,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: highlightMetrics ? _accentEmerald : _textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: highlightMetrics
+                          ? _buildMetricHighlightedRichText(statement)
+                          : Text(
+                              statement,
+                              style: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w500,
+                                height: 1.45,
+                                color: _textPrimary,
+                              ),
+                            ),
+                    ),
+                  ],
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricHighlightedRichText(String statement) {
+    final metricRegex = RegExp(
+      r'\b(\d+(?:[\.\-]\d+)?(?:\s*(?:minute|minutes|min|second|seconds|sec|s|FPS|fps|key|keys|waves|wave|enemies|enemy|rooms|room|players|player|times|time|ms|%))?)\b',
+      caseSensitive: false,
+    );
+    final spans = <InlineSpan>[];
+    int lastEnd = 0;
+
+    for (final match in metricRegex.allMatches(statement)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: statement.substring(lastEnd, match.start)));
+      }
+      final metricText = match.group(0)!;
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: _accentEmerald.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: _accentEmerald.withValues(alpha: 0.42)),
+            ),
+            child: Text(
+              metricText,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
+            ),
+          ),
+        ),
+      );
+      lastEnd = match.end;
+    }
+
+    if (lastEnd < statement.length) {
+      spans.add(TextSpan(text: statement.substring(lastEnd)));
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: GoogleFonts.inter(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w500,
+          height: 1.45,
+          color: _textPrimary,
+        ),
+        children: spans,
+      ),
+    );
+  }
+
+  Widget _buildReleaseChatBar(ReleaseBlueprint bp) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      decoration: BoxDecoration(
+        color: _bgRecessed,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: _bgSurface,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: _borderBright),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _accentAmber,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'AGENT · ${widget.workbench.planningModel.toUpperCase()}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
                 child: Text(
-                  '${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h Budget',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
+                  'Conversational Release Plan Refinement',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.accentBlue,
+                    color: _textPrimary,
                   ),
                 ),
               ),
             ],
           ),
+          if (bp.chatHistory.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final msg in bp.chatHistory.reversed.take(2).toList().reversed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: msg.isUser ? _accentAmber : _accentEmerald,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    '${msg.isUser ? "You" : "Agent"}: ${msg.text}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+          ],
           const SizedBox(height: 10),
-          Text(
-            'GOAL: ${bp.goal}',
-            style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600, color: _textPrimary),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'DONE WHEN: ${bp.doneWhen}',
-            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.accentGreen),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '[ASK AGENT]',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('release_plan_chat_input'),
+                          controller: _releaseChatController,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: _textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            hintText:
+                                'Tell the Agent how to refine this Release Plan (e.g., "Add a wall-run feature to Beat 1", "Defer Beat 4")...',
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              color: _textMuted,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          onSubmitted: (_) => _submitReleaseChat(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                key: const ValueKey('send_release_chat_btn'),
+                onPressed: widget.workbench.isAgentBusy ? null : _submitReleaseChat,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _textPrimary,
+                  backgroundColor: _bgSurface,
+                  side: BorderSide(color: _borderBright),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+                child: Text(
+                  widget.workbench.isAgentBusy ? 'Updating...' : 'Refine Plan',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildReleaseQuestionsCard(ReleaseBlueprint bp) {
+  Widget _buildSectionHeader({
+    required String numLabel,
+    required String title,
+    String? trailingMeta,
+  }) {
+    return Container(
+      padding: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: _borderSubtle),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Text(
+                numLabel,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _textSecondary.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title.toUpperCase(),
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                  color: _textPrimary,
+                ),
+              ),
+            ],
+          ),
+          if (trailingMeta != null)
+            Text(
+              trailingMeta,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: _textSecondary,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReleaseQuestionsSection(ReleaseBlueprint bp) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSectionHeader(
+          numLabel: '01',
+          title: 'Clarifying Release Questions',
+          trailingMeta: '${bp.questions.length} Playtest Priorities',
+        ),
+        const SizedBox(height: 12),
+        for (int qIdx = 0; qIdx < bp.questions.length; qIdx++) ...[
+          Container(
+            margin: EdgeInsets.only(bottom: qIdx < bp.questions.length - 1 ? 12 : 0),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  bp.questions[qIdx].question,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (int optIdx = 0; optIdx < bp.questions[qIdx].options.length; optIdx++) ...[
+                  _buildQuestionOptionCard(
+                    question: bp.questions[qIdx],
+                    optionText: bp.questions[qIdx].options[optIdx],
+                    isFirst: optIdx == 0,
+                  ),
+                  if (optIdx < bp.questions[qIdx].options.length - 1)
+                    const SizedBox(height: 6),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildQuestionOptionCard({
+    required AgentQuestion question,
+    required String optionText,
+    required bool isFirst,
+  }) {
+    final isSelected = question.selectedOption == optionText;
+    final cleanLabel = optionText
+        .replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '')
+        .trim();
+
+    return InkWell(
+      onTap: () => setState(() => question.selectedOption = optionText),
+      borderRadius: BorderRadius.circular(5),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? _bgHover : _bgSurface,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+            color: isSelected ? _textPrimary : _borderSubtle,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 15,
+              height: 15,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? _focalAccent : Colors.transparent,
+                border: Border.all(
+                  color: isSelected ? _focalAccent : _textMuted,
+                  width: 1.4,
+                ),
+              ),
+              child: isSelected
+                  ? Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _focalAccentFg,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                cleanLabel,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: _textPrimary,
+                ),
+              ),
+            ),
+            if (isFirst) ...[
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _accentEmerald.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: _accentEmerald.withValues(alpha: 0.42)),
+                ),
+                child: Text(
+                  'RECOMMENDED',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: _accentEmerald,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBeatsBlueprintSection(ReleaseBlueprint bp) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSectionHeader(
+          numLabel: '02',
+          title: 'Core Loop Beats & Playable Features',
+          trailingMeta: 'Uncheck any feature to defer to Out of Scope',
+        ),
+        const SizedBox(height: 12),
+        for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) ...[
+          _buildBeatCard(bp, bp.beats[bIdx], bIdx),
+          if (bIdx < bp.beats.length - 1)
+            Row(
+              children: [
+                const SizedBox(width: 47),
+                Container(
+                  width: 2,
+                  height: 10,
+                  color: _accentEmerald.withValues(alpha: 0.45),
+                ),
+              ],
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBeatCard(
+    ReleaseBlueprint bp,
+    ProposedBeatBlueprint beat,
+    int beatIndex,
+  ) {
+    final beatCode = 'BEAT·${(beatIndex + 1).toString().padLeft(2, '0')}';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _borderColor),
+        color: _bgRecessed,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: _borderSubtle),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'CLARIFYING RELEASE QUESTIONS',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.accentBlue,
-            ),
-          ),
-          const SizedBox(height: 10),
-          for (final q in bp.questions) ...[
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    q.question,
-                    style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: _textPrimary),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 68,
+                padding: const EdgeInsets.symmetric(vertical: 2.5),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _accentEmerald.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: _accentEmerald.withValues(alpha: 0.45),
                   ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      for (final opt in q.options)
-                        InkWell(
-                          onTap: () => setState(() => q.selectedOption = opt),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: q.selectedOption == opt
-                                  ? AppTheme.accentBlue.withValues(alpha: 0.16)
-                                  : _cardBg,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: q.selectedOption == opt ? AppTheme.accentBlue : _borderColor,
-                              ),
-                            ),
-                            child: Text(
-                              opt,
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                fontWeight: q.selectedOption == opt ? FontWeight.w700 : FontWeight.w500,
-                                color: _textPrimary,
-                              ),
+                ),
+                child: Text(
+                  beatCode,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _accentEmerald,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            beat.title,
+                            style: GoogleFonts.inter(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: _textPrimary,
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _bgSurface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Text(
+                            '${beat.includedFeatures.length} Features · ${beat.totalIncludedHours}h',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      beat.goal,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        color: _textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (int fIdx = 0; fIdx < beat.features.length; fIdx++) ...[
+            _buildFeatureToggleRow(bp, beat, beat.features[fIdx]),
+            if (fIdx < beat.features.length - 1) const SizedBox(height: 7),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildBeatsBlueprintCard(ReleaseBlueprint bp) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'PROPOSED CORE LOOP BEATS & FEATURES (UNCHECK TO DEFER TO OUT OF SCOPE)',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.tierEpic,
+  Widget _buildFeatureToggleRow(
+    ReleaseBlueprint bp,
+    ProposedBeatBlueprint beat,
+    ProposedFeatureBlueprint feat,
+  ) {
+    final isIncluded = feat.included;
+    return Material(
+      color: isIncluded ? _bgSurface : _bgRecessed.withValues(alpha: 0.5),
+      borderRadius: BorderRadius.circular(5),
+      child: InkWell(
+        key: ValueKey('toggle_feat_${feat.id}'),
+        onTap: () => widget.workbench.toggleProposedFeatureScope(
+          beat.id,
+          feat.id,
+          !feat.included,
+        ),
+        borderRadius: BorderRadius.circular(5),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(
+              color: isIncluded ? _borderBright : _borderSubtle,
             ),
           ),
-          const SizedBox(height: 12),
-          for (final beat in bp.beats) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _cardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _borderColor),
+          child: Row(
+            children: [
+              Icon(
+                isIncluded
+                    ? Icons.check_box_rounded
+                    : Icons.check_box_outline_blank_rounded,
+                size: 16,
+                color: isIncluded ? _accentEmerald : _textMuted,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.tierEpic.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'CORE LOOP BEAT',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.tierEpic,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          beat.title,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          feat.title,
                           style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: _textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isIncluded ? _textPrimary : _textMuted,
+                            decoration: isIncluded
+                                ? TextDecoration.none
+                                : TextDecoration.lineThrough,
                           ),
                         ),
-                      ),
-                      Text(
-                        '${beat.totalIncludedHours}h',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: _textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    beat.goal,
-                    style: GoogleFonts.inter(fontSize: 11.5, color: _textSecondary),
-                  ),
-                  const SizedBox(height: 10),
-                  for (final feat in beat.features)
-                    InkWell(
-                      key: ValueKey('toggle_feat_${feat.id}'),
-                      onTap: () => widget.workbench.toggleProposedFeatureScope(
-                        beat.id,
-                        feat.id,
-                        !feat.included,
-                      ),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _bgSurface,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: feat.included
-                                ? AppTheme.tierFeature.withValues(alpha: 0.45)
-                                : _borderColor,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              feat.included
-                                  ? Icons.check_box_rounded
-                                  : Icons.check_box_outline_blank_rounded,
-                              size: 16,
-                              color: feat.included ? AppTheme.tierFeature : _textMuted,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
-                                    children: [
-                                      Text(
-                                        feat.title,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: feat.included ? _textPrimary : _textMuted,
-                                          decoration: feat.included
-                                              ? TextDecoration.none
-                                              : TextDecoration.lineThrough,
-                                        ),
-                                      ),
-                                      _buildLifecycleBadge(
-                                        feat,
-                                        bp.releaseVersionTag,
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    feat.lifecycle == FeatureLifecycleStatus.stable
-                                        ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
-                                        : '${feat.checkpoints.length} Checkpoints · ${feat.tuningParams.length} Tune · ${feat.edgeCases.length} Edge',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10,
-                                      color: _textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              !feat.included
-                                  ? (feat.lifecycle == FeatureLifecycleStatus.superseded
-                                      ? 'ARCHIVED'
-                                      : 'DEFERRED')
-                                  : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                      ? 'STABLE · 0h'
-                                      : '${feat.activeDeltaHours}h'),
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: !feat.included
-                                    ? _textMuted
-                                    : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                        ? AppTheme.accentGreen
-                                        : AppTheme.tierFeature),
-                              ),
-                            ),
-                          ],
-                        ),
+                        _buildLifecycleBadge(feat, bp.releaseVersionTag),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      feat.lifecycle == FeatureLifecycleStatus.stable
+                          ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
+                          : '${feat.goal} (${feat.checkpoints.length} Checkpoints · ${feat.tuningParams.length} Tune · ${feat.edgeCases.length} Edge)',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: isIncluded ? _textSecondary : _textMuted,
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        ],
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: !isIncluded
+                      ? _accentCrimson.withValues(alpha: 0.12)
+                      : (feat.lifecycle == FeatureLifecycleStatus.stable
+                          ? _accentEmerald.withValues(alpha: 0.12)
+                          : _bgRecessed),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: !isIncluded
+                        ? _accentCrimson.withValues(alpha: 0.42)
+                        : (feat.lifecycle == FeatureLifecycleStatus.stable
+                            ? _accentEmerald.withValues(alpha: 0.42)
+                            : _borderSubtle),
+                  ),
+                ),
+                child: Text(
+                  !isIncluded
+                      ? (feat.lifecycle == FeatureLifecycleStatus.superseded
+                          ? 'ARCHIVED'
+                          : 'DEFERRED')
+                      : (feat.lifecycle == FeatureLifecycleStatus.stable
+                          ? 'STABLE · 0h'
+                          : '${feat.activeDeltaHours}h'),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: !isIncluded
+                        ? _accentCrimson
+                        : (feat.lifecycle == FeatureLifecycleStatus.stable
+                            ? _accentEmerald
+                            : _textPrimary),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -541,11 +946,11 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     switch (feat.lifecycle) {
       case FeatureLifecycleStatus.stable:
         label = 'STABLE · ${feat.originVersion} ✓';
-        color = AppTheme.accentGreen;
+        color = _accentEmerald;
         break;
       case FeatureLifecycleStatus.upgrade:
         label = '${feat.originVersion} → $releaseVersionTag';
-        color = AppTheme.accentBlue;
+        color = _accentAmber;
         break;
       case FeatureLifecycleStatus.superseded:
         label = 'SUPERSEDED (${feat.originVersion})';
@@ -553,16 +958,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
         break;
       case FeatureLifecycleStatus.newFeature:
         label = 'NEW $releaseVersionTag';
-        color = AppTheme.tierFeature;
+        color = _accentAmber;
         break;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.8),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: color.withValues(alpha: 0.42), width: 0.8),
       ),
       child: Text(
         label,
@@ -575,45 +980,103 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     );
   }
 
-  Widget _buildOutOfScopeSummaryCard(ReleaseBlueprint bp) {
+  Widget _buildOutOfScopeSummarySection(ReleaseBlueprint bp) {
     final exclusions = bp.effectiveOutOfScope;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'EFFECTIVE OUT OF SCOPE (${exclusions.length} DEFERRED ITEMS)',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: _textMuted,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSectionHeader(
+          numLabel: '03',
+          title: 'Out of Scope (Deferred & Excluded)',
+          trailingMeta: '${exclusions.length} Items Cut',
+        ),
+        const SizedBox(height: 12),
+        for (int i = 0; i < exclusions.length; i++) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _bgRecessed.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: _borderSubtle),
             ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              for (final item in exclusions)
+            child: Row(
+              children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  width: 68,
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: _cardBg,
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: _borderColor),
+                    color: _accentCrimson.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: _accentCrimson.withValues(alpha: 0.42),
+                    ),
                   ),
                   child: Text(
-                    '⊘ $item',
-                    style: GoogleFonts.inter(fontSize: 11, color: _textSecondary),
+                    'CUT',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accentCrimson,
+                    ),
                   ),
                 ),
-            ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    exclusions[i],
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: _textSecondary.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (i < exclusions.length - 1) const SizedBox(height: 7),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBottomApprovalBar(ReleaseBlueprint bp) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderBright),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 10,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => widget.workbench.setStage(WorkbenchStage.projectPitch),
+            icon: const Icon(Icons.arrow_back_rounded, size: 14),
+            label: Text(
+              'Back to Project Concept',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _textPrimary,
+              backgroundColor: _bgRecessed,
+              side: BorderSide(color: _borderSubtle),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+          ),
+          _buildPrimaryApproveButton(
+            bp,
+            key: const ValueKey('approve_and_build_release_btn'),
           ),
         ],
       ),
