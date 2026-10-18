@@ -13,7 +13,8 @@ void main() {
       expect(draft.questions.length, 3);
       expect(draft.isInterviewComplete, isTrue);
       expect(draft.chatHistory.length, 2);
-      expect(draft.releaseTrainTitles.length, 3);
+      expect(draft.coreLoopBeats.length, greaterThanOrEqualTo(6));
+      expect(draft.releaseTrainTitles.length, 1);
 
       // Send a user turn in the chat and verify the Blueprint updates in real time
       final updated = await ProjectConceptAgent.sendConceptChatTurn(

@@ -66,10 +66,51 @@ class AgentQuestion {
   }
 }
 
+/// Sequential production phase tracks in the Rolling Phase Release model:
+/// 1. Prototype -> 2. MVP Track (1 Release per Beat) -> 3. Vertical Slice -> 4. Full Production.
+enum ProductionPhase {
+  prototype(
+    label: 'PHASE 1 · PROTOTYPE',
+    shortName: 'Prototype',
+    summary: 'Define and playtest the Core Game Loop in a greybox sandbox.',
+    unlockCondition: 'Active in Stage 1',
+  ),
+  mvp(
+    label: 'PHASE 2 · MVP RELEASES',
+    shortName: 'MVP Track',
+    summary: 'Build 1 focused MVP Release for each proven Core Loop Beat.',
+    unlockCondition: 'Unlocks after Prototype completes',
+  ),
+  verticalSlice(
+    label: 'PHASE 3 · VERTICAL SLICE',
+    shortName: 'Vertical Slice',
+    summary: 'Combine all completed MVP Beats into 1 fully polished Gold Standard level.',
+    unlockCondition: 'Unlocks after all MVP Releases complete',
+  ),
+  fullProduction(
+    label: 'PHASE 4 · FULL PRODUCTION',
+    shortName: 'Full Production',
+    summary: 'Reuse the Rough → Polish release pattern across the remaining world and content.',
+    unlockCondition: 'Unlocks after Vertical Slice completes',
+  );
+
+  final String label;
+  final String shortName;
+  final String summary;
+  final String unlockCondition;
+
+  const ProductionPhase({
+    required this.label,
+    required this.shortName,
+    required this.summary,
+    required this.unlockCondition,
+  });
+}
+
 /// Blueprint produced during Stage 1 (Initial Project Concept Creation).
 /// Combines the 9-section structured Project Concept (`Goal`, `Game Spec`,
 /// `Tech Spec`, `Design Pillars`, `Trade-Offs`, `Core Loop`, `Out of Scope`,
-/// `Done When`, `Release Train`) with section-focused Agent guidance.
+/// `Done When`, `Prototype Release`) with section-focused Agent guidance.
 class ProjectConceptBlueprint {
   String title;
   String sparkIdea;
@@ -106,7 +147,7 @@ class ProjectConceptBlueprint {
       'Offline-Only Local Save',
     ],
     this.designPillars = const [
-      'Every 30-second cycle rewards decisive movement and timing over hesitation',
+      'Every cycle rewards decisive movement and timing over hesitation',
       'Mistakes feel immediately readable and recoverable in a single button press',
       'Core controls feel responsive from the very first second on screen',
     ],

@@ -588,8 +588,14 @@ class WorkbenchProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Advances to the next queued Release in the Release Train (or creates a new v0.X release if at the end)
-  /// and opens its Plan Gate to evolve the existing feature tree.
+  ProductionPhase _currentPhase = ProductionPhase.prototype;
+  ProductionPhase get currentPhase => _currentPhase;
+
+  /// Advances to the next queued Release in the current Production Phase, or unlocks the
+  /// next Production Phase once the current phase's releases are completed:
+  /// - Phase 1 (Prototype) complete -> Phase 2 (MVP Track: 1 MVP Release per Core Loop Beat)
+  /// - Phase 2 (MVP Track) complete -> Phase 3 (Vertical Slice: 1 Polished Gold Standard Level)
+  /// - Phase 3 (Vertical Slice) complete -> Phase 4 (Full Production: World & Content Expansion)
   Future<void> advanceToNextRelease() async {
     final proj = activeProject;
     if (proj == null) return;
@@ -603,17 +609,87 @@ class WorkbenchProvider extends ChangeNotifier {
       return;
     }
 
-    // Dynamically append a new release milestone if scaling past the initial train (e.g. v0.4, v1.0+)
-    final newIndex = releases.length + 1;
+    // Current Phase has no more queued releases — unlock and define the next Production Phase!
+    if (_currentPhase == ProductionPhase.prototype) {
+      _currentPhase = ProductionPhase.mvp;
+      final beatNames = <String>[];
+      final existingBeats = activeReleaseBeats;
+      if (existingBeats.isNotEmpty) {
+        for (final b in existingBeats) {
+          beatNames.add(b.title);
+        }
+      } else if (_conceptDraft != null && _conceptDraft!.coreLoopBeats.isNotEmpty) {
+        for (final raw in _conceptDraft!.coreLoopBeats) {
+          final cleanTitle = raw.split(':').first.split('—').first.trim();
+          beatNames.add(cleanTitle.isNotEmpty ? cleanTitle : raw);
+        }
+      }
+      if (beatNames.isEmpty) {
+        beatNames.add('Core Gameplay Systems');
+      }
+
+      String? firstNewMvpId;
+      for (int i = 0; i < beatNames.length; i++) {
+        final newIndex = proj.childrenIds.length + 1;
+        final newRelId = 'rel_v0_$newIndex';
+        final beatLabel = beatNames[i];
+        final newRelDoc = TierDocument(
+          id: newRelId,
+          title: 'v0.$newIndex: MVP Beat ${i + 1} ($beatLabel) - MVP',
+          tier: TierType.release,
+          parentId: proj.id,
+          sections: {
+            'releaseScope': ReleaseScope.mvp.name,
+            'phase': ProductionPhase.mvp.name,
+            'scope':
+                'Goal: Build and connect MVP systems for Beat ${i + 1} ($beatLabel).\n\nIn Scope:\n• $beatLabel\n\nDone When: Beat ${i + 1} is playable end-to-end inside the rough representative level.',
+          },
+        );
+        documents[newRelId] = newRelDoc;
+        proj.childrenIds.add(newRelId);
+        firstNewMvpId ??= newRelId;
+      }
+
+      if (firstNewMvpId != null) {
+        await openReleasePlanGate(releaseId: firstNewMvpId);
+        return;
+      }
+    } else if (_currentPhase == ProductionPhase.mvp) {
+      _currentPhase = ProductionPhase.verticalSlice;
+      final newIndex = proj.childrenIds.length + 1;
+      final newRelId = 'rel_v0_$newIndex';
+      final newRelDoc = TierDocument(
+        id: newRelId,
+        title: 'v0.$newIndex: Gold Standard Level (Combined MVPs) - Vertical Slice',
+        tier: TierType.release,
+        parentId: proj.id,
+        sections: {
+          'releaseScope': ReleaseScope.verticalSlice.name,
+          'phase': ProductionPhase.verticalSlice.name,
+          'scope':
+              'Goal: Combine all completed MVP Beats into 1 fully polished Gold Standard level.\n\nIn Scope:\n• Final art, audio, UI, and game-feel pass on the representative level\n\nDone When: Playtester completes the polished Vertical Slice level at shippable quality.',
+        },
+      );
+      documents[newRelId] = newRelDoc;
+      proj.childrenIds.add(newRelId);
+      await openReleasePlanGate(releaseId: newRelId);
+      return;
+    }
+
+    // Phase 4: Full Production content drops (reusing the Rough -> Polish pattern)
+    _currentPhase = ProductionPhase.fullProduction;
+    final newIndex = proj.childrenIds.length + 1;
     final newRelId = 'rel_v0_$newIndex';
     final newRelDoc = TierDocument(
       id: newRelId,
-      title: 'v0.$newIndex: Live Expansion & Polish - Standard',
+      title: 'v0.$newIndex: Full Production World & Content Pass - Standard',
       tier: TierType.release,
       parentId: proj.id,
       sections: {
         'releaseScope': ReleaseScope.verticalSlice.name,
-        'scope': 'Goal: Expand the verified game loop.\n\nIn Scope:\n• Next milestone upgrades\n\nDone When: All checkpoints verified.',
+        'phase': ProductionPhase.fullProduction.name,
+        'scope':
+            'Goal: Expand the verified Vertical Slice template to the next world zone.\n\nIn Scope:\n• Rough layout pass followed by final polish for new content\n\nDone When: All checkpoints verified.',
       },
     );
     documents[newRelId] = newRelDoc;

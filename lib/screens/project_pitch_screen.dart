@@ -70,12 +70,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       numLabel: '01',
       shortTitle: 'Goal',
       title: 'Goal',
-      purpose: 'One plain-English sentence stating what we are building and why.',
+      purpose: 'Plain-English statement of what we are building and why.',
       question: 'How should we frame the core prototype goal for v0.1?',
       options: [
-        'Focus v0.1 strictly on the 30-second movement & combat loop in 1 arena',
-        'Include an interactive hub room between wave rounds in v0.1',
-        'Focus v0.1 on pure movement time-trials before adding enemies',
+        'Focus v0.1 strictly on the core movement & combat loop in a single arena',
+        'Include an interactive staging area before entering wave rounds in v0.1',
+        'Focus v0.1 on pure movement traversal before adding enemy waves',
       ],
     ),
     _SectionConfig(
@@ -106,7 +106,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       numLabel: '04',
       shortTitle: 'Design Pillars',
       title: 'Design Pillars',
-      purpose: '3 core player experience truths (how the game feels, never a feature list).',
+      purpose: 'Core player experience truths (how the game feels, never a feature list).',
       question: 'Which player experience truth should anchor our design decisions?',
       options: [
         'Prioritize unbroken movement momentum and readable enemy telegraphs',
@@ -129,48 +129,48 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     _SectionConfig(
       numLabel: '06',
       shortTitle: 'Core Loop',
-      title: 'In Scope: 30s Core Loop',
-      purpose: 'The repeatable 30-second gameplay beats the player executes.',
-      question: 'How should the 30-second playable loop flow in v0.1?',
+      title: 'In Scope: Core Loop Beats',
+      purpose: 'The sequential playable beats that make up the complete game loop.',
+      question: 'How should the playable core loop Beats flow from start to reset?',
       options: [
-        '3 Beats: Traversal Entry → Active Target Engagement → Collect & Reset',
-        '3 Beats: Prep Loadout → Clear Timed Hazard Wave → Upgrade & Reset',
-        '2 Beats: High-Speed Obstacle Run → Instant Score & Retry',
+        'Full Action Loop: Staging Prep → Traversal Entry → Wave Spawning → Primary Combat → Resource Pickup → Upgrade Choice → Loop Reset',
+        'Wave Survival Loop: Loadout Select → Arena Entry → Hazard Escalation → Target Elimination → Loot Tally → Next Wave or Reset',
+        'Speed Traversal Loop: Start Gate → Grapple & Dash Chain → Hazard Dodge → Target Strike → Split Time Evaluation → Instant Retry',
       ],
     ),
     _SectionConfig(
       numLabel: '07',
       shortTitle: 'Out of Scope',
       title: 'Out of Scope (Exclusions)',
-      purpose: 'Hard exclusions cut from v0.1 to prevent scope creep.',
-      question: 'Which scope-creep features should we explicitly cut from v0.1?',
+      purpose: 'Hard exclusions cut from the Prototype to prevent scope creep.',
+      question: 'Which scope-creep features should we explicitly cut from the Prototype?',
       options: [
-        'Cut skill trees, online co-op, and story cutscenes from v0.1',
-        'Also cut boss phases and shop menus until v0.2',
-        'Also cut meta-progression saves and audio settings until v0.2',
+        'Cut skill trees, online co-op, and story cutscenes from Prototype',
+        'Also cut multi-phase bosses and town shop menus until MVP releases',
+        'Also cut persistent meta-progression saves and audio settings until MVP',
       ],
     ),
     _SectionConfig(
       numLabel: '08',
       shortTitle: 'Done When',
       title: 'Done When',
-      purpose: 'Observable playtest condition that proves v0.1 is complete.',
-      question: 'How will we verify that the v0.1 prototype is done?',
+      purpose: 'Observable playtest condition that proves the Prototype is complete.',
+      question: 'How will we verify that the Prototype loop is done?',
       options: [
-        'Playtester completes a full 30-second loop at 60 FPS with zero soft-locks',
-        'Playtester clears 3 consecutive escalating waves and resets cleanly',
+        'Playtester completes a full core loop cycle at 60 FPS with zero soft-locks',
+        'Playtester clears escalating waves, collects drops, and resets cleanly',
         'Playtester beats target par time in the greybox arena without clipping',
       ],
     ),
     _SectionConfig(
       numLabel: '09',
-      shortTitle: 'Release Train',
-      title: 'Release Train',
-      purpose: 'Milestone progression from v0.1 Prototype to v1.0.',
-      question: 'How should we stage the 3-release roadmap?',
+      shortTitle: 'Prototype Release',
+      title: 'Phase 1: Prototype Release',
+      purpose: 'Focuses strictly on proving the Core Loop first. Subsequent phases (MVPs per Beat → Vertical Slice → Full Production) unlock as each phase completes.',
+      question: 'How should we scope Phase 1 (Prototype) before unlocking MVP Beat Releases?',
       options: [
-        'v0.1 Greybox Core Loop → v0.2 Meta Loop & Upgrades → v1.0 Full Polish',
-        'v0.1 Movement Toy → v0.2 Combat & Enemies → v0.3 Boss Vertical Slice',
+        'Single Greybox Prototype (v0.1) proving the Core Loop Beats work together',
+        'Two-Step Prototype: v0.1 Movement & Controls Toy → v0.2 Core Loop Beat Connection',
       ],
     ),
   ];
@@ -211,13 +211,13 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         case 0:
           if (optIdx == 0) {
             d.goal =
-                'Build a playable ${d.title} prototype centered on ${d.sparkIdea} with immediate 30-second loop feedback in a single arena.';
+                'Build a playable ${d.title} prototype centered on ${d.sparkIdea} with immediate loop feedback in a single arena.';
           } else if (optIdx == 1) {
             d.goal =
-                'Build a ${d.title} prototype connecting an interactive prep room to repeatable 30-second arena waves.';
+                'Build a ${d.title} prototype connecting an interactive prep room to repeatable arena waves.';
           } else {
             d.goal =
-                'Build a high-speed ${d.title} movement time-trial prototype proving core traversal feel before adding combat.';
+                'Build a high-speed ${d.title} movement traversal prototype proving core control feel before adding combat.';
           }
           break;
         case 1:
@@ -313,20 +313,32 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         case 5:
           if (optIdx == 0) {
             d.coreLoopBeats = [
-              'Entry & Movement: Trigger primary traversal mechanic with instant camera and SFX feedback',
-              'Core Challenge: Engage active arena targets or hazards using momentum and timing windows',
-              'Resolution & Reset: Clear room objective, collect immediate payoff, and reset loop',
+              'Staging & Loadout Prep: Select active tool or movement modifier in the starting zone',
+              'Arena Entry & Traversal: Enter the arena and chain primary movement impulses across terrain',
+              'Hazard & Wave Spawning: Trigger room encounters with telegraphed enemy waves and active hazards',
+              'Primary Combat & Timing: Strike targets using momentum windows, deflection, and dodge recovery',
+              'Resource Drop & Pickup: Collect dropped energy, ammo, or health orbs mid-encounter',
+              'Room Clear & Upgrade Choice: Complete wave objective and select a run-modifying upgrade',
+              'Loop Resolution & Instant Reset: Bank round results or trigger 1-key arena reset on failure',
             ];
           } else if (optIdx == 1) {
             d.coreLoopBeats = [
-              'Prep Loadout: Select active tool or weapon modifier in the staging zone',
-              'Hazard Wave: Clear 30-second escalating wave using movement and primary attack',
-              'Quick Upgrade & Reset: Pick 1 stat boost and immediately trigger next wave',
+              'Loadout Select: Pick primary weapon and passive perk in the staging room',
+              'Arena Entry: Drop into the active wave arena and establish movement flow',
+              'Hazard Escalation: Dodge telegraphed floor hazards and incoming enemy projectiles',
+              'Target Elimination: Defeat wave enemies using primary and secondary attacks',
+              'Loot Tally: Gather dropped currency and health pickups before timer expires',
+              'Wave Upgrade Choice: Pick a stat boost between waves',
+              'Run Resolution & Reset: Clear final wave or reset immediately on defeat',
             ];
           } else {
             d.coreLoopBeats = [
-              'High-Speed Traversal: Chain grappling and dash impulses across hazard gaps',
-              'Score & Instant Retry: Hit goal beacon, log split time, and reset in 1 key press',
+              'Start Gate Launch: Trigger initial speed burst out of the starting gate',
+              'Grapple & Dash Chain: Link grappling swings and air dashes across gaps',
+              'Hazard Dodge: Navigate moving obstacles without losing velocity',
+              'Target Strike: Hit checkpoint targets mid-flight to extend boost meter',
+              'Split Time Evaluation: Cross finish beacon and compare split rank',
+              'Instant Retry: Reset to start gate in a single keypress',
             ];
           }
           break;
@@ -340,12 +352,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           } else if (optIdx == 1) {
             d.exclusions = [
               'Multi-branch skill trees and deep inventory crafting menus',
-              'Multi-phase boss encounters and town shop menus (deferred to v0.2)',
+              'Multi-phase boss encounters and town shop menus (deferred to MVP releases)',
               'Online multiplayer matchmaking and netcode replication',
             ];
           } else {
             d.exclusions = [
-              'Persistent meta-progression save files (deferred to v0.2)',
+              'Persistent meta-progression save files (deferred to MVP releases)',
               'Custom keybind & audio mixer menus in v0.1',
               'Online multiplayer matchmaking and story cutscenes',
             ];
@@ -354,10 +366,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         case 7:
           if (optIdx == 0) {
             d.doneWhen =
-                'Playtester completes a full 30-second core loop cycle at 60 FPS with responsive controls and zero state soft-locks.';
+                'Playtester completes a full core loop cycle at 60 FPS with responsive controls and zero state soft-locks.';
           } else if (optIdx == 1) {
             d.doneWhen =
-                'Playtester clears 3 consecutive escalating waves, collects drops, and resets the arena with zero collisions or soft-locks.';
+                'Playtester clears escalating waves, collects drops, and resets the arena with zero collisions or soft-locks.';
           } else {
             d.doneWhen =
                 'Playtester completes the greybox obstacle course under par time with zero wall-clipping or input drops.';
@@ -367,14 +379,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           if (optIdx == 0) {
             d.releaseTrainTitles = [
               'v0.1: Core Toy & Movement Loop - Prototype',
-              'v0.2: Target Engagement & Hazard Loop - MVP',
-              'v0.3: Polished Arena & Progression - Vertical Slice',
             ];
           } else {
             d.releaseTrainTitles = [
-              'v0.1: Greybox Movement Sandbox - Prototype',
-              'v0.2: Enemy Wave & Combat Loop - MVP',
-              'v0.3: Boss Arena & Polish - Vertical Slice',
+              'v0.1: Greybox Movement & Control Toy - Prototype',
+              'v0.2: Core Loop Beat Connection - Prototype',
             ];
           }
           break;
@@ -1316,7 +1325,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     border: Border.all(color: _borderBright),
                   ),
                   child: Text(
-                    '$prefix·0${i + 1}',
+                    '$prefix·${(i + 1).toString().padLeft(2, '0')}',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -1470,34 +1479,141 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   }
 
   Widget _buildReleaseTrainPipeline(List<String> releases) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 560;
-        final cards = [
-          for (int i = 0; i < releases.length; i++)
-            _buildReleaseStepCard(releases[i], isFirst: i == 0, index: i),
-        ];
-        if (!isWide) {
-          return Column(
+    const lockedPhases = [
+      ProductionPhase.mvp,
+      ProductionPhase.verticalSlice,
+      ProductionPhase.fullProduction,
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Active Phase 1: Prototype Release(s)
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _bgRecessed,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _borderBright),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (int i = 0; i < cards.length; i++) ...[
-                cards[i],
-                if (i < cards.length - 1) const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    ProductionPhase.prototype.label,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _focalAccent,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      'ACTIVE PHASE',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: _focalAccentFg,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                ProductionPhase.prototype.summary,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _textSecondary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (int i = 0; i < releases.length; i++) ...[
+                _buildReleaseStepCard(releases[i], isFirst: i == 0, index: i),
+                if (i < releases.length - 1) const SizedBox(height: 8),
               ],
             ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (int i = 0; i < cards.length; i++) ...[
-              Expanded(child: cards[i]),
-              if (i < cards.length - 1) const SizedBox(width: 10),
-            ],
-          ],
-        );
-      },
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Locked Future Production Phases (Defined One Phase at a Time After Completion)
+        for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    'LOCKED',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: _textMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            lockedPhases[pIdx].label,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: _textSecondary,
+                            ),
+                          ),
+                          Text(
+                            lockedPhases[pIdx].unlockCondition,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              color: _textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        lockedPhases[pIdx].summary,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: _textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (pIdx < lockedPhases.length - 1) const SizedBox(height: 6),
+        ],
+      ],
     );
   }
 

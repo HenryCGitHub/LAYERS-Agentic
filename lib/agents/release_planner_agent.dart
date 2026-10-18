@@ -7,8 +7,8 @@ import 'gemini_agent_client.dart';
 
 /// Stage 2 Agent: Inspects the Project Concept (and any completed prior Releases)
 /// and proposes a single-Release Blueprint (`ReleaseBlueprint`) with:
-/// - 1-2 clarifying scope questions
-/// - 2-3 Core Loop Beats (`ProposedBeatBlueprint`)
+/// - Clarifying scope questions
+/// - Core Loop Beats (`ProposedBeatBlueprint`)
 /// - Cohesive Playable Features (`ProposedFeatureBlueprint`) with pre-mapped
 ///   60/40 Playable Checkpoints, Scope, Tuning Parameters, and Edge Cases.
 class ReleasePlannerAgent {
@@ -80,7 +80,7 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 
 STRICT NAMING & ARCHITECTURE RULES:
 1. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
-   - Every Beat, Feature, and Checkpoint `title` MUST use 2 to 4 plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Greybox Test Room").
+   - Every Beat, Feature, and Checkpoint `title` MUST use plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Greybox Test Room").
    - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition Prep", "Wasteland", "Adrenaline", "Ordinance").
 2. PERMANENT MECHANICS vs. TEMPORARY TESTBEDS:
    - Keep permanent mechanics (movement, weapons, farming, AI, UI) in their own Features so they evolve cleanly from $versionTag onward.
@@ -97,18 +97,13 @@ STRICT NAMING & ARCHITECTURE RULES:
 
 Return ONLY a JSON object with this exact schema:
 {
-  "goal": "One plain-English sentence starting with 'Build...' or 'Expand...' stating the goal of ${releaseDoc.title}",
-  "doneWhen": "One concrete playtest condition for when ${releaseDoc.title} is ready to ship",
-  "explicitExclusions": ["Exclusion 1", "Exclusion 2", "Exclusion 3"],
+  "goal": "Plain-English sentence starting with 'Build...' or 'Expand...' stating the goal of ${releaseDoc.title}",
+  "doneWhen": "Concrete playtest condition for when ${releaseDoc.title} is ready to ship",
+  "explicitExclusions": ["Deferred or excluded mechanic", "..."],
   "questions": [
     {
       "id": "rel_q_1",
-      "question": "Specific release question 1 in plain dev terms?",
-      "options": ["(Recommended) Option A", "Option B", "Option C"]
-    },
-    {
-      "id": "rel_q_2",
-      "question": "Specific release question 2 in plain dev terms?",
+      "question": "Specific release question in plain dev terms?",
       "options": ["(Recommended) Option A", "Option B"]
     }
   ],
@@ -116,29 +111,29 @@ Return ONLY a JSON object with this exact schema:
     {
       "id": "beat_1",
       "title": "Plain Functional Beat Title",
-      "goal": "1-sentence literal beat goal",
-      "doneWhen": "1-sentence literal beat completion criteria",
+      "goal": "Literal beat goal",
+      "doneWhen": "Literal beat completion criteria",
       "features": [
         {
           "id": "feat_1_1",
           "title": "Plain Feature Title",
-          "goal": "1-sentence literal feature goal",
-          "doneWhen": "1-sentence literal feature doneWhen",
+          "goal": "Literal feature goal",
+          "doneWhen": "Literal feature doneWhen",
           "estimatedHours": 6,
           "included": true,
           "lifecycle": "new",
           "originVersion": "$versionTag",
-          "inScope": ["Scope item 1", "Scope item 2"],
+          "inScope": ["Scope item", "..."],
           "outOfScope": ["Deferred item"],
-          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.15 s"],
+          "tuningParams": ["paramOne: 10.0 m/s", "..."],
           "edgeCases": ["[TAG] Specific edge case behavior"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
               "releaseVersion": "$versionTag",
-              "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
-              "coveredScope": ["Scope item 1"],
+              "tasks": ["Task (2h)", "..."],
+              "coveredScope": ["Scope item"],
               "tuningParams": ["paramOne: 10.0 m/s"],
               "edgeCases": ["[TAG] Specific edge case behavior"]
             }

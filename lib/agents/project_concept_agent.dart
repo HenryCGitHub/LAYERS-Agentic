@@ -2,11 +2,11 @@ import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import 'gemini_agent_client.dart';
 
-/// Stage 1 Agent: Turns a 1-sentence "Spark" idea into an Antigravity-style
-/// 3-question multiple-choice Concept Interview, and synthesizes the answers
-/// into a structured `ProjectConceptBlueprint` + Release Train roadmap.
+/// Stage 1 Agent: Turns a "Spark" idea into a Concept Blueprint and section-focused
+/// guidance, letting the Agent dynamically determine the exact number of Core Loop Beats,
+/// Design Pillars, Trade-Offs, and Exclusions needed for the concept.
 class ProjectConceptAgent {
-  /// Step 1B: Generates 3 tailored multiple-choice clarifying questions from a 1-line spark.
+  /// Step 1B: Generates clarifying questions and initial Concept Blueprint from a spark idea.
   static Future<ProjectConceptBlueprint> startConceptInterview(
     String rawSpark, {
     String apiKey = '',
@@ -20,7 +20,7 @@ class ProjectConceptAgent {
 
     final prompt = '''
 You are an expert indie game design producer interviewing a developer about their new game idea.
-The developer pitched this 1-line spark: "$cleanSpark"
+The developer pitched this spark idea: "$cleanSpark"
 
 STRICT NAMING & WORDING RULES:
 1. PLAIN FUNCTIONAL GAME-DEV NAMING (NO THEMATIC / LORE WORDING):
@@ -29,19 +29,24 @@ STRICT NAMING & WORDING RULES:
 2. BANNED BUZZWORDS:
    - Never use corporate filler ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly"). Start goals with concrete verbs like "Build..." or "Test...".
 3. DESIGN PILLARS (CORE PLAYER EXPERIENCE):
-   - Game design pillars are a short list of 3–4 statements that name the core experiences the game must create and how it should make the player feel—NOT how it is built.
+   - Design pillars name the core experiences the game must create and how it should make the player feel—NOT how it is built.
    - A pillar is NOT a feature ("has a skill tree") and NOT a genre ("a roguelike"); it is the experience those things exist to hold up (e.g., "Every run teaches you something new", "Crashes and recoveries feel just as fun as clean speed").
 4. TRADE-OFFS (PRIORITIZE X OVER Y):
-   - Provide 2–3 explicit "X over Y" priority rules so Stage 2 knows what to protect when mechanics conflict (e.g., "Instant arcade response over realistic physics simulation").
+   - Provide explicit "X over Y" priority rules so production knows what to protect when mechanics conflict (e.g., "Instant arcade response over realistic physics simulation").
+5. COMPLETE SEQUENTIAL CORE LOOP BEATS:
+   - Decompose the complete playable game loop into sequential Beats from start to finish.
+   - Give each distinct player action, system interaction, escalation step, resource/reward step, and loop reset its own separate Beat instead of bundling multiple mechanics into a single line.
+6. PROTOTYPE-FIRST RELEASE FOCUS:
+   - In Stage 1, only define the Phase 1 Prototype release(s) needed to prove the Core Game Loop in greybox. Later phases (MVP Releases per Beat, Vertical Slice, Full Production) are unlocked after the Prototype completes.
 
-Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, literal game-dev terminology:
+Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, literal game-dev terminology (include as many items in each array as this specific game concept genuinely needs):
 {
-  "title": "A simple, clear 2-3 word working title fitting '$cleanSpark'",
+  "title": "A simple, clear working title fitting '$cleanSpark'",
   "gameSpec": [
     "Camera View (e.g., 2D Top-Down or 3D First-Person)",
     "Controls (e.g., Twin-Stick WASD + Aim or Mouse + WASD)",
     "Player Mode (e.g., Singleplayer)",
-    "Arena Structure (e.g., Single-Screen Wave Arena or 3-Minute Run Arenas)"
+    "Arena Structure (e.g., Single-Screen Wave Arena)"
   ],
   "techSpec": [
     "Engine (e.g., Godot 4 (2D) or Unity 6)",
@@ -50,60 +55,51 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
     "Network / Save (e.g., Offline-Only Local Save)"
   ],
   "designPillars": [
-    "Short experiential pillar #1 (how the game makes the player feel, never a feature or genre)",
-    "Short experiential pillar #2 (core player experience, never a feature or genre)",
-    "Short experiential pillar #3 (core player experience, never a feature or genre)"
+    "Experiential pillar describing how the game makes the player feel (never a feature or genre)",
+    "..."
   ],
   "tradeOffs": [
-    "Prioritize X over Y rule #1",
-    "Prioritize X over Y rule #2",
-    "Prioritize X over Y rule #3"
+    "Explicit X over Y priority rule",
+    "..."
   ],
   "questions": [
     {
       "id": "q_perspective",
       "question": "Plain, direct question asking about camera perspective, movement speed, and control feel for '$cleanSpark'",
       "options": [
-        "(Recommended) Specific perspective + control scheme #1 in plain game-dev terms",
-        "Specific perspective + control scheme #2 in plain game-dev terms",
-        "Specific perspective + control scheme #3 in plain game-dev terms"
+        "(Recommended) Specific perspective + control scheme option in plain game-dev terms",
+        "Alternative perspective + control scheme option in plain game-dev terms"
       ]
     },
     {
       "id": "q_loop",
-      "question": "Plain, direct question asking how the core mechanics of '$cleanSpark' connect in a 30-second playable loop",
+      "question": "Plain, direct question asking how the core mechanics of '$cleanSpark' connect in a playable loop",
       "options": [
-        "(Recommended) Concrete 30-second gameplay loop option #1 in plain game-dev terms",
-        "Concrete 30-second gameplay loop option #2 in plain game-dev terms",
-        "Concrete 30-second gameplay loop option #3 in plain game-dev terms"
+        "(Recommended) Concrete gameplay loop option in plain game-dev terms",
+        "Alternative gameplay loop option in plain game-dev terms"
       ]
     },
     {
       "id": "q_milestone",
-      "question": "What should we build and test first in the Release v0.1 Greybox Prototype?",
+      "question": "What should we build and test first in the Phase 1 Greybox Prototype?",
       "options": [
-        "(Recommended) Specific v0.1 prototype sandbox goal #1 in plain game-dev terms",
-        "Specific v0.1 prototype sandbox goal #2 in plain game-dev terms",
-        "Specific v0.1 prototype sandbox goal #3 in plain game-dev terms"
+        "(Recommended) Specific v0.1 prototype sandbox goal in plain game-dev terms",
+        "Alternative v0.1 prototype sandbox goal in plain game-dev terms"
       ]
     }
   ],
-  "goal": "1 plain-English sentence starting with 'Build...' stating what mechanics are being built and why (zero corporate buzzwords or thematic fluff).",
+  "goal": "Plain-English sentence starting with 'Build...' stating what mechanics are being built and why (zero corporate buzzwords or thematic fluff).",
   "coreLoopBeats": [
-    "Plain Beat Name 1: Literal player action and mechanic",
-    "Plain Beat Name 2: Literal interaction or system step",
-    "Plain Beat Name 3: Literal loop payoff and reset"
+    "Plain Beat Name: Literal player action and mechanic",
+    "..."
   ],
   "exclusions": [
-    "Specific scope-creep feature #1 to exclude from v0.1",
-    "Specific scope-creep feature #2 to exclude from v0.1",
-    "Specific scope-creep feature #3 to exclude from v0.1"
+    "Specific scope-creep feature to exclude from the Prototype",
+    "..."
   ],
-  "doneWhen": "Clear practical condition for when a playtester can complete the v0.1 prototype loop.",
+  "doneWhen": "Clear practical condition for when a playtester can complete the Prototype loop.",
   "releaseTrainTitles": [
-    "v0.1: [Plain Functional Prototype Name, e.g. Core Movement & Combat Loop] - Prototype",
-    "v0.2: [Plain Functional MVP Name, e.g. Shop Economy & Wave Loop] - MVP",
-    "v0.3: [Plain Functional Vertical Slice Name, e.g. Full Arena & Polish] - Vertical Slice"
+    "v0.1: [Plain Functional Prototype Name, e.g. Core Toy & Movement Loop] - Prototype"
   ]
 }
 ''';
@@ -137,40 +133,40 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
             'Build a playable $resolvedTitle prototype centered on $cleanSpark with immediate game feel.',
         gameSpec: (json['gameSpec'] as List?)
                 ?.map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
+                .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             _defaultGameSpec(),
         techSpec: (json['techSpec'] as List?)
                 ?.map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
+                .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             _defaultTechSpec(),
         designPillars: (json['designPillars'] as List?)
                 ?.map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
+                .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             _defaultDesignPillars(),
         tradeOffs: (json['tradeOffs'] as List?)
                 ?.map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
+                .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             _defaultTradeOffs(),
         coreLoopBeats: (json['coreLoopBeats'] as List?)
-                ?.map((e) => e.toString())
-                .where((s) => s.isNotEmpty)
+                ?.map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             _defaultCoreLoopForSpark(cleanSpark),
         exclusions: (json['exclusions'] as List?)
-                ?.map((e) => e.toString())
-                .where((s) => s.isNotEmpty)
+                ?.map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             _defaultExclusions(),
         doneWhen: json['doneWhen']?.toString() ??
-            'Playtester completes a full 30-second core loop cycle with responsive controls and clear feedback.',
+            'Playtester completes a full core loop cycle with responsive controls and clear feedback.',
         firstReleasePreset: ReleaseScope.featurePrototype,
         releaseTrainTitles: (json['releaseTrainTitles'] as List?)
-                ?.map((e) => e.toString())
-                .where((s) => s.isNotEmpty)
+                ?.map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             _defaultReleaseTrain(resolvedTitle),
         isInterviewComplete: true,
@@ -183,7 +179,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
           'Goal',
           'Core Loop',
           'Exclusions',
-          'Release Train',
+          'Prototype Release',
         ],
         chatHistory: _buildInitialChatHistory(
           spark: cleanSpark,
@@ -206,7 +202,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
       tradeOffs: _defaultTradeOffs(),
       coreLoopBeats: _defaultCoreLoopForSpark(cleanSpark),
       exclusions: _defaultExclusions(),
-      doneWhen: 'A playtester can complete a full 30-second core loop cycle with responsive controls and clear hit/motion feedback.',
+      doneWhen: 'A playtester can complete a full core loop cycle with responsive controls and clear hit/motion feedback.',
       firstReleasePreset: ReleaseScope.featurePrototype,
       releaseTrainTitles: _defaultReleaseTrain(shortTitle),
       isInterviewComplete: true,
@@ -219,7 +215,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
         'Goal',
         'Core Loop',
         'Exclusions',
-        'Release Train',
+        'Prototype Release',
       ],
       chatHistory: _buildInitialChatHistory(
         spark: cleanSpark,
@@ -238,10 +234,10 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
   }) {
     final firstQ = questions.isNotEmpty
         ? questions.first.question
-        : 'How does the initial 30-second core loop look to you?';
+        : 'How does the initial Core Loop look to you?';
     final quickChips = <String>[
       if (questions.isNotEmpty)
-        for (final opt in questions.first.options.take(3))
+        for (final opt in questions.first.options)
           _stripRecommendedPrefix(opt),
       'Looks great — ready to plan v0.1!',
     ];
@@ -257,8 +253,8 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
         role: 'assistant',
         modelUsed: modelUsed,
         updatedFields: const ['Drafted Initial Concept Blueprint'],
-        text: 'I drafted the initial **$title** Concept Blueprint on the right based on your idea!\n\n'
-            'We can go back and forth right here to tweak anything (Title, Tech Spec, Design Pillars, Trade-Offs, 30s Core Loop Beats, or Release Train).\n\n'
+        text: 'I drafted the initial **$title** Concept Blueprint based on your idea!\n\n'
+            'We can refine each section one at a time (Goal, Game Spec, Tech Spec, Design Pillars, Trade-Offs, Core Loop Beats, Out of Scope, Done When, and Prototype Release).\n\n'
             '**First up:** $firstQ',
         quickReplies: quickChips,
       ),
@@ -292,7 +288,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
         .join('\n\n');
 
     final prompt = '''
-You are Antigravity, an expert game producer pair-designing a game concept with a developer in a turn-by-turn chat.
+You are Antigravity, an expert game producer pair-designing a game concept with a developer.
 Original Spark: "${draft.sparkIdea}"
 
 Current Live Project Concept Blueprint:
@@ -304,12 +300,12 @@ ${draft.designPillars.map((p) => '  * $p').join('\n')}
 - Trade-Offs (Prioritize X over Y):
 ${draft.tradeOffs.map((t) => '  * $t').join('\n')}
 - Goal: "${draft.goal}"
-- In Scope (30s Core Loop Beats):
+- In Scope (Core Loop Beats):
 ${draft.coreLoopBeats.map((b) => '  * $b').join('\n')}
 - Out of Scope (Hard Exclusions):
 ${draft.exclusions.map((e) => '  * $e').join('\n')}
 - Done When: "${draft.doneWhen}"
-- Release Train:
+- Prototype Release(s):
 ${draft.releaseTrainTitles.map((r) => '  * $r').join('\n')}
 
 Conversation History:
@@ -323,47 +319,43 @@ STRICT NAMING & WORDING RULES:
 - NEVER use corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
 - Design Pillars MUST describe the core player experience and how the game makes the player feel—NEVER a feature ("has a skill tree") and NEVER a genre ("a roguelike").
 - Trade-Offs MUST use explicit "X over Y" priority rules.
+- Decompose `coreLoopBeats` into as many distinct sequential playable Beats as the game loop genuinely needs—do not artificially compress multiple steps into a fixed count.
+- Keep `releaseTrainTitles` focused on the Phase 1 Prototype release(s); MVP, Vertical Slice, and Full Production phases are defined later after Prototype completion.
 
 Task:
 1. Apply the developer's latest direction, answer, or adjustment directly to the Project Concept Blueprint fields (`title`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `goal`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Keep everything concrete, playtestable, and in plain developer English.
-2. Write a concise, natural conversational `reply` (2-3 sentences max) confirming what you updated on the Blueprint and asking 1 natural follow-up question (or inviting any final tweaks before Release v0.1 planning).
-3. Provide 2-3 short clickable `quickReplies` the developer can click for their next turn.
+2. Write a concise, natural conversational `reply` confirming what you updated on the Blueprint and asking a natural follow-up question.
+3. Provide short clickable `quickReplies` the developer can click for their next turn.
 4. List which blueprint sections changed in `updatedFields` (e.g. `["Goal", "Design Pillars", "Core Loop"]`).
 
 Return ONLY a JSON object with this schema:
 {
-  "reply": "Conversational response + 1 follow-up question",
-  "quickReplies": ["Short reply option 1", "Short reply option 2", "Short reply option 3"],
+  "reply": "Conversational response + follow-up question",
+  "quickReplies": ["Short reply option", "..."],
   "updatedFields": ["Goal", "Core Loop"],
   "title": "Updated or existing title",
   "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
   "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
   "designPillars": [
-    "Experiential Pillar 1 (how it feels, never a feature/genre)",
-    "Experiential Pillar 2",
-    "Experiential Pillar 3"
+    "Experiential Pillar (how it feels, never a feature/genre)",
+    "..."
   ],
   "tradeOffs": [
-    "X over Y rule 1",
-    "X over Y rule 2",
-    "X over Y rule 3"
+    "X over Y rule",
+    "..."
   ],
-  "goal": "Updated 1-sentence goal starting with 'Build...'",
+  "goal": "Updated plain-English goal starting with 'Build...'",
   "coreLoopBeats": [
-    "Plain Beat Name 1: ...",
-    "Plain Beat Name 2: ...",
-    "Plain Beat Name 3: ..."
+    "Plain Beat Name: Literal player action and system response",
+    "..."
   ],
   "exclusions": [
-    "Exclusion 1",
-    "Exclusion 2",
-    "Exclusion 3"
+    "Concrete exclusion",
+    "..."
   ],
   "doneWhen": "Updated Done When condition",
   "releaseTrainTitles": [
-    "v0.1: ... - Prototype",
-    "v0.2: ... - MVP",
-    "v0.3: ... - Vertical Slice"
+    "v0.1: ... - Prototype"
   ]
 }
 ''';
@@ -385,7 +377,7 @@ Return ONLY a JSON object with this schema:
       }
       final game = (json['gameSpec'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (game != null && game.isNotEmpty) {
         draft.gameSpec = game;
@@ -393,7 +385,7 @@ Return ONLY a JSON object with this schema:
       }
       final tech = (json['techSpec'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (tech != null && tech.isNotEmpty) {
         draft.techSpec = tech;
@@ -401,7 +393,7 @@ Return ONLY a JSON object with this schema:
       }
       final pillars = (json['designPillars'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (pillars != null && pillars.isNotEmpty) {
         draft.designPillars = pillars;
@@ -409,7 +401,7 @@ Return ONLY a JSON object with this schema:
       }
       final tradeOffs = (json['tradeOffs'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (tradeOffs != null && tradeOffs.isNotEmpty) {
         draft.tradeOffs = tradeOffs;
@@ -422,7 +414,7 @@ Return ONLY a JSON object with this schema:
       }
       final beats = (json['coreLoopBeats'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (beats != null && beats.isNotEmpty) {
         draft.coreLoopBeats = beats;
@@ -430,7 +422,7 @@ Return ONLY a JSON object with this schema:
       }
       final excl = (json['exclusions'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (excl != null && excl.isNotEmpty) {
         draft.exclusions = excl;
@@ -443,11 +435,11 @@ Return ONLY a JSON object with this schema:
       }
       final releases = (json['releaseTrainTitles'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (releases != null && releases.isNotEmpty) {
         draft.releaseTrainTitles = releases;
-        updated.add('Release Train');
+        updated.add('Prototype Release');
       }
 
       final explicitUpdated = (json['updatedFields'] as List?)
@@ -460,7 +452,7 @@ Return ONLY a JSON object with this schema:
 
       final quickReplies = (json['quickReplies'] as List?)
               ?.map((e) => e.toString().trim())
-              .where((s) => s.isNotEmpty)
+              .where((s) => s.isNotEmpty && s != '...')
               .toList() ??
           const <String>[];
 
@@ -554,7 +546,7 @@ Return ONLY a JSON object with this schema:
     final nextChips = nextQIdx != -1
         ? draft.questions[nextQIdx].options.map(_stripRecommendedPrefix).toList()
         : <String>[
-            'Tighten scope to 2 core beats',
+            'Split combat into separate approach and strike beats',
             'Add a boss/hazard challenge beat',
             'Looks great — ready for v0.1!',
           ];
@@ -573,7 +565,7 @@ Return ONLY a JSON object with this schema:
     );
   }
 
-  /// Step 1C: Synthesizes the `ProjectConceptBlueprint` once the user answers the 2-3 interview questions.
+  /// Step 1C: Synthesizes the `ProjectConceptBlueprint` once the user answers the interview questions.
   /// Calls Gemini (`gemini-flash-latest`) when an API key is available, with instant deterministic fallback for unit tests/offline.
   static Future<ProjectConceptBlueprint> synthesizeFromInterview(
     ProjectConceptBlueprint draft, {
@@ -597,36 +589,34 @@ STRICT NAMING & WORDING RULES:
 - NEVER use flowery, archaic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline").
 - NEVER use corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
 - Design Pillars MUST describe the core player experience and how the game makes the player feel—NEVER a feature ("has a skill tree") and NEVER a genre ("a roguelike").
+- Decompose `coreLoopBeats` into as many sequential playable Beats as the game loop genuinely requires from start to finish.
+- Keep `releaseTrainTitles` focused on the Phase 1 Prototype release(s).
 
 Synthesize these exact choices into a cohesive Project Concept JSON object using plain, literal game-dev terminology:
 {
-  "title": "Simple, clear 2-3 word working title fitting the spark and answers",
+  "title": "Simple, clear working title fitting the spark and answers",
   "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
   "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
   "designPillars": [
-    "Experiential Pillar 1 (how it feels, never a feature/genre)",
-    "Experiential Pillar 2",
-    "Experiential Pillar 3"
+    "Experiential Pillar (how it feels, never a feature/genre)",
+    "..."
   ],
   "tradeOffs": [
-    "Prioritize X over Y rule 1",
-    "Prioritize X over Y rule 2",
-    "Prioritize X over Y rule 3"
+    "Prioritize X over Y rule",
+    "..."
   ],
-  "goal": "Exactly 1 plain-English sentence starting with 'Build...' stating what is being built and why, incorporating the developer's interview answers.",
+  "goal": "Plain-English sentence starting with 'Build...' stating what is being built and why, incorporating the developer's interview answers.",
   "coreLoopBeats": [
-    "[Plain Beat Name 1] — Literal observable player action & mechanic",
-    "[Plain Beat Name 2] — Literal observable interaction/system step",
-    "[Plain Beat Name 3] — Literal observable payoff & loop reset"
+    "Plain Beat Name: Literal observable player action & mechanic",
+    "..."
   ],
   "exclusions": [
-    "3 concrete scope-creep mechanics strictly cut from v0.1"
+    "Concrete scope-creep mechanic strictly cut from the Prototype",
+    "..."
   ],
-  "doneWhen": "1 clear, testable condition for when a playtester can complete the v0.1 prototype loop.",
+  "doneWhen": "Clear, testable condition for when a playtester can complete the Prototype loop.",
   "releaseTrainTitles": [
-    "v0.1: [Plain Functional Prototype Name] - Prototype",
-    "v0.2: [Plain Functional Expansion Name] - MVP",
-    "v0.3: [Plain Functional Vertical Slice Name] - Vertical Slice"
+    "v0.1: [Plain Functional Prototype Name] - Prototype"
   ]
 }
 ''';
@@ -644,41 +634,41 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
       if (newTitle.isNotEmpty) draft.title = newTitle;
       final game = (json['gameSpec'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (game != null && game.isNotEmpty) draft.gameSpec = game;
       final tech = (json['techSpec'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (tech != null && tech.isNotEmpty) draft.techSpec = tech;
       final pillars = (json['designPillars'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (pillars != null && pillars.isNotEmpty) draft.designPillars = pillars;
       final tradeOffs = (json['tradeOffs'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (tradeOffs != null && tradeOffs.isNotEmpty) draft.tradeOffs = tradeOffs;
       final newGoal = json['goal']?.toString().trim() ?? '';
       if (newGoal.isNotEmpty) draft.goal = newGoal;
       final beats = (json['coreLoopBeats'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (beats != null && beats.isNotEmpty) draft.coreLoopBeats = beats;
       final excl = (json['exclusions'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (excl != null && excl.isNotEmpty) draft.exclusions = excl;
       final done = json['doneWhen']?.toString().trim() ?? '';
       if (done.isNotEmpty) draft.doneWhen = done;
       final releases = (json['releaseTrainTitles'] as List?)
           ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
+          .where((s) => s.isNotEmpty && s != '...')
           .toList();
       if (releases != null && releases.isNotEmpty) {
         draft.releaseTrainTitles = releases;
@@ -733,11 +723,11 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
     if (draft.coreLoopBeats.isNotEmpty) {
       draft.coreLoopBeats[0] = 'Primary Loop: $loopFocus ($perspective)';
     } else {
-      draft.coreLoopBeats = ['Primary Loop: $loopFocus ($perspective)'];
+      draft.coreLoopBeats = _defaultCoreLoopForSpark(loopFocus);
     }
 
     draft.doneWhen =
-        'Playtester completes a full "$loopFocus" cycle in one greybox test arena at 60 FPS with zero state soft-locks.';
+        'Playtester completes a full "$loopFocus" cycle in a greybox test arena at 60 FPS with zero state soft-locks.';
     draft.isInterviewComplete = true;
     return draft;
   }
@@ -810,20 +800,19 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
       ),
       AgentQuestion(
         id: 'q_loop',
-        question: 'What does the player do every 30 seconds in the core gameplay loop?',
+        question: 'How should the core gameplay loop connect from entry to reset?',
         options: [
-          '(Recommended) Chain movement mechanics to clear hazards and strike targets',
-          'Time-trial traversal through obstacle arenas for speed ranks',
-          'Tactical resource management and counter-attacks under pressure',
+          '(Recommended) Chain movement mechanics to clear hazards, collect drops, and reset',
+          'Time-trial traversal through escalating obstacle rooms for speed ranks',
+          'Tactical resource management and counter-attacks under wave pressure',
         ],
       ),
       AgentQuestion(
         id: 'q_milestone',
-        question: 'What is our target scope for Release v0.1?',
+        question: 'What is our target scope for the Phase 1 Prototype?',
         options: [
-          '(Recommended) Prototype — 1 Greybox Arena proving the 30-second toy is fun',
-          'Vertical Slice — Polished single level with production art & audio hooks',
-          'MVP — Complete playable run from start screen to win/loss state',
+          '(Recommended) Prototype — 1 Greybox Arena proving the core loop beats work together',
+          'Two-Step Prototype — v0.1 Movement Toy followed by v0.2 Target & Hazard Loop',
         ],
       ),
     ];
@@ -831,9 +820,13 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
 
   static List<String> _defaultCoreLoopForSpark(String spark) {
     return [
-      'Entry & Movement: Trigger primary traversal / control mechanic with instant camera & SFX feedback',
-      'Core Challenge: Engage active arena targets or hazards using momentum/timing windows',
-      'Resolution & Reset: Clear room objective, collect immediate combat/speed payoff, and reset loop',
+      'Staging & Loadout Prep: Select active tool or movement modifier in the starting zone',
+      'Arena Entry & Traversal: Enter the arena and chain primary movement impulses across terrain',
+      'Hazard & Wave Spawning: Trigger room encounters with telegraphed enemy waves and active hazards',
+      'Primary Combat & Timing: Strike targets using momentum windows, deflection, and dodge recovery',
+      'Resource Drop & Pickup: Collect dropped energy, ammo, or health orbs mid-encounter',
+      'Room Clear & Upgrade Choice: Complete wave objective and select a run-modifying upgrade',
+      'Loop Resolution & Instant Reset: Bank round results or trigger 1-key arena reset on failure',
     ];
   }
 
@@ -848,8 +841,6 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
   static List<String> _defaultReleaseTrain(String title) {
     return [
       'v0.1: Core Toy & Movement Loop - Prototype',
-      'v0.2: Target Engagement & Hazard Loop - MVP',
-      'v0.3: Polished Arena & Progression - Vertical Slice',
     ];
   }
 }
