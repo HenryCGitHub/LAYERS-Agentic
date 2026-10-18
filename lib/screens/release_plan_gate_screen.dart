@@ -70,32 +70,36 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
 
     return Container(
       color: _bgBase,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1160),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildGateBanner(bp),
-                const SizedBox(height: 18),
-                _buildReleaseChatBar(bp),
-                const SizedBox(height: 22),
-                if (bp.questions.isNotEmpty) ...[
-                  _buildReleaseQuestionsSection(bp),
-                  const SizedBox(height: 22),
-                ],
-                _buildBeatsBlueprintSection(bp),
-                const SizedBox(height: 22),
-                _buildOutOfScopeSummarySection(bp),
-                const SizedBox(height: 24),
-                _buildBottomApprovalBar(bp),
-                const SizedBox(height: 12),
-              ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1160),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildGateBanner(bp),
+                      const SizedBox(height: 22),
+                      if (bp.questions.isNotEmpty) ...[
+                        _buildReleaseQuestionsSection(bp),
+                        const SizedBox(height: 22),
+                      ],
+                      _buildBeatsBlueprintSection(bp),
+                      const SizedBox(height: 22),
+                      _buildOutOfScopeSummarySection(bp),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          _buildStickyBottomDock(bp),
+        ],
       ),
     );
   }
@@ -1040,45 +1044,102 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     );
   }
 
-  Widget _buildBottomApprovalBar(ReleaseBlueprint bp) {
+  Widget _buildStickyBottomDock(ReleaseBlueprint bp) {
+    final includedBeatsCount = bp.beats
+        .where((b) => b.features.any((f) => f.included))
+        .length;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      key: const ValueKey('release_sticky_bottom_dock'),
       decoration: BoxDecoration(
         color: _bgSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _borderBright),
+        border: Border(top: BorderSide(color: _borderBright)),
       ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 10,
-        children: [
-          OutlinedButton.icon(
-            onPressed: () => widget.workbench.setStage(WorkbenchStage.projectPitch),
-            icon: const Icon(Icons.arrow_back_rounded, size: 14),
-            label: Text(
-              'Back to Project Concept',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1160),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildReleaseChatBar(bp),
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 10,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            widget.workbench.setStage(WorkbenchStage.projectPitch),
+                        icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                        label: Text(
+                          'Back to Project Concept',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _textPrimary,
+                          backgroundColor: _bgRecessed,
+                          side: BorderSide(color: _borderSubtle),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: _borderSubtle),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline_rounded,
+                              size: 13,
+                              color: _accentEmerald,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$includedBeatsCount Beats · ${bp.totalIncludedFeatures} Features · ~${bp.totalIncludedHours}h selected',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  _buildPrimaryApproveButton(
+                    bp,
+                    key: const ValueKey('approve_and_build_release_btn'),
+                  ),
+                ],
               ),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _textPrimary,
-              backgroundColor: _bgRecessed,
-              side: BorderSide(color: _borderSubtle),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
+            ],
           ),
-          _buildPrimaryApproveButton(
-            bp,
-            key: const ValueKey('approve_and_build_release_btn'),
-          ),
-        ],
+        ),
       ),
     );
   }

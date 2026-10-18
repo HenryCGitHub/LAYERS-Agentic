@@ -28,6 +28,25 @@ class ReleaseWorkbenchScreen extends StatefulWidget {
 class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   final Set<String> _expandedDoneCheckpoints = {};
   final Set<String> _collapsedOpenCheckpoints = {};
+  final Set<String> _awaitingPlaytestVerification = {};
+  final Map<String, TextEditingController> _newTaskControllers = {};
+  bool _showOutOfScopeShelf = false;
+  bool _hideUnassignedSpecShelf = false;
+
+  @override
+  void dispose() {
+    for (final c in _newTaskControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _controllerForCheckpoint(String checkpointId) {
+    return _newTaskControllers.putIfAbsent(
+      checkpointId,
+      () => TextEditingController(),
+    );
+  }
 
   bool get _isDark => widget.workbench.isDark;
   Color get _bgBase => AppTheme.bgBaseFor(_isDark);
@@ -562,9 +581,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     int activeFocusIndex = -1;
     for (int i = 0; i < states.length; i++) {
       final s = states[i];
+      final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
       if (s.isCompleted) {
         completedCps++;
-      } else if (activeFocusIndex == -1) {
+      }
+      // Keep the active focus spotlight on a checkpoint that just finished its tasks
+      // until the user clicks "Verify Playtest & Advance"
+      if (activeFocusIndex == -1 && (!s.isCompleted || awaitingPlaytest)) {
         activeFocusIndex = i;
       }
       totalTasks += s.totalChecklistCount;
@@ -855,40 +878,64 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       spacing: 8,
                       children: [
                         if (outOfScope.isNotEmpty)
-                          Container(
+                          InkWell(
                             key: const ValueKey('feat_out_of_scope_btn'),
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _bgRecessed,
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(color: _borderSubtle),
-                            ),
-                            child: Text(
-                              '⊘ ${outOfScope.length} Out',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: _textMuted,
+                            onTap: () {
+                              setState(() {
+                                _showOutOfScopeShelf = !_showOutOfScopeShelf;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _showOutOfScopeShelf
+                                    ? _accentCrimson.withValues(alpha: 0.14)
+                                    : _bgRecessed,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _showOutOfScopeShelf
+                                      ? _accentCrimson.withValues(alpha: 0.45)
+                                      : _borderSubtle,
+                                ),
+                              ),
+                              child: Text(
+                                '⊘ ${outOfScope.length} Out ${_showOutOfScopeShelf ? "▴" : "▾"}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: _showOutOfScopeShelf
+                                      ? _accentCrimson
+                                      : _textMuted,
+                                ),
                               ),
                             ),
                           ),
                         if (specBinding.hasUnassigned)
-                          Container(
+                          InkWell(
                             key: const ValueKey('feat_unassigned_spec_btn'),
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _accentAmber.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(
-                                color: _accentAmber.withValues(alpha: 0.35),
+                            onTap: () {
+                              setState(() {
+                                _hideUnassignedSpecShelf = !_hideUnassignedSpecShelf;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _accentAmber.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _accentAmber.withValues(alpha: 0.35),
+                                ),
                               ),
-                            ),
-                            child: Text(
-                              '${specBinding.totalUnassignedCount} unassigned',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: _accentAmber,
+                              child: Text(
+                                '${specBinding.totalUnassignedCount} unassigned',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: _accentAmber,
+                                ),
                               ),
                             ),
                           ),
@@ -944,7 +991,40 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               ],
             ),
           ),
-          if (specBinding.hasUnassigned)
+          if (_showOutOfScopeShelf && outOfScope.isNotEmpty)
+            Container(
+              key: const ValueKey('feat_out_of_scope_shelf'),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+              decoration: BoxDecoration(
+                color: _bgRecessed,
+                border: Border(top: BorderSide(color: _borderSubtle)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final item in outOfScope)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          tag('CUT', _accentCrimson, width: 48),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (specBinding.hasUnassigned && !_hideUnassignedSpecShelf)
             Container(
               key: const ValueKey('feat_inline_spec_shelf'),
               padding: const EdgeInsets.fromLTRB(16, 8, 12, 10),
@@ -990,15 +1070,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   }) {
     final node = states[index];
     final isDone = node.isCompleted;
+    final isAwaitingPlaytest = isDone && _awaitingPlaytestVerification.contains(node.id);
     final isActiveFocus = index == activeFocusIndex;
     final isFocusMode = widget.workbench.focusMode;
 
     // In Focus Mode:
-    // - Verified checkpoints default to collapsed unless explicitly expanded
+    // - Verified checkpoints default to collapsed unless awaiting Playtest confirmation or explicitly expanded
     // - The single Active Focus checkpoint defaults to expanded unless explicitly collapsed
     // - Future ("UP NEXT") checkpoints default to collapsed unless explicitly expanded
     final bool isCollapsed;
-    if (isDone) {
+    if (isAwaitingPlaytest) {
+      isCollapsed = false;
+    } else if (isDone) {
       isCollapsed = !_expandedDoneCheckpoints.contains(node.id);
     } else if (isFocusMode && !isActiveFocus) {
       isCollapsed = !_expandedDoneCheckpoints.contains(node.id);
@@ -1010,6 +1093,24 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final tuningItems = specBinding.checkpointTuning[node.id] ?? const <String>[];
     final edgeItems = specBinding.checkpointEdgeCases[node.id] ?? const <String>[];
     final verStamp = node.releaseVersion;
+    final taskCtrl = _controllerForCheckpoint(node.id);
+
+    void submitNewTask() {
+      final text = taskCtrl.text.trim();
+      if (text.isEmpty) return;
+      taskCtrl.clear();
+      setState(() {
+        node.checklist.add(
+          Subtask(
+            id: generateUniqueId('check'),
+            text: text,
+            completed: false,
+          ),
+        );
+        _awaitingPlaytestVerification.remove(node.id);
+      });
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
 
     final checklistPane = Padding(
       padding: const EdgeInsets.all(14),
@@ -1020,7 +1121,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             InkWell(
               key: ValueKey('task_checkbox_${node.id}_$tIdx'),
               onTap: () {
+                final wasDone = node.isCompleted;
                 node.checklist[tIdx].completed = !node.checklist[tIdx].completed;
+                final nowDone = node.isCompleted;
+                setState(() {
+                  if (!wasDone && nowDone) {
+                    // Hold checkpoint open so the developer can read the PLAYTEST instructions
+                    // and click "Verify Playtest & Advance"
+                    _awaitingPlaytestVerification.add(node.id);
+                  } else if (!nowDone) {
+                    _awaitingPlaytestVerification.remove(node.id);
+                  }
+                });
                 widget.workbench.updateFeatureStates(feat.id, states);
               },
               borderRadius: BorderRadius.circular(5),
@@ -1056,6 +1168,58 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 ),
               ),
             ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.add_rounded, size: 14, color: _textMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: TextField(
+                    key: ValueKey('add_checkpoint_task_input_$index'),
+                    controller: taskCtrl,
+                    onSubmitted: (_) => submitNewTask(),
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: _textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                      hintText: 'Add task step...',
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: _textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  key: ValueKey('add_checkpoint_task_btn_$index'),
+                  onTap: submitNewTask,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Text(
+                      'Add',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: _accentAmber,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1073,7 +1237,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                 decoration: BoxDecoration(
-                  color: _accentAmber.withValues(alpha: 0.14),
+                  color: (isDone ? _accentEmerald : _accentAmber).withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -1081,7 +1245,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 8.5,
                     fontWeight: FontWeight.w800,
-                    color: _accentAmber,
+                    color: isDone ? _accentEmerald : _accentAmber,
                   ),
                 ),
               ),
@@ -1098,6 +1262,38 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               ),
             ],
           ),
+          if (isAwaitingPlaytest) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                key: ValueKey('verify_playtest_btn_$index'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentEmerald,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _awaitingPlaytestVerification.remove(node.id);
+                    _expandedDoneCheckpoints.remove(node.id);
+                  });
+                },
+                icon: const Icon(Icons.verified_rounded, size: 15),
+                label: Text(
+                  'Verify Playtest & Advance →',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (scopedItems.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -1239,7 +1435,23 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     ),
                   ),
                 ),
-                if (isDone)
+                if (isAwaitingPlaytest)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _accentEmerald.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'READY FOR PLAYTEST',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: _accentEmerald,
+                      ),
+                    ),
+                  )
+                else if (isDone)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
@@ -1292,7 +1504,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   key: ValueKey('checkpoint_toggle_$index'),
                   onTap: () {
                     setState(() {
-                      if (isCollapsed) {
+                      if (isAwaitingPlaytest) {
+                        _awaitingPlaytestVerification.remove(node.id);
+                        _expandedDoneCheckpoints.remove(node.id);
+                      } else if (isCollapsed) {
                         if (isDone || (isFocusMode && !isActiveFocus)) {
                           _expandedDoneCheckpoints.add(node.id);
                         } else {

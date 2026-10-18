@@ -102,6 +102,7 @@ void main() {
         // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats)
         expect(provider.releaseBlueprint!.beats.length, 7);
         expect(provider.releaseBlueprint!.totalIncludedFeatures, 8);
+        expect(find.byKey(const ValueKey('release_sticky_bottom_dock')), findsOneWidget);
         final buildRelBtn = find.byKey(const ValueKey('approve_and_build_release_btn'));
         await tester.ensureVisible(buildRelBtn);
         await tester.pumpAndSettle();
@@ -126,6 +127,19 @@ void main() {
 
         // Verify Focus Mode is ON by default
         expect(provider.focusMode, isTrue);
+
+        // Verify interactive Out-of-Scope shelf toggle
+        expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('feat_out_of_scope_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsOneWidget);
+
+        // Verify inline "+ Add task step..." input appends a task to Checkpoint 1
+        final addInput = find.byKey(const ValueKey('add_checkpoint_task_input_0'));
+        await tester.enterText(addInput, 'Verify grapple hook cooldown indicator');
+        await tester.tap(find.byKey(const ValueKey('add_checkpoint_task_btn_0')));
+        await tester.pumpAndSettle();
+        expect(find.text('Verify grapple hook cooldown indicator'), findsOneWidget);
       },
     );
 
