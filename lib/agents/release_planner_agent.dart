@@ -36,16 +36,25 @@ Project Title: "${projectDoc.title}"
 Project Concept Scope:
 ${projectDoc.sections['scope'] ?? ''}
 
+STRICT NAMING & WORDING RULES:
+1. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
+   - Every Beat, Feature, and Checkpoint `title` MUST use 2 to 4 plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Crop Stat Buffs").
+   - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition Prep", "Wasteland", "Adrenaline", "Ordinance").
+2. LITERAL ENGINEERING & DESIGN SENTENCES:
+   - Write `goal` and `doneWhen` like a practical developer talking to a teammate (e.g., "Build crop planting, growth timers, and grid storage boxes on the farm" instead of dramatic storytelling like "Pit the player against aggressive demon waves in an out-of-town arena").
+3. BANNED CORPORATE JARGON:
+   - Never use words like "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "staging", "synergy", or "seamlessly". Start goals with concrete verbs like "Build...", "Add...", or "Connect...".
+
 Task:
-Generate a bespoke, game-specific Release Blueprint for "${releaseDoc.title}" in strict JSON format.
+Generate a Release Blueprint for "${releaseDoc.title}" in strict JSON format.
 Rules:
 - Pure KISS, DRY, and YAGNI: Focus ONLY on observable, playtestable mechanics for this specific game and milestone.
-- Generate 2 custom clarifying questions (`questions`) specific to this game's release feel and scope. Prefix the first option of each with "(Recommended) ".
-- Generate 2 to 3 Core Loop Beats (`beats`) tailored to this game.
-- Under each Beat, generate 1 to 2 cohesive Playable Features (`features`). Include 1 optional stretch feature with `"included": false` in the last beat so the user can see YAGNI scope deferral in action; all other features must have `"included": true`.
+- Generate 2 custom clarifying questions (`questions`) specific to this game's mechanics and scope in plain developer terms. Prefix the first option of each with "(Recommended) ".
+- Generate 2 to 3 Core Loop Beats (`beats`) using plain functional titles (2-4 everyday words).
+- Under each Beat, generate 1 to 2 cohesive Playable Features (`features`) using plain functional titles (2-4 everyday words). Include 1 optional stretch feature with `"included": false` in the last beat so the user can see YAGNI scope deferral in action; all other features must have `"included": true`.
 - Each Feature must have:
-  - `title` (2-4 words)
-  - `goal` (1 plain-English sentence)
+  - `title` (2-4 plain functional game-dev words, NO lore/thematic fluff)
+  - `goal` (1 plain-English sentence starting with a concrete verb like "Build..." or "Add...")
   - `doneWhen` (1 observable playtest condition)
   - `estimatedHours` (integer 3-8)
   - `included` (boolean)
@@ -57,33 +66,33 @@ Rules:
 
 Return ONLY a JSON object with this exact schema:
 {
-  "goal": "One plain-English sentence stating the goal of ${releaseDoc.title}",
+  "goal": "One plain-English sentence starting with 'Build...' stating the goal of ${releaseDoc.title} (no 'deliver' or 'verified')",
   "doneWhen": "One concrete playtest condition for when ${releaseDoc.title} is ready to ship",
   "explicitExclusions": ["Exclusion 1", "Exclusion 2", "Exclusion 3"],
   "questions": [
     {
       "id": "rel_q_1",
-      "question": "Specific release question 1?",
+      "question": "Specific release question 1 in plain dev terms?",
       "options": ["(Recommended) Option A", "Option B", "Option C"]
     },
     {
       "id": "rel_q_2",
-      "question": "Specific release question 2?",
+      "question": "Specific release question 2 in plain dev terms?",
       "options": ["(Recommended) Option A", "Option B"]
     }
   ],
   "beats": [
     {
       "id": "beat_1",
-      "title": "Beat Title",
-      "goal": "1-sentence beat goal",
-      "doneWhen": "1-sentence beat completion criteria",
+      "title": "Plain Functional Beat Title",
+      "goal": "1-sentence literal beat goal",
+      "doneWhen": "1-sentence literal beat completion criteria",
       "features": [
         {
           "id": "feat_1_1",
-          "title": "Feature Title",
-          "goal": "1-sentence feature goal",
-          "doneWhen": "1-sentence feature doneWhen",
+          "title": "Plain Feature Title",
+          "goal": "1-sentence literal feature goal",
+          "doneWhen": "1-sentence literal feature doneWhen",
           "estimatedHours": 6,
           "included": true,
           "inScope": ["Scope item 1", "Scope item 2"],
@@ -92,7 +101,7 @@ Return ONLY a JSON object with this exact schema:
           "edgeCases": ["[TAG] Specific edge case behavior"],
           "checkpoints": [
             {
-              "title": "Checkpoint Title",
+              "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
               "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
               "coveredScope": ["Scope item 1"],
@@ -168,7 +177,7 @@ Return ONLY a JSON object with this exact schema:
           ProposedFeatureBlueprint(
             id: 'feat_1_1',
             title: 'Primary Locomotion & Burst',
-            goal: 'Deliver responsive directional movement and burst impulse with FOV kick.',
+            goal: 'Build responsive directional movement and burst impulse with FOV kick.',
             doneWhen: 'Player chains 3 burst impulses across gaps at 60 FPS.',
             estimatedHours: 6,
             included: true,
@@ -643,26 +652,31 @@ $currentBeatsSummary
 
 Developer's Latest Chat Message: "$cleanMsg"
 
+STRICT NAMING & WORDING RULES:
+- Use PLAIN, LITERAL, NON-THEMATIC game-dev words for all Beat, Feature, and Checkpoint titles (2-4 everyday words like "Crop Farming & Storage", "Shop Buy & Sell", "Shotgun Arena Combat").
+- NEVER use flowery, archaic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline").
+- NEVER use corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
+
 Task:
 Apply the developer's requested changes to the Release Blueprint and reply conversationally in 1-2 sentences confirming what you changed.
 Return ONLY a JSON object with this schema:
 {
   "reply": "1-2 sentence confirmation of the changes made to the Release Plan",
-  "goal": "Updated release goal",
+  "goal": "Updated release goal starting with 'Build...'",
   "doneWhen": "Updated release doneWhen",
   "explicitExclusions": ["Exclusion 1", "Exclusion 2"],
   "beats": [
     {
       "id": "beat_1",
-      "title": "Beat Title",
-      "goal": "1-sentence beat goal",
-      "doneWhen": "1-sentence beat completion criteria",
+      "title": "Plain Functional Beat Title",
+      "goal": "1-sentence literal beat goal",
+      "doneWhen": "1-sentence literal beat completion criteria",
       "features": [
         {
           "id": "feat_1_1",
-          "title": "Feature Title",
-          "goal": "1-sentence feature goal",
-          "doneWhen": "1-sentence feature doneWhen",
+          "title": "Plain Feature Title",
+          "goal": "1-sentence literal feature goal",
+          "doneWhen": "1-sentence literal feature doneWhen",
           "estimatedHours": 6,
           "included": true,
           "inScope": ["Scope item 1", "Scope item 2"],
@@ -671,7 +685,7 @@ Return ONLY a JSON object with this schema:
           "edgeCases": ["[TAG] Specific edge case behavior"],
           "checkpoints": [
             {
-              "title": "Checkpoint Title",
+              "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
               "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
               "coveredScope": ["Scope item 1"],

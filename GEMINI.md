@@ -38,7 +38,7 @@
 - **App & AI**:
   - **The Playtest Rule**: If a player or QA tester cannot see, hear, or feel it on screen during gameplay, rephrase it into an observable deliverable.
   - **Cohesive Playable Units**: Group mechanics and game feel (controls, physics, SFX, animations, particle cues) into single, unified cards. Do NOT split a feature into artificial technical micro-tickets.
-  - **Punchy Titles**: Keep card titles short and direct (2–4 plain English words).
+  - **Plain Functional Titles (No Thematic / Lore Wording)**: Keep card titles short and literal (2–4 plain everyday game-dev words). Name the actual gameplay mechanic or system (e.g., *Crop Farming & Storage*, *Shop Buy & Sell*, *Wave Combat & Drops*) — NEVER use flowery, archaic, or roleplay/lore words (e.g., *Homestead Husbandry*, *Expedition Prep*, *Adrenaline Crop Buffs*).
 
 ### 2. DRY (Don't Repeat Yourself / Single Source of Truth)
 - **Codebase**:
@@ -60,5 +60,7 @@ Whenever writing or revising any Scope, Goal, or Objective section (across Epics
   - **Goal**: Exactly one plain-English sentence stating what is being built/done and why.
   - **In Scope**: A concise bulleted list of the specific systems, features, or assets included.
   - **Done When**: Clear, practical conditions for when the work is considered complete.
-- **Tone**: Write like a practical developer talking to a teammate. Keep it direct and natural.
-- **Banned Jargon**: Never use corporate filler or vague buzzwords (e.g., *leverage*, *unified*, *end-to-end loop*, *staging*, *validate*, *deliver*, *synergy*, *seamlessly*). State the actual concrete action instead.
+- **Tone**: Write like a practical developer talking to a teammate. Keep it direct, literal, and natural.
+- **Non-Thematic / Literal Wording**: Describe mechanics in plain engineering/design terms (e.g., *"Spawn 3 enemy waves in the arena and drop ore on kill"* instead of *"Pit the player against aggressive demon waves in an out-of-town wasteland"*).
+- **Banned Jargon & Archaic Words**: Never use corporate filler or vague buzzwords (*leverage*, *unified*, *end-to-end loop*, *staging*, *validate*, *verified*, *deliver*, *synergy*, *seamlessly*) or flowery/archaic lore synonyms (*husbandry*, *homestead*, *expedition*, *ordinance*). State the actual concrete action instead.
+

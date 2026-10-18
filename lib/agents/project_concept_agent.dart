@@ -22,54 +22,61 @@ class ProjectConceptAgent {
 You are an expert indie game design producer interviewing a developer about their new game idea.
 The developer pitched this 1-line spark: "$cleanSpark"
 
-Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" (do not use generic filler; reference the exact genres/mechanics mentioned in "$cleanSpark"):
+STRICT NAMING & WORDING RULES:
+1. PLAIN FUNCTIONAL GAME-DEV NAMING (NO THEMATIC / LORE WORDING):
+   - Use simple, literal, everyday game-dev words for all Beats, Release titles, and descriptions (e.g., "Crop Farming & Storage", "Shop Buy & Sell", "Arena Wave Combat").
+   - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline", "Ordinance").
+2. BANNED BUZZWORDS:
+   - Never use corporate filler ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly"). Start goals with concrete verbs like "Build..." or "Test...".
+
+Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, literal game-dev terminology:
 {
-  "title": "A punchy, memorable 2-3 word game working title fitting '$cleanSpark'",
+  "title": "A simple, clear 2-3 word working title fitting '$cleanSpark'",
   "questions": [
     {
       "id": "q_perspective",
-      "question": "Tailored question asking about camera perspective, movement speed, and control feel for '$cleanSpark'",
+      "question": "Plain, direct question asking about camera perspective, movement speed, and control feel for '$cleanSpark'",
       "options": [
-        "(Recommended) Specific perspective + control scheme #1 tailored to $cleanSpark",
-        "Specific perspective + control scheme #2 tailored to $cleanSpark",
-        "Specific perspective + control scheme #3 tailored to $cleanSpark"
+        "(Recommended) Specific perspective + control scheme #1 in plain game-dev terms",
+        "Specific perspective + control scheme #2 in plain game-dev terms",
+        "Specific perspective + control scheme #3 in plain game-dev terms"
       ]
     },
     {
       "id": "q_loop",
-      "question": "Tailored question asking how the core mechanics of '$cleanSpark' connect in a 30-second playable loop",
+      "question": "Plain, direct question asking how the core mechanics of '$cleanSpark' connect in a 30-second playable loop",
       "options": [
-        "(Recommended) Concrete 30-second gameplay loop option #1 combining the mechanics of $cleanSpark",
-        "Concrete 30-second gameplay loop option #2 combining the mechanics of $cleanSpark",
-        "Concrete 30-second gameplay loop option #3 combining the mechanics of $cleanSpark"
+        "(Recommended) Concrete 30-second gameplay loop option #1 in plain game-dev terms",
+        "Concrete 30-second gameplay loop option #2 in plain game-dev terms",
+        "Concrete 30-second gameplay loop option #3 in plain game-dev terms"
       ]
     },
     {
       "id": "q_milestone",
-      "question": "What should we prove first in the Release v0.1 Greybox Prototype?",
+      "question": "What should we build and test first in the Release v0.1 Greybox Prototype?",
       "options": [
-        "(Recommended) Specific v0.1 prototype sandbox goal #1 for $cleanSpark",
-        "Specific v0.1 prototype sandbox goal #2 for $cleanSpark",
-        "Specific v0.1 prototype sandbox goal #3 for $cleanSpark"
+        "(Recommended) Specific v0.1 prototype sandbox goal #1 in plain game-dev terms",
+        "Specific v0.1 prototype sandbox goal #2 in plain game-dev terms",
+        "Specific v0.1 prototype sandbox goal #3 in plain game-dev terms"
       ]
     }
   ],
-  "goal": "1 plain-English sentence stating what is being built and why it feels great (no corporate buzzwords).",
+  "goal": "1 plain-English sentence starting with 'Build...' stating what mechanics are being built and why (zero corporate buzzwords or thematic fluff).",
   "coreLoopBeats": [
-    "Beat 1: Concrete observable action",
-    "Beat 2: Concrete observable interaction/payoff",
-    "Beat 3: Concrete observable loop resolution/reset"
+    "Plain Beat Name 1: Literal player action and mechanic",
+    "Plain Beat Name 2: Literal interaction or system step",
+    "Plain Beat Name 3: Literal loop payoff and reset"
   ],
   "exclusions": [
     "Specific scope-creep feature #1 to exclude from v0.1",
     "Specific scope-creep feature #2 to exclude from v0.1",
     "Specific scope-creep feature #3 to exclude from v0.1"
   ],
-  "doneWhen": "Clear practical condition for when the v0.1 prototype proves the core loop is fun.",
+  "doneWhen": "Clear practical condition for when a playtester can complete the v0.1 prototype loop.",
   "releaseTrainTitles": [
-    "v0.1: [Specific Prototype Milestone Title] - Prototype",
-    "v0.2: [Specific Core Loop Expansion Title] - MVP",
-    "v0.3: [Specific Polished Content Milestone Title] - Vertical Slice"
+    "v0.1: [Plain Functional Prototype Name, e.g. Core Movement & Combat Loop] - Prototype",
+    "v0.2: [Plain Functional MVP Name, e.g. Shop Economy & Wave Loop] - MVP",
+    "v0.3: [Plain Functional Vertical Slice Name, e.g. Full Arena & Polish] - Vertical Slice"
   ]
 }
 ''';
@@ -233,8 +240,13 @@ $recentHistory
 
 Developer's Latest Turn: "$cleanMsg"
 
+STRICT NAMING & WORDING RULES:
+- Use PLAIN, LITERAL, NON-THEMATIC game-dev terms for all Beats, Release titles, and descriptions (e.g., "Crop Farming & Storage", "Shop Buy & Sell", "Arena Wave Combat").
+- NEVER use flowery, archaic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline").
+- NEVER use corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
+
 Task:
-1. Apply the developer's latest direction, answer, or adjustment directly to the Project Concept Blueprint fields (`title`, `goal`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Keep everything concrete, playtestable, and free of corporate buzzwords.
+1. Apply the developer's latest direction, answer, or adjustment directly to the Project Concept Blueprint fields (`title`, `goal`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Keep everything concrete, playtestable, and in plain developer English.
 2. Write a concise, natural conversational `reply` (2-3 sentences max) confirming what you updated on the Blueprint and asking 1 natural follow-up question (or inviting any final tweaks before Release v0.1 planning).
 3. Provide 2-3 short clickable `quickReplies` the developer can click for their next turn.
 4. List which blueprint sections changed in `updatedFields` (e.g. `["Goal", "Core Loop"]`).
@@ -245,11 +257,11 @@ Return ONLY a JSON object with this schema:
   "quickReplies": ["Short reply option 1", "Short reply option 2", "Short reply option 3"],
   "updatedFields": ["Goal", "Core Loop"],
   "title": "Updated or existing title",
-  "goal": "Updated 1-sentence goal",
+  "goal": "Updated 1-sentence goal starting with 'Build...'",
   "coreLoopBeats": [
-    "Beat 1: ...",
-    "Beat 2: ...",
-    "Beat 3: ..."
+    "Plain Beat Name 1: ...",
+    "Plain Beat Name 2: ...",
+    "Plain Beat Name 3: ..."
   ],
   "exclusions": [
     "Exclusion 1",
@@ -432,23 +444,28 @@ Working Title: "${draft.title}"
 Developer's Interview Answers:
 $qaSummary
 
-Synthesize these exact choices into a cohesive Project Concept JSON object (no corporate buzzwords; use concrete, observable gameplay terms):
+STRICT NAMING & WORDING RULES:
+- Use PLAIN, LITERAL, NON-THEMATIC game-dev words for all Beats, Release titles, and descriptions (e.g., "Crop Farming & Storage", "Shop Buy & Sell", "Arena Wave Combat").
+- NEVER use flowery, archaic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline").
+- NEVER use corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
+
+Synthesize these exact choices into a cohesive Project Concept JSON object using plain, literal game-dev terminology:
 {
-  "title": "Refined 2-3 word game title fitting the spark and answers",
-  "goal": "Exactly 1 plain-English sentence stating what is being built and why it feels great, incorporating the developer's interview answers.",
+  "title": "Simple, clear 2-3 word working title fitting the spark and answers",
+  "goal": "Exactly 1 plain-English sentence starting with 'Build...' stating what is being built and why, incorporating the developer's interview answers.",
   "coreLoopBeats": [
-    "Beat 1: [Name] — Concrete observable player action & game feel",
-    "Beat 2: [Name] — Concrete observable interaction/system hook",
-    "Beat 3: [Name] — Concrete observable payoff & loop reset"
+    "[Plain Beat Name 1] — Literal observable player action & mechanic",
+    "[Plain Beat Name 2] — Literal observable interaction/system step",
+    "[Plain Beat Name 3] — Literal observable payoff & loop reset"
   ],
   "exclusions": [
     "3 concrete scope-creep mechanics strictly cut from v0.1"
   ],
-  "doneWhen": "1 clear, testable condition for when the v0.1 prototype proves the core loop works in-game.",
+  "doneWhen": "1 clear, testable condition for when a playtester can complete the v0.1 prototype loop.",
   "releaseTrainTitles": [
-    "v0.1: [Tailored Prototype Title] - Prototype",
-    "v0.2: [Tailored Expansion Title] - MVP",
-    "v0.3: [Tailored Vertical Slice Title] - Vertical Slice"
+    "v0.1: [Plain Functional Prototype Name] - Prototype",
+    "v0.2: [Plain Functional Expansion Name] - MVP",
+    "v0.3: [Plain Functional Vertical Slice Name] - Vertical Slice"
   ]
 }
 ''';
