@@ -102,6 +102,26 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _selectedFeatureId;
   String? get selectedFeatureId => _selectedFeatureId;
 
+  bool _focusMode = true;
+  bool get focusMode => _focusMode;
+
+  /// Filter for the compact Release Dropdown in Stage 3:
+  /// - 'active': Active Milestone
+  /// - 'all': All Live Game Features
+  /// - 'archived': Superseded Testbeds Archive
+  String _releaseViewFilter = 'active';
+  String get releaseViewFilter => _releaseViewFilter;
+
+  void toggleFocusMode() {
+    _focusMode = !_focusMode;
+    notifyListeners();
+  }
+
+  void setReleaseViewFilter(String filter) {
+    _releaseViewFilter = filter;
+    notifyListeners();
+  }
+
   ProjectConceptBlueprint? _conceptDraft;
   ProjectConceptBlueprint? get conceptDraft => _conceptDraft;
 
@@ -156,6 +176,36 @@ class WorkbenchProvider extends ChangeNotifier {
         .toList();
   }
 
+  /// All superseded/archived testbed features across the vault.
+  List<TierDocument> get supersededFeatures {
+    return documents.values
+        .where(
+          (d) =>
+              d.tier == TierType.feature &&
+              d.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name,
+        )
+        .toList();
+  }
+
+  /// Next incomplete feature in the active Release after the currently selected feature.
+  TierDocument? get nextIncompleteFeature {
+    final allFeats = <TierDocument>[];
+    for (final b in activeReleaseBeats) {
+      allFeats.addAll(featuresForBeat(b.id));
+    }
+    if (allFeats.isEmpty) return null;
+    final currentIdx =
+        allFeats.indexWhere((f) => f.id == _selectedFeatureId);
+    for (int offset = 1; offset <= allFeats.length; offset++) {
+      final candidate = allFeats[(currentIdx + offset) % allFeats.length];
+      if (candidate.id != _selectedFeatureId &&
+          getDocumentProgress(candidate.id) < 100) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   void toggleTheme() {
     _isDark = !_isDark;
     notifyListeners();
@@ -190,7 +240,8 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Sends a user turn in the Stage 1 Co-Design Chat and updates the live Project Concept Blueprint.
+  /// Sends a user turn in the Stage 1 Co-Design Chat and updates the live Project Concept Blueprint
+  /// using the fast `_conversationModel` (`gemini-flash-latest`).
   Future<void> sendConceptChatMessage(String message) async {
     final clean = message.trim();
     if (clean.isEmpty) return;
@@ -203,7 +254,7 @@ class WorkbenchProvider extends ChangeNotifier {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Updating Concept Blueprint ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
+        'Updating Concept Blueprint ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
@@ -239,14 +290,14 @@ class WorkbenchProvider extends ChangeNotifier {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Synthesizing Project Concept Blueprint ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
+        'Synthesizing Project Concept Blueprint ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
       await ProjectConceptAgent.synthesizeFromInterview(
         draft,
         apiKey: _apiKey,
-        modelName: _planningModel,
+        modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
       _commitConceptToVault(draft);
@@ -259,19 +310,37 @@ class WorkbenchProvider extends ChangeNotifier {
 
   void _commitConceptToVault(ProjectConceptBlueprint draft) {
     final projId = _activeProjectId ?? 'proj_main';
-    final projDoc = TierDocument(
-      id: projId,
-      title: draft.title,
-      tier: TierType.project,
-      sections: {
-        'scope': draft.toFormattedScopeSection(),
-      },
-    );
+    final existingProj = documents[projId];
+    final projDoc = existingProj ??
+        TierDocument(
+          id: projId,
+          title: draft.title,
+          tier: TierType.project,
+        );
+    projDoc.title = draft.title;
+    projDoc.sections['scope'] = draft.toFormattedScopeSection();
+    projDoc.sections['tech_spec'] = draft.techSpec.join(' · ');
+    projDoc.sections['design_pillars'] =
+        draft.designPillars.map((p) => '• $p').join('\n');
+    projDoc.sections['trade_offs'] =
+        draft.tradeOffs.map((t) => '• $t').join('\n');
 
     final releaseIds = <String>[];
     for (int i = 0; i < draft.releaseTrainTitles.length; i++) {
       final relId = 'rel_v0_${i + 1}';
       final relTitle = draft.releaseTrainTitles[i];
+      final existingRel = documents[relId];
+
+      if (existingRel != null) {
+        existingRel.title = relTitle;
+        if (existingRel.childrenIds.isEmpty && i == 0) {
+          existingRel.sections['releaseScope'] = draft.firstReleasePreset.name;
+          existingRel.sections['scope'] =
+              'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
+        }
+        releaseIds.add(relId);
+        continue;
+      }
 
       final relDoc = TierDocument(
         id: relId,
@@ -292,7 +361,7 @@ class WorkbenchProvider extends ChangeNotifier {
     projDoc.childrenIds = releaseIds;
     documents[projId] = projDoc;
     _activeProjectId = projId;
-    _activeReleaseId = releaseIds.isNotEmpty ? releaseIds.first : null;
+    _activeReleaseId ??= releaseIds.isNotEmpty ? releaseIds.first : null;
   }
 
   /// Step 1C -> Stage 2: Lock in the Project Concept and open the Release Plan Gate for the active Release.
@@ -309,6 +378,22 @@ class WorkbenchProvider extends ChangeNotifier {
         (proj.childrenIds.isNotEmpty ? proj.childrenIds.first : null);
     if (targetRelId == null) return;
 
+    // Collect existing live Beats & Features from the currently active (or prior) release
+    // so evolving to v0.2+ preserves the single live game tree!
+    final existingBeats = <TierDocument>[];
+    final existingFeaturesByBeat = <String, List<TierDocument>>{};
+    for (final rel in projectReleases) {
+      if (rel.childrenIds.isNotEmpty) {
+        for (final beatId in rel.childrenIds) {
+          final bDoc = documents[beatId];
+          if (bDoc != null && !existingBeats.any((b) => b.id == bDoc.id)) {
+            existingBeats.add(bDoc);
+            existingFeaturesByBeat[bDoc.id] = featuresForBeat(bDoc.id);
+          }
+        }
+      }
+    }
+
     _activeReleaseId = targetRelId;
     final relDoc = documents[targetRelId];
     if (relDoc == null) return;
@@ -322,6 +407,8 @@ class WorkbenchProvider extends ChangeNotifier {
       _releaseBlueprint = await ReleasePlannerAgent.planRelease(
         projectDoc: proj,
         releaseDoc: relDoc,
+        existingBeats: existingBeats,
+        existingFeaturesByBeat: existingFeaturesByBeat,
         apiKey: _apiKey,
         modelName: _planningModel,
         thinkingLevel: _thinkingLevel,
@@ -376,7 +463,7 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Stage 2 -> Stage 3: User approves the Release Plan Gate; Executor Agent builds the full Release hierarchy.
+  /// Stage 2 -> Stage 3: User approves the Release Plan Gate; Executor Agent builds or evolves the Release hierarchy.
   Future<void> approveAndExecuteReleasePlan() async {
     final bp = _releaseBlueprint;
     final relDoc = activeRelease;
@@ -385,12 +472,14 @@ class WorkbenchProvider extends ChangeNotifier {
     _isAgentBusy = true;
     _executionLog.clear();
     _currentStage = WorkbenchStage.releaseWorkbench;
+    _releaseViewFilter = 'active';
     notifyListeners();
 
     try {
       final createdDocs = await ReleaseExecutorAgent.executeBlueprint(
         releaseDoc: relDoc,
         blueprint: bp,
+        existingDocuments: documents,
         onProgress: (msg) {
           _agentProgressStep = msg;
           _executionLog.add(msg);
@@ -402,12 +491,25 @@ class WorkbenchProvider extends ChangeNotifier {
         documents[d.id] = d;
       }
 
-      // Auto-select Beat 1 and Feature 1 so the user lands directly on Checkpoint 1 ready to work!
+      // Auto-select the first Feature that has incomplete checkpoints (or Beat 1 / Feature 1)
       final beats = activeReleaseBeats;
       if (beats.isNotEmpty) {
-        _selectedBeatId = beats.first.id;
-        final feats = featuresForBeat(beats.first.id);
-        _selectedFeatureId = feats.isNotEmpty ? feats.first.id : null;
+        TierDocument? firstActiveBeat;
+        TierDocument? firstActiveFeat;
+        for (final b in beats) {
+          for (final f in featuresForBeat(b.id)) {
+            if (getDocumentProgress(f.id) < 100) {
+              firstActiveBeat = b;
+              firstActiveFeat = f;
+              break;
+            }
+          }
+          if (firstActiveFeat != null) break;
+        }
+        _selectedBeatId = (firstActiveBeat ?? beats.first).id;
+        final feats = featuresForBeat(_selectedBeatId!);
+        _selectedFeatureId =
+            (firstActiveFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
       }
     } finally {
       _isAgentBusy = false;
@@ -485,14 +587,36 @@ class WorkbenchProvider extends ChangeNotifier {
     return true;
   }
 
-  /// Advances to the next queued Release in the Release Train and opens its Plan Gate.
+  /// Advances to the next queued Release in the Release Train (or creates a new v0.X release if at the end)
+  /// and opens its Plan Gate to evolve the existing feature tree.
   Future<void> advanceToNextRelease() async {
+    final proj = activeProject;
+    if (proj == null) return;
     final releases = projectReleases;
     if (releases.isEmpty) return;
+
     final currentIdx = releases.indexWhere((r) => r.id == _activeReleaseId);
     final nextIdx = currentIdx + 1;
     if (nextIdx < releases.length) {
       await openReleasePlanGate(releaseId: releases[nextIdx].id);
+      return;
     }
+
+    // Dynamically append a new release milestone if scaling past the initial train (e.g. v0.4, v1.0+)
+    final newIndex = releases.length + 1;
+    final newRelId = 'rel_v0_$newIndex';
+    final newRelDoc = TierDocument(
+      id: newRelId,
+      title: 'v0.$newIndex: Live Expansion & Polish - Standard',
+      tier: TierType.release,
+      parentId: proj.id,
+      sections: {
+        'releaseScope': ReleaseScope.verticalSlice.name,
+        'scope': 'Goal: Expand the verified game loop.\n\nIn Scope:\n• Next milestone upgrades\n\nDone When: All checkpoints verified.',
+      },
+    );
+    documents[newRelId] = newRelDoc;
+    proj.childrenIds.add(newRelId);
+    await openReleasePlanGate(releaseId: newRelId);
   }
 }

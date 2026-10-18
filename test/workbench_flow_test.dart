@@ -95,6 +95,48 @@ void main() {
           find.byKey(const ValueKey('checkpoint_spec_pane_0')),
         );
         expect(leftTaskPos.dx, lessThan(rightSpecPos.dx));
+
+        // Verify Focus Mode is ON by default: Checkpoint 1 is expanded while Checkpoint 2 is UP NEXT (collapsed)
+        expect(provider.focusMode, isTrue);
+        expect(find.byKey(const ValueKey('checkpoint_spec_pane_1')), findsNothing);
+      },
+    );
+
+    test(
+      'Evolving from Release v0.1 to v0.2 preserves STABLE features (0h delta) and appends v0.2 checkpoints to UPGRADE features',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('High-speed grappling hook parkour roguelite');
+        expect(provider.conceptDraft!.designPillars, isNotEmpty);
+        expect(provider.conceptDraft!.tradeOffs, isNotEmpty);
+        expect(provider.conceptDraft!.techSpec, isNotEmpty);
+
+        // Plan & Execute v0.1
+        await provider.openReleasePlanGate();
+        await provider.approveAndExecuteReleasePlan();
+
+        final v1Beats = provider.activeReleaseBeats;
+        expect(v1Beats.length, 3);
+        final v1FirstFeat = provider.featuresForBeat(v1Beats.first.id).first;
+        expect(v1FirstFeat.title, 'Primary Locomotion & Burst');
+
+        // Advance to v0.2 Plan Gate
+        await provider.advanceToNextRelease();
+        final v2Blueprint = provider.releaseBlueprint!;
+        expect(v2Blueprint.releaseVersionTag, 'v0.2');
+
+        // Beat 1 Feature 1 is upgraded (4h delta), Beat 1 Feature 2 is STABLE (0h delta)
+        final b1f1 = v2Blueprint.beats[0].features[0];
+        final b1f2 = v2Blueprint.beats[0].features[1];
+        expect(b1f1.lifecycle.name, 'upgrade');
+        expect(b1f1.activeDeltaHours, 4);
+        expect(b1f2.lifecycle.name, 'stable');
+        expect(b1f2.activeDeltaHours, 0);
+
+        // Execute v0.2 and verify v0.1 checkpoints are preserved + v0.2 checkpoint is appended
+        await provider.approveAndExecuteReleasePlan();
+        final evolvedFeat = provider.documents[v1FirstFeat.id]!;
+        expect(evolvedFeat.sections['lifecycle'], 'upgrade');
       },
     );
   });

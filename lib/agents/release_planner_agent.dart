@@ -12,61 +12,90 @@ import 'gemini_agent_client.dart';
 /// - Cohesive Playable Features (`ProposedFeatureBlueprint`) with pre-mapped
 ///   60/40 Playable Checkpoints, Scope, Tuning Parameters, and Edge Cases.
 class ReleasePlannerAgent {
+  static String extractReleaseVersionTag(String releaseTitle) {
+    final match = RegExp(r'(v\d+\.\d+(?:\.\d+)?)', caseSensitive: false)
+        .firstMatch(releaseTitle);
+    if (match != null) {
+      return match.group(1)!.toLowerCase();
+    }
+    return 'v0.1';
+  }
+
   static Future<ReleaseBlueprint> planRelease({
     required TierDocument projectDoc,
     required TierDocument releaseDoc,
     List<TierDocument> completedReleases = const [],
+    List<TierDocument> existingBeats = const [],
+    Map<String, List<TierDocument>> existingFeaturesByBeat = const {},
     String apiKey = '',
     String modelName = 'gemini-4-argon',
     String thinkingLevel = 'LOW',
   }) async {
     final preset = releaseDoc.releaseScope;
+    final versionTag = extractReleaseVersionTag(releaseDoc.title);
+    final isSubsequentRelease =
+        existingBeats.isNotEmpty || completedReleases.isNotEmpty || versionTag != 'v0.1';
     final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
     final projectExclusions = SectionTextUtils.resolveExclusions(
       projectDoc.sections,
       splitSingleSentence: false,
     );
+    final techSpecText = projectDoc.sections['tech_spec'] ?? '';
+    final pillarsText = projectDoc.sections['design_pillars'] ?? '';
+    final tradeOffsText = projectDoc.sections['trade_offs'] ?? '';
+
+    final existingTreeSummary = StringBuffer();
+    if (existingBeats.isNotEmpty) {
+      existingTreeSummary.writeln('Existing Live Game Tree (from prior release):');
+      for (final b in existingBeats) {
+        existingTreeSummary.writeln('- Beat "${b.title}" (${b.id}):');
+        final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
+        for (final f in feats) {
+          final states = FeatureStateNode.getStatesForDocument(f);
+          final originVer = f.sections['originVersion'] ?? 'v0.1';
+          existingTreeSummary.writeln(
+            '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints verified]',
+          );
+        }
+      }
+    }
 
     if (GeminiAgentClient.hasKey(apiKey)) {
       final prompt = '''
-You are the Antigravity Release Planner Agent for a game studio.
-We are planning a single milestone Release: "${releaseDoc.title}" (Scope Preset: ${preset.label} — ${preset.description}).
+You are the Antigravity Release Planner Agent (`gemini-4-argon`) for a game studio.
+We are planning milestone Release: "${releaseDoc.title}" (Version Tag: $versionTag, Scope Preset: ${preset.label} — ${preset.description}).
 
 Project Title: "${projectDoc.title}"
+Tech & Perspective: $techSpecText
+Load-Bearing Design Pillars (Core Player Experience):
+$pillarsText
+Trade-Offs (Prioritize X over Y):
+$tradeOffsText
 Project Concept Scope:
 ${projectDoc.sections['scope'] ?? ''}
 
-STRICT NAMING & WORDING RULES:
-1. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
-   - Every Beat, Feature, and Checkpoint `title` MUST use 2 to 4 plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Crop Stat Buffs").
-   - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition Prep", "Wasteland", "Adrenaline", "Ordinance").
-2. LITERAL ENGINEERING & DESIGN SENTENCES:
-   - Write `goal` and `doneWhen` like a practical developer talking to a teammate (e.g., "Build crop planting, growth timers, and grid storage boxes on the farm" instead of dramatic storytelling like "Pit the player against aggressive demon waves in an out-of-town arena").
-3. BANNED CORPORATE JARGON:
-   - Never use words like "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "staging", "synergy", or "seamlessly". Start goals with concrete verbs like "Build...", "Add...", or "Connect...".
+${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
 
-Task:
-Generate a Release Blueprint for "${releaseDoc.title}" in strict JSON format.
-Rules:
-- Pure KISS, DRY, and YAGNI: Focus ONLY on observable, playtestable mechanics for this specific game and milestone.
-- Generate 2 custom clarifying questions (`questions`) specific to this game's mechanics and scope in plain developer terms. Prefix the first option of each with "(Recommended) ".
-- Generate 2 to 3 Core Loop Beats (`beats`) using plain functional titles (2-4 everyday words).
-- Under each Beat, generate 1 to 2 cohesive Playable Features (`features`) using plain functional titles (2-4 everyday words). Include 1 optional stretch feature with `"included": false` in the last beat so the user can see YAGNI scope deferral in action; all other features must have `"included": true`.
-- Each Feature must have:
-  - `title` (2-4 plain functional game-dev words, NO lore/thematic fluff)
-  - `goal` (1 plain-English sentence starting with a concrete verb like "Build..." or "Add...")
-  - `doneWhen` (1 observable playtest condition)
-  - `estimatedHours` (integer 3-8)
-  - `included` (boolean)
-  - `inScope` (2-3 concrete bullet strings)
-  - `outOfScope` (1 concrete exclusion string)
-  - `tuningParams` (2-3 concrete `variableName: value unit` strings specific to this mechanic)
-  - `edgeCases` (1-2 concrete `[TAG] condition -> expected behavior` strings)
-  - `checkpoints` (1-2 `ProposedCheckpointBlueprint` items where `coveredScope`, `tuningParams`, and `edgeCases` are subsets of the Feature's lists, and `tasks` are 2-3 concrete engineering steps with `(Xh)` hour tags).
+STRICT NAMING & ARCHITECTURE RULES:
+1. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
+   - Every Beat, Feature, and Checkpoint `title` MUST use 2 to 4 plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Greybox Test Room").
+   - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition Prep", "Wasteland", "Adrenaline", "Ordinance").
+2. PERMANENT MECHANICS vs. TEMPORARY TESTBEDS:
+   - Keep permanent mechanics (movement, weapons, farming, AI, UI) in their own Features so they evolve cleanly from $versionTag onward.
+   - Keep temporary greybox test rooms or debug spawners in a separate testbed Feature so they can be marked `"lifecycle": "superseded"` in later releases without throwing away core mechanics.
+3. FEATURE LIFECYCLE STATUS (`lifecycle`):
+   - For v0.1 (first release): all features use `"lifecycle": "new"`.
+   - For v0.2+ (subsequent releases evolving an existing tree):
+     * `"stable"` — Existing feature from a prior release that works and needs 0 new hours (`"estimatedHours": 0`, `"checkpoints": []`). Leave it alone!
+     * `"upgrade"` — Existing feature getting new $versionTag checkpoints, scope items, or tuning parameters (`"estimatedHours"` = ONLY the new delta hours for $versionTag, and `"checkpoints"` = ONLY the new $versionTag checkpoints).
+     * `"new"` — Brand new feature added in $versionTag (or promoted from prior Out of Scope).
+     * `"superseded"` — Temporary v0.1 testbed replaced by a real level/arena in $versionTag (`"included": false`, `"supersedesFeatureTitle"` set on the new replacement feature).
+4. BANNED CORPORATE JARGON:
+   - Never use words like "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "staging", "synergy", or "seamlessly". Start goals with concrete verbs like "Build...", "Add...", or "Connect...".
 
 Return ONLY a JSON object with this exact schema:
 {
-  "goal": "One plain-English sentence starting with 'Build...' stating the goal of ${releaseDoc.title} (no 'deliver' or 'verified')",
+  "goal": "One plain-English sentence starting with 'Build...' or 'Expand...' stating the goal of ${releaseDoc.title}",
   "doneWhen": "One concrete playtest condition for when ${releaseDoc.title} is ready to ship",
   "explicitExclusions": ["Exclusion 1", "Exclusion 2", "Exclusion 3"],
   "questions": [
@@ -95,6 +124,8 @@ Return ONLY a JSON object with this exact schema:
           "doneWhen": "1-sentence literal feature doneWhen",
           "estimatedHours": 6,
           "included": true,
+          "lifecycle": "new",
+          "originVersion": "$versionTag",
           "inScope": ["Scope item 1", "Scope item 2"],
           "outOfScope": ["Deferred item"],
           "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.15 s"],
@@ -103,6 +134,7 @@ Return ONLY a JSON object with this exact schema:
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
+              "releaseVersion": "$versionTag",
               "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
               "coveredScope": ["Scope item 1"],
               "tuningParams": ["paramOne: 10.0 m/s"],
@@ -129,12 +161,24 @@ Return ONLY a JSON object with this exact schema:
           json: json,
           releaseDoc: releaseDoc,
           preset: preset,
+          versionTag: versionTag,
           fallbackExclusions: projectExclusions,
         );
         if (parsed != null) {
           return parsed;
         }
       }
+    }
+
+    if (isSubsequentRelease && existingBeats.isNotEmpty) {
+      return _buildDeterministicSubsequentRelease(
+        releaseDoc: releaseDoc,
+        preset: preset,
+        versionTag: versionTag,
+        existingBeats: existingBeats,
+        existingFeaturesByBeat: existingFeaturesByBeat,
+        projectExclusions: projectExclusions,
+      );
     }
 
     final questions = <AgentQuestion>[
@@ -181,6 +225,8 @@ Return ONLY a JSON object with this exact schema:
             doneWhen: 'Player chains 3 burst impulses across gaps at 60 FPS.',
             estimatedHours: 6,
             included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
             inScope: [
               'Directional acceleration and ground/air velocity curve',
               'Burst impulse trigger with camera FOV kick and whoosh SFX',
@@ -198,38 +244,40 @@ Return ONLY a JSON object with this exact schema:
               '[INPUT BUFFER] Queued jump/burst within 100ms before landing fires on touchdown',
             ],
             checkpoints: [
-              const ProposedCheckpointBlueprint(
+              ProposedCheckpointBlueprint(
                 title: 'Velocity Curve & Input Buffer',
                 playtestCriteria: 'Sprint and trigger burst off a ledge -> verify 0.12s coyote window and 100ms landing buffer.',
-                tasks: [
+                releaseVersion: versionTag,
+                tasks: const [
                   'Implement directional acceleration & maxMoveSpeed clamp (2h)',
                   'Add 100ms input buffer and coyoteTimeWindow check (2h)',
                 ],
-                coveredScope: [
+                coveredScope: const [
                   'Directional acceleration and ground/air velocity curve',
                 ],
-                tuningParams: [
+                tuningParams: const [
                   'maxMoveSpeed: 12.0 m/s',
                   'coyoteTimeWindow: 0.12 s',
                 ],
-                edgeCases: [
+                edgeCases: const [
                   '[INPUT BUFFER] Queued jump/burst within 100ms before landing fires on touchdown',
                 ],
               ),
-              const ProposedCheckpointBlueprint(
+              ProposedCheckpointBlueprint(
                 title: 'Burst Impulse & Corner Deflection',
                 playtestCriteria: 'Trigger burst into a 45-degree wall corner -> character slides along surface without clipping.',
-                tasks: [
+                releaseVersion: versionTag,
+                tasks: const [
                   'Hook burstImpulse velocity vector with camera FOV kick & SFX (1h)',
                   'Add capsule sweep deflection against steep wall normals (1h)',
                 ],
-                coveredScope: [
+                coveredScope: const [
                   'Burst impulse trigger with camera FOV kick and whoosh SFX',
                 ],
-                tuningParams: [
+                tuningParams: const [
                   'burstImpulse: 18.5 m/s',
                 ],
-                edgeCases: [
+                edgeCases: const [
                   '[WALL CLIP] High-speed burst into acute corner clamps velocity cleanly',
                 ],
               ),
@@ -242,6 +290,8 @@ Return ONLY a JSON object with this exact schema:
             doneWhen: 'Landing into a slide preserves momentum and decelerates predictably on flat ground.',
             estimatedHours: 5,
             included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
             inScope: [
               'Slope-aware slide speed multiplier and friction decay',
               'Camera tilt and particle dust trail while sliding',
@@ -257,23 +307,24 @@ Return ONLY a JSON object with this exact schema:
               '[CEILING STAND] Uncrouching under low geometry stays in crouched state until clear',
             ],
             checkpoints: [
-              const ProposedCheckpointBlueprint(
+              ProposedCheckpointBlueprint(
                 title: 'Slide Entry & Friction Decay',
                 playtestCriteria: 'Enter slide on flat vs sloped ramp -> verify speed boost on incline and smooth stop on flat.',
-                tasks: [
+                releaseVersion: versionTag,
+                tasks: const [
                   'Apply slideEntrySpeed impulse and slope dot-product multiplier (2h)',
                   'Add flatFrictionDecel curve, camera roll tilt, and dust VFX (2h)',
                   'Guard uncrouch state transition with vertical capsule clearance raycast (1h)',
                 ],
-                coveredScope: [
+                coveredScope: const [
                   'Slope-aware slide speed multiplier and friction decay',
                   'Camera tilt and particle dust trail while sliding',
                 ],
-                tuningParams: [
+                tuningParams: const [
                   'slideEntrySpeed: 14.0 m/s',
                   'flatFrictionDecel: 6.5 m/s²',
                 ],
-                edgeCases: [
+                edgeCases: const [
                   '[CEILING STAND] Uncrouching under low geometry stays in crouched state until clear',
                 ],
               ),
@@ -294,6 +345,8 @@ Return ONLY a JSON object with this exact schema:
             doneWhen: 'Every strike registers hit-stop, audio cue, and health reduction without ghost hits.',
             estimatedHours: 6,
             included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
             inScope: [
               'Attack hitbox sweep and target hurtbox registration',
               '60ms hit-stop freeze, material flash, and directional knockback',
@@ -310,35 +363,37 @@ Return ONLY a JSON object with this exact schema:
               '[MULTI HIT] Single attack swing only damages the same target ID once per active frame window',
             ],
             checkpoints: [
-              const ProposedCheckpointBlueprint(
+              ProposedCheckpointBlueprint(
                 title: 'Hitbox Sweep & Single-Hit Guard',
                 playtestCriteria: 'Strike a cluster of 2 targets -> each takes damage exactly once per swing.',
-                tasks: [
+                releaseVersion: versionTag,
+                tasks: const [
                   'Build active hitbox sweep and per-swing hit target ID set (2h)',
                   'Apply knockbackForce impulse along impact normal (1h)',
                 ],
-                coveredScope: [
+                coveredScope: const [
                   'Attack hitbox sweep and target hurtbox registration',
                 ],
-                tuningParams: [
+                tuningParams: const [
                   'attackRange: 3.2 m',
                   'knockbackForce: 11.0 N',
                 ],
-                edgeCases: [
+                edgeCases: const [
                   '[MULTI HIT] Single attack swing only damages the same target ID once per active frame window',
                 ],
               ),
-              const ProposedCheckpointBlueprint(
+              ProposedCheckpointBlueprint(
                 title: 'Hit-Stop & Visual Impact Cues',
                 playtestCriteria: 'Land a direct hit -> verify 60ms hit-stop frame pause, white flash, and impact SFX.',
-                tasks: [
+                releaseVersion: versionTag,
+                tasks: const [
                   'Trigger hitStopDuration time-scale pause and target emissive flash (2h)',
                   'Hook impact spark particles and hit confirmation SFX (1h)',
                 ],
-                coveredScope: [
+                coveredScope: const [
                   '60ms hit-stop freeze, material flash, and directional knockback',
                 ],
-                tuningParams: [
+                tuningParams: const [
                   'hitStopDuration: 0.06 s',
                 ],
               ),
@@ -359,6 +414,8 @@ Return ONLY a JSON object with this exact schema:
             doneWhen: 'Defeating the last target triggers clear banner and R-key resets all actors cleanly.',
             estimatedHours: 4,
             included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
             inScope: [
               'Active target counter and arena clear banner with run timer',
               'Instant 1-key arena state reset without reloading scene assets',
@@ -373,21 +430,22 @@ Return ONLY a JSON object with this exact schema:
               '[SIMULTANEOUS KO] Player dying on the same frame as last target prioritizes failure reset cleanly',
             ],
             checkpoints: [
-              const ProposedCheckpointBlueprint(
+              ProposedCheckpointBlueprint(
                 title: 'Clear Tracker & Instant Loop Reset',
                 playtestCriteria: 'Eliminate final target -> banner appears -> press Reset -> player and targets restore in 0.25s.',
-                tasks: [
+                releaseVersion: versionTag,
+                tasks: const [
                   'Wire active target count listener and run timer HUD (2h)',
                   'Implement pool-based actor reset and simultaneous KO guard (2h)',
                 ],
-                coveredScope: [
+                coveredScope: const [
                   'Active target counter and arena clear banner with run timer',
                   'Instant 1-key arena state reset without reloading scene assets',
                 ],
-                tuningParams: [
+                tuningParams: const [
                   'resetFadeDuration: 0.25 s',
                 ],
-                edgeCases: [
+                edgeCases: const [
                   '[SIMULTANEOUS KO] Player dying on the same frame as last target prioritizes failure reset cleanly',
                 ],
               ),
@@ -400,6 +458,8 @@ Return ONLY a JSON object with this exact schema:
             doneWhen: 'Clearing under target thresholds displays medal icon on summary card.',
             estimatedHours: 4,
             included: false, // Pre-unchecked to demonstrate YAGNI toggle -> Out of Scope
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
             inScope: [
               'Gold/Silver/Bronze time threshold evaluation and badge popup',
             ],
@@ -410,19 +470,20 @@ Return ONLY a JSON object with this exact schema:
               '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
             ],
             checkpoints: [
-              const ProposedCheckpointBlueprint(
+              ProposedCheckpointBlueprint(
                 title: 'Medal Threshold Evaluation',
                 playtestCriteria: 'Clear arena in under 25s -> Gold medal badge animates on clear screen.',
-                tasks: [
+                releaseVersion: versionTag,
+                tasks: const [
                   'Compare final elapsed time against goldTimeThreshold and render badge (2h)',
                 ],
-                coveredScope: [
+                coveredScope: const [
                   'Gold/Silver/Bronze time threshold evaluation and badge popup',
                 ],
-                tuningParams: [
+                tuningParams: const [
                   'goldTimeThreshold: 25.0 s',
                 ],
-                edgeCases: [
+                edgeCases: const [
                   '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
                 ],
               ),
@@ -435,6 +496,7 @@ Return ONLY a JSON object with this exact schema:
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
       releaseTitle: releaseDoc.title,
+      releaseVersionTag: versionTag,
       preset: preset,
       goal: 'Prove the 30-second playable core loop in one greybox arena with responsive controls and instant reset.',
       doneWhen: 'A playtester can play, clear, and reset the greybox arena 3 times in a row with zero debug intervention.',
@@ -446,10 +508,172 @@ Return ONLY a JSON object with this exact schema:
     );
   }
 
+  /// Deterministic evolution blueprint for v0.2+ when running offline / in tests.
+  /// Demonstrates how existing v0.1 features either stay STABLE (0h delta) or
+  /// UPGRADE with new v0.2 checkpoints, while new v0.2 features join the tree.
+  static ReleaseBlueprint _buildDeterministicSubsequentRelease({
+    required TierDocument releaseDoc,
+    required ReleaseScope preset,
+    required String versionTag,
+    required List<TierDocument> existingBeats,
+    required Map<String, List<TierDocument>> existingFeaturesByBeat,
+    required List<String> projectExclusions,
+  }) {
+    final beats = <ProposedBeatBlueprint>[];
+
+    for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
+      final beatDoc = existingBeats[bIdx];
+      final existingFeats = existingFeaturesByBeat[beatDoc.id] ?? const <TierDocument>[];
+      final proposedFeats = <ProposedFeatureBlueprint>[];
+
+      for (int fIdx = 0; fIdx < existingFeats.length; fIdx++) {
+        final fDoc = existingFeats[fIdx];
+        final originVer = fDoc.sections['originVersion'] ?? 'v0.1';
+
+        if (bIdx == 0 && fIdx == 0) {
+          // Upgrade the first feature with a new v0.2 checkpoint!
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: fDoc.id,
+              title: fDoc.title,
+              goal: 'Expand ${fDoc.title} with $versionTag air-dash chain and stamina recovery.',
+              doneWhen: 'Player chains ground burst into air-dash with clean stamina recharge.',
+              estimatedHours: 4,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.upgrade,
+              originVersion: originVer,
+              inScope: [
+                'Air-dash chain impulse and cooldown indicator',
+              ],
+              tuningParams: [
+                'airDashMultiplier: 1.25 x',
+              ],
+              edgeCases: [
+                '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
+              ],
+              checkpoints: [
+                ProposedCheckpointBlueprint(
+                  title: 'Air-Dash Chain & Cooldown HUD',
+                  playtestCriteria: 'Trigger burst in mid-air -> verify 1.25x air-dash impulse and cooldown pip recharge.',
+                  releaseVersion: versionTag,
+                  tasks: const [
+                    'Add mid-air burst chain state and airDashMultiplier (2h)',
+                    'Bind stamina pip recharge bar on reticle HUD (2h)',
+                  ],
+                  coveredScope: const [
+                    'Air-dash chain impulse and cooldown indicator',
+                  ],
+                  tuningParams: const [
+                    'airDashMultiplier: 1.25 x',
+                  ],
+                  edgeCases: const [
+                    '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
+                  ],
+                ),
+              ],
+            ),
+          );
+        } else {
+          // Keep other existing features STABLE (0h delta, untouched!)
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: fDoc.id,
+              title: fDoc.title,
+              goal: SectionTextUtils.resolveGoal(fDoc.sections),
+              doneWhen: SectionTextUtils.resolveDoneWhen(fDoc.sections),
+              estimatedHours: 0,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.stable,
+              originVersion: originVer,
+              checkpoints: const [],
+            ),
+          );
+        }
+      }
+
+      if (bIdx == existingBeats.length - 1) {
+        // Promote a new feature in the last beat for v0.2
+        proposedFeats.add(
+          ProposedFeatureBlueprint(
+            id: 'feat_${versionTag}_medals',
+            title: 'Bonus Time-Trial Medals',
+            goal: 'Award Bronze/Silver/Gold speed medals at the end of an arena clear.',
+            doneWhen: 'Clearing under target thresholds displays medal icon on summary card.',
+            estimatedHours: 4,
+            included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
+            inScope: const [
+              'Gold/Silver/Bronze time threshold evaluation and badge popup',
+            ],
+            tuningParams: const [
+              'goldTimeThreshold: 25.0 s',
+            ],
+            edgeCases: const [
+              '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+            ],
+            checkpoints: [
+              ProposedCheckpointBlueprint(
+                title: 'Medal Threshold Evaluation',
+                playtestCriteria: 'Clear arena in under 25s -> Gold medal badge animates on clear screen.',
+                releaseVersion: versionTag,
+                tasks: const [
+                  'Compare final elapsed time against goldTimeThreshold and render badge (2h)',
+                  'Add personal-best split delta indicator on clear banner (2h)',
+                ],
+                coveredScope: const [
+                  'Gold/Silver/Bronze time threshold evaluation and badge popup',
+                ],
+                tuningParams: const [
+                  'goldTimeThreshold: 25.0 s',
+                ],
+                edgeCases: const [
+                  '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+                ],
+              ),
+            ],
+          ),
+        );
+      }
+
+      beats.add(
+        ProposedBeatBlueprint(
+          id: beatDoc.id,
+          title: beatDoc.title,
+          goal: SectionTextUtils.resolveGoal(beatDoc.sections),
+          doneWhen: SectionTextUtils.resolveDoneWhen(beatDoc.sections),
+          features: proposedFeats,
+        ),
+      );
+    }
+
+    return ReleaseBlueprint(
+      releaseDocId: releaseDoc.id,
+      releaseTitle: releaseDoc.title,
+      releaseVersionTag: versionTag,
+      preset: preset,
+      goal: 'Expand the verified v0.1 core loop with $versionTag upgrades while keeping stable features untouched.',
+      doneWhen: 'Playtester completes the expanded $versionTag loop with all new and upgraded checkpoints verified.',
+      questions: [
+        AgentQuestion(
+          id: 'rel_q_evolve',
+          question: 'How should we handle existing v0.1 features during ${releaseDoc.title}?',
+          options: const [
+            '(Recommended) Keep verified features STABLE (0h) and only add delta checkpoints where needed',
+            'Re-tune all v0.1 movement parameters alongside new v0.2 content',
+          ],
+        ),
+      ],
+      beats: beats,
+      explicitExclusions: projectExclusions,
+    );
+  }
+
   static ReleaseBlueprint? _parseDynamicReleaseBlueprint({
     required Map<String, dynamic> json,
     required TierDocument releaseDoc,
     required ReleaseScope preset,
+    required String versionTag,
     required List<String> fallbackExclusions,
   }) {
     final rawBeats = json['beats'];
@@ -499,10 +723,28 @@ Return ONLY a JSON object with this exact schema:
         final fTitle = (fMap['title'] ?? 'Feature ${fIdx + 1}').toString().trim();
         final fGoal = (fMap['goal'] ?? '').toString().trim();
         final fDone = (fMap['doneWhen'] ?? '').toString().trim();
-        final hours = (fMap['estimatedHours'] is num)
-            ? (fMap['estimatedHours'] as num).round().clamp(1, 24)
-            : 4;
-        final included = fMap['included'] is bool ? fMap['included'] as bool : true;
+
+        final rawLifecycle = (fMap['lifecycle'] ?? 'new').toString().toLowerCase().trim();
+        FeatureLifecycleStatus lifecycle = FeatureLifecycleStatus.newFeature;
+        if (rawLifecycle.contains('stable') || rawLifecycle.contains('keep')) {
+          lifecycle = FeatureLifecycleStatus.stable;
+        } else if (rawLifecycle.contains('upgrade') || rawLifecycle.contains('expand')) {
+          lifecycle = FeatureLifecycleStatus.upgrade;
+        } else if (rawLifecycle.contains('supersed') || rawLifecycle.contains('archiv')) {
+          lifecycle = FeatureLifecycleStatus.superseded;
+        }
+
+        final hours = lifecycle == FeatureLifecycleStatus.stable
+            ? 0
+            : ((fMap['estimatedHours'] is num)
+                ? (fMap['estimatedHours'] as num).round().clamp(0, 24)
+                : 4);
+        final included = lifecycle == FeatureLifecycleStatus.superseded
+            ? false
+            : (fMap['included'] is bool ? fMap['included'] as bool : true);
+        final originVersion =
+            (fMap['originVersion'] ?? versionTag).toString().trim();
+        final supersedesTitle = fMap['supersedesFeatureTitle']?.toString().trim();
 
         List<String> toStrList(dynamic v) => v is List
             ? v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
@@ -523,14 +765,17 @@ Return ONLY a JSON object with this exact schema:
                 (cMap['title'] ?? 'Stage ${cIdx + 1}').toString().trim();
             final cpCriteria =
                 (cMap['playtestCriteria'] ?? fDone).toString().trim();
+            final cpVer =
+                (cMap['releaseVersion'] ?? versionTag).toString().trim();
             final cpTasks = toStrList(cMap['tasks']);
             checkpoints.add(
               ProposedCheckpointBlueprint(
                 title: cpTitle,
                 playtestCriteria: cpCriteria,
+                releaseVersion: cpVer,
                 tasks: cpTasks.isNotEmpty
                     ? cpTasks
-                    : ['Implement $cpTitle (${(hours / 2).ceil()}h)'],
+                    : ['Implement $cpTitle (${(hours / 2).ceil().clamp(1, 8)}h)'],
                 coveredScope: toStrList(cMap['coveredScope']).isNotEmpty
                     ? toStrList(cMap['coveredScope'])
                     : inScope,
@@ -545,12 +790,15 @@ Return ONLY a JSON object with this exact schema:
           }
         }
 
-        if (checkpoints.isEmpty) {
+        if (checkpoints.isEmpty &&
+            lifecycle != FeatureLifecycleStatus.stable &&
+            lifecycle != FeatureLifecycleStatus.superseded) {
           checkpoints.add(
             ProposedCheckpointBlueprint(
               title: fTitle,
               playtestCriteria: fDone,
-              tasks: ['Implement $fTitle ($hours h)'],
+              releaseVersion: versionTag,
+              tasks: ['Implement $fTitle (${hours > 0 ? hours : 4}h)'],
               coveredScope: inScope,
               tuningParams: tuning,
               edgeCases: edges,
@@ -566,6 +814,12 @@ Return ONLY a JSON object with this exact schema:
             doneWhen: fDone,
             estimatedHours: hours,
             included: included,
+            lifecycle: lifecycle,
+            originVersion: originVersion.isNotEmpty ? originVersion : versionTag,
+            supersedesFeatureTitle:
+                (supersedesTitle != null && supersedesTitle.isNotEmpty)
+                    ? supersedesTitle
+                    : null,
             inScope: inScope,
             outOfScope: outOfScope,
             tuningParams: tuning,
@@ -598,6 +852,7 @@ Return ONLY a JSON object with this exact schema:
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
       releaseTitle: releaseDoc.title,
+      releaseVersionTag: versionTag,
       preset: preset,
       goal: (json['goal'] ??
               'Prove the core 30-second playable loop in one greybox test arena.')
@@ -637,12 +892,12 @@ Return ONLY a JSON object with this exact schema:
       final currentBeatsSummary = blueprint.beats
           .map(
             (b) => '- Beat "${b.title}" (${b.goal}):\n'
-                '${b.features.map((f) => '  * Feature "${f.title}" [${f.included ? "IN SCOPE" : "DEFERRED"}] (${f.estimatedHours}h): ${f.goal}').join('\n')}',
+                '${b.features.map((f) => '  * Feature "${f.title}" [${f.included ? "IN SCOPE" : "DEFERRED"}, lifecycle: ${f.lifecycle.name}] (${f.activeDeltaHours}h): ${f.goal}').join('\n')}',
           )
           .join('\n');
 
       final prompt = '''
-You are the Antigravity Release Planner Agent pair-planning "${blueprint.releaseTitle}" with a game developer.
+You are the Antigravity Release Planner Agent pair-planning "${blueprint.releaseTitle}" (${blueprint.releaseVersionTag}) with a game developer.
 Current Release Blueprint:
 - Goal: "${blueprint.goal}"
 - Done When: "${blueprint.doneWhen}"
@@ -679,6 +934,8 @@ Return ONLY a JSON object with this schema:
           "doneWhen": "1-sentence literal feature doneWhen",
           "estimatedHours": 6,
           "included": true,
+          "lifecycle": "new",
+          "originVersion": "${blueprint.releaseVersionTag}",
           "inScope": ["Scope item 1", "Scope item 2"],
           "outOfScope": ["Deferred item"],
           "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.15 s"],
@@ -687,6 +944,7 @@ Return ONLY a JSON object with this schema:
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
+              "releaseVersion": "${blueprint.releaseVersionTag}",
               "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
               "coveredScope": ["Scope item 1"],
               "tuningParams": ["paramOne: 10.0 m/s"],
@@ -718,6 +976,7 @@ Return ONLY a JSON object with this schema:
           json: json,
           releaseDoc: dummyDoc,
           preset: blueprint.preset,
+          versionTag: blueprint.releaseVersionTag,
           fallbackExclusions: blueprint.explicitExclusions,
         );
         if (updatedBp != null) {
@@ -770,92 +1029,211 @@ Return ONLY a JSON object with this schema:
 }
 
 /// Stage 3 Executor Agent: Takes the user-approved `ReleaseBlueprint` from the
-/// Confirmation Gate and constructs the entire active Release hierarchy:
-/// - Updates the `Release` document (`scope` with Goal, In Scope Beats, Out of Scope exclusions, Done When)
-/// - Creates each `Core Loop Beat` (`TierType.epic`)
-/// - Creates each `Feature` (`TierType.feature`) with its `scope`, `tuning`, `edge_cases`,
-///   and `Playable Checkpoints` (`FeatureStateNode`) pre-bound for the 60/40 Workbench.
+/// Confirmation Gate and constructs or evolves the active Release hierarchy:
+/// - Non-destructively merges existing Core Loop Beats & Features so completed
+///   checkpoints from `v0.1` remain intact when re-planning or evolving to `v0.2+`.
+/// - Stamps newly added Checkpoints (`FeatureStateNode`) with `releaseVersion`.
 class ReleaseExecutorAgent {
   static Future<List<TierDocument>> executeBlueprint({
     required TierDocument releaseDoc,
     required ReleaseBlueprint blueprint,
+    Map<String, TierDocument> existingDocuments = const {},
     void Function(String stepMessage)? onProgress,
   }) async {
-    final createdDocs = <TierDocument>[];
+    final createdOrUpdatedDocs = <TierDocument>[];
     final beatTitles = <String>[];
+    final versionTag = blueprint.releaseVersionTag;
 
-    onProgress?.call('Locking in ${blueprint.releaseTitle} scope & exclusions...');
+    onProgress?.call('Locking in ${blueprint.releaseTitle} ($versionTag) scope & exclusions...');
     await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    // Index any existing Beats and Features by ID and normalized title for non-destructive merge
+    final existingBeatsByTitle = <String, TierDocument>{};
+    final existingFeaturesByTitle = <String, TierDocument>{};
+    for (final doc in existingDocuments.values) {
+      if (doc.tier == TierType.epic) {
+        existingBeatsByTitle[doc.title.toLowerCase().trim()] = doc;
+      } else if (doc.tier == TierType.feature) {
+        existingFeaturesByTitle[doc.title.toLowerCase().trim()] = doc;
+      }
+    }
 
     releaseDoc.childrenIds.clear();
 
     for (int bIdx = 0; bIdx < blueprint.beats.length; bIdx++) {
       final beatBp = blueprint.beats[bIdx];
+      // Keep both included features and superseded features (marked archived) if they already existed
       final includedFeats = beatBp.includedFeatures;
       if (includedFeats.isEmpty) continue;
 
       beatTitles.add(beatBp.title);
-      onProgress?.call('Creating Core Loop Beat ${bIdx + 1}: ${beatBp.title}...');
+      onProgress?.call('Syncing Core Loop Beat ${bIdx + 1}: ${beatBp.title}...');
       await Future<void>.delayed(const Duration(milliseconds: 40));
 
-      final beatId = 'epic_${releaseDoc.id}_${bIdx + 1}';
+      final existingBeat = existingDocuments[beatBp.id] ??
+          existingBeatsByTitle[beatBp.title.toLowerCase().trim()];
+      final beatId = existingBeat?.id ?? 'epic_${releaseDoc.id}_${bIdx + 1}';
+
       final featTitlesForBeat = includedFeats.map((f) => '• ${f.title}: ${f.goal}').join('\n');
       final deferredForBeat = beatBp.deferredFeatures.map((f) => '• ${f.title}').join('\n');
 
-      final beatDoc = TierDocument(
-        id: beatId,
-        title: beatBp.title,
-        tier: TierType.epic,
-        parentId: releaseDoc.id,
-        estimatedDuration: '${beatBp.totalIncludedHours}h',
-        sections: {
-          'scope': 'Goal: ${beatBp.goal}\n\n'
-              'In Scope:\n$featTitlesForBeat\n\n'
-              '${deferredForBeat.isNotEmpty ? 'Out of Scope:\n$deferredForBeat\n\n' : ''}'
-              'Done When: ${beatBp.doneWhen}',
-        },
-      );
+      final beatDoc = existingBeat ??
+          TierDocument(
+            id: beatId,
+            title: beatBp.title,
+            tier: TierType.epic,
+            parentId: releaseDoc.id,
+          );
+      beatDoc.title = beatBp.title;
+      beatDoc.parentId = releaseDoc.id;
+      beatDoc.estimatedDuration = '${beatBp.totalIncludedHours}h';
+      beatDoc.sections['scope'] = 'Goal: ${beatBp.goal}\n\n'
+          'In Scope:\n$featTitlesForBeat\n\n'
+          '${deferredForBeat.isNotEmpty ? 'Out of Scope:\n$deferredForBeat\n\n' : ''}'
+          'Done When: ${beatBp.doneWhen}';
+      beatDoc.childrenIds.clear();
 
       releaseDoc.childrenIds.add(beatDoc.id);
-      createdDocs.add(beatDoc);
+      createdOrUpdatedDocs.add(beatDoc);
+
+      // Handle any explicitly superseded features in this beat
+      for (final supFeat in beatBp.features.where(
+        (f) => f.lifecycle == FeatureLifecycleStatus.superseded,
+      )) {
+        final existingSup = existingDocuments[supFeat.id] ??
+            existingFeaturesByTitle[supFeat.title.toLowerCase().trim()];
+        if (existingSup != null) {
+          existingSup.sections['lifecycle'] = FeatureLifecycleStatus.superseded.name;
+          existingSup.sections['supersededByRelease'] = versionTag;
+          createdOrUpdatedDocs.add(existingSup);
+        }
+      }
 
       for (int fIdx = 0; fIdx < includedFeats.length; fIdx++) {
         final featBp = includedFeats[fIdx];
         onProgress?.call(
-          'Building 60/40 Checkpoints & Spec Context for "${featBp.title}"...',
+          'Syncing 60/40 Checkpoints & Spec Context for "${featBp.title}"...',
         );
         await Future<void>.delayed(const Duration(milliseconds: 40));
 
-        final featId = 'feat_${beatId}_${fIdx + 1}';
-        final inScopeText = featBp.inScope.map((s) => '• $s').join('\n');
-        final outScopeText = featBp.outOfScope.map((s) => '• $s').join('\n');
-        final tuningText = featBp.tuningParams.map((t) => '• $t').join('\n');
-        final edgeText = featBp.edgeCases.map((e) => '• $e').join('\n');
+        // If this new feature supersedes an old v0.1 testbed by title, mark the old one superseded
+        if (featBp.supersedesFeatureTitle != null) {
+          final oldDoc = existingFeaturesByTitle[
+              featBp.supersedesFeatureTitle!.toLowerCase().trim()];
+          if (oldDoc != null) {
+            oldDoc.sections['lifecycle'] = FeatureLifecycleStatus.superseded.name;
+            oldDoc.sections['supersededByRelease'] = versionTag;
+            oldDoc.sections['supersededByFeature'] = featBp.title;
+            createdOrUpdatedDocs.add(oldDoc);
+          }
+        }
 
-        final featDoc = TierDocument(
-          id: featId,
-          title: featBp.title,
-          tier: TierType.feature,
-          parentId: beatDoc.id,
-          estimatedDuration: '${featBp.estimatedHours}h',
-          sections: {
-            'scope': 'Goal: ${featBp.goal}\n\n'
-                'In Scope:\n$inScopeText\n\n'
-                '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
-                'Done When: ${featBp.doneWhen}',
-            'variables': tuningText,
-            'tuning': tuningText,
-            'edge_cases': edgeText,
-          },
-        );
+        final existingFeat = existingDocuments[featBp.id] ??
+            existingFeaturesByTitle[featBp.title.toLowerCase().trim()];
+        final featId = existingFeat?.id ?? 'feat_${beatId}_${fIdx + 1}';
 
-        final stateNodes = <FeatureStateNode>[];
+        // If STABLE and already exists in vault, preserve its existing document & checkpoints untouched!
+        if (featBp.lifecycle == FeatureLifecycleStatus.stable &&
+            existingFeat != null) {
+          existingFeat.parentId = beatDoc.id;
+          existingFeat.sections['lifecycle'] = FeatureLifecycleStatus.stable.name;
+          existingFeat.sections['lastVerifiedVersion'] =
+              existingFeat.sections['originVersion'] ?? 'v0.1';
+          beatDoc.childrenIds.add(existingFeat.id);
+          createdOrUpdatedDocs.add(existingFeat);
+          continue;
+        }
+
+        // Merge scope, tuning, and edge cases with any existing feature data
+        final existingStates = existingFeat != null
+            ? FeatureStateNode.getStatesForDocument(existingFeat)
+            : <FeatureStateNode>[];
+
+        final mergedInScope = <String>{
+          if (existingFeat != null)
+            ...SectionTextUtils.resolveInScope(existingFeat.sections),
+          ...featBp.inScope,
+        }.toList();
+
+        final mergedOutScope = <String>{
+          ...featBp.outOfScope,
+        }.toList();
+
+        final existingTuning = existingFeat != null
+            ? (existingFeat.sections['tuning'] ?? '')
+                .split('\n')
+                .map((s) => s.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim())
+                .where((s) => s.isNotEmpty)
+            : const Iterable<String>.empty();
+        final mergedTuning = <String>{
+          ...existingTuning,
+          ...featBp.tuningParams,
+        }.toList();
+
+        final existingEdges = existingFeat != null
+            ? (existingFeat.sections['edge_cases'] ?? '')
+                .split('\n')
+                .map((s) => s.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim())
+                .where((s) => s.isNotEmpty)
+            : const Iterable<String>.empty();
+        final mergedEdges = <String>{
+          ...existingEdges,
+          ...featBp.edgeCases,
+        }.toList();
+
+        final inScopeText = mergedInScope.map((s) => '• $s').join('\n');
+        final outScopeText = mergedOutScope.map((s) => '• $s').join('\n');
+        final tuningText = mergedTuning.map((t) => '• $t').join('\n');
+        final edgeText = mergedEdges.map((e) => '• $e').join('\n');
+
+        final originVer = existingFeat?.sections['originVersion'] ??
+            (featBp.originVersion.isNotEmpty ? featBp.originVersion : versionTag);
+        final resolvedLifecycle = existingFeat != null &&
+                featBp.lifecycle == FeatureLifecycleStatus.newFeature &&
+                existingStates.isNotEmpty
+            ? FeatureLifecycleStatus.upgrade
+            : featBp.lifecycle;
+
+        final featDoc = existingFeat ??
+            TierDocument(
+              id: featId,
+              title: featBp.title,
+              tier: TierType.feature,
+              parentId: beatDoc.id,
+            );
+
+        featDoc.title = featBp.title;
+        featDoc.parentId = beatDoc.id;
+        featDoc.estimatedDuration = '${featBp.activeDeltaHours}h';
+        featDoc.sections['originVersion'] = originVer;
+        featDoc.sections['activeReleaseVersion'] = versionTag;
+        featDoc.sections['lifecycle'] = resolvedLifecycle.name;
+        featDoc.sections['scope'] = 'Goal: ${featBp.goal}\n\n'
+            'In Scope:\n$inScopeText\n\n'
+            '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
+            'Done When: ${featBp.doneWhen}';
+        featDoc.sections['variables'] = tuningText;
+        featDoc.sections['tuning'] = tuningText;
+        featDoc.sections['edge_cases'] = edgeText;
+
+        final stateNodes = <FeatureStateNode>[
+          ...existingStates,
+        ];
+        final existingCpTitles = existingStates
+            .map((s) => s.cleanStageTitle.toLowerCase().trim())
+            .toSet();
+
         for (int cIdx = 0; cIdx < featBp.checkpoints.length; cIdx++) {
           final cpBp = featBp.checkpoints[cIdx];
+          if (existingCpTitles.contains(cpBp.title.toLowerCase().trim())) {
+            continue;
+          }
+          final nextOrder = stateNodes.length;
+          final cpNumber = nextOrder + 1;
           final checklist = <Subtask>[
             for (int tIdx = 0; tIdx < cpBp.tasks.length; tIdx++)
               Subtask(
-                id: '${featId}_cp${cIdx + 1}_t${tIdx + 1}',
+                id: '${featId}_${versionTag}_cp${cpNumber}_t${tIdx + 1}',
                 text: cpBp.tasks[tIdx],
                 completed: false,
               ),
@@ -863,21 +1241,25 @@ class ReleaseExecutorAgent {
 
           stateNodes.add(
             FeatureStateNode(
-              id: '${featId}_cp_${cIdx + 1}',
-              name: 'Checkpoint ${cIdx + 1}: ${cpBp.title}',
+              id: '${featId}_${versionTag}_cp_$cpNumber',
+              name: 'Checkpoint $cpNumber: ${cpBp.title}',
               trigger: 'Playtest: ${cpBp.playtestCriteria}',
-              order: cIdx,
+              order: nextOrder,
               checklist: checklist,
               coveredScope: List<String>.from(cpBp.coveredScope),
               tuningParams: List<String>.from(cpBp.tuningParams),
               edgeCases: List<String>.from(cpBp.edgeCases),
+              parameters: {
+                'releaseVersion':
+                    cpBp.releaseVersion.isNotEmpty ? cpBp.releaseVersion : versionTag,
+              },
             ),
           );
         }
 
         FeatureStateNode.saveStatesToDocument(featDoc, stateNodes);
         beatDoc.childrenIds.add(featDoc.id);
-        createdDocs.add(featDoc);
+        createdOrUpdatedDocs.add(featDoc);
       }
     }
 
@@ -895,6 +1277,7 @@ class ReleaseExecutorAgent {
 
     releaseDoc.title = blueprint.releaseTitle;
     releaseDoc.sections['releaseScope'] = blueprint.preset.name;
+    releaseDoc.sections['versionTag'] = versionTag;
     releaseDoc.estimatedDuration = '${blueprint.totalIncludedHours}h';
     releaseDoc.sections['scope'] = 'Goal: $effectiveGoal\n\n'
         'In Scope:\n$inScopeBeats\n\n'
@@ -902,6 +1285,6 @@ class ReleaseExecutorAgent {
         'Done When: ${blueprint.doneWhen}';
 
     onProgress?.call('Release ${blueprint.releaseTitle} ready for development!');
-    return createdDocs;
+    return createdOrUpdatedDocs;
   }
 }

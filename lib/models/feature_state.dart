@@ -59,6 +59,16 @@ class FeatureStateNode {
     return tag.replaceAll('[', '').replaceAll(']', '').trim();
   }
 
+  /// Release version tag this checkpoint was introduced in (e.g. 'v0.1', 'v0.2').
+  String get releaseVersion {
+    final raw = parameters['releaseVersion']?.trim();
+    return (raw != null && raw.isNotEmpty) ? raw : 'v0.1';
+  }
+
+  set releaseVersion(String val) {
+    parameters['releaseVersion'] = val.trim().isEmpty ? 'v0.1' : val.trim();
+  }
+
   /// Theme-aware accent color for the operational stage tag badge.
   static Color tagColor(String tag, bool isDark) {
     switch (tag.toUpperCase()) {

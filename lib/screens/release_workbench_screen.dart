@@ -148,6 +148,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   Widget _buildLeftBeatFeatureRail(TierDocument rel, {bool shrinkWrap = false}) {
     final beats = widget.workbench.activeReleaseBeats;
     final relProgress = widget.workbench.getDocumentProgress(rel.id);
+    final releases = widget.workbench.projectReleases;
+    final archivedFeats = widget.workbench.supersededFeatures;
+    final isFocus = widget.workbench.focusMode;
+    final activeVer = rel.sections['versionTag'] ?? 'v0.1';
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -161,8 +165,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
+                runSpacing: 4,
                 children: [
                   Text(
                     'ACTIVE RELEASE',
@@ -172,60 +179,203 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       color: AppTheme.tierRelease,
                     ),
                   ),
-                  Text(
-                    '$relProgress%',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: relProgress >= 100 ? AppTheme.accentGreen : AppTheme.tierRelease,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        key: const ValueKey('focus_mode_toggle_btn'),
+                        onTap: () => widget.workbench.toggleFocusMode(),
+                        borderRadius: BorderRadius.circular(5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isFocus
+                                ? AppTheme.accentBlue.withValues(alpha: 0.16)
+                                : _cardBg,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: isFocus ? AppTheme.accentBlue : _borderColor,
+                            ),
+                          ),
+                          child: Text(
+                            'Focus: ${isFocus ? "ON" : "OFF"}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              color: isFocus ? AppTheme.accentBlue : _textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$relProgress%',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: relProgress >= 100
+                              ? AppTheme.accentGreen
+                              : AppTheme.tierRelease,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                rel.title,
-                style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  color: _textPrimary,
+              const SizedBox(height: 6),
+              // Compact Release Selector Dropdown (scales past v1.0+)
+              PopupMenuButton<String>(
+                key: const ValueKey('release_selector_dropdown_btn'),
+                tooltip: 'Switch Release View or Evolve Scope',
+                onSelected: (value) {
+                  if (value == '__evolve__') {
+                    widget.workbench.advanceToNextRelease();
+                  } else if (value == '__replan__') {
+                    widget.workbench.openReleasePlanGate(releaseId: rel.id);
+                  } else if (value.startsWith('rel:')) {
+                    final targetId = value.substring(4);
+                    widget.workbench.openReleasePlanGate(releaseId: targetId);
+                  } else {
+                    widget.workbench.setReleaseViewFilter(value);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem<String>(
+                    value: 'active',
+                    child: Text(
+                      '● Active: ${rel.title} ($relProgress%)',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'all',
+                    child: Text(
+                      '🌳 All Live Game Features ($activeVer)',
+                      style: GoogleFonts.inter(fontSize: 12),
+                    ),
+                  ),
+                  if (archivedFeats.isNotEmpty)
+                    PopupMenuItem<String>(
+                      value: 'archived',
+                      child: Text(
+                        '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
+                        style: GoogleFonts.inter(fontSize: 12),
+                      ),
+                    ),
+                  const PopupMenuDivider(),
+                  for (final r in releases)
+                    PopupMenuItem<String>(
+                      value: 'rel:${r.id}',
+                      child: Text(
+                        '${r.id == rel.id ? "▸ " : "  "}${r.title}',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: r.id == rel.id ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: '__replan__',
+                    child: Text(
+                      '✎ Edit ${rel.title} Scope in Plan Gate',
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.accentBlue),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: '__evolve__',
+                    child: Text(
+                      '+ Evolve to Next Release Milestone ✦',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.accentGreen,
+                      ),
+                    ),
+                  ),
+                ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: _cardBg,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: _borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          rel.title,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: _textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: _textSecondary,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
         ),
-        for (final beat in beats) ...[
+        if (widget.workbench.releaseViewFilter == 'archived' &&
+            archivedFeats.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: Row(
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.tierEpic,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    beat.title.toUpperCase(),
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: _textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            child: Text(
+              'ARCHIVED TESTBEDS (${archivedFeats.length})',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: _textMuted,
+              ),
             ),
           ),
-          for (final feat in widget.workbench.featuresForBeat(beat.id))
-            _buildFeatureRailItem(feat),
-        ],
+          for (final arch in archivedFeats)
+            _buildFeatureRailItem(arch, activeVer: activeVer),
+        ] else
+          for (final beat in beats) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.tierEpic,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      beat.title.toUpperCase(),
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: _textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final feat in widget.workbench.featuresForBeat(beat.id))
+              _buildFeatureRailItem(feat, activeVer: activeVer),
+          ],
       ],
     );
 
@@ -249,59 +399,101 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
-  Widget _buildFeatureRailItem(TierDocument feat) {
+  Widget _buildFeatureRailItem(TierDocument feat, {required String activeVer}) {
     final isSelected = widget.workbench.selectedFeatureId == feat.id;
     final progress = widget.workbench.getDocumentProgress(feat.id);
     final isDone = progress >= 100;
+    final isFocus = widget.workbench.focusMode;
+    final lifecycle = feat.sections['lifecycle'] ?? '';
+    final originVer = feat.sections['originVersion'] ?? 'v0.1';
 
-    return InkWell(
-      key: ValueKey('rail_feat_${feat.id}'),
-      onTap: () => widget.workbench.selectFeature(feat.id),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppTheme.tierFeature.withValues(alpha: 0.14)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(
+    String? vBadge;
+    Color vColor = _textMuted;
+    if (lifecycle == 'stable') {
+      vBadge = '$originVer ✓';
+      vColor = AppTheme.accentGreen;
+    } else if (lifecycle == 'upgrade') {
+      vBadge = '$originVer→$activeVer';
+      vColor = AppTheme.accentBlue;
+    } else if (lifecycle == 'superseded') {
+      vBadge = 'ARCHIVED';
+      vColor = _textMuted;
+    } else if (activeVer != 'v0.1') {
+      vBadge = 'NEW $activeVer';
+      vColor = AppTheme.tierFeature;
+    }
+
+    final shouldDim = isFocus && !isSelected;
+
+    return Opacity(
+      opacity: shouldDim ? 0.55 : 1.0,
+      child: InkWell(
+        key: ValueKey('rail_feat_${feat.id}'),
+        onTap: () => widget.workbench.selectFeature(feat.id),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
             color: isSelected
-                ? AppTheme.tierFeature.withValues(alpha: 0.5)
+                ? AppTheme.tierFeature.withValues(alpha: 0.14)
                 : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.tierFeature.withValues(alpha: 0.5)
+                  : Colors.transparent,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              isDone ? Icons.check_circle : Icons.radio_button_unchecked,
-              size: 14,
-              color: isDone
-                  ? AppTheme.accentGreen
-                  : (isSelected ? AppTheme.tierFeature : _textMuted),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                feat.title,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: _textPrimary,
+          child: Row(
+            children: [
+              Icon(
+                isDone ? Icons.check_circle : Icons.radio_button_unchecked,
+                size: 14,
+                color: isDone
+                    ? AppTheme.accentGreen
+                    : (isSelected ? AppTheme.tierFeature : _textMuted),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  feat.title,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: _textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            Text(
-              '$progress%',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: isDone ? AppTheme.accentGreen : _textMuted,
+              if (vBadge != null) ...[
+                Container(
+                  margin: const EdgeInsets.only(right: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: vColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    vBadge,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: vColor,
+                    ),
+                  ),
+                ),
+              ],
+              Text(
+                '$progress%',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: isDone ? AppTheme.accentGreen : _textMuted,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -322,12 +514,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final specBinding = FeatureSpecBinding.resolveBindings(feat, states);
     final progress = widget.workbench.getDocumentProgress(feat.id).toDouble();
     final isDone = progress >= 100;
+    final nextFeat = widget.workbench.nextIncompleteFeature;
 
     int totalTasks = 0;
     int completedTasks = 0;
     int completedCps = 0;
-    for (final s in states) {
-      if (s.isCompleted) completedCps++;
+    int activeFocusIndex = -1;
+    for (int i = 0; i < states.length; i++) {
+      final s = states[i];
+      if (s.isCompleted) {
+        completedCps++;
+      } else if (activeFocusIndex == -1) {
+        activeFocusIndex = i;
+      }
       totalTasks += s.totalChecklistCount;
       completedTasks += s.completedChecklistCount;
     }
@@ -337,6 +536,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       children: [
         if (widget.workbench.isActiveReleaseComplete) ...[
           _buildReleaseShippedBanner(rel),
+          const SizedBox(height: 16),
+        ] else if (isDone && nextFeat != null) ...[
+          _buildNextFeatureAdvanceBanner(feat, nextFeat),
           const SizedBox(height: 16),
         ],
         _buildUltraCompactFeatureHeader(
@@ -349,14 +551,28 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           presetLabel: rel.releaseScope.label,
         ),
         const SizedBox(height: 16),
-        Text(
-          'PLAYABLE CHECKPOINTS (${states.length})',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.6,
-            color: _textPrimary,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'PLAYABLE CHECKPOINTS (${states.length})',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+                color: _textPrimary,
+              ),
+            ),
+            if (widget.workbench.focusMode && activeFocusIndex != -1)
+              Text(
+                '🎯 Focus Mode: Expanding Active Checkpoint ${activeFocusIndex + 1} of ${states.length}',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.accentBlue,
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 10),
         for (int i = 0; i < states.length; i++)
@@ -364,6 +580,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             feat,
             states,
             i,
+            activeFocusIndex: activeFocusIndex,
             specBinding: specBinding,
           ),
       ],
@@ -378,6 +595,59 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           constraints: const BoxConstraints(maxWidth: 1040),
           child: body,
         ),
+      ),
+    );
+  }
+
+  Widget _buildNextFeatureAdvanceBanner(
+    TierDocument completedFeat,
+    TierDocument nextFeat,
+  ) {
+    return Container(
+      key: const ValueKey('next_feature_advance_banner'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.accentBlue.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.accentBlue),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppTheme.accentGreen,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '${completedFeat.title} is 100% VERIFIED ✓! Ready for the next feature in your loop?',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            key: const ValueKey('continue_to_next_feature_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accentBlue,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => widget.workbench.selectFeature(nextFeat.id),
+            icon: const Icon(Icons.arrow_forward_rounded, size: 15),
+            label: Text('Continue to ${nextFeat.title} →'),
+          ),
+        ],
       ),
     );
   }
@@ -623,17 +893,31 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     TierDocument feat,
     List<FeatureStateNode> states,
     int index, {
+    required int activeFocusIndex,
     required FeatureSpecBindingResult specBinding,
   }) {
     final node = states[index];
     final isDone = node.isCompleted;
-    final isCollapsed = isDone
-        ? !_expandedDoneCheckpoints.contains(node.id)
-        : _collapsedOpenCheckpoints.contains(node.id);
+    final isActiveFocus = index == activeFocusIndex;
+    final isFocusMode = widget.workbench.focusMode;
+
+    // In Focus Mode:
+    // - Verified checkpoints default to collapsed unless explicitly expanded
+    // - The single Active Focus checkpoint defaults to expanded unless explicitly collapsed
+    // - Future ("UP NEXT") checkpoints default to collapsed unless explicitly expanded
+    final bool isCollapsed;
+    if (isDone) {
+      isCollapsed = !_expandedDoneCheckpoints.contains(node.id);
+    } else if (isFocusMode && !isActiveFocus) {
+      isCollapsed = !_expandedDoneCheckpoints.contains(node.id);
+    } else {
+      isCollapsed = _collapsedOpenCheckpoints.contains(node.id);
+    }
 
     final scopedItems = specBinding.checkpointScope[node.id] ?? const <String>[];
     final tuningItems = specBinding.checkpointTuning[node.id] ?? const <String>[];
     final edgeItems = specBinding.checkpointEdgeCases[node.id] ?? const <String>[];
+    final verStamp = node.releaseVersion;
 
     final checklistPane = Padding(
       padding: const EdgeInsets.all(12),
@@ -781,7 +1065,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       decoration: BoxDecoration(
         color: _bgSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _borderColor),
+        border: Border.all(
+          color: isActiveFocus
+              ? AppTheme.accentBlue.withValues(alpha: 0.65)
+              : _borderColor,
+          width: isActiveFocus ? 1.4 : 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -803,6 +1092,23 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     color: _textMuted,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: _cardBg,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderColor),
+                  ),
+                  child: Text(
+                    verStamp,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: _textSecondary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -832,10 +1138,37 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       ),
                     ),
                   )
+                else if (isActiveFocus)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentBlue.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'ACTIVE FOCUS · ${node.completedChecklistCount}/${node.totalChecklistCount}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.accentBlue,
+                      ),
+                    ),
+                  )
                 else
-                  Text(
-                    '${node.completedChecklistCount}/${node.totalChecklistCount}',
-                    style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: _textMuted),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _cardBg,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'UP NEXT · ${node.completedChecklistCount}/${node.totalChecklistCount}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _textMuted,
+                      ),
+                    ),
                   ),
                 const SizedBox(width: 6),
                 InkWell(
@@ -843,13 +1176,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   onTap: () {
                     setState(() {
                       if (isCollapsed) {
-                        if (isDone) {
+                        if (isDone || (isFocusMode && !isActiveFocus)) {
                           _expandedDoneCheckpoints.add(node.id);
                         } else {
                           _collapsedOpenCheckpoints.remove(node.id);
                         }
                       } else {
-                        if (isDone) {
+                        if (isDone || (isFocusMode && !isActiveFocus)) {
                           _expandedDoneCheckpoints.remove(node.id);
                         } else {
                           _collapsedOpenCheckpoints.add(node.id);

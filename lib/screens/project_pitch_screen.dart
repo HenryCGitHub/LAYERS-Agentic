@@ -611,6 +611,115 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           ),
           const SizedBox(height: 14),
           _buildTagRow('GOAL', draft.goal, AppTheme.tierProject),
+          if (draft.techSpec.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'TECH & PERSPECTIVE',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: _textMuted,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final spec in draft.techSpec)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentBlue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: AppTheme.accentBlue.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      spec,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.accentBlue,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          if (draft.designPillars.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'DESIGN PILLARS (CORE PLAYER EXPERIENCE)',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.tierEpic,
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final pillar in draft.designPillars)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '🏛 ',
+                      style: GoogleFonts.inter(fontSize: 12),
+                    ),
+                    Expanded(
+                      child: Text(
+                        pillar,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          if (draft.tradeOffs.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'TRADE-OFFS (PRIORITIZE X OVER Y)',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.tierFeature,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final rule in draft.tradeOffs)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.tierFeature.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: AppTheme.tierFeature.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      '⚖ $rule',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           Text(
             'IN SCOPE (CORE 30-SECOND LOOP)',

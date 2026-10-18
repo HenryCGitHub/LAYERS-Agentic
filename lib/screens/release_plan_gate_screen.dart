@@ -467,19 +467,32 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    feat.title,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: feat.included ? _textPrimary : _textMuted,
-                                      decoration: feat.included
-                                          ? TextDecoration.none
-                                          : TextDecoration.lineThrough,
-                                    ),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        feat.title,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: feat.included ? _textPrimary : _textMuted,
+                                          decoration: feat.included
+                                              ? TextDecoration.none
+                                              : TextDecoration.lineThrough,
+                                        ),
+                                      ),
+                                      _buildLifecycleBadge(
+                                        feat,
+                                        bp.releaseVersionTag,
+                                      ),
+                                    ],
                                   ),
                                   Text(
-                                    '${feat.checkpoints.length} Checkpoints · ${feat.tuningParams.length} Tune · ${feat.edgeCases.length} Edge',
+                                    feat.lifecycle == FeatureLifecycleStatus.stable
+                                        ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
+                                        : '${feat.checkpoints.length} Checkpoints · ${feat.tuningParams.length} Tune · ${feat.edgeCases.length} Edge',
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 10,
                                       color: _textMuted,
@@ -489,11 +502,21 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                               ),
                             ),
                             Text(
-                              feat.included ? '${feat.estimatedHours}h' : 'DEFERRED',
+                              !feat.included
+                                  ? (feat.lifecycle == FeatureLifecycleStatus.superseded
+                                      ? 'ARCHIVED'
+                                      : 'DEFERRED')
+                                  : (feat.lifecycle == FeatureLifecycleStatus.stable
+                                      ? 'STABLE · 0h'
+                                      : '${feat.activeDeltaHours}h'),
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
-                                color: feat.included ? AppTheme.tierFeature : _textMuted,
+                                color: !feat.included
+                                    ? _textMuted
+                                    : (feat.lifecycle == FeatureLifecycleStatus.stable
+                                        ? AppTheme.accentGreen
+                                        : AppTheme.tierFeature),
                               ),
                             ),
                           ],
@@ -505,6 +528,49 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildLifecycleBadge(
+    ProposedFeatureBlueprint feat,
+    String releaseVersionTag,
+  ) {
+    String label;
+    Color color;
+    switch (feat.lifecycle) {
+      case FeatureLifecycleStatus.stable:
+        label = 'STABLE · ${feat.originVersion} ✓';
+        color = AppTheme.accentGreen;
+        break;
+      case FeatureLifecycleStatus.upgrade:
+        label = '${feat.originVersion} → $releaseVersionTag';
+        color = AppTheme.accentBlue;
+        break;
+      case FeatureLifecycleStatus.superseded:
+        label = 'SUPERSEDED (${feat.originVersion})';
+        color = _textMuted;
+        break;
+      case FeatureLifecycleStatus.newFeature:
+        label = 'NEW $releaseVersionTag';
+        color = AppTheme.tierFeature;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 0.8),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
       ),
     );
   }

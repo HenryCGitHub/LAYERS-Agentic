@@ -74,6 +74,9 @@ class ProjectConceptBlueprint {
   String sparkIdea;
   List<AgentQuestion> questions;
   String goal;
+  List<String> techSpec;
+  List<String> designPillars;
+  List<String> tradeOffs;
   List<String> coreLoopBeats;
   List<String> exclusions;
   String doneWhen;
@@ -88,6 +91,21 @@ class ProjectConceptBlueprint {
     required this.sparkIdea,
     required this.questions,
     required this.goal,
+    this.techSpec = const [
+      '3D First-Person Mouse/KB',
+      'Godot 4 / Unity',
+      'Locked 60 FPS Arcade Feel',
+    ],
+    this.designPillars = const [
+      'Every 30-second cycle rewards decisive movement and timing over hesitation',
+      'Mistakes feel immediately readable and recoverable in a single button press',
+      'Core controls feel responsive from the very first second on screen',
+    ],
+    this.tradeOffs = const [
+      'Immediate arcade responsiveness over realistic physics inertia',
+      'Readable greybox clarity over complex visual shaders in v0.1',
+      'Fast 1-key loop reset over multi-screen menu flows',
+    ],
     required this.coreLoopBeats,
     required this.exclusions,
     required this.doneWhen,
@@ -109,6 +127,35 @@ class ProjectConceptBlueprint {
   }
 }
 
+/// Lifecycle state of a Feature across evolving releases (`v0.1` -> `v0.2` -> `v1.0+`).
+enum FeatureLifecycleStatus {
+  /// Newly introduced in this release (or promoted from prior Out of Scope).
+  newFeature,
+
+  /// Built in an earlier release and receiving new upgrade Checkpoints in this release.
+  upgrade,
+
+  /// Built in an earlier release and untouched in this release (`0h` delta work).
+  stable,
+
+  /// Temporary testbed from an earlier release superseded by a real system in this release.
+  superseded;
+
+  static FeatureLifecycleStatus fromString(String? raw) {
+    final clean = (raw ?? '').trim().toLowerCase();
+    if (clean.contains('upgrade') || clean.contains('evolve')) {
+      return FeatureLifecycleStatus.upgrade;
+    }
+    if (clean.contains('stable') || clean.contains('frozen')) {
+      return FeatureLifecycleStatus.stable;
+    }
+    if (clean.contains('supersed') || clean.contains('retire') || clean.contains('archive')) {
+      return FeatureLifecycleStatus.superseded;
+    }
+    return FeatureLifecycleStatus.newFeature;
+  }
+}
+
 /// A proposed Feature stub inside a Release Blueprint Beat.
 /// The user can toggle `included` on/off at the Confirmation Gate;
 /// unchecked features automatically move into `Out of Scope` (YAGNI).
@@ -119,6 +166,9 @@ class ProposedFeatureBlueprint {
   String doneWhen;
   int estimatedHours;
   bool included;
+  FeatureLifecycleStatus lifecycle;
+  String originVersion;
+  String? supersedesFeatureTitle;
   List<String> inScope;
   List<String> outOfScope;
   List<String> tuningParams;
@@ -132,12 +182,20 @@ class ProposedFeatureBlueprint {
     required this.doneWhen,
     this.estimatedHours = 4,
     this.included = true,
+    this.lifecycle = FeatureLifecycleStatus.newFeature,
+    this.originVersion = 'v0.1',
+    this.supersedesFeatureTitle,
     this.inScope = const [],
     this.outOfScope = const [],
     this.tuningParams = const [],
     this.edgeCases = const [],
     this.checkpoints = const [],
   });
+
+  bool get isStable => lifecycle == FeatureLifecycleStatus.stable;
+  bool get isSuperseded => lifecycle == FeatureLifecycleStatus.superseded;
+  int get activeDeltaHours =>
+      (!included || isStable || isSuperseded) ? 0 : estimatedHours;
 }
 
 /// A proposed Playable Checkpoint inside a Feature Blueprint.
@@ -148,6 +206,7 @@ class ProposedCheckpointBlueprint {
   final List<String> coveredScope;
   final List<String> tuningParams;
   final List<String> edgeCases;
+  final String releaseVersion;
 
   const ProposedCheckpointBlueprint({
     required this.title,
@@ -156,6 +215,7 @@ class ProposedCheckpointBlueprint {
     this.coveredScope = const [],
     this.tuningParams = const [],
     this.edgeCases = const [],
+    this.releaseVersion = 'v0.1',
   });
 }
 
@@ -176,19 +236,20 @@ class ProposedBeatBlueprint {
   });
 
   List<ProposedFeatureBlueprint> get includedFeatures =>
-      features.where((f) => f.included).toList();
+      features.where((f) => f.included && !f.isSuperseded).toList();
 
   List<ProposedFeatureBlueprint> get deferredFeatures =>
-      features.where((f) => !f.included).toList();
+      features.where((f) => !f.included && !f.isSuperseded).toList();
 
   int get totalIncludedHours =>
-      includedFeatures.fold(0, (sum, f) => sum + f.estimatedHours);
+      includedFeatures.fold(0, (sum, f) => sum + f.activeDeltaHours);
 }
 
 /// Blueprint produced by `ReleasePlannerAgent` for the Confirmation Gate (Stage 2).
 class ReleaseBlueprint {
   final String releaseDocId;
   String releaseTitle;
+  String releaseVersionTag;
   ReleaseScope preset;
   String goal;
   String doneWhen;
@@ -200,6 +261,7 @@ class ReleaseBlueprint {
   ReleaseBlueprint({
     required this.releaseDocId,
     required this.releaseTitle,
+    this.releaseVersionTag = 'v0.1',
     this.preset = ReleaseScope.featurePrototype,
     required this.goal,
     required this.doneWhen,
@@ -209,11 +271,11 @@ class ReleaseBlueprint {
     List<AgentChatMessage>? chatHistory,
   }) : chatHistory = chatHistory ?? <AgentChatMessage>[];
 
-  /// Total hours of all currently checked/included Features across all Beats.
+  /// Total active delta hours of all currently checked/included Features across all Beats.
   int get totalIncludedHours =>
       beats.fold(0, (sum, b) => sum + b.totalIncludedHours);
 
-  /// Count of included Features across all Beats.
+  /// Count of included Features across all Beats (excluding superseded ones).
   int get totalIncludedFeatures =>
       beats.fold(0, (sum, b) => sum + b.includedFeatures.length);
 
