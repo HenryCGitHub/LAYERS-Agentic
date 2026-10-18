@@ -49,14 +49,17 @@ class WorkbenchShell extends StatelessWidget {
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
 
+    final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+
     return Scaffold(
       backgroundColor: AppTheme.bgCanvasFor(isDark),
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(50),
+        preferredSize: const Size.fromHeight(48),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
-            color: bgSurface,
+            color: bgRecessed,
             border: Border(bottom: BorderSide(color: borderColor)),
           ),
           child: Row(
@@ -77,15 +80,16 @@ class WorkbenchShell extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentBlue.withValues(alpha: 0.15),
+                      color: bgSurface,
                       borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: borderColor),
                     ),
                     child: Text(
                       'AGENTIC',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.accentBlue,
+                        fontWeight: FontWeight.w700,
+                        color: textSecondary,
                       ),
                     ),
                   ),
@@ -98,29 +102,29 @@ class WorkbenchShell extends StatelessWidget {
                     label: '1. Project Concept',
                     stage: WorkbenchStage.projectPitch,
                     activeStage: workbench.currentStage,
-                    color: AppTheme.tierProject,
+                    color: AppTheme.accentAmberFor(isDark),
                     textPrimary: textPrimary,
                     textMuted: textMuted,
                     onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   _buildStagePill(
                     label: '2. Release Plan Gate',
                     stage: WorkbenchStage.releasePlanGate,
                     activeStage: workbench.currentStage,
-                    color: AppTheme.tierRelease,
+                    color: AppTheme.accentCyanFor(isDark),
                     textPrimary: textPrimary,
                     textMuted: textMuted,
                     onTap: workbench.releaseBlueprint != null
                         ? () => workbench.setStage(WorkbenchStage.releasePlanGate)
                         : null,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   _buildStagePill(
                     label: '3. Active Workbench',
                     stage: WorkbenchStage.releaseWorkbench,
                     activeStage: workbench.currentStage,
-                    color: AppTheme.tierFeature,
+                    color: AppTheme.accentGreenFor(isDark),
                     textPrimary: textPrimary,
                     textMuted: textMuted,
                     onTap: workbench.activeReleaseBeats.isNotEmpty
@@ -137,51 +141,59 @@ class WorkbenchShell extends StatelessWidget {
                     onTap: () => _showAiSettingsDialog(context),
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                       decoration: BoxDecoration(
-                        color: workbench.hasLiveAiKey
-                            ? AppTheme.accentGreen.withValues(alpha: 0.14)
-                            : AppTheme.tierRelease.withValues(alpha: 0.14),
+                        color: bgSurface,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: workbench.hasLiveAiKey
-                              ? AppTheme.accentGreen.withValues(alpha: 0.45)
-                              : AppTheme.tierRelease.withValues(alpha: 0.45),
-                        ),
+                        border: Border.all(color: borderColor),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            workbench.hasLiveAiKey
-                                ? Icons.bolt_rounded
-                                : Icons.key_outlined,
-                            size: 13,
-                            color: workbench.hasLiveAiKey
-                                ? AppTheme.accentGreen
-                                : AppTheme.tierRelease,
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: workbench.hasLiveAiKey
+                                  ? AppTheme.accentGreenFor(isDark).withValues(alpha: 0.65)
+                                  : AppTheme.accentAmberFor(isDark).withValues(alpha: 0.65),
+                            ),
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           Text(
                             workbench.modelBadgeLabel,
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary,
+                              fontWeight: FontWeight.w500,
+                              color: textSecondary,
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  IconButton(
-                    tooltip: 'Toggle Theme',
-                    onPressed: workbench.toggleTheme,
-                    icon: Icon(
-                      isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                      size: 17,
-                      color: textMuted,
+                  const SizedBox(width: 10),
+                  Tooltip(
+                    message: 'Toggle Theme',
+                    child: InkWell(
+                      onTap: workbench.toggleTheme,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: bgSurface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Icon(
+                          isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                          size: 15,
+                          color: textSecondary,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -471,20 +483,22 @@ class WorkbenchShell extends StatelessWidget {
     final isActive = stage == activeStage;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isActive ? color.withValues(alpha: 0.16) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isActive ? color : Colors.transparent,
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? color : Colors.transparent,
+              width: 2.5,
+            ),
           ),
         ),
         child: Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: 11.5,
+            fontSize: 12,
             fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
             color: isActive ? textPrimary : textMuted,
           ),
