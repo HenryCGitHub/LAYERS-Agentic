@@ -49,16 +49,42 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('start_concept_interview_btn')));
         await tester.pumpAndSettle();
 
-        // ── Stage 1B: Concept Interview ──
+        // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..09) ──
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
+        expect(find.text('SECTION 01 / 09'), findsOneWidget);
+        expect(find.text('Goal'), findsWidgets);
+
+        // Step to Section 02 (Game Spec) and verify 2x2 KV grid labels
+        await tester.tap(find.byKey(const ValueKey('next_section_btn')));
+        await tester.pumpAndSettle();
+        expect(find.text('SECTION 02 / 09'), findsOneWidget);
+        expect(find.text('CAMERA VIEW'), findsOneWidget);
+        expect(find.text('CONTROLS'), findsOneWidget);
+
+        // Step to Section 03 (Tech Spec) and verify 2x2 KV grid labels
+        await tester.tap(find.byKey(const ValueKey('next_section_btn')));
+        await tester.pumpAndSettle();
+        expect(find.text('SECTION 03 / 09'), findsOneWidget);
+        expect(find.text('ENGINE'), findsOneWidget);
+        expect(find.text('PLATFORM'), findsOneWidget);
+
+        // Step to Section 04 (Design Pillars — plain label, never "Load-Bearing")
+        await tester.tap(find.byKey(const ValueKey('next_section_btn')));
+        await tester.pumpAndSettle();
+        expect(find.text('SECTION 04 / 09'), findsOneWidget);
+        expect(find.text('Design Pillars'), findsWidgets);
+        expect(find.textContaining('Load-Bearing'), findsNothing);
+
+        // Jump to Step 10: Full Blueprint Review
         final synthBtn = find.byKey(const ValueKey('synthesize_concept_btn'));
         await tester.ensureVisible(synthBtn);
         await tester.pumpAndSettle();
         await tester.tap(synthBtn);
         await tester.pumpAndSettle();
 
-        // ── Stage 1C: Project Concept Blueprint & Release Train ──
+        // ── Stage 1C: Step 10 Full Blueprint Review & Release Train ──
         expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
+        expect(find.text('STEP 10 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
         expect(find.text('v0.1: Core Toy & Movement Loop - Prototype'), findsOneWidget);
         final approveConceptBtn = find.byKey(const ValueKey('approve_concept_plan_release_btn'));
         await tester.ensureVisible(approveConceptBtn);

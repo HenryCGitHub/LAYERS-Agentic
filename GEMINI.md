@@ -8,8 +8,8 @@
   - **Conversation & Concept Blueprint Model (Stage 1)**: `gemini-flash-latest` with `thinkingLevel: "LOW"` for fast turn-by-turn co-design chat and live Project Concept Blueprint updates.
   - **Release Architecture Model (Stage 2)**: `gemini-4-argon` with `thinkingLevel: "LOW"` for Release Plan Gate blueprint generation and multi-release evolution (`v0.1` → `v0.2` → `v1.0+`).
 - **3-Stage Antigravity Workflow (One Release at a Time)**:
-  1. **Stage 1 — Turn-by-Turn Co-Design Chat + Live Project Blueprint (`lib/screens/project_pitch_screen.dart` & `lib/agents/project_concept_agent.dart`)**:
-     - 50/50 split view: Turn-by-turn conversational chat on the left (`gemini-flash-latest`) and a live-updating **Project Concept & Release Train** artifact on the right (`Tech & Perspective`, `Goal`, `Load-Bearing Design Pillars`, `Trade-Offs (X over Y)`, `In Scope: 30s Core Loop Beats`, `Out of Scope: Hard Exclusions`, `Done When`, `Release Train`).
+  1. **Stage 1 — One-Section-at-a-Time Dynamic UI + Full Blueprint Review (`lib/screens/project_pitch_screen.dart` & `lib/agents/project_concept_agent.dart`)**:
+     - Structure-first Dynamic UI stepper (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Design Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`, `09 Release Train`) paired with a section-scoped Agent Console (`gemini-flash-latest`), followed by Step `10 · Full Review` right before approval.
   2. **Stage 2 — Antigravity Release Plan Gate (`lib/screens/release_plan_gate_screen.dart` & `lib/agents/release_planner_agent.dart`)**:
      - Proposes an evolving single-Release Blueprint (`ReleaseBlueprint`) using `gemini-4-argon` with a conversational refinement chat bar and Beat/Feature keep/defer checkboxes. Supports 4 Feature Lifecycle states across releases: `NEW`, `UPGRADING (v0.1 → v0.2)`, `STABLE ✓`, and `SUPERSEDED` (retiring temporary greybox testbeds).
   3. **Stage 3 — Focus Mode Active Release Workbench (`lib/screens/release_workbench_screen.dart` & `ReleaseExecutorAgent`)**:
@@ -39,7 +39,7 @@
   - **The Playtest Rule**: If a player or QA tester cannot see, hear, or feel it on screen during gameplay, rephrase it into an observable deliverable.
   - **Cohesive Playable Units**: Group mechanics and game feel (controls, physics, SFX, animations, particle cues) into single, unified cards. Do NOT split a feature into artificial technical micro-tickets.
   - **Plain Functional Titles (No Thematic / Lore Wording)**: Keep card titles short and literal (2–4 plain everyday game-dev words). Name the actual gameplay mechanic or system (e.g., *Crop Farming & Storage*, *Shop Buy & Sell*, *Shotgun Firing & Reload*) — NEVER use flowery, archaic, or roleplay/lore words (e.g., *Homestead Husbandry*, *Expedition Prep*, *Adrenaline Crop Buffs*).
-  - **Load-Bearing Design Pillars vs. Trade-Offs**:
+  - **Design Pillars vs. Trade-Offs**:
     - **Design Pillars (3–4 statements)**: Name the core experiences the game must create and how it should make the player feel—NOT how it is built, NOT a feature (*"has a skill tree"*), and NOT a genre (*"a roguelike"*), but the experience those things exist to hold up (*"Every run teaches you something new"*).
     - **Trade-Offs (2–3 `X over Y` rules)**: Practical engineering/design boundaries used to resolve conflicts (e.g., *"Immediate arcade movement over realistic physics inertia"*).
 

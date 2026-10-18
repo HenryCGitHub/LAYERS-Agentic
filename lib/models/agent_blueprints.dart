@@ -67,13 +67,15 @@ class AgentQuestion {
 }
 
 /// Blueprint produced during Stage 1 (Initial Project Concept Creation).
-/// Combines the turn-by-turn Co-Design chat thread with the live-updating
-/// structured Project Concept (Goal, Core 30s Loop, Hard Exclusions, Done When, Release Train).
+/// Combines the 9-section structured Project Concept (`Goal`, `Game Spec`,
+/// `Tech Spec`, `Design Pillars`, `Trade-Offs`, `Core Loop`, `Out of Scope`,
+/// `Done When`, `Release Train`) with section-focused Agent guidance.
 class ProjectConceptBlueprint {
   String title;
   String sparkIdea;
   List<AgentQuestion> questions;
   String goal;
+  List<String> gameSpec;
   List<String> techSpec;
   List<String> designPillars;
   List<String> tradeOffs;
@@ -91,10 +93,17 @@ class ProjectConceptBlueprint {
     required this.sparkIdea,
     required this.questions,
     required this.goal,
+    this.gameSpec = const [
+      '2D Top-Down',
+      'Twin-Stick (WASD + Aim)',
+      'Singleplayer',
+      'Single-Screen Wave Arena',
+    ],
     this.techSpec = const [
-      '3D First-Person Mouse/KB',
-      'Godot 4 / Unity',
-      'Locked 60 FPS Arcade Feel',
+      'Godot 4 (2D)',
+      'PC (Steam / Desktop)',
+      '2D Sprites + Particles',
+      'Offline-Only Local Save',
     ],
     this.designPillars = const [
       'Every 30-second cycle rewards decisive movement and timing over hesitation',

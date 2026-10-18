@@ -28,7 +28,7 @@ STRICT NAMING & WORDING RULES:
    - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline", "Ordinance").
 2. BANNED BUZZWORDS:
    - Never use corporate filler ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly"). Start goals with concrete verbs like "Build..." or "Test...".
-3. LOAD-BEARING DESIGN PILLARS (CORE PLAYER EXPERIENCE):
+3. DESIGN PILLARS (CORE PLAYER EXPERIENCE):
    - Game design pillars are a short list of 3–4 statements that name the core experiences the game must create and how it should make the player feel—NOT how it is built.
    - A pillar is NOT a feature ("has a skill tree") and NOT a genre ("a roguelike"); it is the experience those things exist to hold up (e.g., "Every run teaches you something new", "Crashes and recoveries feel just as fun as clean speed").
 4. TRADE-OFFS (PRIORITIZE X OVER Y):
@@ -37,10 +37,17 @@ STRICT NAMING & WORDING RULES:
 Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, literal game-dev terminology:
 {
   "title": "A simple, clear 2-3 word working title fitting '$cleanSpark'",
+  "gameSpec": [
+    "Camera View (e.g., 2D Top-Down or 3D First-Person)",
+    "Controls (e.g., Twin-Stick WASD + Aim or Mouse + WASD)",
+    "Player Mode (e.g., Singleplayer)",
+    "Arena Structure (e.g., Single-Screen Wave Arena or 3-Minute Run Arenas)"
+  ],
   "techSpec": [
-    "Camera / Dimension (e.g., 3D First-Person or 2D Side-Scrolling)",
-    "Control Scheme (e.g., Mouse + WASD or Twin-Stick Controller)",
-    "Session Structure (e.g., 3-Minute Arena Runs)"
+    "Engine (e.g., Godot 4 (2D) or Unity 6)",
+    "Platform (e.g., PC (Steam / Desktop))",
+    "Asset Pipeline (e.g., 2D Sprites + Particles or Low-Poly 3D)",
+    "Network / Save (e.g., Offline-Only Local Save)"
   ],
   "designPillars": [
     "Short experiential pillar #1 (how the game makes the player feel, never a feature or genre)",
@@ -49,7 +56,8 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
   ],
   "tradeOffs": [
     "Prioritize X over Y rule #1",
-    "Prioritize X over Y rule #2"
+    "Prioritize X over Y rule #2",
+    "Prioritize X over Y rule #3"
   ],
   "questions": [
     {
@@ -127,6 +135,11 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
         questions: resolvedQuestions,
         goal: json['goal']?.toString() ??
             'Build a playable $resolvedTitle prototype centered on $cleanSpark with immediate game feel.',
+        gameSpec: (json['gameSpec'] as List?)
+                ?.map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList() ??
+            _defaultGameSpec(),
         techSpec: (json['techSpec'] as List?)
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty)
@@ -163,6 +176,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
         isInterviewComplete: true,
         lastUpdatedFields: const [
           'Title',
+          'Game Spec',
           'Tech Spec',
           'Design Pillars',
           'Trade-Offs',
@@ -186,6 +200,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
       sparkIdea: cleanSpark,
       questions: fallbackQuestions,
       goal: 'Build a playable $shortTitle prototype centered on $cleanSpark with immediate game feel.',
+      gameSpec: _defaultGameSpec(),
       techSpec: _defaultTechSpec(),
       designPillars: _defaultDesignPillars(),
       tradeOffs: _defaultTradeOffs(),
@@ -197,6 +212,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
       isInterviewComplete: true,
       lastUpdatedFields: const [
         'Title',
+        'Game Spec',
         'Tech Spec',
         'Design Pillars',
         'Trade-Offs',
@@ -281,7 +297,8 @@ Original Spark: "${draft.sparkIdea}"
 
 Current Live Project Concept Blueprint:
 - Title: "${draft.title}"
-- Tech & Perspective: ${draft.techSpec.join(' · ')}
+- Game Spec: ${draft.gameSpec.join(' · ')}
+- Tech Spec: ${draft.techSpec.join(' · ')}
 - Design Pillars (Core Player Experience):
 ${draft.designPillars.map((p) => '  * $p').join('\n')}
 - Trade-Offs (Prioritize X over Y):
@@ -308,7 +325,7 @@ STRICT NAMING & WORDING RULES:
 - Trade-Offs MUST use explicit "X over Y" priority rules.
 
 Task:
-1. Apply the developer's latest direction, answer, or adjustment directly to the Project Concept Blueprint fields (`title`, `techSpec`, `designPillars`, `tradeOffs`, `goal`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Keep everything concrete, playtestable, and in plain developer English.
+1. Apply the developer's latest direction, answer, or adjustment directly to the Project Concept Blueprint fields (`title`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `goal`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Keep everything concrete, playtestable, and in plain developer English.
 2. Write a concise, natural conversational `reply` (2-3 sentences max) confirming what you updated on the Blueprint and asking 1 natural follow-up question (or inviting any final tweaks before Release v0.1 planning).
 3. Provide 2-3 short clickable `quickReplies` the developer can click for their next turn.
 4. List which blueprint sections changed in `updatedFields` (e.g. `["Goal", "Design Pillars", "Core Loop"]`).
@@ -319,7 +336,8 @@ Return ONLY a JSON object with this schema:
   "quickReplies": ["Short reply option 1", "Short reply option 2", "Short reply option 3"],
   "updatedFields": ["Goal", "Core Loop"],
   "title": "Updated or existing title",
-  "techSpec": ["Perspective/Dimension", "Controls", "Session Length"],
+  "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
+  "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
   "designPillars": [
     "Experiential Pillar 1 (how it feels, never a feature/genre)",
     "Experiential Pillar 2",
@@ -327,7 +345,8 @@ Return ONLY a JSON object with this schema:
   ],
   "tradeOffs": [
     "X over Y rule 1",
-    "X over Y rule 2"
+    "X over Y rule 2",
+    "X over Y rule 3"
   ],
   "goal": "Updated 1-sentence goal starting with 'Build...'",
   "coreLoopBeats": [
@@ -363,6 +382,14 @@ Return ONLY a JSON object with this schema:
       if (newTitle.isNotEmpty && newTitle != draft.title) {
         draft.title = newTitle;
         updated.add('Title');
+      }
+      final game = (json['gameSpec'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (game != null && game.isNotEmpty) {
+        draft.gameSpec = game;
+        updated.add('Game Spec');
       }
       final tech = (json['techSpec'] as List?)
           ?.map((e) => e.toString().trim())
@@ -480,6 +507,15 @@ Return ONLY a JSON object with this schema:
     } else if (lower.contains('over ')) {
       draft.tradeOffs.add(userMsg);
       updated.add('Trade-Offs');
+    } else if (lower.contains('godot') ||
+        lower.contains('unity') ||
+        lower.contains('unreal') ||
+        lower.contains('engine')) {
+      if (draft.techSpec.isEmpty) {
+        draft.techSpec = _defaultTechSpec();
+      }
+      draft.techSpec[0] = userMsg;
+      updated.add('Tech Spec');
     } else if (lower.contains('title') || lower.startsWith('rename')) {
       final cleanedTitle = userMsg
           .replaceFirst(RegExp(r'^(rename|change title|title)\s*(to|:)?\s*', caseSensitive: false), '')
@@ -491,10 +527,15 @@ Return ONLY a JSON object with this schema:
     } else {
       draft.goal =
           'Build a ${draft.title} prototype focused on "$userMsg" with responsive controls and clear feedback.';
-      if (draft.techSpec.isNotEmpty &&
-          (lower.contains('2d') || lower.contains('3d') || lower.contains('top-down'))) {
-        draft.techSpec[0] = userMsg;
-        updated.add('Tech Spec');
+      if (lower.contains('2d') || lower.contains('3d') || lower.contains('top-down')) {
+        if (draft.gameSpec.isNotEmpty) {
+          draft.gameSpec[0] = userMsg;
+          updated.add('Game Spec');
+        }
+        if (draft.techSpec.isNotEmpty) {
+          draft.techSpec[0] = userMsg;
+          updated.add('Tech Spec');
+        }
       }
       if (draft.coreLoopBeats.isNotEmpty) {
         draft.coreLoopBeats[0] = 'Core Focus: $userMsg';
@@ -509,7 +550,7 @@ Return ONLY a JSON object with this schema:
     final nextQIdx = assistantTurnCount < draft.questions.length ? assistantTurnCount : -1;
     final followUp = nextQIdx != -1
         ? '\n\n**Next question:** ${draft.questions[nextQIdx].question}'
-        : '\n\nHow does the updated Blueprint on the right look now? Feel free to ask for more tweaks or click **Approve Concept & Plan v0.1 Release ✦**.';
+        : '\n\nHow does the updated Blueprint look now? Feel free to ask for more tweaks or click **Approve & Plan v0.1 Release →**.';
     final nextChips = nextQIdx != -1
         ? draft.questions[nextQIdx].options.map(_stripRecommendedPrefix).toList()
         : <String>[
@@ -560,7 +601,8 @@ STRICT NAMING & WORDING RULES:
 Synthesize these exact choices into a cohesive Project Concept JSON object using plain, literal game-dev terminology:
 {
   "title": "Simple, clear 2-3 word working title fitting the spark and answers",
-  "techSpec": ["Perspective/Dimension", "Controls", "Session Length"],
+  "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
+  "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
   "designPillars": [
     "Experiential Pillar 1 (how it feels, never a feature/genre)",
     "Experiential Pillar 2",
@@ -568,7 +610,8 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
   ],
   "tradeOffs": [
     "Prioritize X over Y rule 1",
-    "Prioritize X over Y rule 2"
+    "Prioritize X over Y rule 2",
+    "Prioritize X over Y rule 3"
   ],
   "goal": "Exactly 1 plain-English sentence starting with 'Build...' stating what is being built and why, incorporating the developer's interview answers.",
   "coreLoopBeats": [
@@ -599,6 +642,11 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
     if (json != null) {
       final newTitle = json['title']?.toString().trim() ?? '';
       if (newTitle.isNotEmpty) draft.title = newTitle;
+      final game = (json['gameSpec'] as List?)
+          ?.map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (game != null && game.isNotEmpty) draft.gameSpec = game;
       final tech = (json['techSpec'] as List?)
           ?.map((e) => e.toString().trim())
           .where((s) => s.isNotEmpty)
@@ -667,10 +715,13 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
     draft.firstReleasePreset = preset;
     draft.goal =
         'Build a $perspective ${draft.title} prototype where the player executes "$loopFocus" with crisp visual and audio feedback.';
+    if (draft.gameSpec.isEmpty) {
+      draft.gameSpec = _defaultGameSpec();
+    } else {
+      draft.gameSpec[0] = perspective;
+    }
     if (draft.techSpec.isEmpty) {
       draft.techSpec = _defaultTechSpec();
-    } else {
-      draft.techSpec[0] = perspective;
     }
     if (draft.designPillars.isEmpty) {
       draft.designPillars = _defaultDesignPillars();
@@ -712,11 +763,21 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
         .join(' ');
   }
 
+  static List<String> _defaultGameSpec() {
+    return [
+      '2D Top-Down',
+      'Twin-Stick (WASD + Aim)',
+      'Singleplayer',
+      'Single-Screen Wave Arena',
+    ];
+  }
+
   static List<String> _defaultTechSpec() {
     return [
-      '3D First/Third-Person Arena',
-      'Mouse + WASD / Gamepad',
-      '3-Minute Repeatable Runs',
+      'Godot 4 (2D)',
+      'PC (Steam / Desktop)',
+      '2D Sprites + Particles',
+      'Offline-Only Local Save',
     ];
   }
 
@@ -732,6 +793,7 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
     return [
       'Instant arcade responsiveness over realistic physics inertia',
       'Clear visual silhouette readability over dense particle clutter',
+      'Fast 1-key loop reset over multi-screen menu flows',
     ];
   }
 

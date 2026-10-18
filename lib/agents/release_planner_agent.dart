@@ -40,6 +40,7 @@ class ReleasePlannerAgent {
       projectDoc.sections,
       splitSingleSentence: false,
     );
+    final gameSpecText = projectDoc.sections['game_spec'] ?? '';
     final techSpecText = projectDoc.sections['tech_spec'] ?? '';
     final pillarsText = projectDoc.sections['design_pillars'] ?? '';
     final tradeOffsText = projectDoc.sections['trade_offs'] ?? '';
@@ -66,8 +67,9 @@ You are the Antigravity Release Planner Agent (`gemini-4-argon`) for a game stud
 We are planning milestone Release: "${releaseDoc.title}" (Version Tag: $versionTag, Scope Preset: ${preset.label} — ${preset.description}).
 
 Project Title: "${projectDoc.title}"
-Tech & Perspective: $techSpecText
-Load-Bearing Design Pillars (Core Player Experience):
+Game Spec: $gameSpecText
+Tech Spec: $techSpecText
+Design Pillars (Core Player Experience):
 $pillarsText
 Trade-Offs (Prioritize X over Y):
 $tradeOffsText

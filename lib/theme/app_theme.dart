@@ -2,66 +2,77 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // ── Dark Palette (Deep Studio Charcoal · High-Contrast Tactile Depth) ────
+  // ── Dark Palette (Warm Studio Charcoal · Soft Eggshell Ink & Focal Accent) ──
   static const Color bgBase =
-      Color(0xFF181A20); // Main app canvas backdrop (deep charcoal canvas)
+      Color(0xFF141310); // Main app canvas backdrop (deep warm charcoal)
   static const Color bgPanel =
-      Color(0xFF1E2128); // Sidebar / Panel elevated background (charcoal sidebar)
+      Color(0xFF181713); // Sidebar / Panel elevated background (warm charcoal panel)
   static const Color bgSurface =
-      Color(0xFF22252E); // Cards, inputs, surface fills (charcoal card floor)
+      Color(0xFF1D1B17); // Cards, inputs, surface fills (elevated charcoal surface)
   static const Color bgSurfaceHover =
-      Color(0xFF2C303B); // Hover state background
+      Color(0xFF25231D); // Hover state background
   static const Color bgSurfaceActive =
-      Color(0xFF2C303B); // Active/selected list item highlight
+      Color(0xFF2A2720); // Active/selected list item highlight
 
   static const Color borderSubtle =
-      Color(0xFF323642); // Crisp structural lines (clear boundary)
+      Color(0xFF333028); // Crisp 1px warm charcoal stone boundary
   static const Color borderBright =
-      Color(0xFF454B5C); // Focused input / active structural borders
+      Color(0xFF5C5646); // Focused input / active structural borders
 
   static const Color textPrimary =
-      Color(0xFFF8FAFC); // Soft crisp off-white primary text / headings (Slate-50)
+      Color(0xFFFAF5E8); // Soft Eggshell primary text / headings
   static const Color textSecondary =
-      Color(0xFF94A3B8); // Clean slate secondary text (Slate-400)
+      Color(0xFFC4BBA3); // Warm cream-slate secondary text
   static const Color textMuted =
-      Color(0xFF64748B); // Readable dimmed label / metadata text (Slate-500)
+      Color(0xFF827B68); // Warm muted stone label / metadata text
 
-  // ── Light Palette (Warm Cashmere Paper / Non-Harsh Natural Linen) ──────────
+  // ── Light Palette (Soft Eggshell Paper · Deep Dark Charcoal Ink & Accent) ──
   static const Color bgBaseLight =
-      Color(0xFFE9E4DA); // Main canvas backdrop (warm unbleached linen paper)
+      Color(0xFFF7F3E8); // Main canvas backdrop (Soft Eggshell paper)
   static const Color bgPanelLight =
-      Color(0xFFF3EFE6); // Sidebar / TitleBar / Dialogs (soft cashmere cream)
+      Color(0xFFFAF6EC); // Sidebar / TitleBar / Dialogs (Warm Eggshell panel)
   static const Color bgSurfaceLight =
-      Color(0xFFF3EFE6); // Document cards (soft cashmere cream, not stark white)
+      Color(0xFFFFFDF8); // Document cards (Warm Ivory elevated card)
   static const Color bgSurfaceHoverLight =
-      Color(0xFFDFD9CC); // Hover state background (warm scooped stone)
+      Color(0xFFE6DEC8); // Hover state background (warm eggshell sand)
 
   static const Color borderSubtleLight =
-      Color(0xFFD3CCC0); // Crisp 1px warm cashmere stone sand structural lines
+      Color(0xFFD5CCB6); // Crisp 1px warm stone structural lines
   static const Color borderBrightLight =
-      Color(0xFFB8B0A2); // Focused / active borders
+      Color(0xFF7A7260); // Focused / active borders
 
   static const Color textPrimaryLight =
-      Color(0xFF343029); // Deep warm espresso charcoal ink primary headings
+      Color(0xFF181612); // Deep Dark Charcoal ink primary headings
   static const Color textSecondaryLight =
-      Color(0xFF655F54); // Warm earth secondary text
+      Color(0xFF4A453A); // Warm dark stone secondary text
   static const Color textMutedLight =
-      Color(0xFF8C8578); // Warm stone dimmed metadata text
+      Color(0xFF787060); // Warm stone dimmed metadata text
 
   // ── Semantic Surface Scale ────────────────────────────────────────────────
   static const Color bgSurfaceRaised =
-      Color(0xFF2F333F); // Elevated cards, chiclets, floating toolbars (Dark)
+      Color(0xFF25231D); // Elevated cards, chiclets, floating toolbars (Dark)
   static const Color bgSurfaceRecessed =
-      Color(0xFF121419); // Recessed insets, sockets, formula chips (Dark)
+      Color(0xFF100F0C); // Recessed insets, Agent Console well (Dark)
   static const Color bgSurfaceRaisedLight =
-      Color(0xFFFFFFFF); // Elevated cards on light (pure white stone)
+      Color(0xFFFFFDF8); // Elevated cards on light (Warm Ivory)
   static const Color bgSurfaceRecessedLight =
-      Color(0xFFE5DFD1); // Recessed insets on light (warm stone socket)
+      Color(0xFFEDE6D5); // Recessed insets, Agent Console well (Light)
   static const Color bgSurfaceActiveLight =
-      Color(0xFFE5DFD1); // Active/selected list item on light
+      Color(0xFFE6DEC8); // Active/selected list item on light
 
-  static const Color bgInset = Color(0xFF121419); // Recessed insets / inner cards (Dark)
-  static const Color bgInsetLight = Color(0xFFE5DFD1); // Recessed insets / inner cards (Light)
+  static const Color bgInset = Color(0xFF100F0C); // Recessed insets / inner cards (Dark)
+  static const Color bgInsetLight = Color(0xFFEDE6D5); // Recessed insets / inner cards (Light)
+
+  // ── Reversible Polarity Focal Accent (Soft Eggshell in Dark ↔ Dark Charcoal in Light) ─
+  static const Color focalAccentDark = Color(0xFFF5E8C7);
+  static const Color focalAccentFgDark = Color(0xFF141310);
+  static const Color focalAccentLight = Color(0xFF181612);
+  static const Color focalAccentFgLight = Color(0xFFFAF5E8);
+
+  static Color focalAccentFor(bool isDark) =>
+      isDark ? focalAccentDark : focalAccentLight;
+  static Color focalAccentFgFor(bool isDark) =>
+      isDark ? focalAccentFgDark : focalAccentFgLight;
 
   // ── Dynamic Theme Helpers ─────────────────────────────────────────────────
   static Color bgBaseFor(bool isDark) => isDark ? bgBase : bgBaseLight;

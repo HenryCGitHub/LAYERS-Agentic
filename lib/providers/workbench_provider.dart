@@ -319,6 +319,7 @@ class WorkbenchProvider extends ChangeNotifier {
         );
     projDoc.title = draft.title;
     projDoc.sections['scope'] = draft.toFormattedScopeSection();
+    projDoc.sections['game_spec'] = draft.gameSpec.join(' · ');
     projDoc.sections['tech_spec'] = draft.techSpec.join(' · ');
     projDoc.sections['design_pillars'] =
         draft.designPillars.map((p) => '• $p').join('\n');
