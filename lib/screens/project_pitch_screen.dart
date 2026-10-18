@@ -982,7 +982,85 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
-  // ── Steps `01`–`09`: Focused Single-Section Workspace ───────────────────────
+  // ── Direct Text Edit Dialog for Any Section Callout or Row ──────────────────
+  void _showDirectSectionTextEditDialog({
+    required String title,
+    required String initialText,
+    required ValueChanged<String> onSave,
+  }) {
+    final controller = TextEditingController(text: initialText);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Text(
+            'Edit $title',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: _textPrimary,
+            ),
+          ),
+          content: SizedBox(
+            width: 480,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 3,
+              minLines: 1,
+              style: GoogleFonts.inter(fontSize: 13.5, color: _textPrimary),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: _bgRecessed,
+                hintText: 'Enter $title...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(color: _borderSubtle),
+                ),
+              ),
+              onSubmitted: (val) {
+                final trimmed = val.trim();
+                if (trimmed.isNotEmpty) onSave(trimmed);
+                Navigator.of(ctx).pop();
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(fontSize: 12, color: _textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _focalAccent,
+                foregroundColor: _focalAccentFg,
+                elevation: 0,
+              ),
+              onPressed: () {
+                final trimmed = controller.text.trim();
+                if (trimmed.isNotEmpty) onSave(trimmed);
+                Navigator.of(ctx).pop();
+              },
+              child: Text(
+                'Save',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ── Steps `01`–`09`: De-Boxed Full-Width Single-Section Workspace ──────────
   Widget _buildFocusedSectionWorkspace(ProjectConceptBlueprint draft, int sectionIdx) {
     final sec = _sections[sectionIdx];
     final selectedOpt = _selectedOptionBySection[sectionIdx] ?? 0;
@@ -991,359 +1069,385 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ? 'Next: ${_sections[sectionIdx + 1].shortTitle} →'
         : 'Next: Full Blueprint Review →';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Top Project Context Strip
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              color: _bgRecessed,
-              border: Border(bottom: BorderSide(color: _borderSubtle)),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  'PROJECT: ${draft.title.toUpperCase()}',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: _textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Spark: "${draft.sparkIdea}"',
-                    style: GoogleFonts.inter(fontSize: 11.5, color: _textSecondary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  'SECTION ${sec.numLabel} OF 09',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: _textSecondary,
-                  ),
-                ),
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // CARD 1: THE FOCUSED ARTIFACT SECTION CARD (Full-Width 1160px Canvas, Matching Step 10 Hierarchy)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          decoration: BoxDecoration(
+            color: _bgSurface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _borderSubtle),
           ),
-
-          // ZONE 1: THE ARTIFACT SPEC (Elevated Surface, 2-Column Layout)
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 640;
-                final leftHeader = Container(
-                  padding: const EdgeInsets.only(left: 12),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(color: _focalAccent, width: 3),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Top Section Header Bar (Full Width — No 210px Left Squeeze)
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 8,
+                spacing: 12,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        'SECTION ${sec.numLabel} / 09',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                          color: _textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        sec.title,
-                        style: GoogleFonts.inter(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: _textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        sec.purpose,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          height: 1.45,
-                          color: _textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-
-                final rightWidget = _buildSectionContentWidget(draft, sectionIdx);
-
-                if (!isWide) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      leftHeader,
-                      const SizedBox(height: 16),
-                      rightWidget,
-                    ],
-                  );
-                }
-
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 210, child: leftHeader),
-                    const SizedBox(width: 24),
-                    Expanded(child: rightWidget),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          // ZONE 2: THE AGENT CONSOLE (Recessed Inset Well)
-          Container(
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
-            decoration: BoxDecoration(
-              color: _bgRecessed,
-              border: Border(
-                top: BorderSide(color: _borderSubtle),
-                bottom: BorderSide(color: _borderSubtle),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _bgSurface,
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: _borderBright),
-                      ),
-                      child: Text(
-                        'AGENT · ${widget.workbench.conversationModel.toUpperCase()}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: _textPrimary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        sec.question,
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: _textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Clickable Radio Option Cards
-                for (int optIdx = 0; optIdx < sec.options.length; optIdx++) ...[
-                  _buildAgentOptionCard(
-                    draft: draft,
-                    sectionIdx: sectionIdx,
-                    optIdx: optIdx,
-                    label: sec.options[optIdx],
-                    isSelected: selectedOpt == optIdx,
-                  ),
-                  const SizedBox(height: 6),
-                ],
-
-                const SizedBox(height: 6),
-
-                // [ASK AGENT] Input Bar
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                         decoration: BoxDecoration(
-                          color: _bgSurface,
-                          borderRadius: BorderRadius.circular(5),
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: _borderBright),
+                        ),
+                        child: Text(
+                          sec.numLabel,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        sec.title.toUpperCase(),
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: _borderSubtle),
+                        ),
+                        child: Text(
+                          'SECTION ${sec.numLabel} / 09',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: _textSecondary.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: _borderSubtle),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '[ASK AGENT]',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: _textSecondary,
-                              ),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 11,
+                              color: _textSecondary,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                key: const ValueKey('concept_chat_input_field'),
-                                controller: _agentPromptController,
-                                style: GoogleFonts.inter(
-                                  fontSize: 12.5,
-                                  color: _textPrimary,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText:
-                                      'Tell the Agent how to change or expand ${sec.title}...',
-                                  hintStyle: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: _textMuted,
-                                  ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  filled: false,
-                                  isDense: true,
-                                  contentPadding:
-                                      const EdgeInsets.symmetric(vertical: 8),
-                                ),
-                                onSubmitted: (_) =>
-                                    _submitSectionPrompt(draft, sectionIdx),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Click any item below to edit directly',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: _textSecondary,
                               ),
                             ),
                           ],
                         ),
                       ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                sec.purpose,
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  color: _textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Full-Width Artifact Content (Identical Proportions to Step 10 Full Review)
+              _buildSectionContentWidget(draft, sectionIdx),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 18),
+
+        // CARD 2: THE AGENT CO-DESIGN CONSOLE & STEP NAVIGATION CARD
+        Container(
+          decoration: BoxDecoration(
+            color: _bgSurface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _borderSubtle),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
+                decoration: BoxDecoration(
+                  color: _bgRecessed,
+                  border: Border(
+                    bottom: BorderSide(color: _borderSubtle),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: _bgSurface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: _borderBright),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _accentAmber,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'AGENT · ${widget.workbench.conversationModel.toUpperCase()}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: _textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            sec.question,
+                            style: GoogleFonts.inter(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: _textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(height: 12),
+
+                    // Clickable Radio Option Cards
+                    for (int optIdx = 0; optIdx < sec.options.length; optIdx++) ...[
+                      _buildAgentOptionCard(
+                        draft: draft,
+                        sectionIdx: sectionIdx,
+                        optIdx: optIdx,
+                        label: sec.options[optIdx],
+                        isSelected: selectedOpt == optIdx,
+                      ),
+                      const SizedBox(height: 7),
+                    ],
+
+                    const SizedBox(height: 6),
+
+                    // [ASK AGENT] Input Bar
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _bgSurface,
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(color: _borderSubtle),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  '[ASK AGENT]',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextField(
+                                    key: const ValueKey('concept_chat_input_field'),
+                                    controller: _agentPromptController,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      color: _textPrimary,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Tell the Agent how to change or expand ${sec.title}...',
+                                      hintStyle: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        color: _textMuted,
+                                      ),
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      filled: false,
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(vertical: 8),
+                                    ),
+                                    onSubmitted: (_) =>
+                                        _submitSectionPrompt(draft, sectionIdx),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: widget.workbench.isAgentBusy
+                              ? null
+                              : () => _submitSectionPrompt(draft, sectionIdx),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _textPrimary,
+                            backgroundColor: _bgSurface,
+                            side: BorderSide(color: _borderBright),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                          child: Text(
+                            widget.workbench.isAgentBusy ? 'Updating...' : 'Send to Agent',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (agentNote != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: _accentEmerald, width: 2),
+                          ),
+                        ),
+                        child: Text(
+                          agentNote,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // STEP NAVIGATION BAR
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                color: _bgSurface,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
                     OutlinedButton(
-                      onPressed: widget.workbench.isAgentBusy
+                      onPressed: sectionIdx == 0
                           ? null
-                          : () => _submitSectionPrompt(draft, sectionIdx),
+                          : () => _goToStep(sectionIdx - 1),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _textPrimary,
-                        backgroundColor: _bgSurface,
-                        side: BorderSide(color: _borderBright),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
+                        side: BorderSide(color: _borderSubtle),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(5),
                         ),
                       ),
                       child: Text(
-                        widget.workbench.isAgentBusy ? 'Updating...' : 'Send to Agent',
+                        '← Previous Section',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                  ],
-                ),
-
-                if (agentNote != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(color: _accentEmerald, width: 2),
-                      ),
-                    ),
-                    child: Text(
-                      agentNote,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        color: _textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // ZONE 3: SECTION NAVIGATION BAR
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            color: _bgSurface,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                OutlinedButton(
-                  onPressed: sectionIdx == 0
-                      ? null
-                      : () => _goToStep(sectionIdx - 1),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _textPrimary,
-                    side: BorderSide(color: _borderSubtle),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                  child: Text(
-                    '← Previous Section',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () => _goToStep(_sections.length),
-                      child: Text(
-                        'Skip to Final Review',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: _textSecondary,
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => _goToStep(_sections.length),
+                          child: Text(
+                            'Skip to Final Review',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: _textSecondary,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton(
-                      key: const ValueKey('next_section_btn'),
-                      onPressed: () => _goToStep(sectionIdx + 1),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _focalAccent,
-                        foregroundColor: _focalAccentFg,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 11,
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          key: const ValueKey('next_section_btn'),
+                          onPressed: () => _goToStep(sectionIdx + 1),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _focalAccent,
+                            foregroundColor: _focalAccentFg,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 11,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                          child: Text(
+                            nextTitle,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                      ),
-                      child: Text(
-                        nextTitle,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1358,7 +1462,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       onTap: () => _selectSectionOption(draft, sectionIdx, optIdx),
       borderRadius: BorderRadius.circular(5),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? _bgHover : _bgSurface,
           borderRadius: BorderRadius.circular(5),
@@ -1392,33 +1496,31 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     )
                   : null,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                  color: isSelected ? _textPrimary : _textSecondary,
-                ),
-              ),
+              child: _buildFormattedLeadInText(label),
             ),
-            if (optIdx == 0)
+            if (optIdx == 0) ...[
+              const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
+                  color: _accentEmerald.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: _borderSubtle),
+                  border: Border.all(
+                    color: _accentEmerald.withValues(alpha: 0.42),
+                  ),
                 ),
                 child: Text(
                   'RECOMMENDED',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: _textSecondary,
+                    fontWeight: FontWeight.w700,
+                    color: _accentEmerald,
                   ),
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -1428,8 +1530,16 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   // ── 6 Distinct Structural Section Layouts ──────────────────────────────────
   Widget _buildSectionContentWidget(ProjectConceptBlueprint draft, int sectionIdx) {
     switch (sectionIdx) {
-      case 0: // 01 Goal — Callout Blockquote
-        return _buildCalloutStatement(draft.goal, highlightMetrics: false);
+      case 0: // 01 Goal — Callout Blockquote (Click to Edit)
+        return _buildCalloutStatement(
+          draft.goal,
+          highlightMetrics: false,
+          onEditTap: () => _showDirectSectionTextEditDialog(
+            title: '01 Goal',
+            initialText: draft.goal,
+            onSave: (val) => widget.workbench.updateConceptDraft((d) => d.goal = val),
+          ),
+        );
       case 1: // 02 Game Spec — 2×2 Key-Value Spec Grid (Direct Click-to-Edit)
         return _buildKvSpecGrid(
           isGameSpec: true,
@@ -1442,24 +1552,56 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           keys: const ['ENGINE', 'PLATFORM', 'ASSET PIPELINE', 'NETWORK / SAVE'],
           values: draft.techSpec,
         );
-      case 3: // 04 Design Pillars — Indexed Rows (P·01, P·02, P·03) with Bold Lead-Ins
+      case 3: // 04 Design Pillars — Indexed Rows (P·01, P·02, P·03) with Bold Lead-Ins & Click-to-Edit
         return _buildIndexedRows(
           prefix: 'P',
           items: draft.designPillars,
           isCoreLoop: false,
+          onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
+            final next = List<String>.from(d.designPillars);
+            next[i] = val;
+            d.designPillars = next;
+          }),
         );
-      case 4: // 05 Trade-Offs — Split X OVER Y Comparison Bars
-        return _buildTradeOffSplitBars(draft.tradeOffs);
+      case 4: // 05 Trade-Offs — Split X OVER Y Comparison Bars (Click to Edit)
+        return _buildTradeOffSplitBars(
+          draft.tradeOffs,
+          onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
+            final next = List<String>.from(d.tradeOffs);
+            next[i] = val;
+            d.tradeOffs = next;
+          }),
+        );
       case 5: // 06 Core Loop — Connected Beat Cycle Rows (BEAT·01 -> BEAT·0N -> Loop)
         return _buildIndexedRows(
           prefix: 'BEAT',
           items: draft.coreLoopBeats,
           isCoreLoop: true,
+          onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
+            final next = List<String>.from(d.coreLoopBeats);
+            next[i] = val;
+            d.coreLoopBeats = next;
+          }),
         );
       case 6: // 07 Out of Scope — Recessed Guardrail Chips with Muted Crimson [CUT] Badge
-        return _buildCutGuardrailChips(draft.exclusions);
+        return _buildCutGuardrailChips(
+          draft.exclusions,
+          onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
+            final next = List<String>.from(d.exclusions);
+            next[i] = val;
+            d.exclusions = next;
+          }),
+        );
       case 7: // 08 Done When — Acceptance Callout Statement with Highlighted Playtest Metrics
-        return _buildCalloutStatement(draft.doneWhen, highlightMetrics: true);
+        return _buildCalloutStatement(
+          draft.doneWhen,
+          highlightMetrics: true,
+          onEditTap: () => _showDirectSectionTextEditDialog(
+            title: '08 Done When',
+            initialText: draft.doneWhen,
+            onSave: (val) => widget.workbench.updateConceptDraft((d) => d.doneWhen = val),
+          ),
+        );
       case 8: // 09 Prototype Release — Phase 1 Active Target + Locked Subsequent Phases
       default:
         return _buildReleaseTrainPipeline(draft);
@@ -1469,39 +1611,47 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   Widget _buildCalloutStatement(
     String statement, {
     required bool highlightMetrics,
+    VoidCallback? onEditTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _bgRecessed,
+    return Material(
+      color: _bgRecessed,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onEditTap,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 3,
-              color: highlightMetrics ? _accentEmerald : _focalAccent,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _borderSubtle),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 3,
+                  color: highlightMetrics ? _accentEmerald : _focalAccent,
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                    child: highlightMetrics
+                        ? _buildMetricHighlightedRichText(statement)
+                        : Text(
+                            statement,
+                            style: GoogleFonts.inter(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              height: 1.58,
+                              color: _textPrimary,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-                child: highlightMetrics
-                    ? _buildMetricHighlightedRichText(statement)
-                    : Text(
-                        statement,
-                        style: GoogleFonts.inter(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          height: 1.58,
-                          color: _textPrimary,
-                        ),
-                      ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1762,6 +1912,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     required String prefix,
     required List<String> items,
     required bool isCoreLoop,
+    void Function(int index, String newValue)? onEditItem,
   }) {
     final badgeAccent = isCoreLoop ? _accentEmerald : _borderBright;
 
@@ -1769,50 +1920,63 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < items.length; i++) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: _bgRecessed,
+          Material(
+            color: _bgRecessed,
+            borderRadius: BorderRadius.circular(5),
+            child: InkWell(
+              onTap: onEditItem == null
+                  ? null
+                  : () => _showDirectSectionTextEditDialog(
+                        title: '$prefix·${(i + 1).toString().padLeft(2, '0')}',
+                        initialText: items[i],
+                        onSave: (val) => onEditItem(i, val),
+                      ),
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: _borderSubtle),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 68,
-                  padding: const EdgeInsets.symmetric(vertical: 2.5),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: isCoreLoop
-                        ? _accentEmerald.withValues(alpha: 0.12)
-                        : _bgSurface,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: isCoreLoop
-                          ? badgeAccent.withValues(alpha: 0.45)
-                          : _borderBright,
-                    ),
-                  ),
-                  child: Text(
-                    '$prefix·${(i + 1).toString().padLeft(2, '0')}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: isCoreLoop ? _accentEmerald : _textSecondary,
-                    ),
-                  ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: _borderSubtle),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: _buildFormattedLeadInText(items[i]),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 68,
+                      padding: const EdgeInsets.symmetric(vertical: 2.5),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isCoreLoop
+                            ? _accentEmerald.withValues(alpha: 0.12)
+                            : _bgSurface,
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: isCoreLoop
+                              ? badgeAccent.withValues(alpha: 0.45)
+                              : _borderBright,
+                        ),
+                      ),
+                      child: Text(
+                        '$prefix·${(i + 1).toString().padLeft(2, '0')}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: isCoreLoop ? _accentEmerald : _textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _buildFormattedLeadInText(items[i]),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           if (i < items.length - 1)
             if (isCoreLoop)
-               Row(
+              Row(
                 children: [
                   const SizedBox(width: 47),
                   Container(
@@ -1862,146 +2026,181 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
-  Widget _buildTradeOffSplitBars(List<String> tradeOffs) {
+  Widget _buildTradeOffSplitBars(
+    List<String> tradeOffs, {
+    void Function(int index, String newValue)? onEditItem,
+  }) {
     return Column(
       children: [
         for (int i = 0; i < tradeOffs.length; i++) ...[
-          _buildSingleTradeOffBar(tradeOffs[i]),
+          _buildSingleTradeOffBar(
+            tradeOffs[i],
+            onTap: onEditItem == null
+                ? null
+                : () => _showDirectSectionTextEditDialog(
+                      title: 'Trade-Off #${i + 1} (X over Y)',
+                      initialText: tradeOffs[i],
+                      onSave: (val) => onEditItem(i, val),
+                    ),
+          ),
           if (i < tradeOffs.length - 1) const SizedBox(height: 7),
         ],
       ],
     );
   }
 
-  Widget _buildSingleTradeOffBar(String rawRule) {
+  Widget _buildSingleTradeOffBar(String rawRule, {VoidCallback? onTap}) {
     final clean = rawRule.replaceFirst(RegExp(r'^Prioritize\s+', caseSensitive: false), '');
     final parts = clean.split(RegExp(r'\s+over\s+', caseSensitive: false));
     final winText = parts.isNotEmpty ? parts[0].trim() : clean;
     final loseText = parts.length > 1 ? parts.sublist(1).join(' over ').trim() : 'secondary complexity';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: _bgRecessed,
+    return Material(
+      color: _bgRecessed,
+      borderRadius: BorderRadius.circular(5),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: _borderSubtle),
-      ),
-      child: Row(
-        children: [
-          // Left winning option: Checkmark on far left, winning text right-aligned toward center OVER pill
-          Container(
-            width: 68,
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _accentEmerald.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(
-                color: _accentEmerald.withValues(alpha: 0.45),
-              ),
-            ),
-            child: Text(
-              '✓ WIN',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w700,
-                color: _accentEmerald,
-              ),
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: _borderSubtle),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              winText,
-              textAlign: TextAlign.right,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: _textPrimary,
+          child: Row(
+            children: [
+              // Left winning option: Checkmark on far left, winning text right-aligned toward center OVER pill
+              Container(
+                width: 68,
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _accentEmerald.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: _accentEmerald.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Text(
+                  '✓ WIN',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: _accentEmerald,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: _bgSurface,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: _borderBright),
-            ),
-            child: Text(
-              'OVER',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
-                color: _textSecondary,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  winText,
+                  textAlign: TextAlign.right,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              loseText,
-              textAlign: TextAlign.left,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: _textSecondary.withValues(alpha: 0.78),
-                decoration: TextDecoration.lineThrough,
-                decorationColor: _accentCrimson.withValues(alpha: 0.70),
-                decorationThickness: 1.6,
+              const SizedBox(width: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _bgSurface,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: _borderBright),
+                ),
+                child: Text(
+                  'OVER',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: _textSecondary,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  loseText,
+                  textAlign: TextAlign.left,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: _textSecondary.withValues(alpha: 0.78),
+                    decoration: TextDecoration.lineThrough,
+                    decorationColor: _accentCrimson.withValues(alpha: 0.70),
+                    decorationThickness: 1.6,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildCutGuardrailChips(List<String> exclusions) {
+  Widget _buildCutGuardrailChips(
+    List<String> exclusions, {
+    void Function(int index, String newValue)? onEditItem,
+  }) {
     return Column(
       children: [
         for (int i = 0; i < exclusions.length; i++) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: _bgRecessed.withValues(alpha: 0.55),
+          Material(
+            color: _bgRecessed.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(5),
+            child: InkWell(
+              onTap: onEditItem == null
+                  ? null
+                  : () => _showDirectSectionTextEditDialog(
+                        title: 'Out of Scope Exclusion #${i + 1}',
+                        initialText: exclusions[i],
+                        onSave: (val) => onEditItem(i, val),
+                      ),
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: _borderSubtle),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 68,
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _accentCrimson.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: _accentCrimson.withValues(alpha: 0.42),
-                    ),
-                  ),
-                  child: Text(
-                    'CUT',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: _accentCrimson,
-                    ),
-                  ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: _borderSubtle),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    exclusions[i],
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: _textSecondary.withValues(alpha: 0.85),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 68,
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _accentCrimson.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: _accentCrimson.withValues(alpha: 0.42),
+                        ),
+                      ),
+                      child: Text(
+                        'CUT',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: _accentCrimson,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        exclusions[i],
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: _textSecondary.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           if (i < exclusions.length - 1) const SizedBox(height: 7),
@@ -2078,6 +2277,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   draft: draft,
                   isFirst: i == 0,
                   index: i,
+                  onTap: () => _showDirectSectionTextEditDialog(
+                    title: 'Prototype Release v0.${i + 1}',
+                    initialText: releases[i],
+                    onSave: (val) => widget.workbench.updateConceptDraft((d) {
+                      final next = List<String>.from(d.releaseTrainTitles);
+                      next[i] = val;
+                      d.releaseTrainTitles = next;
+                    }),
+                  ),
                 ),
                 if (i < releases.length - 1)
                   Padding(
@@ -2181,74 +2389,82 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     required ProjectConceptBlueprint draft,
     required bool isFirst,
     required int index,
+    VoidCallback? onTap,
   }) {
     final verTag = isFirst ? 'v0.1 · ACTIVE TARGET' : 'v0.${index + 1} · QUEUED';
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isFirst ? _bgSurface : _bgRecessed,
+    return Material(
+      color: isFirst ? _bgSurface : _bgRecessed,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isFirst ? _accentAmber : _borderSubtle,
-          width: isFirst ? 1.6 : 1.0,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isFirst ? _accentAmber : _borderSubtle,
+              width: isFirst ? 1.6 : 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    verTag,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: isFirst ? _accentAmber : _textSecondary.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isFirst
+                          ? _accentAmber.withValues(alpha: 0.14)
+                          : _bgSurface,
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: isFirst
+                            ? _accentAmber.withValues(alpha: 0.45)
+                            : _borderSubtle,
+                      ),
+                    ),
+                    child: Text(
+                      isFirst ? 'READY TO PLAN →' : 'QUEUED',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: isFirst ? _accentAmber : _textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
               Text(
-                verTag,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: isFirst ? _accentAmber : _textSecondary.withValues(alpha: 0.85),
+                fullTitle,
+                style: GoogleFonts.inter(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: isFirst ? _textPrimary : _textSecondary,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isFirst
-                      ? _accentAmber.withValues(alpha: 0.14)
-                      : _bgSurface,
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: isFirst
-                        ? _accentAmber.withValues(alpha: 0.45)
-                        : _borderSubtle,
-                  ),
-                ),
-                child: Text(
-                  isFirst ? 'READY TO PLAN →' : 'QUEUED',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: isFirst ? _accentAmber : _textSecondary,
-                  ),
+              const SizedBox(height: 8),
+              Text(
+                'Scope: ${draft.coreLoopBeats.length} Core Loop Beats · ${draft.gameSpec.length} Game Specs · ${draft.designPillars.length} Design Pillars',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  color: _textSecondary.withValues(alpha: 0.85),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            fullTitle,
-            style: GoogleFonts.inter(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              color: isFirst ? _textPrimary : _textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Scope: ${draft.coreLoopBeats.length} Core Loop Beats · ${draft.gameSpec.length} Game Specs · ${draft.designPillars.length} Design Pillars',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              color: _textSecondary.withValues(alpha: 0.85),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
