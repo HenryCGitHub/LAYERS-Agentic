@@ -118,7 +118,11 @@ Return ONLY a JSON object with this exact schema:
     {
       "id": "rel_q_1",
       "question": "Specific release question in plain dev terms?",
-      "options": ["(Recommended) Option A", "Option B"]
+      "options": [
+        "(Recommended) Short Card Title: Concise 1-sentence description",
+        "Alternative Card Title: Concise 1-sentence description",
+        "Third Card Title: Concise 1-sentence description"
+      ]
     }
   ],
   "beats": [
@@ -205,17 +209,18 @@ Return ONLY a JSON object with this exact schema:
         id: 'rel_q_feel',
         question: 'For ${releaseDoc.title}, what should we prioritize during greybox playtesting?',
         options: [
-          '(Recommended) Crisp input responsiveness, core mechanic feel, and state transitions',
-          'Target hit confirmation, visual/audio telegraphs, and feedback cues',
-          'Complete loop progression, reward/upgrade selection, and instant restart flow',
+          '(Recommended) Controls & Mechanic Feel: Crisp input responsiveness, core mechanic feel, and state transitions at 60 FPS',
+          'Combat Hit & Telegraphs: Target hit confirmation, visual/audio telegraphs, and impact feedback cues',
+          'Full Loop & Upgrade Flow: Complete loop progression, reward/upgrade selection, and instant restart flow',
         ],
       ),
       AgentQuestion(
         id: 'rel_q_scope',
         question: 'How strict should our hour budget be for ${releaseDoc.title}?',
         options: [
-          '(Recommended) Lean Prototype covering all ${effectiveLoopItems.length} Core Loop Beats in greybox',
-          'Expanded Prototype including secondary bonus challenges and tuning polish',
+          '(Recommended) Lean Core Loop Prototype: Cover all ${effectiveLoopItems.length} Core Loop Beats in greybox with zero filler',
+          'Expanded Bonus Scope: Include optional time-trial medals and secondary bonus challenges in $versionTag',
+          'Minimal Mechanic Slice: Focus strictly on primary movement and combat beats first',
         ],
       ),
     ];
@@ -543,8 +548,9 @@ Return ONLY a JSON object with this exact schema:
           id: 'rel_q_evolve',
           question: 'How should we handle existing v0.1 features during ${releaseDoc.title}?',
           options: const [
-            '(Recommended) Keep verified features STABLE (0h) and only add delta checkpoints where needed',
-            'Re-tune all v0.1 movement parameters alongside new v0.2 content',
+            '(Recommended) Keep Verified Features Stable: Keep verified features STABLE (0h) and only add delta checkpoints where needed',
+            'Re-Tune Movement & Combat: Re-tune all v0.1 movement parameters alongside new v0.2 content',
+            'Expand All Beats Equally: Add one new polish checkpoint to every existing Beat in v0.2',
           ],
         ),
       ],

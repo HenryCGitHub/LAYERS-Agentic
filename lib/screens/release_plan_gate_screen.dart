@@ -145,6 +145,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   }
 
   Widget _buildGateBanner(ReleaseBlueprint bp) {
+    final includedHours = bp.totalIncludedHours;
+    final deferredHours = bp.totalDeferredHours;
+    final totalCandidateHours = includedHours + deferredHours;
+    final ratio = totalCandidateHours > 0
+        ? (includedHours / totalCandidateHours).clamp(0.08, 1.0)
+        : 1.0;
+
     return Container(
       key: const ValueKey('release_plan_gate_banner'),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
@@ -186,7 +193,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           border: Border.all(color: _borderSubtle),
                         ),
                         child: Text(
-                          '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h Budget',
+                          '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Included · ${bp.totalDeferredFeatures} Deferred',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -218,7 +225,66 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               _buildPrimaryApproveButton(bp),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          // Live Visual Scope & Hour Budget Bar
+          Container(
+            key: const ValueKey('release_hour_budget_bar'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'ACTIVE ${bp.releaseVersionTag.toUpperCase()} SCOPE BUDGET',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: _textSecondary,
+                      ),
+                    ),
+                    Text(
+                      deferredHours > 0
+                          ? '${includedHours}h Included · ${deferredHours}h Deferred (Saved)'
+                          : '${includedHours}h Included · 0h Deferred',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: _accentEmerald,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    height: 6,
+                    color: _bgSurface,
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: ratio,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [_accentEmerald, _accentAmber],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           // GOAL Callout Blockquote
           _buildCalloutBar(
             badgeLabel: 'GOAL',
@@ -580,6 +646,30 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     );
   }
 
+  ({String title, String description}) _splitQuestionOption(
+    String rawOption,
+    int optIdx,
+  ) {
+    final clean = rawOption
+        .replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '')
+        .trim();
+    final colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < 48 && colonIdx < clean.length - 1) {
+      return (
+        title: clean.substring(0, colonIdx).trim(),
+        description: clean.substring(colonIdx + 1).trim(),
+      );
+    }
+    final words = clean.split(RegExp(r'\s+'));
+    if (words.length <= 4) {
+      return (title: clean, description: 'Apply this priority to the release blueprint.');
+    }
+    return (
+      title: words.take(3).join(' '),
+      description: clean,
+    );
+  }
+
   Widget _buildReleaseQuestionsSection(ReleaseBlueprint bp) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -587,7 +677,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
         _buildSectionHeader(
           numLabel: '01',
           title: 'Clarifying Release Questions',
-          trailingMeta: '${bp.questions.length} Playtest Priorities',
+          trailingMeta: '${bp.questions.length} Playtest Priorities · Live-Syncs Blueprint',
         ),
         const SizedBox(height: 12),
         for (int qIdx = 0; qIdx < bp.questions.length; qIdx++) ...[
@@ -600,26 +690,75 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               border: Border.all(color: _borderSubtle),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  bp.questions[qIdx].question,
-                  style: GoogleFonts.inter(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: _textPrimary,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        bp.questions[qIdx].question,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '✦ Live-syncs Done When',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _accentEmerald,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                for (int optIdx = 0; optIdx < bp.questions[qIdx].options.length; optIdx++) ...[
-                  _buildQuestionOptionCard(
-                    question: bp.questions[qIdx],
-                    optionText: bp.questions[qIdx].options[optIdx],
-                    isFirst: optIdx == 0,
-                  ),
-                  if (optIdx < bp.questions[qIdx].options.length - 1)
-                    const SizedBox(height: 6),
-                ],
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final opts = bp.questions[qIdx].options;
+                    final isWide = constraints.maxWidth >= 680;
+                    if (!isWide) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
+                            _buildQuestionOptionCard(
+                              question: bp.questions[qIdx],
+                              qIdx: qIdx,
+                              optIdx: optIdx,
+                              optionText: opts[optIdx],
+                              isFirst: optIdx == 0,
+                            ),
+                            if (optIdx < opts.length - 1) const SizedBox(height: 8),
+                          ],
+                        ],
+                      );
+                    }
+                    return IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
+                            Expanded(
+                              child: _buildQuestionOptionCard(
+                                question: bp.questions[qIdx],
+                                qIdx: qIdx,
+                                optIdx: optIdx,
+                                optionText: opts[optIdx],
+                                isFirst: optIdx == 0,
+                              ),
+                            ),
+                            if (optIdx < opts.length - 1) const SizedBox(width: 10),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -630,83 +769,126 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
 
   Widget _buildQuestionOptionCard({
     required AgentQuestion question,
+    required int qIdx,
+    required int optIdx,
     required String optionText,
     required bool isFirst,
   }) {
     final isSelected = question.selectedOption == optionText;
-    final cleanLabel = optionText
-        .replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '')
-        .trim();
+    final parsed = _splitQuestionOption(optionText, optIdx);
 
-    return InkWell(
-      onTap: () => setState(() => question.selectedOption = optionText),
-      borderRadius: BorderRadius.circular(5),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? _bgHover : _bgSurface,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(
-            color: isSelected ? _textPrimary : _borderSubtle,
-            width: isSelected ? 1.5 : 1.0,
-          ),
+    return Material(
+      color: isSelected ? _bgHover : _bgSurface,
+      borderRadius: BorderRadius.circular(7),
+      child: InkWell(
+        key: ValueKey('release_question_card_${qIdx}_$optIdx'),
+        onTap: () => widget.workbench.selectReleaseQuestionOption(
+          question.id,
+          optionText,
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 15,
-              height: 15,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected ? _focalAccent : Colors.transparent,
-                border: Border.all(
-                  color: isSelected ? _focalAccent : _textMuted,
-                  width: 1.4,
-                ),
-              ),
-              child: isSelected
-                  ? Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _focalAccentFg,
+        borderRadius: BorderRadius.circular(7),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: isSelected ? _textPrimary : _borderSubtle,
+              width: isSelected ? 1.5 : 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 15,
+                        height: 15,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected ? _focalAccent : Colors.transparent,
+                          border: Border.all(
+                            color: isSelected ? _focalAccent : _textMuted,
+                            width: 1.4,
+                          ),
+                        ),
+                        child: isSelected
+                            ? Container(
+                                width: 5,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _focalAccentFg,
+                                ),
+                              )
+                            : null,
                       ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                cleanLabel,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: _textPrimary,
-                ),
-              ),
-            ),
-            if (isFirst) ...[
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _accentEmerald.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: _accentEmerald.withValues(alpha: 0.42)),
-                ),
-                child: Text(
-                  'RECOMMENDED',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: _accentEmerald,
+                      if (isFirst)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _accentEmerald.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: _accentEmerald.withValues(alpha: 0.42),
+                            ),
+                          ),
+                          child: Text(
+                            'RECOMMENDED',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: _accentEmerald,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _bgRecessed,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Text(
+                            'OPTION 0${optIdx + 1}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: _textSecondary,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 10),
+                  Text(
+                    parsed.title,
+                    style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    parsed.description,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -858,10 +1040,65 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          for (int fIdx = 0; fIdx < beat.features.length; fIdx++) ...[
-            _buildFeatureToggleRow(bp, beat, beat.features[fIdx]),
-            if (fIdx < beat.features.length - 1) const SizedBox(height: 7),
-          ],
+          // 2-Column Feature Playing Cards when Beat has 2+ features and none are expanded
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final hasAnyExpanded = beat.features.any(
+                (f) => _expandedFeatureIds.contains(f.id),
+              );
+              final useTwoCol = constraints.maxWidth >= 680 &&
+                  beat.features.length >= 2 &&
+                  !hasAnyExpanded;
+              if (!useTwoCol) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int fIdx = 0; fIdx < beat.features.length; fIdx++) ...[
+                      _buildFeatureToggleRow(bp, beat, beat.features[fIdx]),
+                      if (fIdx < beat.features.length - 1) const SizedBox(height: 7),
+                    ],
+                  ],
+                );
+              }
+              final rows = <Widget>[];
+              for (int i = 0; i < beat.features.length; i += 2) {
+                final hasSecond = i + 1 < beat.features.length;
+                rows.add(
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _buildFeatureToggleRow(
+                            bp,
+                            beat,
+                            beat.features[i],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: hasSecond
+                              ? _buildFeatureToggleRow(
+                                  bp,
+                                  beat,
+                                  beat.features[i + 1],
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+                if (i + 2 < beat.features.length) {
+                  rows.add(const SizedBox(height: 8));
+                }
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: rows,
+              );
+            },
+          ),
           const SizedBox(height: 8),
           // Inline "+ Add Feature to Beat" input bar
           Container(
@@ -932,7 +1169,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     return Container(
       decoration: BoxDecoration(
         color: isIncluded ? _bgSurface : _bgRecessed.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isIncluded ? _borderBright : _borderSubtle,
         ),
@@ -940,10 +1177,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 InkWell(
                   key: ValueKey('toggle_feat_${feat.id}'),
@@ -954,7 +1193,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   ),
                   borderRadius: BorderRadius.circular(4),
                   child: Padding(
-                    padding: const EdgeInsets.all(2),
+                    padding: const EdgeInsets.only(top: 1, right: 2),
                     child: Icon(
                       isIncluded
                           ? Icons.check_box_rounded
@@ -994,13 +1233,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                             _buildLifecycleBadge(feat, bp.releaseVersionTag),
                           ],
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         Text(
                           feat.lifecycle == FeatureLifecycleStatus.stable
                               ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
                               : feat.goal,
                           style: GoogleFonts.inter(
                             fontSize: 11.5,
+                            height: 1.4,
                             color: isIncluded ? _textSecondary : _textMuted,
                           ),
                         ),
@@ -1284,61 +1524,158 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   }
 
   Widget _buildOutOfScopeSummarySection(ReleaseBlueprint bp) {
-    final exclusions = bp.effectiveOutOfScope;
+    // Collect explicit exclusions + deferred features with their beatId/featId for 1-click Restore
+    final items = <({String text, String? beatId, String? featId})>[
+      for (final ex in bp.explicitExclusions)
+        (text: ex, beatId: null, featId: null),
+    ];
+    for (final beat in bp.beats) {
+      for (final deferred in beat.deferredFeatures) {
+        final label = '${deferred.title} (deferred from ${beat.title})';
+        if (!items.any((it) => it.text == label)) {
+          items.add((
+            text: label,
+            beatId: beat.id,
+            featId: deferred.id,
+          ));
+        }
+      }
+    }
+
+    Widget buildOutOfScopeCard(int idx) {
+      final item = items[idx];
+      final isDeferredFeat = item.beatId != null && item.featId != null;
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _bgRecessed.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isDeferredFeat
+                ? _accentAmber.withValues(alpha: 0.38)
+                : _borderSubtle,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _accentCrimson.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(
+                  color: _accentCrimson.withValues(alpha: 0.42),
+                ),
+              ),
+              child: Text(
+                isDeferredFeat ? 'DEFERRED' : 'CUT',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: _accentCrimson,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                item.text,
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: isDeferredFeat ? FontWeight.w600 : FontWeight.w400,
+                  color: isDeferredFeat
+                      ? _textPrimary
+                      : _textSecondary.withValues(alpha: 0.85),
+                ),
+              ),
+            ),
+            if (isDeferredFeat) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                key: ValueKey('restore_deferred_feat_${item.featId}'),
+                onTap: () => widget.workbench.toggleProposedFeatureScope(
+                  item.beatId!,
+                  item.featId!,
+                  true,
+                ),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderBright),
+                  ),
+                  child: Text(
+                    '+ Restore',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accentEmerald,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSectionHeader(
           numLabel: '03',
           title: 'Out of Scope (Deferred & Excluded)',
-          trailingMeta: '${exclusions.length} Items Cut',
+          trailingMeta: '${items.length} Items Cut',
         ),
         const SizedBox(height: 12),
-        for (int i = 0; i < exclusions.length; i++) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: _bgRecessed.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: _borderSubtle),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 68,
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _accentCrimson.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: _accentCrimson.withValues(alpha: 0.42),
-                    ),
-                  ),
-                  child: Text(
-                    'CUT',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: _accentCrimson,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    exclusions[i],
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: _textSecondary.withValues(alpha: 0.85),
-                    ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final useTwoCol = constraints.maxWidth >= 620 && items.length > 1;
+            if (!useTwoCol) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < items.length; i++) ...[
+                    buildOutOfScopeCard(i),
+                    if (i < items.length - 1) const SizedBox(height: 7),
+                  ],
+                ],
+              );
+            }
+            final rows = <Widget>[];
+            for (int i = 0; i < items.length; i += 2) {
+              final hasSecond = i + 1 < items.length;
+              rows.add(
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: buildOutOfScopeCard(i)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: hasSecond
+                            ? buildOutOfScopeCard(i + 1)
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          if (i < exclusions.length - 1) const SizedBox(height: 7),
-        ],
+              );
+              if (i + 2 < items.length) {
+                rows.add(const SizedBox(height: 8));
+              }
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rows,
+            );
+          },
+        ),
       ],
     );
   }

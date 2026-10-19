@@ -105,9 +105,14 @@ void main() {
 
         // ── Stage 2: Antigravity Release Plan Gate ──
         expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_hour_budget_bar')), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_question_card_0_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_question_card_0_1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_question_card_0_2')), findsOneWidget);
         expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
         expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
+        expect(find.byKey(const ValueKey('restore_deferred_feat_feat_7_2')), findsOneWidget);
 
         // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats)
         expect(provider.releaseBlueprint!.beats.length, 7);

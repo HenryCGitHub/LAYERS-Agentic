@@ -488,6 +488,49 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
+  /// Selects a Stage 2 Release Question Playing Card option and live-syncs the Release Blueprint's
+  /// `doneWhen` and optional deferred feature scope immediately.
+  void selectReleaseQuestionOption(String questionId, String optionText) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    for (final q in bp.questions) {
+      if (q.id == questionId) {
+        q.selectedOption = optionText;
+        final clean = optionText
+            .replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '')
+            .trim();
+        final colonIdx = clean.indexOf(':');
+        final summary = (colonIdx > 0 && colonIdx < clean.length - 1)
+            ? clean.substring(colonIdx + 1).trim()
+            : clean;
+
+        if (questionId.contains('feel') || q == bp.questions.first) {
+          bp.doneWhen =
+              'A playtester can complete the full ${bp.releaseVersionTag} core loop cycle 3 times in a row — prioritizing: $summary.';
+        } else if (questionId.contains('scope')) {
+          final lower = clean.toLowerCase();
+          if (lower.contains('expanded')) {
+            for (final b in bp.beats) {
+              for (final f in b.features) {
+                if (!f.isSuperseded) f.included = true;
+              }
+            }
+          } else if (lower.contains('lean')) {
+            for (final b in bp.beats) {
+              for (final f in b.features) {
+                if (f.title.toLowerCase().contains('bonus')) {
+                  f.included = false;
+                }
+              }
+            }
+          }
+        }
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
   /// Adds a custom Playable Feature stub directly into a Beat in Stage 2 without waiting for AI regeneration.
   void addProposedFeatureToBeat(String beatId, String rawTitle) {
     final bp = _releaseBlueprint;

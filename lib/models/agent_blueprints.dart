@@ -328,9 +328,19 @@ class ReleaseBlueprint {
   int get totalIncludedHours =>
       beats.fold(0, (sum, b) => sum + b.totalIncludedHours);
 
+  /// Total hours of all deferred (unchecked, non-superseded) Features across all Beats.
+  int get totalDeferredHours => beats.fold(
+        0,
+        (sum, b) => sum + b.deferredFeatures.fold(0, (s, f) => s + f.estimatedHours),
+      );
+
   /// Count of included Features across all Beats (excluding superseded ones).
   int get totalIncludedFeatures =>
       beats.fold(0, (sum, b) => sum + b.includedFeatures.length);
+
+  /// Count of deferred Features across all Beats (excluding superseded ones).
+  int get totalDeferredFeatures =>
+      beats.fold(0, (sum, b) => sum + b.deferredFeatures.length);
 
   /// Combines explicit exclusions + any Features the user unchecked at the Confirmation Gate.
   List<String> get effectiveOutOfScope {
