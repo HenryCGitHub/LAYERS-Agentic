@@ -44,6 +44,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // ── Stage 1A: The Spark (3 Side-by-Side Starter Concept Playing Cards) ──
+        expect(find.byKey(const ValueKey('connected_pipeline_track')), findsOneWidget);
         expect(find.text('STEP 1A · THE SPARK'), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_card_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_card_1')), findsOneWidget);
@@ -55,6 +56,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..09) ──
+        expect(find.byKey(const ValueKey('top_bar_project_title')), findsOneWidget);
+        expect(find.byKey(const ValueKey('global_export_spec_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
         expect(find.byKey(const ValueKey('new_spark_reset_btn')), findsOneWidget);
@@ -106,6 +109,10 @@ void main() {
         // ── Stage 2: Antigravity Release Plan Gate ──
         expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_hour_budget_bar')), findsOneWidget);
+        expect(find.byKey(const ValueKey('toggle_release_questions_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_beat_jump_bar')), findsOneWidget);
+        expect(find.byKey(const ValueKey('toggle_all_feat_specs_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_2')), findsOneWidget);
@@ -113,6 +120,12 @@ void main() {
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
         expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
         expect(find.byKey(const ValueKey('restore_deferred_feat_feat_7_2')), findsOneWidget);
+
+        // Verify collapsing Clarifying Release Questions into the Answered Decisions Summary Strip
+        await tester.tap(find.byKey(const ValueKey('toggle_release_questions_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('release_question_card_0_0')), findsNothing);
+        expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
 
         // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats)
         expect(provider.releaseBlueprint!.beats.length, 7);
@@ -148,8 +161,9 @@ void main() {
         expect(find.byKey(const ValueKey('edit_playtest_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('add_checkpoint_header_btn')), findsOneWidget);
 
-        // Verify Stage 3 Sticky Bottom Studio Dock & 3 Co-Pilot Playing Cards
+        // Verify Stage 3 Sticky Bottom Studio Dock & Toggleable 3 Co-Pilot Playing Cards Drawer
         expect(find.byKey(const ValueKey('workbench_sticky_bottom_dock')), findsOneWidget);
+        expect(find.byKey(const ValueKey('toggle_copilot_drawer_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsOneWidget);
         expect(find.byKey(const ValueKey('copilot_card_suggest_tuning')), findsOneWidget);
         expect(find.byKey(const ValueKey('copilot_card_add_guards')), findsOneWidget);
@@ -187,6 +201,11 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('copilot_card_add_checkpoint')));
         await tester.pumpAndSettle();
         expect(find.text('Screen Feedback & Feel Pass'), findsOneWidget);
+
+        // Verify collapsing the Co-Pilot Playing Cards drawer frees vertical space
+        await tester.tap(find.byKey(const ValueKey('toggle_copilot_drawer_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsNothing);
       },
     );
 

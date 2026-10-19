@@ -35,6 +35,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   final TextEditingController _copilotPromptController = TextEditingController();
   bool _showOutOfScopeShelf = false;
   bool _hideUnassignedSpecShelf = false;
+  bool _showCoPilotDrawer = true;
 
   @override
   void dispose() {
@@ -972,10 +973,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         const SizedBox(width: 8),
                         Text(
                           feat.title,
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.2,
+                          style: AppTheme.displayFont(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.35,
                             color: _textPrimary,
                           ),
                         ),
@@ -1991,8 +1992,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 Expanded(
                   child: Text(
                     node.cleanStageTitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
+                    style: AppTheme.displayFont(
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w700,
                       color: _textPrimary,
                     ),
@@ -2538,8 +2539,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 const SizedBox(height: 4),
                 Text(
                   title,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
+                  style: AppTheme.displayFont(
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: _textPrimary,
                   ),
@@ -2591,119 +2592,159 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Row 1: 3 Side-by-Side Co-Pilot Playing Cards
-              Row(
-                children: [
-                  buildCoPilotCard(
-                    key: const ValueKey('copilot_card_add_checkpoint'),
-                    badge: 'CO-PILOT 01 · CHECKPOINT',
-                    badgeColor: _accentEmerald,
-                    title: '+ Add Polish Checkpoint',
-                    subtitle: 'Append a 60/40 playtest checkpoint with tasks & tuning.',
-                    onTap: () => _applyFeatureCoPilotAction(
-                      feat,
-                      states,
-                      specBinding,
-                      activeFocusIndex,
-                      'add_polish_checkpoint',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  buildCoPilotCard(
-                    key: const ValueKey('copilot_card_suggest_tuning'),
-                    badge: 'CO-PILOT 02 · TUNING',
-                    badgeColor: _accentAmber,
-                    title: 'Suggest Tuning Values',
-                    subtitle: 'Generate concrete numeric parameters for the active checkpoint.',
-                    onTap: () => _applyFeatureCoPilotAction(
-                      feat,
-                      states,
-                      specBinding,
-                      activeFocusIndex,
-                      'suggest_tuning',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  buildCoPilotCard(
-                    key: const ValueKey('copilot_card_add_guards'),
-                    badge: 'CO-PILOT 03 · EDGE GUARDS',
-                    badgeColor: _accentCrimson,
-                    title: 'Add Edge-Case Guards',
-                    subtitle: 'Append [GUARD] boundary conditions to prevent state bugs.',
-                    onTap: () => _applyFeatureCoPilotAction(
-                      feat,
-                      states,
-                      specBinding,
-                      activeFocusIndex,
-                      'add_edge_guards',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Row 2: [ASK AGENT] Feature Co-Pilot Input Bar
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _bgRecessed,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _borderSubtle),
-                ),
-                child: Row(
+              // Collapsible 3 Side-by-Side Co-Pilot Playing Cards Drawer
+              if (_showCoPilotDrawer) ...[
+                Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _accentEmerald.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'ASK AGENT',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: _accentEmerald,
-                        ),
+                    buildCoPilotCard(
+                      key: const ValueKey('copilot_card_add_checkpoint'),
+                      badge: 'CO-PILOT 01 · CHECKPOINT',
+                      badgeColor: _accentEmerald,
+                      title: '+ Add Polish Checkpoint',
+                      subtitle: 'Append a 60/40 playtest checkpoint with tasks & tuning.',
+                      onTap: () => _applyFeatureCoPilotAction(
+                        feat,
+                        states,
+                        specBinding,
+                        activeFocusIndex,
+                        'add_polish_checkpoint',
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        key: const ValueKey('workbench_copilot_input'),
-                        controller: _copilotPromptController,
-                        onSubmitted: (_) => submitCustomPrompt(),
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: _textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 6),
-                          hintText:
-                              'Ask Agent to add a task, checkpoint, tuning value, or edge guard for ${feat.title}...',
-                          hintStyle: GoogleFonts.inter(
-                            fontSize: 11.5,
-                            color: _textMuted,
-                          ),
-                        ),
+                    buildCoPilotCard(
+                      key: const ValueKey('copilot_card_suggest_tuning'),
+                      badge: 'CO-PILOT 02 · TUNING',
+                      badgeColor: _accentAmber,
+                      title: 'Suggest Tuning Values',
+                      subtitle: 'Generate concrete numeric parameters for the active checkpoint.',
+                      onTap: () => _applyFeatureCoPilotAction(
+                        feat,
+                        states,
+                        specBinding,
+                        activeFocusIndex,
+                        'suggest_tuning',
                       ),
                     ),
-                    InkWell(
-                      key: const ValueKey('workbench_copilot_send_btn'),
-                      onTap: submitCustomPrompt,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: Icon(
-                          Icons.send_rounded,
-                          size: 15,
-                          color: _accentAmber,
-                        ),
+                    const SizedBox(width: 8),
+                    buildCoPilotCard(
+                      key: const ValueKey('copilot_card_add_guards'),
+                      badge: 'CO-PILOT 03 · EDGE GUARDS',
+                      badgeColor: _accentCrimson,
+                      title: 'Add Edge-Case Guards',
+                      subtitle: 'Append [GUARD] boundary conditions to prevent state bugs.',
+                      onTap: () => _applyFeatureCoPilotAction(
+                        feat,
+                        states,
+                        specBinding,
+                        activeFocusIndex,
+                        'add_edge_guards',
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+              ],
+              // Row 2: [ASK AGENT] Feature Co-Pilot Input Bar + Co-Pilot Drawer Toggle
+              Row(
+                children: [
+                  InkWell(
+                    key: const ValueKey('toggle_copilot_drawer_btn'),
+                    onTap: () {
+                      setState(() {
+                        _showCoPilotDrawer = !_showCoPilotDrawer;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: _showCoPilotDrawer
+                            ? _accentEmerald.withValues(alpha: 0.14)
+                            : _bgRecessed,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _showCoPilotDrawer
+                              ? _accentEmerald.withValues(alpha: 0.45)
+                              : _borderSubtle,
+                        ),
+                      ),
+                      child: Text(
+                        '✦ Co-Pilot Cards (3) ${_showCoPilotDrawer ? "▾" : "▴"}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _showCoPilotDrawer ? _accentEmerald : _textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: _borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _accentEmerald.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'ASK AGENT',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: _accentEmerald,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              key: const ValueKey('workbench_copilot_input'),
+                              controller: _copilotPromptController,
+                              onSubmitted: (_) => submitCustomPrompt(),
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: _textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                                hintText:
+                                    'Ask Agent to add a task, checkpoint, tuning value, or edge guard for ${feat.title}...',
+                                hintStyle: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: _textMuted,
+                                ),
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            key: const ValueKey('workbench_copilot_send_btn'),
+                            onTap: submitCustomPrompt,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Icon(
+                                Icons.send_rounded,
+                                size: 15,
+                                color: _accentAmber,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               // Row 3: Feature Navigation & Copy Markdown Spec Bar

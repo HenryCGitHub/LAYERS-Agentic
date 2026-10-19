@@ -25,6 +25,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   final TextEditingController _releaseChatController = TextEditingController();
   final Set<String> _expandedFeatureIds = {};
   final Map<String, TextEditingController> _newBeatFeatureControllers = {};
+  bool _collapseQuestions = false;
 
   bool get _isDark => widget.workbench.isDark;
   Color get _bgBase => AppTheme.bgBaseFor(_isDark);
@@ -206,9 +207,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   const SizedBox(height: 5),
                   Text(
                     bp.releaseTitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
+                    style: AppTheme.displayFont(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.4,
                       color: _textPrimary,
                     ),
                   ),
@@ -674,94 +676,231 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildSectionHeader(
-          numLabel: '01',
-          title: 'Clarifying Release Questions',
-          trailingMeta: '${bp.questions.length} Playtest Priorities · Live-Syncs Blueprint',
-        ),
-        const SizedBox(height: 12),
-        for (int qIdx = 0; qIdx < bp.questions.length; qIdx++) ...[
-          Container(
-            margin: EdgeInsets.only(bottom: qIdx < bp.questions.length - 1 ? 12 : 0),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _bgRecessed,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _borderSubtle),
+        Container(
+          padding: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: _borderSubtle),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '01',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _textSecondary.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'CLARIFYING RELEASE QUESTIONS',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: _textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${bp.questions.length} Playtest Priorities · Live-Syncs Blueprint',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: _textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  InkWell(
+                    key: const ValueKey('toggle_release_questions_btn'),
+                    onTap: () {
+                      setState(() {
+                        _collapseQuestions = !_collapseQuestions;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: _bgSurface,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: _borderBright),
+                      ),
                       child: Text(
-                        bp.questions[qIdx].question,
-                        style: GoogleFonts.inter(
-                          fontSize: 13.5,
+                        _collapseQuestions
+                            ? 'Edit Decisions ▾'
+                            : 'Collapse Decisions ▴',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
                           fontWeight: FontWeight.w700,
-                          color: _textPrimary,
+                          color: _accentEmerald,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '✦ Live-syncs Done When',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: _accentEmerald,
-                      ),
-                    ),
-                  ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Compact Answered Decisions Summary Strip (always visible for quick glance)
+        Container(
+          key: const ValueKey('answered_decisions_strip'),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _bgSurface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _borderSubtle),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'DECISIONS (${bp.questions.length}/${bp.questions.length} ✓):',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  color: _accentEmerald,
                 ),
-                const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final opts = bp.questions[qIdx].options;
-                    final isWide = constraints.maxWidth >= 680;
-                    if (!isWide) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
-                            _buildQuestionOptionCard(
-                              question: bp.questions[qIdx],
-                              qIdx: qIdx,
-                              optIdx: optIdx,
-                              optionText: opts[optIdx],
-                              isFirst: optIdx == 0,
-                            ),
-                            if (optIdx < opts.length - 1) const SizedBox(height: 8),
-                          ],
-                        ],
-                      );
-                    }
-                    return IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
-                            Expanded(
-                              child: _buildQuestionOptionCard(
+              ),
+              for (int qIdx = 0; qIdx < bp.questions.length; qIdx++)
+                Builder(
+                  builder: (context) {
+                    final q = bp.questions[qIdx];
+                    final chosen = q.selectedOption.isNotEmpty
+                        ? q.selectedOption
+                        : (q.options.isNotEmpty ? q.options.first : '');
+                    final parsed = _splitQuestionOption(chosen, 0);
+                    return InkWell(
+                      onTap: () {
+                        if (_collapseQuestions) {
+                          setState(() {
+                            _collapseQuestions = false;
+                          });
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _accentEmerald.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: _accentEmerald.withValues(alpha: 0.38),
+                          ),
+                        ),
+                        child: Text(
+                          'Q${qIdx + 1}: ${parsed.title} ✓',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+        if (!_collapseQuestions) ...[
+          const SizedBox(height: 12),
+          for (int qIdx = 0; qIdx < bp.questions.length; qIdx++) ...[
+            Container(
+              margin: EdgeInsets.only(bottom: qIdx < bp.questions.length - 1 ? 12 : 0),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _bgRecessed,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: _borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          bp.questions[qIdx].question,
+                          style: AppTheme.displayFont(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '✦ Live-syncs Done When',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: _accentEmerald,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final opts = bp.questions[qIdx].options;
+                      final isWide = constraints.maxWidth >= 680;
+                      if (!isWide) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
+                              _buildQuestionOptionCard(
                                 question: bp.questions[qIdx],
                                 qIdx: qIdx,
                                 optIdx: optIdx,
                                 optionText: opts[optIdx],
                                 isFirst: optIdx == 0,
                               ),
-                            ),
-                            if (optIdx < opts.length - 1) const SizedBox(width: 10),
+                              if (optIdx < opts.length - 1) const SizedBox(height: 8),
+                            ],
                           ],
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ],
+                        );
+                      }
+                      return IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
+                              Expanded(
+                                child: _buildQuestionOptionCard(
+                                  question: bp.questions[qIdx],
+                                  qIdx: qIdx,
+                                  optIdx: optIdx,
+                                  optionText: opts[optIdx],
+                                  isFirst: optIdx == 0,
+                                ),
+                              ),
+                              if (optIdx < opts.length - 1) const SizedBox(width: 10),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ],
     );
@@ -870,9 +1009,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   const SizedBox(height: 10),
                   Text(
                     parsed.title,
-                    style: GoogleFonts.inter(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
+                    style: AppTheme.displayFont(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                       color: _textPrimary,
                     ),
                   ),
@@ -880,8 +1019,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   Text(
                     parsed.description,
                     style: GoogleFonts.inter(
-                      fontSize: 12,
-                      height: 1.45,
+                      fontSize: 12.5,
+                      height: 1.5,
                       color: _textSecondary,
                     ),
                   ),
@@ -895,6 +1034,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   }
 
   Widget _buildBeatsBlueprintSection(ReleaseBlueprint bp) {
+    final allFeatureIds = <String>[
+      for (final b in bp.beats)
+        for (final f in b.features) f.id,
+    ];
+    final allSpecsExpanded = allFeatureIds.isNotEmpty &&
+        allFeatureIds.every((id) => _expandedFeatureIds.contains(id));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -902,6 +1048,78 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           numLabel: '02',
           title: 'Core Loop Beats & Playable Features',
           trailingMeta: 'Uncheck any feature to defer to Out of Scope',
+        ),
+        const SizedBox(height: 10),
+        // Beat Jump-Bar + 1-Click Expand/Collapse All Specs
+        Container(
+          key: const ValueKey('stage2_beat_jump_bar'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: _bgSurface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _borderSubtle),
+          ),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (int bIdx = 0; bIdx < bp.beats.length; bIdx++)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: _borderSubtle),
+                      ),
+                      child: Text(
+                        'B${(bIdx + 1).toString().padLeft(2, '0')} · ${bp.beats[bIdx].title} (${bp.beats[bIdx].totalIncludedHours}h)',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: _textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              InkWell(
+                key: const ValueKey('toggle_all_feat_specs_btn'),
+                onTap: () {
+                  setState(() {
+                    if (allSpecsExpanded) {
+                      _expandedFeatureIds.clear();
+                    } else {
+                      _expandedFeatureIds.addAll(allFeatureIds);
+                    }
+                  });
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: _bgRecessed,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderBright),
+                  ),
+                  child: Text(
+                    allSpecsExpanded ? 'Collapse All Specs ▴' : 'Expand All Specs ▾',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accentAmber,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) ...[
@@ -1001,9 +1219,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         Expanded(
                           child: Text(
                             beat.title,
-                            style: GoogleFonts.inter(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
+                            style: AppTheme.displayFont(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
                               color: _textPrimary,
                             ),
                           ),
@@ -1221,10 +1439,11 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           children: [
                             Text(
                               feat.title,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
+                              style: AppTheme.displayFont(
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                                 color: isIncluded ? _textPrimary : _textMuted,
+                              ).copyWith(
                                 decoration: isIncluded
                                     ? TextDecoration.none
                                     : TextDecoration.lineThrough,
@@ -1239,8 +1458,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                               ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
                               : feat.goal,
                           style: GoogleFonts.inter(
-                            fontSize: 11.5,
-                            height: 1.4,
+                            fontSize: 12,
+                            height: 1.45,
                             color: isIncluded ? _textSecondary : _textMuted,
                           ),
                         ),

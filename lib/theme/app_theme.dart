@@ -187,6 +187,24 @@ class AppTheme {
     );
   }
 
+  /// Architectural Studio Display Heading Font (`Space Grotesk`)
+  static TextStyle displayFont({
+    required double fontSize,
+    FontWeight fontWeight = FontWeight.w700,
+    required Color color,
+    double letterSpacing = -0.3,
+    double? height,
+  }) {
+    return GoogleFonts.spaceGrotesk(
+      textStyle: const TextStyle(fontFamilyFallback: fontFallbacks),
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      letterSpacing: letterSpacing,
+      height: height,
+      color: color,
+    );
+  }
+
   static ThemeData get darkTheme {
     return ThemeData.dark().copyWith(
       scaffoldBackgroundColor: bgBase,
@@ -195,14 +213,14 @@ class AppTheme {
       cardColor: bgSurface,
       dividerColor: borderSubtle,
       textTheme: TextTheme(
-        displayLarge: _font(fontSize: 24, fontWeight: FontWeight.w700, color: textPrimary),
-        displayMedium: _font(fontSize: 20, fontWeight: FontWeight.w600, color: textPrimary),
-        titleLarge: _font(fontSize: 16, fontWeight: FontWeight.w600, color: textPrimary),
-        titleMedium: _font(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
+        displayLarge: displayFont(fontSize: 24, fontWeight: FontWeight.w700, color: textPrimary),
+        displayMedium: displayFont(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimary),
+        titleLarge: displayFont(fontSize: 16.5, fontWeight: FontWeight.w700, color: textPrimary),
+        titleMedium: displayFont(fontSize: 14.5, fontWeight: FontWeight.w700, color: textPrimary),
         bodyLarge: _font(fontSize: 14, fontWeight: FontWeight.w400, color: textPrimary),
         bodyMedium: _font(fontSize: 13, fontWeight: FontWeight.w400, color: textSecondary),
-        bodySmall: _font(fontSize: 11, fontWeight: FontWeight.w400, color: textMuted),
-        labelSmall: _font(fontSize: 10, fontWeight: FontWeight.w500, color: textMuted),
+        bodySmall: _font(fontSize: 11.5, fontWeight: FontWeight.w400, color: textMuted),
+        labelSmall: _font(fontSize: 10.5, fontWeight: FontWeight.w500, color: textMuted),
       ),
       colorScheme: const ColorScheme.dark(
         surface: bgSurface,
@@ -289,14 +307,14 @@ class AppTheme {
       cardColor: bgSurfaceLight,
       dividerColor: borderSubtleLight,
       textTheme: TextTheme(
-        displayLarge: _font(fontSize: 24, fontWeight: FontWeight.w700, color: textPrimaryLight),
-        displayMedium: _font(fontSize: 20, fontWeight: FontWeight.w600, color: textPrimaryLight),
-        titleLarge: _font(fontSize: 16, fontWeight: FontWeight.w600, color: textPrimaryLight),
-        titleMedium: _font(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimaryLight),
+        displayLarge: displayFont(fontSize: 24, fontWeight: FontWeight.w700, color: textPrimaryLight),
+        displayMedium: displayFont(fontSize: 20, fontWeight: FontWeight.w700, color: textPrimaryLight),
+        titleLarge: displayFont(fontSize: 16.5, fontWeight: FontWeight.w700, color: textPrimaryLight),
+        titleMedium: displayFont(fontSize: 14.5, fontWeight: FontWeight.w700, color: textPrimaryLight),
         bodyLarge: _font(fontSize: 14, fontWeight: FontWeight.w400, color: textPrimaryLight),
         bodyMedium: _font(fontSize: 13, fontWeight: FontWeight.w400, color: textSecondaryLight),
-        bodySmall: _font(fontSize: 11, fontWeight: FontWeight.w400, color: textMutedLight),
-        labelSmall: _font(fontSize: 10, fontWeight: FontWeight.w500, color: textMutedLight),
+        bodySmall: _font(fontSize: 11.5, fontWeight: FontWeight.w400, color: textMutedLight),
+        labelSmall: _font(fontSize: 10.5, fontWeight: FontWeight.w500, color: textMutedLight),
       ),
       colorScheme: const ColorScheme.light(
         surface: bgSurfaceLight,

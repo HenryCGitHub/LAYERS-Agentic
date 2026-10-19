@@ -860,9 +860,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     const SizedBox(height: 10),
                     Text(
                       card.title,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                      style: AppTheme.displayFont(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                         color: _textPrimary,
                       ),
                     ),
@@ -870,8 +870,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     Text(
                       card.description,
                       style: GoogleFonts.inter(
-                        fontSize: 12,
-                        height: 1.45,
+                        fontSize: 12.5,
+                        height: 1.48,
                         color: _textSecondary,
                       ),
                     ),
@@ -951,8 +951,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               Expanded(
                 child: Text(
                   'Pitch your game idea to build your Concept Blueprint',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
+                  style: AppTheme.displayFont(
+                    fontSize: 17.5,
                     fontWeight: FontWeight.w700,
                     color: _textPrimary,
                   ),
@@ -1373,10 +1373,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       const SizedBox(width: 10),
                       Text(
                         sec.title.toUpperCase(),
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
+                        style: AppTheme.displayFont(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
                           color: _textPrimary,
                         ),
                       ),
@@ -1398,6 +1398,23 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                             fontSize: 9.5,
                             fontWeight: FontWeight.w700,
                             color: _textSecondary.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: _borderBright.withValues(alpha: 0.55)),
+                        ),
+                        child: Text(
+                          '← / → Step',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: _textSecondary,
                           ),
                         ),
                       ),
@@ -1925,50 +1942,72 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               )
                             : null,
                       ),
-                      if (optIdx == 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _accentEmerald.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: _accentEmerald.withValues(alpha: 0.42),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (optIdx == 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _accentEmerald.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: _accentEmerald.withValues(alpha: 0.42),
+                                ),
+                              ),
+                              child: Text(
+                                'RECOMMENDED',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: _accentEmerald,
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _bgRecessed,
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                'OPTION 0${optIdx + 1}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: _textSecondary,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(width: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: _bgRecessed,
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(color: _borderBright.withValues(alpha: 0.6)),
+                            ),
+                            child: Text(
+                              'Key ${optIdx + 1}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w700,
+                                color: _textSecondary,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            'RECOMMENDED',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700,
-                              color: _accentEmerald,
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _bgRecessed,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(color: _borderSubtle),
-                          ),
-                          child: Text(
-                            'OPTION 0${optIdx + 1}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700,
-                              color: _textSecondary,
-                            ),
-                          ),
-                        ),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Text(
                     parsed.title,
-                    style: GoogleFonts.inter(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
+                    style: AppTheme.displayFont(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                       color: _textPrimary,
                     ),
                   ),
@@ -1976,8 +2015,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   Text(
                     parsed.description,
                     style: GoogleFonts.inter(
-                      fontSize: 12,
-                      height: 1.45,
+                      fontSize: 12.5,
+                      height: 1.48,
                       color: _textSecondary,
                     ),
                   ),
@@ -2481,9 +2520,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 const SizedBox(height: 10),
                 Text(
                   title,
-                  style: GoogleFonts.inter(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
+                  style: AppTheme.displayFont(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                     color: _textPrimary,
                   ),
                 ),
@@ -2491,8 +2530,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 Text(
                   body,
                   style: GoogleFonts.inter(
-                    fontSize: 12,
-                    height: 1.45,
+                    fontSize: 12.5,
+                    height: 1.48,
                     color: _textSecondary,
                   ),
                 ),

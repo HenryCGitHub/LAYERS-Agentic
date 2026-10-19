@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'providers/workbench_provider.dart';
@@ -41,6 +42,63 @@ class WorkbenchShell extends StatelessWidget {
 
   const WorkbenchShell({super.key, required this.workbench});
 
+  Future<void> _exportFullProjectSpec(BuildContext context) async {
+    final draft = workbench.conceptDraft;
+    final bp = workbench.releaseBlueprint;
+    final rel = workbench.activeRelease;
+    final sb = StringBuffer();
+    final title = draft != null && draft.sparkIdea.trim().isNotEmpty
+        ? draft.sparkIdea.trim()
+        : 'LAYERS-Agentic Game Project';
+    sb.writeln('# $title — Project & Release Specification');
+    if (draft != null) {
+      sb.writeln('\n## Stage 1: Project Concept Blueprint');
+      sb.writeln(draft.toFormattedScopeSection());
+    }
+    if (bp != null) {
+      sb.writeln(
+        '\n## Stage 2: ${bp.releaseTitle} (${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h)',
+      );
+      for (int i = 0; i < bp.beats.length; i++) {
+        final b = bp.beats[i];
+        sb.writeln('\n### Beat ${i + 1}: ${b.title}');
+        for (final f in b.features) {
+          final status = f.included ? 'INCLUDED (${f.estimatedHours}h)' : 'DEFERRED';
+          sb.writeln('- **${f.title}** [$status]: ${f.goal}');
+        }
+      }
+    }
+    if (rel != null) {
+      final relProgress = workbench.getDocumentProgress(rel.id);
+      sb.writeln('\n## Stage 3: Active Release Workbench (${rel.title} · $relProgress% Verified)');
+      for (final beat in workbench.activeReleaseBeats) {
+        final feats = workbench.featuresForBeat(beat.id);
+        for (final feat in feats) {
+          final p = workbench.getDocumentProgress(feat.id);
+          sb.writeln('- **${feat.title}** ($p% verified · ${feat.estimatedDuration})');
+        }
+      }
+    }
+    await Clipboard.setData(ClipboardData(text: sb.toString()));
+    if (!context.mounted) return;
+    final isDark = workbench.isDark;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.bgSurfaceFor(isDark),
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          'Copied full Project & Release Spec to clipboard ✓',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.accentGreenFor(isDark),
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = workbench.isDark;
@@ -51,13 +109,38 @@ class WorkbenchShell extends StatelessWidget {
 
     final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final accentAmber = AppTheme.accentAmberFor(isDark);
+    final accentCyan = AppTheme.accentCyanFor(isDark);
+    final accentEmerald = AppTheme.accentGreenFor(isDark);
+
+    final draft = workbench.conceptDraft;
+    final bp = workbench.releaseBlueprint;
+    final rel = workbench.activeRelease;
+    final allFeats = <String>[
+      for (final b in workbench.activeReleaseBeats)
+        for (final f in workbench.featuresForBeat(b.id)) f.id,
+    ];
+    final doneFeatCount = allFeats
+        .where((id) => workbench.getDocumentProgress(id) >= 100)
+        .length;
+
+    final String? stage1Badge = draft != null ? '✓' : null;
+    final String? stage2Badge = bp?.releaseVersionTag;
+    final String? stage3Badge = allFeats.isNotEmpty
+        ? '$doneFeatCount/${allFeats.length}'
+        : (rel != null ? '${workbench.getDocumentProgress(rel.id)}%' : null);
+
+    final String? rawSpark = draft?.sparkIdea.trim();
+    final String? activeProjectLabel = (rawSpark != null && rawSpark.isNotEmpty)
+        ? (rawSpark.length > 10 ? '${rawSpark.substring(0, 10)}…' : rawSpark)
+        : null;
 
     return Scaffold(
       backgroundColor: AppTheme.bgCanvasFor(isDark),
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
+        preferredSize: const Size.fromHeight(50),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: bgRecessed,
             border: Border(bottom: BorderSide(color: borderColor)),
@@ -66,19 +149,20 @@ class WorkbenchShell extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'LAYERS',
-                    style: GoogleFonts.jetBrainsMono(
+                    style: AppTheme.displayFont(
                       fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
                       color: textPrimary,
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
                     decoration: BoxDecoration(
                       color: bgSurface,
                       borderRadius: BorderRadius.circular(4),
@@ -87,61 +171,158 @@ class WorkbenchShell extends StatelessWidget {
                     child: Text(
                       'AGENTIC',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9,
+                        fontSize: 8,
                         fontWeight: FontWeight.w700,
                         color: textSecondary,
                       ),
                     ),
                   ),
+                  if (activeProjectLabel != null) ...[
+                    const SizedBox(width: 5),
+                    Text(
+                      '/',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: textMuted,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      activeProjectLabel,
+                      key: const ValueKey('top_bar_project_title'),
+                      style: AppTheme.displayFont(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                        color: accentAmber,
+                      ),
+                    ),
+                  ],
                 ],
+              ),
+              Container(
+                key: const ValueKey('connected_pipeline_track'),
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: bgSurface,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildStagePill(
+                      label: '1. Concept',
+                      badge: stage1Badge,
+                      stage: WorkbenchStage.projectPitch,
+                      activeStage: workbench.currentStage,
+                      isCompleted: bp != null || allFeats.isNotEmpty,
+                      color: accentAmber,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      textMuted: textMuted,
+                      bgActive: AppTheme.bgSurfaceHoverFor(isDark),
+                      borderBright: AppTheme.borderBrightFor(isDark),
+                      onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Text(
+                        '▸',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          color: textMuted,
+                        ),
+                      ),
+                    ),
+                    _buildStagePill(
+                      label: '2. Release Plan',
+                      badge: stage2Badge,
+                      stage: WorkbenchStage.releasePlanGate,
+                      activeStage: workbench.currentStage,
+                      isCompleted: allFeats.isNotEmpty,
+                      color: accentCyan,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      textMuted: textMuted,
+                      bgActive: AppTheme.bgSurfaceHoverFor(isDark),
+                      borderBright: AppTheme.borderBrightFor(isDark),
+                      onTap: workbench.releaseBlueprint != null
+                          ? () => workbench.setStage(WorkbenchStage.releasePlanGate)
+                          : null,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Text(
+                        '▸',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          color: textMuted,
+                        ),
+                      ),
+                    ),
+                    _buildStagePill(
+                      label: '3. Workbench',
+                      badge: stage3Badge,
+                      stage: WorkbenchStage.releaseWorkbench,
+                      activeStage: workbench.currentStage,
+                      isCompleted: workbench.isActiveReleaseComplete,
+                      color: accentEmerald,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      textMuted: textMuted,
+                      bgActive: AppTheme.bgSurfaceHoverFor(isDark),
+                      borderBright: AppTheme.borderBrightFor(isDark),
+                      onTap: workbench.activeReleaseBeats.isNotEmpty
+                          ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
+                          : null,
+                    ),
+                  ],
+                ),
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildStagePill(
-                    label: '1. Project Concept',
-                    stage: WorkbenchStage.projectPitch,
-                    activeStage: workbench.currentStage,
-                    color: AppTheme.accentAmberFor(isDark),
-                    textPrimary: textPrimary,
-                    textMuted: textMuted,
-                    onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
-                  ),
-                  const SizedBox(width: 6),
-                  _buildStagePill(
-                    label: '2. Release Plan Gate',
-                    stage: WorkbenchStage.releasePlanGate,
-                    activeStage: workbench.currentStage,
-                    color: AppTheme.accentCyanFor(isDark),
-                    textPrimary: textPrimary,
-                    textMuted: textMuted,
-                    onTap: workbench.releaseBlueprint != null
-                        ? () => workbench.setStage(WorkbenchStage.releasePlanGate)
-                        : null,
-                  ),
-                  const SizedBox(width: 6),
-                  _buildStagePill(
-                    label: '3. Active Workbench',
-                    stage: WorkbenchStage.releaseWorkbench,
-                    activeStage: workbench.currentStage,
-                    color: AppTheme.accentGreenFor(isDark),
-                    textPrimary: textPrimary,
-                    textMuted: textMuted,
-                    onTap: workbench.activeReleaseBeats.isNotEmpty
-                        ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
-                        : null,
-                  ),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+                  if (draft != null) ...[
+                    Tooltip(
+                      message: 'Copy Full Project & Release Spec as Markdown',
+                      child: InkWell(
+                        key: const ValueKey('global_export_spec_btn'),
+                        onTap: () => _exportFullProjectSpec(context),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: bgSurface,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.copy_rounded, size: 11.5, color: accentAmber),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Export',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   InkWell(
                     key: const ValueKey('ai_settings_btn'),
                     onTap: () => _showAiSettingsDialog(context),
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                       decoration: BoxDecoration(
                         color: bgSurface,
                         borderRadius: BorderRadius.circular(6),
@@ -156,16 +337,16 @@ class WorkbenchShell extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: workbench.hasLiveAiKey
-                                  ? AppTheme.accentGreenFor(isDark).withValues(alpha: 0.65)
-                                  : AppTheme.accentAmberFor(isDark).withValues(alpha: 0.65),
+                                  ? accentEmerald.withValues(alpha: 0.65)
+                                  : accentAmber.withValues(alpha: 0.65),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Text(
-                            workbench.modelBadgeLabel,
+                            'AI Models',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
                               color: textSecondary,
                             ),
                           ),
@@ -173,7 +354,7 @@ class WorkbenchShell extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 6),
                   Tooltip(
                     message: 'Toggle Theme',
                     child: InkWell(
@@ -567,35 +748,78 @@ class WorkbenchShell extends StatelessWidget {
 
   Widget _buildStagePill({
     required String label,
+    String? badge,
     required WorkbenchStage stage,
     required WorkbenchStage activeStage,
+    required bool isCompleted,
     required Color color,
     required Color textPrimary,
+    required Color textSecondary,
     required Color textMuted,
+    required Color bgActive,
+    required Color borderBright,
     VoidCallback? onTap,
   }) {
     final isActive = stage == activeStage;
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(5),
       child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4.5),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: isActive ? color : Colors.transparent,
-              width: 2.5,
-            ),
+          color: isActive ? bgActive : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+            color: isActive ? borderBright : Colors.transparent,
+            width: 0.9,
           ),
         ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-            color: isActive ? textPrimary : textMuted,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive
+                    ? color
+                    : (isCompleted
+                        ? color.withValues(alpha: 0.7)
+                        : textMuted.withValues(alpha: 0.35)),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: AppTheme.displayFont(
+                fontSize: 11.5,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                letterSpacing: -0.1,
+                color: isActive
+                    ? textPrimary
+                    : (isCompleted ? textSecondary : textMuted),
+              ),
+            ),
+            if (badge != null) ...[
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  badge,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
