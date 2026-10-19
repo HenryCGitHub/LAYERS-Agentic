@@ -1955,12 +1955,15 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     }
 
     // Resolve Checkable How-To Blueprints for all parent tasks in this checkpoint
+    final engineHint = widget.workbench.conceptDraft?.techSpec.join(' ') ??
+        widget.workbench.activeProject?.sections['tech_spec'];
     final howToBlueprints = <TaskHowToBlueprint>[
       for (int tIdx = 0; tIdx < node.checklist.length; tIdx++)
         TaskHowToBlueprint.resolve(
           parentTask: node.checklist[tIdx],
           taskIndex: tIdx,
           checkpointNode: node,
+          engineHint: engineHint,
         ),
     ];
 
@@ -1973,6 +1976,179 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         node.checklist.isNotEmpty ? node.checklist[selectedTaskIdx] : null;
     final selectedHowTo =
         howToBlueprints.isNotEmpty ? howToBlueprints[selectedTaskIdx] : null;
+
+    Future<void> promptEditHowToSubStepDialog(int pIdx, int sIdx) async {
+      if (pIdx < 0 || pIdx >= node.checklist.length) return;
+      final parentTask = node.checklist[pIdx];
+      if (sIdx < 0 || sIdx >= parentTask.children.length) return;
+      final sub = parentTask.children[sIdx];
+      final titleCtrl = TextEditingController(text: sub.text);
+      final instrCtrl = TextEditingController(text: sub.specNotes);
+      final codeCtrl = TextEditingController(text: sub.codeSnippet);
+
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Text(
+            'Edit How-To Sub-Step (${pIdx + 1}.${sIdx + 1})',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: _textPrimary,
+            ),
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  key: const ValueKey('edit_substep_title_input'),
+                  controller: titleCtrl,
+                  style: GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
+                  decoration: InputDecoration(
+                    labelText: 'Sub-step Title',
+                    labelStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      color: _textSecondary,
+                    ),
+                    filled: true,
+                    fillColor: _bgRecessed,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderSubtle),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('edit_substep_instruction_input'),
+                  controller: instrCtrl,
+                  maxLines: 2,
+                  style: GoogleFonts.inter(fontSize: 12, color: _textPrimary),
+                  decoration: InputDecoration(
+                    labelText: 'How-To Instruction',
+                    labelStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      color: _textSecondary,
+                    ),
+                    filled: true,
+                    fillColor: _bgRecessed,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderSubtle),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('edit_substep_code_input'),
+                  controller: codeCtrl,
+                  maxLines: 3,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11.5,
+                    color: AppTheme.accentCyanFor(_isDark),
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Code Formula / Snippet',
+                    labelStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      color: _textSecondary,
+                    ),
+                    filled: true,
+                    fillColor: _bgRecessed,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderSubtle),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (parentTask.children.length > 1)
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop('delete'),
+                child: Text(
+                  'Delete',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _accentCrimson,
+                  ),
+                ),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(fontSize: 12, color: _textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _focalAccent,
+                foregroundColor: _focalAccentFg,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('save'),
+              child: Text(
+                'Save Sub-Step',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || action == null || action == 'cancel') return;
+      setState(() {
+        if (action == 'delete' && parentTask.children.length > 1) {
+          parentTask.children.removeAt(sIdx);
+          parentTask.completed = parentTask.children.isNotEmpty &&
+              parentTask.children.every((c) => c.completed);
+        } else if (action == 'save') {
+          if (titleCtrl.text.trim().isNotEmpty) {
+            sub.text = titleCtrl.text.trim();
+          }
+          sub.specNotes = instrCtrl.text.trim();
+          sub.codeSnippet = codeCtrl.text.trim();
+          sub.codeTargetFile = 'custom_snippet';
+        }
+      });
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
+
+    void addCustomHowToSubStep(int pIdx) {
+      if (pIdx < 0 || pIdx >= node.checklist.length) return;
+      final parentTask = node.checklist[pIdx];
+      final nextSubNum = parentTask.children.length + 1;
+      setState(() {
+        parentTask.children.add(
+          Subtask(
+            id: generateUniqueId('${parentTask.id}_sub$nextSubNum'),
+            text: 'Custom Verification & Tuning Pass',
+            completed: false,
+            specNotes:
+                'Verify custom step ${pIdx + 1}.$nextSubNum in the active scene and confirm smooth frame timing.',
+            codeSnippet: '// Custom verification / formula step ${pIdx + 1}.$nextSubNum',
+            codeTargetFile: 'custom_snippet',
+          ),
+        );
+        parentTask.completed = false;
+        _awaitingPlaytestVerification.remove(node.id);
+      });
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
 
     Color layerBadgeColor(String layerTag) {
       switch (layerTag) {
@@ -2335,7 +2511,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (selectedParentTask != null && selectedHowTo != null) ...[
-            // Right Pane Header: Active Task + Sub-Steps Rollup + Script/Scene Location
+            // Right Pane Header: Active Task + Sub-Steps Rollup + Engine + Script/Scene Location
             Container(
               padding: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
@@ -2350,23 +2526,49 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     alignment: WrapAlignment.spaceBetween,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _accentAmber.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: _accentAmber.withValues(alpha: 0.35),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _accentAmber.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _accentAmber.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              'TASK ${selectedHowTo.numLabel} · ${selectedParentTask.completedChildrenCount}/${selectedParentTask.totalChildrenCount} SUB-STEPS',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: _accentAmber,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          'TASK ${selectedHowTo.numLabel} · ${selectedParentTask.completedChildrenCount}/${selectedParentTask.totalChildrenCount} SUB-STEPS',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: _accentAmber,
+                          Container(
+                            key: ValueKey('howto_engine_badge_${node.id}'),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _accentEmerald.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _accentEmerald.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              selectedHowTo.engineLabel,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
+                                color: _accentEmerald,
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -2399,7 +2601,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            // Checkable Step-by-Step How-To Sub-Steps (Step X.1, X.2, X.3)
+            // Checkable Step-by-Step How-To Sub-Steps (Step X.1, X.2, X.3+)
             for (int subIdx = 0; subIdx < selectedHowTo.subSteps.length; subIdx++)
               Builder(
                 builder: (context) {
@@ -2452,18 +2654,49 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    subStep.stepNumberLabel,
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.3,
-                                      color: subDone
-                                          ? _accentEmerald
-                                          : (isGuardStep
-                                              ? _accentCrimson
-                                              : _accentAmber),
-                                    ),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          subStep.stepNumberLabel,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.3,
+                                            color: subDone
+                                                ? _accentEmerald
+                                                : (isGuardStep
+                                                    ? _accentCrimson
+                                                    : _accentAmber),
+                                          ),
+                                        ),
+                                      ),
+                                      InkWell(
+                                        key: ValueKey(
+                                          'edit_howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
+                                        ),
+                                        onTap: () => promptEditHowToSubStepDialog(
+                                          selectedTaskIdx,
+                                          subIdx,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          child: Text(
+                                            'Edit ✎',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: _textMuted,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
@@ -2662,6 +2895,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   );
                 },
               ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                key: ValueKey('add_howto_substep_btn_$index'),
+                onTap: () => addCustomHowToSubStep(selectedTaskIdx),
+                borderRadius: BorderRadius.circular(5),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    '+ Add How-To Sub-Step (${selectedTaskIdx + 1}.${selectedHowTo.subSteps.length + 1})',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accentAmber,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
           if (scopedItems.isNotEmpty) ...[
             const SizedBox(height: 4),
@@ -3184,8 +3444,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         sb.writeln('- **Edge Guards**: ${edges.join(' · ')}');
       }
       sb.writeln('- **Tasks**:');
-      for (final t in cp.checklist) {
+      for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
+        final t = cp.checklist[tIdx];
         sb.writeln('  - [${t.completed ? "x" : " "}] ${t.text}');
+        for (int sIdx = 0; sIdx < t.children.length; sIdx++) {
+          final sub = t.children[sIdx];
+          sb.writeln(
+            '    - [${sub.completed ? "x" : " "}] **Step ${tIdx + 1}.${sIdx + 1} (${sub.text})**: ${sub.specNotes ?? ""}',
+          );
+          final snippet = sub.codeSnippet?.trim() ?? '';
+          if (snippet.isNotEmpty) {
+            sb.writeln('      `Formula`: `$snippet`');
+          }
+        }
       }
     }
     await Clipboard.setData(ClipboardData(text: sb.toString()));

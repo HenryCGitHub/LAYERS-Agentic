@@ -98,8 +98,19 @@ class FirestoreVaultService {
     }
   }
 
+  /// Fetches saved user settings (`activeDocumentId`, `themeMode`) from Firestore.
+  Future<Map<String, dynamic>?> fetchUserSettings({required String uid}) async {
+    try {
+      final snap = await _firestore.collection('users').doc(uid).get();
+      return snap.data();
+    } catch (e) {
+      debugPrint('Firestore fetchUserSettings error: $e');
+      return null;
+    }
+  }
+
   /// Shares a project with a collaborator via email.
-  Future<void> inviteCollaborator({
+  Future<bool> inviteCollaborator({
     required String projectId,
     required String projectTitle,
     required String ownerEmail,
@@ -108,6 +119,7 @@ class FirestoreVaultService {
   }) async {
     try {
       final cleanEmail = collaboratorEmail.trim().toLowerCase();
+      if (cleanEmail.isEmpty) return false;
       await _firestore
           .collection('collaborations')
           .doc('${projectId}_$cleanEmail')
@@ -119,8 +131,32 @@ class FirestoreVaultService {
         'role': role,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      return true;
     } catch (e) {
       debugPrint('Firestore inviteCollaborator error: $e');
+      return false;
+    }
+  }
+
+  /// Lists collaborators invited to a given project.
+  Future<List<Map<String, String>>> listCollaborators({
+    required String projectId,
+  }) async {
+    try {
+      final snap = await _firestore
+          .collection('collaborations')
+          .where('projectId', isEqualTo: projectId)
+          .get();
+      return [
+        for (final doc in snap.docs)
+          {
+            'email': (doc.data()['collaboratorEmail'] ?? '').toString(),
+            'role': (doc.data()['role'] ?? 'editor').toString(),
+          },
+      ];
+    } catch (e) {
+      debugPrint('Firestore listCollaborators error: $e');
+      return const [];
     }
   }
 }

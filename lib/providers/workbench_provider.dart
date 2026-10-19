@@ -39,6 +39,14 @@ class WorkbenchProvider extends ChangeNotifier {
   String? get userEmail => _authService.currentUser?.email;
   String? get userDisplayName => _authService.currentUser?.displayName;
   String? get authLastError => _authService.lastError;
+  DateTime? _lastCloudSyncAt;
+  DateTime? get lastCloudSyncAt => _lastCloudSyncAt;
+  final Map<String, List<Map<String, String>>> _projectCollaborators = {};
+
+  List<Map<String, String>> collaboratorsForProject(String? projectId) {
+    if (projectId == null) return const [];
+    return List.unmodifiable(_projectCollaborators[projectId] ?? const []);
+  }
 
   WorkbenchProvider({this.enableAutoLoad = false}) {
     _authService.addListener(_onAuthStateChanged);
@@ -58,20 +66,52 @@ class WorkbenchProvider extends ChangeNotifier {
     final user = _authService.currentUser;
     if (user != null) {
       _isCloudSynced = true;
+      _lastCloudSyncAt = DateTime.now();
+      bool initialLocalPushDone = false;
       // Push any existing local documents up to Firestore on login
-      for (final doc in documents.values) {
-        _firestoreService.saveDocument(uid: user.uid, doc: doc);
-      }
+      Future.wait([
+        for (final doc in documents.values)
+          _firestoreService.saveDocument(uid: user.uid, doc: doc),
+      ]).then((_) {
+        initialLocalPushDone = true;
+      });
       if (_activeProjectId != null) {
         _firestoreService.saveSettings(
           uid: user.uid,
-          settings: {'activeDocumentId': _activeProjectId},
+          settings: {
+            'activeDocumentId': _activeProjectId,
+            'themeMode': _isDark ? 'dark' : 'light',
+          },
         );
+      } else {
+        _firestoreService.fetchUserSettings(uid: user.uid).then((remoteSettings) {
+          if (remoteSettings == null) return;
+          final remoteTheme = remoteSettings['themeMode']?.toString();
+          if (remoteTheme != null) {
+            _isDark = remoteTheme != 'light';
+          }
+          final remoteActiveId = remoteSettings['activeDocumentId']?.toString();
+          if (remoteActiveId != null && documents.containsKey(remoteActiveId)) {
+            _restoreProjectState(remoteActiveId);
+          }
+          notifyListeners();
+        });
       }
       _firestoreService.startRealtimeSync(
         uid: user.uid,
         onSync: (remoteDocs) {
-          if (remoteDocs.isEmpty) return;
+          _lastCloudSyncAt = DateTime.now();
+          if (remoteDocs.isEmpty && !initialLocalPushDone) return;
+          // Reconcile remote deletions once initial local push has finished
+          if (initialLocalPushDone && remoteDocs.isNotEmpty) {
+            final removedIds = documents.keys
+                .where((localId) => !remoteDocs.containsKey(localId))
+                .toList();
+            for (final removedId in removedIds) {
+              documents.remove(removedId);
+              LocalVaultService.deleteDocument(removedId);
+            }
+          }
           for (final entry in remoteDocs.entries) {
             documents[entry.key] = entry.value;
             LocalVaultService.saveDocument(entry.value);
@@ -92,6 +132,50 @@ class WorkbenchProvider extends ChangeNotifier {
       _firestoreService.stopRealtimeSync();
     }
     notifyListeners();
+  }
+
+  /// Manually pushes all current local documents and settings to Cloud Firestore.
+  Future<void> syncNowWithCloud() async {
+    final user = _authService.currentUser;
+    for (final doc in documents.values) {
+      await LocalVaultService.saveDocument(doc);
+      if (user != null) {
+        await _firestoreService.saveDocument(uid: user.uid, doc: doc);
+      }
+    }
+    _persistSettings();
+    _lastCloudSyncAt = DateTime.now();
+    notifyListeners();
+  }
+
+  /// Invites a collaborator by email (`editor` or `viewer`) to the active project and persists to Firestore.
+  Future<bool> inviteProjectCollaborator({
+    required String collaboratorEmail,
+    String role = 'editor',
+  }) async {
+    final proj = activeProject;
+    final cleanEmail = collaboratorEmail.trim().toLowerCase();
+    if (proj == null || cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      return false;
+    }
+    final list = _projectCollaborators.putIfAbsent(proj.id, () => []);
+    list.removeWhere((c) => c['email'] == cleanEmail);
+    list.add({'email': cleanEmail, 'role': role});
+    proj.sections['collaborators_json'] = jsonEncode(list);
+    _persistDocument(proj);
+
+    final user = _authService.currentUser;
+    if (user != null) {
+      await _firestoreService.inviteCollaborator(
+        projectId: proj.id,
+        projectTitle: proj.title,
+        ownerEmail: user.email ?? 'owner',
+        collaboratorEmail: cleanEmail,
+        role: role,
+      );
+    }
+    notifyListeners();
+    return true;
   }
 
   Future<bool> signInWithGoogle() async {
@@ -192,12 +276,13 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Duplicates an existing project (including its Concept Blueprint and Release Blueprint) and switches to the copy.
+  /// Deep-clones an existing project across all 4 tiers (Project -> Release -> Beat -> Feature)
+  /// including all Checkpoints and How-To Sub-Steps, persists to LocalStorage & Firestore, and switches to the copy.
   String? duplicateProject(String projectId) {
     final src = documents[projectId];
     if (src == null) return null;
 
-    final newId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    final newId = 'proj_${DateTime.now().microsecondsSinceEpoch}';
     final copyTitle = '${src.title} (Copy)';
     final copiedSections = Map<String, String>.from(src.sections);
 
@@ -213,15 +298,54 @@ class WorkbenchProvider extends ChangeNotifier {
     }
 
     final newReleaseIds = <String>[];
-    for (int i = 0; i < src.childrenIds.length; i++) {
-      final oldRel = documents[src.childrenIds[i]];
+    String? mappedActiveReleaseId;
+    for (int rIdx = 0; rIdx < src.childrenIds.length; rIdx++) {
+      final oldRelId = src.childrenIds[rIdx];
+      final oldRel = documents[oldRelId];
       if (oldRel == null) continue;
-      final newRelId = '${newId}_rel_v0_${i + 1}';
-      final newRelDoc = TierDocument(
+      final newRelId = '${newId}_rel_${rIdx + 1}';
+      if (copiedSections['active_release_id'] == oldRelId) {
+        mappedActiveReleaseId = newRelId;
+      }
+
+      // Deep-clone Tier 3 Beats and Tier 4 Features under this Release
+      final newBeatIds = <String>[];
+      for (int bIdx = 0; bIdx < oldRel.childrenIds.length; bIdx++) {
+        final oldBeat = documents[oldRel.childrenIds[bIdx]];
+        if (oldBeat == null) continue;
+        final newBeatId = '${newRelId}_beat_${bIdx + 1}';
+
+        final newFeatIds = <String>[];
+        for (int fIdx = 0; fIdx < oldBeat.childrenIds.length; fIdx++) {
+          final oldFeat = documents[oldBeat.childrenIds[fIdx]];
+          if (oldFeat == null) continue;
+          final newFeatId = '${newBeatId}_feat_${fIdx + 1}';
+          final clonedFeat = oldFeat.copyWith(
+            id: newFeatId,
+            parentId: newBeatId,
+            sections: Map<String, String>.from(oldFeat.sections),
+            subtasks: oldFeat.subtasks.map((st) => st.copyWith()).toList(),
+          );
+          documents[newFeatId] = clonedFeat;
+          _persistDocument(clonedFeat);
+          newFeatIds.add(newFeatId);
+        }
+
+        final newBeatDoc = oldBeat.copyWith(
+          id: newBeatId,
+          parentId: newRelId,
+          childrenIds: newFeatIds,
+          sections: Map<String, String>.from(oldBeat.sections),
+        );
+        documents[newBeatId] = newBeatDoc;
+        _persistDocument(newBeatDoc);
+        newBeatIds.add(newBeatId);
+      }
+
+      final newRelDoc = oldRel.copyWith(
         id: newRelId,
-        title: oldRel.title,
-        tier: TierType.release,
         parentId: newId,
+        childrenIds: newBeatIds,
         sections: Map<String, String>.from(oldRel.sections),
       );
       documents[newRelId] = newRelDoc;
@@ -230,7 +354,8 @@ class WorkbenchProvider extends ChangeNotifier {
     }
 
     if (newReleaseIds.isNotEmpty) {
-      copiedSections['active_release_id'] = newReleaseIds.first;
+      copiedSections['active_release_id'] =
+          mappedActiveReleaseId ?? newReleaseIds.first;
     }
 
     final copyDoc = TierDocument(
@@ -291,6 +416,22 @@ class WorkbenchProvider extends ChangeNotifier {
     final proj = documents[projectId];
     if (proj == null) return;
     _activeProjectId = projectId;
+
+    // Restore Collaborators
+    final rawCollabs = proj.sections['collaborators_json'];
+    if (rawCollabs != null && rawCollabs.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawCollabs) as List<dynamic>;
+        _projectCollaborators[projectId] = [
+          for (final item in decoded)
+            if (item is Map)
+              {
+                'email': (item['email'] ?? '').toString(),
+                'role': (item['role'] ?? 'editor').toString(),
+              },
+        ];
+      } catch (_) {}
+    }
 
     // Restore Concept Blueprint
     final rawConcept = proj.sections['concept_blueprint_json'];

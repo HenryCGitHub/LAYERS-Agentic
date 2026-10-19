@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/main.dart';
+import 'package:layers_agentic/models/feature_state.dart';
+import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 
 void main() {
@@ -206,6 +208,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.textContaining('1/3 steps'), findsOneWidget);
 
+        // Verify "+ Add How-To Sub-Step" appends a 4th checkable sub-step to Task 01
+        final addSubStepBtn = find.byKey(const ValueKey('add_howto_substep_btn_0'));
+        await tester.ensureVisible(addSubStepBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(addSubStepBtn);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('1/4 steps'), findsOneWidget);
+
         // Verify interactive Out-of-Scope shelf toggle
         expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsNothing);
         final outBtn = find.byKey(const ValueKey('feat_out_of_scope_btn'));
@@ -274,7 +284,6 @@ void main() {
         expect(b1f1.lifecycle.name, 'upgrade');
         expect(b1f1.activeDeltaHours, 4);
         expect(b1f2.lifecycle.name, 'stable');
-        expect(b1f2.lifecycle.name, 'stable');
         expect(b1f2.activeDeltaHours, 0);
 
         // Execute v0.2 and verify v0.1 checkpoints are preserved + v0.2 checkpoint is appended
@@ -285,7 +294,7 @@ void main() {
     );
 
     test(
-      'Blueprint JSON serialization & Multi-Project Vault Manager (Switch, Rename, Duplicate, Delete) preserve Stage 1, 2, and 3 state',
+      'Blueprint JSON serialization & Multi-Project Vault Manager (Switch, Rename, Deep 4-Tier Duplicate, Collaborators, Delete) preserve Stage 1, 2, and 3 state',
       () async {
         final provider = WorkbenchProvider();
         await provider.startConceptInterview('Tactical Mecha Extraction Shooter');
@@ -293,19 +302,36 @@ void main() {
         await provider.approveAndExecuteReleasePlan();
 
         final proj1Id = provider.activeProjectId!;
+        final origBeatsCount = provider.activeReleaseBeats.length;
         expect(provider.savedProjects.length, 1);
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
+
+        // Invite collaborator on Project 1
+        final invited = await provider.inviteProjectCollaborator(
+          collaboratorEmail: 'teammate@studio.dev',
+        );
+        expect(invited, isTrue);
+        expect(
+          provider.collaboratorsForProject(proj1Id).map((c) => c['email']),
+          contains('teammate@studio.dev'),
+        );
 
         // Rename Project 1
         provider.renameProject(proj1Id, 'Mecha Drop v1');
         expect(provider.documents[proj1Id]!.title, 'Mecha Drop v1');
 
-        // Duplicate Project 1
+        // Deep 4-Tier Duplicate Project 1 (Project -> Release -> Beat -> Feature + Checkpoints)
         final dupId = provider.duplicateProject(proj1Id);
         expect(dupId, isNotNull);
         expect(provider.savedProjects.length, 2);
         expect(provider.activeProjectId, dupId);
         expect(provider.documents[dupId!]!.title, 'Mecha Drop v1 (Copy)');
+        expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
+        expect(provider.activeReleaseBeats.length, origBeatsCount);
+        expect(
+          provider.featuresForBeat(provider.activeReleaseBeats.first.id),
+          isNotEmpty,
+        );
 
         // Create a third project via createNewProject()
         provider.createNewProject();
@@ -331,6 +357,67 @@ void main() {
         // Delete Project 3
         provider.deleteProject(proj3Id);
         expect(provider.savedProjects.length, 1);
+      },
+    );
+
+    test(
+      'Engine-Aware TaskHowToBlueprint.resolve adapts whereLocation and code formulas for Godot 4, Unity C#, and Unreal 5',
+      () {
+        final cp = FeatureStateNode(
+          id: 'cp_test',
+          name: 'Stage 1: Greybox Core Loop',
+          trigger: 'Verify movement and dash in arena.',
+          tuningParams: const ['move_speed: 240 px/s', 'dash_cooldown: 0.4 s'],
+          edgeCases: const ['[GUARD] Ignore dash input while airborne'],
+        );
+
+        final godotTask = Subtask(
+          id: 't_godot',
+          text: 'Bind WASD movement and dash physics velocity',
+          completed: false,
+        );
+        final godotBp = TaskHowToBlueprint.resolve(
+          parentTask: godotTask,
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Godot 4.3 GDScript 2D',
+        );
+        expect(godotBp.engineLabel, 'GODOT 4');
+        expect(godotBp.whereLocation, contains('_physics_process'));
+        expect(godotBp.subSteps[0].codeFormula, contains('Input.is_action_pressed'));
+        expect(godotBp.subSteps[1].codeFormula, contains('move_toward'));
+
+        final unityTask = Subtask(
+          id: 't_unity',
+          text: 'Bind WASD movement and dash physics velocity',
+          completed: false,
+        );
+        final unityBp = TaskHowToBlueprint.resolve(
+          parentTask: unityTask,
+          taskIndex: 1,
+          checkpointNode: cp,
+          engineHint: 'Unity 6 C# URP',
+        );
+        expect(unityBp.engineLabel, 'UNITY C#');
+        expect(unityBp.whereLocation, contains('MonoBehaviour'));
+        expect(unityBp.subSteps[0].codeFormula, contains('Input.GetButton'));
+        expect(unityBp.subSteps[1].codeFormula, contains('Time.fixedDeltaTime'));
+
+        final unrealTask = Subtask(
+          id: 't_unreal',
+          text: 'Bind WASD movement and dash physics velocity',
+          completed: false,
+        );
+        final unrealBp = TaskHowToBlueprint.resolve(
+          parentTask: unrealTask,
+          taskIndex: 1,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+        );
+        expect(unrealBp.engineLabel, 'UNREAL 5');
+        expect(unrealBp.whereLocation, contains('ActorComponent'));
+        expect(unrealBp.subSteps[0].codeFormula, contains('EMechanicState::Active'));
+        expect(unrealBp.subSteps[1].codeFormula, contains('FMath::FInterpConstantTo'));
       },
     );
   });

@@ -551,6 +551,9 @@ class WorkbenchShell extends StatelessWidget {
     final accentEmerald = AppTheme.accentGreenFor(isDark);
     final accentAmber = AppTheme.accentAmberFor(isDark);
 
+    final collabEmailCtrl = TextEditingController();
+    String selectedCollabRole = 'editor';
+
     showDialog<void>(
       context: context,
       builder: (ctx) {
@@ -558,6 +561,8 @@ class WorkbenchShell extends StatelessWidget {
           builder: (ctx, setModalState) {
             final isSynced = workbench.isCloudSynced;
             final projs = workbench.savedProjects;
+            final activeProj = workbench.activeProject;
+            final collabs = workbench.collaboratorsForProject(activeProj?.id);
             return AlertDialog(
               backgroundColor: bgSurface,
               shape: RoundedRectangleBorder(
@@ -565,99 +570,309 @@ class WorkbenchShell extends StatelessWidget {
                 side: BorderSide(color: borderBright),
               ),
               title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    isSynced ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
-                    size: 18,
-                    color: isSynced ? accentEmerald : accentCyan,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Firebase Cloud Sync & Local Vault',
-                    style: AppTheme.displayFont(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 440,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: bgRecessed,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isSynced
-                              ? accentEmerald.withValues(alpha: 0.45)
-                              : borderSubtle,
+                  Row(
+                    children: [
+                      Icon(
+                        isSynced ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
+                        size: 18,
+                        color: isSynced ? accentEmerald : accentCyan,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Firebase Cloud Sync & Local Vault',
+                        style: AppTheme.displayFont(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
                         ),
                       ),
+                    ],
+                  ),
+                  InkWell(
+                    key: const ValueKey('cloud_sync_now_btn'),
+                    onTap: () async {
+                      await workbench.syncNowWithCloud();
+                      setModalState(() {});
+                    },
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: bgRecessed,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: borderSubtle),
+                      ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isSynced ? accentEmerald : accentAmber,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  isSynced
-                                      ? 'Cloud Firestore Connected (${workbench.userEmail ?? "Google Account"})'
-                                      : 'Local Vault Active · Cloud Sync Offline',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  isSynced
-                                      ? 'All Stage 1 Concepts, Stage 2 Release Plans, and Stage 3 Checkpoints sync live to Firebase project layers-b8a16.'
-                                      : 'Every change is automatically saved to browser local storage. Sign in with Google to sync across devices via Cloud Firestore.',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11.5,
-                                    height: 1.4,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              ],
+                          Icon(Icons.sync_rounded, size: 12, color: accentCyan),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Sync Now',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: accentCyan,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    if (workbench.authLastError != null &&
-                        workbench.authLastError!.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        workbench.authLastError!,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          color: accentAmber,
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 460,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isSynced
+                                ? accentEmerald.withValues(alpha: 0.45)
+                                : borderSubtle,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSynced ? accentEmerald : accentAmber,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isSynced
+                                        ? 'Cloud Firestore Connected (${workbench.userEmail ?? "Google Account"})'
+                                        : 'Local Vault Active · Cloud Sync Offline',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    isSynced
+                                        ? 'All Stage 1 Concepts, Stage 2 Release Plans, and Stage 3 Checkpoints sync live to Firebase project layers-b8a16.'
+                                        : 'Every change is automatically saved to browser local storage. Sign in with Google to sync across devices via Cloud Firestore.',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      height: 1.4,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 14),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                      if (workbench.authLastError != null &&
+                          workbench.authLastError!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
                         Text(
-                          'SAVED PROJECTS IN VAULT (${projs.length})',
+                          workbench.authLastError!,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            color: accentAmber,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'SAVED PROJECTS IN VAULT (${projs.length})',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              color: textMuted,
+                            ),
+                          ),
+                          InkWell(
+                            key: const ValueKey('vault_new_project_btn'),
+                            onTap: () {
+                              workbench.createNewProject();
+                              Navigator.of(ctx).pop();
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              child: Text(
+                                '+ New Spark',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: accentEmerald,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (projs.isEmpty)
+                        Text(
+                          'No saved projects yet — pick a Spark card or type an idea to start.',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: textSecondary),
+                        )
+                      else
+                        for (final p in projs.take(6))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: p.id == workbench.activeProjectId
+                                  ? bgRecessed
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: p.id == workbench.activeProjectId
+                                    ? borderBright
+                                    : borderSubtle,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  p.id == workbench.activeProjectId
+                                      ? Icons.check_circle_rounded
+                                      : Icons.folder_outlined,
+                                  size: 13,
+                                  color: p.id == workbench.activeProjectId
+                                      ? accentEmerald
+                                      : textMuted,
+                                ),
+                                const SizedBox(width: 7),
+                                Expanded(
+                                  child: InkWell(
+                                    key: ValueKey('vault_switch_${p.id}'),
+                                    onTap: () {
+                                      workbench.switchProject(p.id);
+                                      setModalState(() {});
+                                    },
+                                    child: Text(
+                                      p.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: p.id == workbench.activeProjectId
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Tooltip(
+                                  message: 'Rename Project',
+                                  child: InkWell(
+                                    key: ValueKey('vault_rename_${p.id}'),
+                                    onTap: () async {
+                                      final ctrl = TextEditingController(text: p.title);
+                                      final newTitle = await showDialog<String>(
+                                        context: ctx,
+                                        builder: (rCtx) => AlertDialog(
+                                          backgroundColor: bgSurface,
+                                          title: Text(
+                                            'Rename Project',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: textPrimary,
+                                            ),
+                                          ),
+                                          content: TextField(
+                                            controller: ctrl,
+                                            autofocus: true,
+                                            style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                                            onSubmitted: (val) => Navigator.of(rCtx).pop(val),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.of(rCtx).pop(),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
+                                              child: const Text('Save'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (newTitle != null && newTitle.trim().isNotEmpty) {
+                                        workbench.renameProject(p.id, newTitle.trim());
+                                        setModalState(() {});
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Icon(Icons.edit_outlined, size: 13, color: textSecondary),
+                                    ),
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: 'Duplicate Project',
+                                  child: InkWell(
+                                    key: ValueKey('vault_duplicate_${p.id}'),
+                                    onTap: () {
+                                      workbench.duplicateProject(p.id);
+                                      setModalState(() {});
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Icon(Icons.copy_all_rounded, size: 13, color: accentCyan),
+                                    ),
+                                  ),
+                                ),
+                                Tooltip(
+                                  message: 'Delete Project',
+                                  child: InkWell(
+                                    key: ValueKey('vault_delete_${p.id}'),
+                                    onTap: () {
+                                      workbench.deleteProject(p.id);
+                                      setModalState(() {});
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 13,
+                                        color: AppTheme.accentRedFor(isDark),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      if (activeProj != null) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          'SHARE ACTIVE PROJECT (${activeProj.title.toUpperCase()})',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -665,169 +880,115 @@ class WorkbenchShell extends StatelessWidget {
                             color: textMuted,
                           ),
                         ),
-                        InkWell(
-                          key: const ValueKey('vault_new_project_btn'),
-                          onTap: () {
-                            workbench.createNewProject();
-                            Navigator.of(ctx).pop();
-                          },
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            child: Text(
-                              '+ New Spark',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: accentEmerald,
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                key: const ValueKey('invite_collaborator_email_input'),
+                                controller: collabEmailCtrl,
+                                style: GoogleFonts.inter(fontSize: 12, color: textPrimary),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: bgRecessed,
+                                  hintText: 'Teammate email (e.g., dev@studio.io)...',
+                                  hintStyle: GoogleFonts.inter(fontSize: 11.5, color: textMuted),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 9,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(5),
+                                    borderSide: BorderSide(color: borderSubtle),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              onTap: () {
+                                setModalState(() {
+                                  selectedCollabRole =
+                                      selectedCollabRole == 'editor' ? 'viewer' : 'editor';
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(5),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: bgRecessed,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(color: borderSubtle),
+                                ),
+                                child: Text(
+                                  selectedCollabRole.toUpperCase(),
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentAmber,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            ElevatedButton(
+                              key: const ValueKey('invite_collaborator_btn'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: accentEmerald,
+                                foregroundColor: Colors.black,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                minimumSize: Size.zero,
+                              ),
+                              onPressed: () async {
+                                final ok = await workbench.inviteProjectCollaborator(
+                                  collaboratorEmail: collabEmailCtrl.text,
+                                  role: selectedCollabRole,
+                                );
+                                if (ok) {
+                                  collabEmailCtrl.clear();
+                                  setModalState(() {});
+                                }
+                              },
+                              child: Text(
+                                'Invite',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    if (projs.isEmpty)
-                      Text(
-                        'No saved projects yet — pick a Spark card or type an idea to start.',
-                        style: GoogleFonts.inter(fontSize: 11.5, color: textSecondary),
-                      )
-                    else
-                      for (final p in projs.take(6))
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 5),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: p.id == workbench.activeProjectId
-                                ? bgRecessed
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                              color: p.id == workbench.activeProjectId
-                                  ? borderBright
-                                  : borderSubtle,
-                            ),
-                          ),
-                          child: Row(
+                        if (collabs.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
                             children: [
-                              Icon(
-                                p.id == workbench.activeProjectId
-                                    ? Icons.check_circle_rounded
-                                    : Icons.folder_outlined,
-                                size: 13,
-                                color: p.id == workbench.activeProjectId
-                                    ? accentEmerald
-                                    : textMuted,
-                              ),
-                              const SizedBox(width: 7),
-                              Expanded(
-                                child: InkWell(
-                                  key: ValueKey('vault_switch_${p.id}'),
-                                  onTap: () {
-                                    workbench.switchProject(p.id);
-                                    setModalState(() {});
-                                  },
+                              for (final c in collabs)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: bgRecessed,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: borderSubtle),
+                                  ),
                                   child: Text(
-                                    p.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: p.id == workbench.activeProjectId
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: textPrimary,
+                                    '👤 ${c['email']} (${c['role']})',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      color: textSecondary,
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              Tooltip(
-                                message: 'Rename Project',
-                                child: InkWell(
-                                  key: ValueKey('vault_rename_${p.id}'),
-                                  onTap: () async {
-                                    final ctrl = TextEditingController(text: p.title);
-                                    final newTitle = await showDialog<String>(
-                                      context: ctx,
-                                      builder: (rCtx) => AlertDialog(
-                                        backgroundColor: bgSurface,
-                                        title: Text(
-                                          'Rename Project',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            color: textPrimary,
-                                          ),
-                                        ),
-                                        content: TextField(
-                                          controller: ctrl,
-                                          autofocus: true,
-                                          style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
-                                          onSubmitted: (val) => Navigator.of(rCtx).pop(val),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.of(rCtx).pop(),
-                                            child: const Text('Cancel'),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
-                                            child: const Text('Save'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                    if (newTitle != null && newTitle.trim().isNotEmpty) {
-                                      workbench.renameProject(p.id, newTitle.trim());
-                                      setModalState(() {});
-                                    }
-                                  },
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4),
-                                    child: Icon(Icons.edit_outlined, size: 13, color: textSecondary),
-                                  ),
-                                ),
-                              ),
-                              Tooltip(
-                                message: 'Duplicate Project',
-                                child: InkWell(
-                                  key: ValueKey('vault_duplicate_${p.id}'),
-                                  onTap: () {
-                                    workbench.duplicateProject(p.id);
-                                    setModalState(() {});
-                                  },
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4),
-                                    child: Icon(Icons.copy_all_rounded, size: 13, color: accentCyan),
-                                  ),
-                                ),
-                              ),
-                              Tooltip(
-                                message: 'Delete Project',
-                                child: InkWell(
-                                  key: ValueKey('vault_delete_${p.id}'),
-                                  onTap: () {
-                                    workbench.deleteProject(p.id);
-                                    setModalState(() {});
-                                  },
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4),
-                                    child: Icon(
-                                      Icons.delete_outline_rounded,
-                                      size: 13,
-                                      color: AppTheme.accentRedFor(isDark),
-                                    ),
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
-                        ),
-                  ],
+                        ],
+                      ],
+                    ],
+                  ),
                 ),
               ),
               actions: [

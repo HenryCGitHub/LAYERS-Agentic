@@ -1261,14 +1261,15 @@ class TaskHowToSubStep {
 }
 
 /// Resolves and persists the structured Parent Task metadata (`numLabel`, `layerTag`,
-/// `cleanTitle`, `durationChip`, `whereLocation`) and ensures each Parent Task has
-/// 3 checkable `How-To` sub-steps (`Subtask.children`) with automatic rollup.
+/// `cleanTitle`, `durationChip`, `whereLocation`, `engineLabel`) and ensures each Parent Task has
+/// 3 checkable `How-To` sub-steps (`Subtask.children`) with automatic rollup and engine-aware code formulas.
 class TaskHowToBlueprint {
   final String numLabel;      // "01", "02", ...
   final String layerTag;      // "INPUT", "PHYSICS", "STATE", "FEEL", "UI"
   final String cleanTitle;    // Task title without trailing "(2h)"
   final String durationChip;  // Extracted "2h" or "1h"
   final String whereLocation; // e.g. "Script: PlayerController._physics_process(delta)"
+  final String engineLabel;   // "GODOT 4", "UNITY C#", "UNREAL 5"
   final List<TaskHowToSubStep> subSteps;
 
   const TaskHowToBlueprint({
@@ -1277,11 +1278,23 @@ class TaskHowToBlueprint {
     required this.cleanTitle,
     required this.durationChip,
     required this.whereLocation,
+    required this.engineLabel,
     required this.subSteps,
   });
 
   static final RegExp _trailingDurationRe =
       RegExp(r'\s*\(([\d\.]+\s*[hm])\)\s*$', caseSensitive: false);
+
+  static String detectEngineLabel(String? engineHint) {
+    final lower = (engineHint ?? '').toLowerCase();
+    if (lower.contains('unity') || lower.contains('c#')) {
+      return 'UNITY C#';
+    }
+    if (lower.contains('unreal') || lower.contains('ue5') || lower.contains('c++')) {
+      return 'UNREAL 5';
+    }
+    return 'GODOT 4';
+  }
 
   static String extractCleanTitle(String rawText) {
     var cleaned = rawText.replaceAll(_trailingDurationRe, '').trim();
@@ -1346,7 +1359,39 @@ class TaskHowToBlueprint {
     return taskIdx == 0 ? 'STATE' : (taskIdx == 1 ? 'FEEL' : 'LOGIC');
   }
 
-  static String inferWhereLocation(String cleanTitle, String layerTag) {
+  static String inferWhereLocation(
+    String cleanTitle,
+    String layerTag, {
+    String engineLabel = 'GODOT 4',
+  }) {
+    if (engineLabel == 'UNITY C#') {
+      switch (layerTag) {
+        case 'INPUT':
+          return 'MonoBehaviour: PlayerInputController.Update()';
+        case 'PHYSICS':
+          return 'MonoBehaviour: MechanicController.FixedUpdate()';
+        case 'FEEL':
+          return 'MonoBehaviour: FeedbackPresenter.LateUpdate()';
+        case 'UI / HUD':
+          return 'MonoBehaviour: GameHudOverlay.RefreshReadout()';
+        default:
+          return 'MonoBehaviour: CoreLoopStateController.FixedUpdate()';
+      }
+    }
+    if (engineLabel == 'UNREAL 5') {
+      switch (layerTag) {
+        case 'INPUT':
+          return 'ActorComponent: UPlayerInputComp::SetupPlayerInputComponent()';
+        case 'PHYSICS':
+          return 'ActorComponent: UMechanicComponent::TickComponent(DeltaTime)';
+        case 'FEEL':
+          return 'ActorComponent: UFeedbackPresenter::TriggerFeelCue()';
+        case 'UI / HUD':
+          return 'UserWidget: UGameHudWidget::UpdateStateReadout()';
+        default:
+          return 'ActorComponent: UCoreLoopStateComp::TickComponent(DeltaTime)';
+      }
+    }
     switch (layerTag) {
       case 'INPUT':
         return 'Script: PlayerController._unhandled_input(event)';
@@ -1361,22 +1406,26 @@ class TaskHowToBlueprint {
     }
   }
 
-  /// Guarantees that `parentTask.children` contains 3 concrete, checkable "How-To" sub-steps
+  /// Guarantees that `parentTask.children` contains concrete, checkable "How-To" sub-steps
   /// (Step X.1 Setup/Input, Step X.2 Core Logic + Variables, Step X.3 Edge-Case Guard Check)
-  /// and returns the resolved [TaskHowToBlueprint].
+  /// adapted to `engineHint` (`GODOT 4`, `UNITY C#`, `UNREAL 5`) and returns the resolved [TaskHowToBlueprint].
   static TaskHowToBlueprint resolve({
     required Subtask parentTask,
     required int taskIndex,
     required FeatureStateNode checkpointNode,
+    String? engineHint,
   }) {
     final taskNum = taskIndex + 1;
     final numLabel = taskNum.toString().padLeft(2, '0');
     final cleanTitle = extractCleanTitle(parentTask.text);
     final durationChip = extractDurationChip(parentTask.text);
     final layerTag = inferLayerTag(parentTask.text, taskIndex);
-    final whereLocation = parentTask.codeTargetFile?.trim().isNotEmpty == true
-        ? parentTask.codeTargetFile!.trim()
-        : inferWhereLocation(cleanTitle, layerTag);
+    final engineLabel = detectEngineLabel(engineHint);
+    final whereLocation = inferWhereLocation(
+      cleanTitle,
+      layerTag,
+      engineLabel: engineLabel,
+    );
 
     final primaryVar = checkpointNode.tuningParams.isNotEmpty
         ? checkpointNode.tuningParams[taskIndex % checkpointNode.tuningParams.length]
@@ -1386,17 +1435,80 @@ class TaskHowToBlueprint {
         ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
         : '[STATE GUARD] Prevent duplicate trigger while active';
 
+    String buildEngineSnippet({
+      required int stepIdx,
+      required bool isFeelOrUi,
+    }) {
+      if (engineLabel == 'UNITY C#') {
+        if (isFeelOrUi) {
+          if (stepIdx == 0) {
+            return 'mechanicController.OnStateChanged += HandleMechanicStateChanged;';
+          } else if (stepIdx == 1) {
+            return 'hudIndicator.SetActive(true);\nfeedbackSource.PlayOneShot(cueClip, $primaryVarName);';
+          } else {
+            return 'if (!isStateActive) { hudIndicator.ResetCleanly(); return; } // Guard: $primaryGuard';
+          }
+        } else {
+          if (stepIdx == 0) {
+            return 'if (Input.GetButton("Fire1") && CanEnterState()) {\n    activeState = MechanicState.Active;\n}';
+          } else if (stepIdx == 1) {
+            return 'currentVal = Mathf.MoveTowards(currentVal, targetVal, $primaryVarName * Time.fixedDeltaTime);\nApplyMechanicStep(currentVal);';
+          } else {
+            return 'if (IsBoundaryBlocked() || cooldownTimer > 0f) return; // Guard: $primaryGuard';
+          }
+        }
+      }
+      if (engineLabel == 'UNREAL 5') {
+        if (isFeelOrUi) {
+          if (stepIdx == 0) {
+            return 'MechanicComp->OnStateChanged.AddDynamic(this, &UFeedbackPresenter::OnMechanicStateChanged);';
+          } else if (stepIdx == 1) {
+            return 'HudWidget->SetIndicatorActive(true);\nUGameplayStatics::PlaySound2D(this, CueSound, $primaryVarName);';
+          } else {
+            return 'if (!bIsStateActive) { HudWidget->ResetCleanly(); return; } // Guard: $primaryGuard';
+          }
+        } else {
+          if (stepIdx == 0) {
+            return 'if (bInputPressed && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n}';
+          } else if (stepIdx == 1) {
+            return 'CurrentVal = FMath::FInterpConstantTo(CurrentVal, TargetVal, DeltaTime, $primaryVarName);\nApplyMechanicStep(CurrentVal);';
+          } else {
+            return 'if (IsBoundaryBlocked() || CooldownTimer > 0.f) return; // Guard: $primaryGuard';
+          }
+        }
+      }
+      // Default: GODOT 4 (GDScript)
+      if (isFeelOrUi) {
+        if (stepIdx == 0) {
+          return 'mechanicController.state_changed.connect(_on_mechanic_state_changed)';
+        } else if (stepIdx == 1) {
+          return 'hudIndicator.set_active(true)\nfeedbackPlayer.play_cue(intensity = $primaryVarName)';
+        } else {
+          return 'if not is_state_active:\n    hudIndicator.reset_cleanly() // Guard: $primaryGuard';
+        }
+      } else {
+        if (stepIdx == 0) {
+          return 'if Input.is_action_pressed("primary_action") and can_enter_state():\n    activeState = State.ACTIVE';
+        } else if (stepIdx == 1) {
+          return 'currentValue = move_toward(currentValue, targetValue, $primaryVarName * delta)\napply_mechanic_step(currentValue)';
+        } else {
+          return 'if is_boundary_blocked() or cooldownTimer > 0.0:\n    return // Guard: $primaryGuard';
+        }
+      }
+    }
+
+    final isFeelOrUi = layerTag == 'FEEL' || layerTag == 'UI / HUD';
+
     if (parentTask.children.isEmpty) {
       final isParentCompleted = parentTask.completed;
-      if (layerTag == 'FEEL' || layerTag == 'UI / HUD') {
+      if (isFeelOrUi) {
         parentTask.children = [
           Subtask(
             id: '${parentTask.id}_sub_1',
             text: 'STEP $taskNum.1 · BIND STATE CHANGE SIGNAL TO VISUAL/AUDIO PRESENTER',
             specNotes:
                 'Subscribe your HUD/VFX presenter node to the mechanic state signal so feedback triggers on transition for $cleanTitle:',
-            codeSnippet:
-                'mechanicController.state_changed.connect(_on_mechanic_state_changed)',
+            codeSnippet: buildEngineSnippet(stepIdx: 0, isFeelOrUi: true),
             completed: isParentCompleted,
           ),
           Subtask(
@@ -1404,8 +1516,7 @@ class TaskHowToBlueprint {
             text: 'STEP $taskNum.2 · TRIGGER ON-SCREEN FEEDBACK & APPLY TUNING PARAMETER',
             specNotes:
                 'Update the active on-screen indicator, camera/animation response, and audio cue scaled by $primaryVarName:',
-            codeSnippet:
-                'hudIndicator.set_active(true)\nfeedbackPlayer.play_cue(intensity = $primaryVarName)',
+            codeSnippet: buildEngineSnippet(stepIdx: 1, isFeelOrUi: true),
             completed: isParentCompleted,
           ),
           Subtask(
@@ -1413,8 +1524,7 @@ class TaskHowToBlueprint {
             text: 'STEP $taskNum.3 · ENFORCE CLEANUP & TRANSITION GUARD',
             specNotes:
                 'Immediately clear active visual/audio effects on state exit or reset to satisfy "$primaryGuard":',
-            codeSnippet:
-                'if not is_state_active:\n    hudIndicator.reset_cleanly() // Guard cleanup',
+            codeSnippet: buildEngineSnippet(stepIdx: 2, isFeelOrUi: true),
             completed: isParentCompleted,
           ),
         ];
@@ -1425,8 +1535,7 @@ class TaskHowToBlueprint {
             text: 'STEP $taskNum.1 · READ PLAYER INPUT & VALIDATE ENTRY STATE',
             specNotes:
                 'Inside your update loop, read the player trigger input and verify the mechanic can enter "$cleanTitle":',
-            codeSnippet:
-                'if Input.is_action_pressed("primary_action") and can_enter_state():\n    activeState = State.ACTIVE',
+            codeSnippet: buildEngineSnippet(stepIdx: 0, isFeelOrUi: false),
             completed: isParentCompleted,
           ),
           Subtask(
@@ -1434,8 +1543,7 @@ class TaskHowToBlueprint {
             text: 'STEP $taskNum.2 · EXECUTE CORE MECHANIC LOGIC WITH INSPECTOR VARIABLES',
             specNotes:
                 'Apply the state update and movement/interaction math for "$cleanTitle" driven by inspector variable $primaryVarName:',
-            codeSnippet:
-                'currentValue = move_toward(currentValue, targetValue, $primaryVarName * delta)\napply_mechanic_step(currentValue)',
+            codeSnippet: buildEngineSnippet(stepIdx: 1, isFeelOrUi: false),
             completed: isParentCompleted,
           ),
           Subtask(
@@ -1443,8 +1551,7 @@ class TaskHowToBlueprint {
             text: 'STEP $taskNum.3 · ADD EDGE-CASE GUARD CHECK BEFORE COMMITTING STATE',
             specNotes:
                 'Add an explicit guard check to enforce "$primaryGuard" so rapid inputs or boundary hits never lock the loop:',
-            codeSnippet:
-                'if is_boundary_blocked() or cooldownTimer > 0.0:\n    return // Guard: $primaryGuard',
+            codeSnippet: buildEngineSnippet(stepIdx: 2, isFeelOrUi: false),
             completed: isParentCompleted,
           ),
         ];
@@ -1461,9 +1568,18 @@ class TaskHowToBlueprint {
       final instruction = (child.specNotes != null && child.specNotes!.trim().isNotEmpty)
           ? child.specNotes!.trim()
           : 'Implement and verify "$rawLabel" inside $whereLocation.';
-      final code = (child.codeSnippet != null && child.codeSnippet!.trim().isNotEmpty)
+      // If user hasn't customized the snippet (`codeTargetFile != 'custom_snippet'`) and i < 3,
+      // dynamically adapt the code formula to the current engine & active tuning variable!
+      final isCustomSnippet = child.codeTargetFile == 'custom_snippet';
+      final code = (isCustomSnippet &&
+              child.codeSnippet != null &&
+              child.codeSnippet!.trim().isNotEmpty)
           ? child.codeSnippet!.trim()
-          : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)';
+          : (i < 3
+              ? buildEngineSnippet(stepIdx: i, isFeelOrUi: isFeelOrUi)
+              : (child.codeSnippet != null && child.codeSnippet!.trim().isNotEmpty
+                  ? child.codeSnippet!.trim()
+                  : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)'));
       resolvedSubs.add(
         TaskHowToSubStep(
           subtask: child,
@@ -1482,6 +1598,7 @@ class TaskHowToBlueprint {
       cleanTitle: cleanTitle,
       durationChip: durationChip,
       whereLocation: whereLocation,
+      engineLabel: engineLabel,
       subSteps: resolvedSubs,
     );
   }
