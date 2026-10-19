@@ -216,6 +216,29 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.textContaining('1/4 steps'), findsOneWidget);
 
+        // Verify 1-Click "Copy 📋" on a How-To sub-step copies the code formula without toggling completion
+        final copyCodeBtn = find.byKey(ValueKey('copy_howto_code_${cp0Id}_0_1'));
+        await tester.ensureVisible(copyCodeBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(copyCodeBtn);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('1/4 steps'), findsOneWidget);
+
+        // Verify Task-Scoped AI "✦ Tailor How-To" rewrites sub-steps with exact scene/node context
+        final tailorBtn = find.byKey(ValueKey('tailor_howto_btn_${cp0Id}_0'));
+        await tester.ensureVisible(tailorBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(tailorBtn);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('tailor_howto_context_input')),
+          'CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual',
+        );
+        await tester.tap(find.byKey(const ValueKey('confirm_tailor_howto_btn')));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('HookRay'), findsWidgets);
+        expect(find.textContaining('RopeVisual'), findsWidgets);
+
         // Verify interactive Out-of-Scope shelf toggle
         expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsNothing);
         final outBtn = find.byKey(const ValueKey('feat_out_of_scope_btn'));
@@ -418,6 +441,52 @@ void main() {
         expect(unrealBp.whereLocation, contains('ActorComponent'));
         expect(unrealBp.subSteps[0].codeFormula, contains('EMechanicState::Active'));
         expect(unrealBp.subSteps[1].codeFormula, contains('FMath::FInterpConstantTo'));
+      },
+    );
+
+    test(
+      'Stage 2 -> Stage 3 Custom Mechanic Breakdown synthesizes domain-specific tuning variables, edge guards, and 2 playable checkpoints',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('High-speed grappling hook parkour roguelite');
+        await provider.openReleasePlanGate();
+
+        final firstBeat = provider.releaseBlueprint!.beats.first;
+        provider.addProposedFeatureToBeat(firstBeat.id, 'Grapple Hook Swing');
+
+        final customFeatBp = firstBeat.features.last;
+        expect(customFeatBp.title, 'Grapple Hook Swing');
+        expect(customFeatBp.checkpoints.length, 2);
+        expect(customFeatBp.tuningParams, contains('hookMaxRange: 18.0 m'));
+        expect(customFeatBp.tuningParams, contains('hookPullSpeed: 28.0 m/s'));
+        expect(
+          customFeatBp.edgeCases.first,
+          contains('[LOS BREAK GUARD]'),
+        );
+
+        // Also verify Stage 2 chat command "Add Ore Smelting Furnace to Beat 2" adds a tailored economy feature
+        await provider.sendReleasePlanChatMessage('Add Ore Smelting Furnace to Beat 2');
+        final secondBeat = provider.releaseBlueprint!.beats[1];
+        final furnaceBp = secondBeat.features.last;
+        expect(furnaceBp.title, 'Ore Smelting Furnace');
+        expect(furnaceBp.checkpoints.length, 2);
+        expect(furnaceBp.tuningParams, contains('transactionCostBase: 25 gold'));
+
+        // Execute Stage 3 and verify the custom Grapple Hook Swing feature carries its 2 checkpoints & tuning into the Workbench
+        await provider.approveAndExecuteReleasePlan();
+        final stage3Beat1Feats = provider.featuresForBeat(
+          provider.activeReleaseBeats.first.id,
+        );
+        final stage3GrappleDoc = stage3Beat1Feats.firstWhere(
+          (f) => f.title == 'Grapple Hook Swing',
+        );
+        final stage3GrappleStates =
+            FeatureStateNode.getStatesForDocument(stage3GrappleDoc);
+        expect(stage3GrappleStates.length, 2);
+        expect(
+          stage3GrappleStates.first.tuningParams,
+          contains('hookPullSpeed: 28.0 m/s'),
+        );
       },
     );
   });

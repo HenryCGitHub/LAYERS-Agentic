@@ -1056,7 +1056,8 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Adds a custom Playable Feature stub directly into a Beat in Stage 2 without waiting for AI regeneration.
+  /// Adds a custom Playable Feature directly into a Beat in Stage 2 with mechanic-specific
+  /// Checkpoints, Tuning Variables, and Edge-Case Guards synthesized via [MechanicArchetypeProfile].
   void addProposedFeatureToBeat(String beatId, String rawTitle) {
     final bp = _releaseBlueprint;
     final cleanTitle = rawTitle.trim();
@@ -1064,48 +1065,48 @@ class WorkbenchProvider extends ChangeNotifier {
 
     for (final beat in bp.beats) {
       if (beat.id == beatId) {
-        final featId = 'feat_${beat.id}_${beat.features.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+        final featId =
+            'feat_${beat.id}_${beat.features.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+        final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+          cleanTitle,
+          beatTitle: beat.title,
+          beatDescription: beat.goal,
+        );
         beat.features.add(
           ProposedFeatureBlueprint(
             id: featId,
             title: cleanTitle,
-            goal: 'Build playable $cleanTitle mechanics and player feedback for ${beat.title}.',
-            doneWhen: 'Player executes $cleanTitle in viewport with immediate visual response.',
+            goal: archetype.goal,
+            doneWhen: archetype.doneWhen,
             estimatedHours: 4,
             included: true,
             lifecycle: FeatureLifecycleStatus.newFeature,
             originVersion: bp.releaseVersionTag,
-            inScope: [
-              'Core $cleanTitle interaction & state',
-              'Immediate visual & HUD feedback',
-            ],
-            outOfScope: [
-              'Final production art polish',
-            ],
-            tuningParams: [
-              'responseTime: 0.15s',
-            ],
-            edgeCases: [
-              'Prevent duplicate trigger during active cooldown',
-            ],
+            inScope: archetype.inScope,
+            outOfScope: archetype.outOfScope,
+            tuningParams: archetype.tuningParams,
+            edgeCases: archetype.edgeCases,
             checkpoints: [
               ProposedCheckpointBlueprint(
-                title: '[BUILD PASS] $cleanTitle Core Execution',
-                playtestCriteria: 'Trigger $cleanTitle in viewport and verify responsive state change and feedback.',
-                tasks: [
-                  'Implement core player interaction and state for $cleanTitle (2h)',
-                  'Hook up immediate visual/audio cue and verify in viewport (2h)',
-                ],
-                coveredScope: [
-                  'Core $cleanTitle interaction & state',
-                  'Immediate visual & HUD feedback',
-                ],
-                tuningParams: [
-                  'responseTime: 0.15s',
-                ],
-                edgeCases: [
-                  'Prevent duplicate trigger during active cooldown',
-                ],
+                title: archetype.cp1Title,
+                playtestCriteria: archetype.cp1Playtest,
+                tasks: archetype.cp1Tasks,
+                coveredScope: [archetype.inScope.first],
+                tuningParams: archetype.tuningParams,
+                edgeCases: [archetype.edgeCases.first],
+                releaseVersion: bp.releaseVersionTag,
+              ),
+              ProposedCheckpointBlueprint(
+                title: archetype.cp2Title,
+                playtestCriteria: archetype.cp2Playtest,
+                tasks: archetype.cp2Tasks,
+                coveredScope: archetype.inScope.length > 1
+                    ? [archetype.inScope[1]]
+                    : archetype.inScope,
+                tuningParams: archetype.tuningParams,
+                edgeCases: archetype.edgeCases.length > 1
+                    ? [archetype.edgeCases[1]]
+                    : archetype.edgeCases,
                 releaseVersion: bp.releaseVersionTag,
               ),
             ],
@@ -1116,6 +1117,111 @@ class WorkbenchProvider extends ChangeNotifier {
         return;
       }
     }
+  }
+
+  /// Tailors the 3 checkable How-To sub-steps (`Step X.1`, `Step X.2`, `Step X.3`) for a specific
+  /// Parent Task in Stage 3 using either Gemini AI (`gemini-flash-latest`) or deterministic
+  /// Scene/Node context injection when offline.
+  Future<void> tailorTaskHowToSubSteps({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required int taskIndex,
+    required String userContext,
+  }) async {
+    final cleanContext = userContext.trim();
+    if (cleanContext.isEmpty ||
+        checkpointIndex < 0 ||
+        checkpointIndex >= states.length) {
+      return;
+    }
+    final cpNode = states[checkpointIndex];
+    if (taskIndex < 0 || taskIndex >= cpNode.checklist.length) return;
+    final parentTask = cpNode.checklist[taskIndex];
+    final featDoc = documents[featureId];
+    final engineHint = _conceptDraft?.techSpec.join(' ') ??
+        activeProject?.sections['tech_spec'];
+    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final taskNum = taskIndex + 1;
+
+    // Ensure children are initialized first
+    TaskHowToBlueprint.resolve(
+      parentTask: parentTask,
+      taskIndex: taskIndex,
+      checkpointNode: cpNode,
+      engineHint: engineHint,
+    );
+
+    if (GeminiAgentClient.hasKey(_apiKey)) {
+      final prompt = '''
+You are a senior game engine programmer assisting with a concrete implementation task.
+Engine: $engineLabel
+Feature: "${featDoc?.title ?? cpNode.name}"
+Checkpoint: "${cpNode.cleanStageTitle}"
+Task ($taskNum): "${parentTask.text}"
+Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
+Developer's Exact Scene / Node / Script Setup: "$cleanContext"
+
+Rewrite the 3 checkable How-To Sub-Steps (Step $taskNum.1 Setup/Input, Step $taskNum.2 Core Logic with Tuning Variable, Step $taskNum.3 Edge-Case Guard Check) specifically using the developer's node/script names from "$cleanContext".
+Return ONLY a JSON object with this exact schema:
+{
+  "subSteps": [
+    {
+      "title": "STEP $taskNum.1 · SHORT LITERAL SUB-STEP TITLE",
+      "instruction": "1-sentence literal instruction referencing the user's exact nodes/scripts",
+      "codeFormula": "2-3 lines of $engineLabel code using the user's node/script names"
+    },
+    {
+      "title": "STEP $taskNum.2 · SHORT LITERAL SUB-STEP TITLE",
+      "instruction": "1-sentence literal instruction applying the tuning variable",
+      "codeFormula": "2-3 lines of $engineLabel code applying the tuning variable"
+    },
+    {
+      "title": "STEP $taskNum.3 · SHORT LITERAL GUARD TITLE",
+      "instruction": "1-sentence literal instruction enforcing the edge-case guard",
+      "codeFormula": "1-2 lines of $engineLabel guard check code"
+    }
+  ]
+}
+''';
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: _apiKey,
+        preferredModel: _conversationModel,
+        thinkingLevel: _thinkingLevel,
+        temperature: 0.25,
+      );
+      final rawSubs = json?['subSteps'];
+      if (rawSubs is List && rawSubs.isNotEmpty) {
+        for (int i = 0; i < rawSubs.length && i < parentTask.children.length; i++) {
+          final item = rawSubs[i];
+          if (item is Map) {
+            final t = (item['title'] ?? '').toString().trim();
+            final instr = (item['instruction'] ?? '').toString().trim();
+            final code = (item['codeFormula'] ?? '').toString().trim();
+            if (t.isNotEmpty) parentTask.children[i].text = t;
+            if (instr.isNotEmpty) parentTask.children[i].specNotes = instr;
+            if (code.isNotEmpty) {
+              parentTask.children[i].codeSnippet = code;
+              parentTask.children[i].codeTargetFile = 'custom_snippet';
+            }
+          }
+        }
+        updateFeatureStates(featureId, states);
+        return;
+      }
+    }
+
+    // Deterministic Scene/Node Context Adapter
+    TaskHowToBlueprint.tailorSubStepsForContext(
+      parentTask: parentTask,
+      taskIndex: taskIndex,
+      checkpointNode: cpNode,
+      userContext: cleanContext,
+      engineHint: engineHint,
+    );
+    updateFeatureStates(featureId, states);
   }
 
   /// Stage 2 -> Stage 3: User approves the Release Plan Gate; Executor Agent builds or evolves the Release hierarchy.

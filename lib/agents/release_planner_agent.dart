@@ -237,6 +237,11 @@ Return ONLY a JSON object with this exact schema:
           ? rawBeat.substring(rawBeat.indexOf(':') + 1).trim()
           : rawBeat.trim();
       final isLastBeat = i == effectiveLoopItems.length - 1;
+      final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+        '$beatTitle Mechanics & Controls',
+        beatTitle: beatTitle,
+        beatDescription: beatDesc,
+      );
 
       final beatFeatures = <ProposedFeatureBlueprint>[
         ProposedFeatureBlueprint(
@@ -248,20 +253,10 @@ Return ONLY a JSON object with this exact schema:
           included: true,
           lifecycle: FeatureLifecycleStatus.newFeature,
           originVersion: versionTag,
-          inScope: [
-            'Core player input, state logic, and on-screen feedback for $beatTitle',
-            'Clean transition into the next beat of the ${projectDoc.title} core loop',
-          ],
-          outOfScope: [
-            'Final production art shaders and multi-branch meta unlocks for $beatTitle',
-          ],
-          tuningParams: [
-            'beat${beatNum}ResponseTime: 0.10 s',
-            'beat${beatNum}CooldownWindow: 0.25 s',
-          ],
-          edgeCases: [
-            '[INPUT GUARD] Rapid repeated inputs during $beatTitle transition cleanly without state lock',
-          ],
+          inScope: archetype.inScope,
+          outOfScope: archetype.outOfScope,
+          tuningParams: archetype.tuningParams,
+          edgeCases: archetype.edgeCases,
           checkpoints: [
             ProposedCheckpointBlueprint(
               title: '$beatTitle Core Implementation & Playtest',
@@ -271,17 +266,9 @@ Return ONLY a JSON object with this exact schema:
                 'Implement core state and player interaction for $beatTitle (3h)',
                 'Hook visual/audio feedback cues and transition guard for $beatTitle (2h)',
               ],
-              coveredScope: [
-                'Core player input, state logic, and on-screen feedback for $beatTitle',
-                'Clean transition into the next beat of the ${projectDoc.title} core loop',
-              ],
-              tuningParams: [
-                'beat${beatNum}ResponseTime: 0.10 s',
-                'beat${beatNum}CooldownWindow: 0.25 s',
-              ],
-              edgeCases: [
-                '[INPUT GUARD] Rapid repeated inputs during $beatTitle transition cleanly without state lock',
-              ],
+              coveredScope: archetype.inScope,
+              tuningParams: archetype.tuningParams,
+              edgeCases: archetype.edgeCases,
             ),
           ],
         ),
@@ -890,14 +877,79 @@ Return ONLY a JSON object with this schema:
       }
     }
 
-    // Offline / deterministic fallback
-    blueprint.goal = '${blueprint.goal} (Adjusted: $cleanMsg)';
+    // Offline / deterministic fallback: also support "Add <Feature> [to Beat N]" commands
+    final addMatch = RegExp(
+      r'^(?:add|include|create)\s+(?:a\s+|an\s+)?(.+?)(?:\s+feature)?(?:\s+(?:to|in)\s+beat\s*(\d+))?$',
+      caseSensitive: false,
+    ).firstMatch(cleanMsg);
+
+    String replyText = 'Updated the Release Plan goal and scope to reflect "$cleanMsg".';
+    if (addMatch != null && blueprint.beats.isNotEmpty) {
+      final rawFeatTitle = addMatch.group(1)!.trim();
+      final beatNumStr = addMatch.group(2);
+      final targetBeatIdx = beatNumStr != null
+          ? ((int.tryParse(beatNumStr) ?? 1) - 1).clamp(0, blueprint.beats.length - 1)
+          : 0;
+      final targetBeat = blueprint.beats[targetBeatIdx];
+      final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+        rawFeatTitle,
+        beatTitle: targetBeat.title,
+        beatDescription: targetBeat.goal,
+      );
+      final newFeatId =
+          'feat_${targetBeat.id}_${targetBeat.features.length + 1}_chat';
+      targetBeat.features.add(
+        ProposedFeatureBlueprint(
+          id: newFeatId,
+          title: rawFeatTitle,
+          goal: archetype.goal,
+          doneWhen: archetype.doneWhen,
+          estimatedHours: 4,
+          included: true,
+          lifecycle: FeatureLifecycleStatus.newFeature,
+          originVersion: blueprint.releaseVersionTag,
+          inScope: archetype.inScope,
+          outOfScope: archetype.outOfScope,
+          tuningParams: archetype.tuningParams,
+          edgeCases: archetype.edgeCases,
+          checkpoints: [
+            ProposedCheckpointBlueprint(
+              title: archetype.cp1Title,
+              playtestCriteria: archetype.cp1Playtest,
+              releaseVersion: blueprint.releaseVersionTag,
+              tasks: archetype.cp1Tasks,
+              coveredScope: [archetype.inScope.first],
+              tuningParams: archetype.tuningParams,
+              edgeCases: [archetype.edgeCases.first],
+            ),
+            ProposedCheckpointBlueprint(
+              title: archetype.cp2Title,
+              playtestCriteria: archetype.cp2Playtest,
+              releaseVersion: blueprint.releaseVersionTag,
+              tasks: archetype.cp2Tasks,
+              coveredScope: archetype.inScope.length > 1
+                  ? [archetype.inScope[1]]
+                  : archetype.inScope,
+              tuningParams: archetype.tuningParams,
+              edgeCases: archetype.edgeCases.length > 1
+                  ? [archetype.edgeCases[1]]
+                  : archetype.edgeCases,
+            ),
+          ],
+        ),
+      );
+      replyText =
+          'Added "$rawFeatTitle" to ${targetBeat.title} with 2 playable checkpoints and ${archetype.tuningParams.length} tuning parameters.';
+    } else {
+      blueprint.goal = '${blueprint.goal} (Adjusted: $cleanMsg)';
+    }
+
     blueprint.chatHistory.add(
       AgentChatMessage(
         id: 'rel_msg_ai_${blueprint.chatHistory.length}',
         role: 'assistant',
         modelUsed: modelName,
-        text: 'Updated the Release Plan goal and scope to reflect "$cleanMsg".',
+        text: replyText,
         updatedFields: const ['Release Plan Updated'],
       ),
     );

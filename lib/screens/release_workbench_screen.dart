@@ -2150,6 +2150,149 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       widget.workbench.updateFeatureStates(feat.id, states);
     }
 
+    Future<void> copySubStepCodeFormula(
+      int pIdx,
+      int sIdx,
+      String codeFormula,
+    ) async {
+      await Clipboard.setData(ClipboardData(text: codeFormula));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: _bgSurface,
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'Copied Step ${pIdx + 1}.${sIdx + 1} code formula to clipboard ✓',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: _accentEmerald,
+            ),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
+    Future<void> promptTailorHowToDialog(int pIdx) async {
+      if (pIdx < 0 || pIdx >= node.checklist.length) return;
+      final parentTask = node.checklist[pIdx];
+      final ctrl = TextEditingController();
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Text(
+            '✦ Tailor How-To Sub-Steps (Task ${(pIdx + 1).toString().padLeft(2, '0')})',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: _textPrimary,
+            ),
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Describe your exact Scene / Node / Script setup for "${parentTask.text}". The Agent will rewrite Steps ${pIdx + 1}.1, ${pIdx + 1}.2, and ${pIdx + 1}.3 using your exact node and script names:',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: _textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('tailor_howto_context_input'),
+                  controller: ctrl,
+                  autofocus: true,
+                  maxLines: 3,
+                  onSubmitted: (_) => Navigator.of(ctx).pop('tailor'),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    color: _textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText:
+                        'e.g., CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual',
+                    hintStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: _textMuted,
+                    ),
+                    filled: true,
+                    fillColor: _bgRecessed,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderSubtle),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(fontSize: 12, color: _textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              key: const ValueKey('confirm_tailor_howto_btn'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _focalAccent,
+                foregroundColor: _focalAccentFg,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('tailor'),
+              child: Text(
+                '✦ Tailor Sub-Steps',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || action != 'tailor') return;
+      final contextText = ctrl.text.trim();
+      if (contextText.isEmpty) return;
+      await widget.workbench.tailorTaskHowToSubSteps(
+        featureId: feat.id,
+        states: states,
+        checkpointIndex: index,
+        taskIndex: pIdx,
+        userContext: contextText,
+      );
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: _bgSurface,
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'Tailored Task ${(pIdx + 1).toString().padLeft(2, '0')} How-To sub-steps to "$contextText" ✓',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: _accentEmerald,
+            ),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
     Color layerBadgeColor(String layerTag) {
       switch (layerTag) {
         case 'INPUT':
@@ -2568,6 +2711,34 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               ),
                             ),
                           ),
+                          InkWell(
+                            key: ValueKey(
+                              'tailor_howto_btn_${node.id}_$selectedTaskIdx',
+                            ),
+                            onTap: () => promptTailorHowToDialog(selectedTaskIdx),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgSurface,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: _accentAmber.withValues(alpha: 0.45),
+                                ),
+                              ),
+                              child: Text(
+                                '✦ Tailor How-To',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: _accentAmber,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       Container(
@@ -2722,15 +2893,55 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border.all(color: _borderSubtle),
                                     ),
-                                    child: Text(
-                                      subStep.codeFormula,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10,
-                                        height: 1.35,
-                                        color: subDone
-                                            ? _textMuted
-                                            : AppTheme.accentCyanFor(_isDark),
-                                      ),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            subStep.codeFormula,
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              height: 1.35,
+                                              color: subDone
+                                                  ? _textMuted
+                                                  : AppTheme.accentCyanFor(_isDark),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          key: ValueKey(
+                                            'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
+                                          ),
+                                          onTap: () => copySubStepCodeFormula(
+                                            selectedTaskIdx,
+                                            subIdx,
+                                            subStep.codeFormula,
+                                          ),
+                                          borderRadius: BorderRadius.circular(3),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                              vertical: 1.5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: _bgSurface,
+                                              borderRadius: BorderRadius.circular(3),
+                                              border: Border.all(
+                                                color: _borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Copy 📋',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 8.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: _textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   if (isCoreStep) ...[

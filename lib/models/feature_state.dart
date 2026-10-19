@@ -1260,6 +1260,417 @@ class TaskHowToSubStep {
   });
 }
 
+/// Synthesizes mechanic-specific scope bullets, tuning parameters, edge-case guards,
+/// and 60/40 Playable Checkpoint blueprints for any custom or Beat-derived feature title.
+class MechanicArchetypeProfile {
+  final String category; // 'grapple', 'movement', 'combat', 'farming', 'economy', 'building', 'ui', 'core'
+  final String goal;
+  final String doneWhen;
+  final List<String> inScope;
+  final List<String> outOfScope;
+  final List<String> tuningParams;
+  final List<String> edgeCases;
+  final String cp1Title;
+  final String cp1Playtest;
+  final List<String> cp1Tasks;
+  final String cp2Title;
+  final String cp2Playtest;
+  final List<String> cp2Tasks;
+
+  const MechanicArchetypeProfile({
+    required this.category,
+    required this.goal,
+    required this.doneWhen,
+    required this.inScope,
+    required this.outOfScope,
+    required this.tuningParams,
+    required this.edgeCases,
+    required this.cp1Title,
+    required this.cp1Playtest,
+    required this.cp1Tasks,
+    required this.cp2Title,
+    required this.cp2Playtest,
+    required this.cp2Tasks,
+  });
+
+  static String inferCategory(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('grappl') ||
+        lower.contains('hook') ||
+        lower.contains('swing') ||
+        lower.contains('rope') ||
+        lower.contains('tether') ||
+        lower.contains('zipline')) {
+      return 'grapple';
+    }
+    if (lower.contains('dash') ||
+        lower.contains('slide') ||
+        lower.contains('jump') ||
+        lower.contains('wall') ||
+        lower.contains('sprint') ||
+        lower.contains('climb') ||
+        lower.contains('move') ||
+        lower.contains('locomotion') ||
+        lower.contains('parkour')) {
+      return 'movement';
+    }
+    if (lower.contains('shotgun') ||
+        lower.contains('weapon') ||
+        lower.contains('gun') ||
+        lower.contains('shoot') ||
+        lower.contains('fire') ||
+        lower.contains('attack') ||
+        lower.contains('combat') ||
+        lower.contains('slash') ||
+        lower.contains('enemy') ||
+        lower.contains('wave') ||
+        lower.contains('turret') ||
+        lower.contains('boss') ||
+        lower.contains('damage')) {
+      return 'combat';
+    }
+    if (lower.contains('crop') ||
+        lower.contains('farm') ||
+        lower.contains('plant') ||
+        lower.contains('harvest') ||
+        lower.contains('seed') ||
+        lower.contains('soil') ||
+        lower.contains('water') ||
+        lower.contains('forag')) {
+      return 'farming';
+    }
+    if (lower.contains('shop') ||
+        lower.contains('buy') ||
+        lower.contains('sell') ||
+        lower.contains('smelt') ||
+        lower.contains('furnace') ||
+        lower.contains('craft') ||
+        lower.contains('invent') ||
+        lower.contains('loot') ||
+        lower.contains('ore') ||
+        lower.contains('loadout') ||
+        lower.contains('upgrade')) {
+      return 'economy';
+    }
+    if (lower.contains('grid') ||
+        lower.contains('build') ||
+        lower.contains('place') ||
+        lower.contains('construct') ||
+        lower.contains('tile') ||
+        lower.contains('snap')) {
+      return 'building';
+    }
+    if (lower.contains('camera') ||
+        lower.contains('hud') ||
+        lower.contains('ui') ||
+        lower.contains('radar') ||
+        lower.contains('minimap') ||
+        lower.contains('menu') ||
+        lower.contains('medal') ||
+        lower.contains('score') ||
+        lower.contains('timer')) {
+      return 'ui';
+    }
+    return 'core';
+  }
+
+  static MechanicArchetypeProfile fromFeatureTitle(
+    String rawTitle, {
+    String? beatTitle,
+    String? beatDescription,
+  }) {
+    final clean = rawTitle.trim().isEmpty ? 'Core Mechanic' : rawTitle.trim();
+    // First inspect the feature title itself; only fall back to beat context if the feature title is generic
+    final titleCat = inferCategory(clean);
+    final cat = titleCat != 'core'
+        ? titleCat
+        : inferCategory('$clean ${beatTitle ?? ''} ${beatDescription ?? ''}');
+
+    switch (cat) {
+      case 'grapple':
+        return MechanicArchetypeProfile(
+          category: 'grapple',
+          goal: 'Build $clean raycast targeting, tether pull velocity, and release momentum.',
+          doneWhen: 'Player fires $clean at valid anchors, swings/pulls smoothly at 60 FPS, and keeps momentum on release.',
+          inScope: [
+            'Anchor raycast check and tether line rendering for $clean',
+            'Pull/swing velocity impulse and release momentum transfer',
+          ],
+          outOfScope: [
+            'Multi-segment Verlet rope wrapping around complex meshes',
+          ],
+          tuningParams: const [
+            'hookMaxRange: 18.0 m',
+            'hookPullSpeed: 28.0 m/s',
+            'releaseBoostMultiplier: 1.25 x',
+          ],
+          edgeCases: const [
+            '[LOS BREAK GUARD] Detach tether cleanly if moving obstacle blocks line of sight',
+            '[MAX TENSION CLAMP] Clamp velocity on release so frame spikes never launch player out of bounds',
+          ],
+          cp1Title: '$clean Targeting & Pull Velocity',
+          cp1Playtest: 'Aim at anchor within hookMaxRange and fire -> player pulls toward anchor and releases with momentum.',
+          cp1Tasks: [
+            'Implement anchor raycast check and tether state entry for $clean (2h)',
+            'Apply hookPullSpeed velocity and releaseBoostMultiplier on detach (2h)',
+          ],
+          cp2Title: 'Tether Visual Line & Detach Guards',
+          cp2Playtest: 'Break line-of-sight mid-pull -> tether detaches cleanly with audio/visual cue and zero physics hitch.',
+          cp2Tasks: [
+            'Render active tether line and attach/detach audio-visual cues (1h)',
+            'Enforce line-of-sight break guard and velocity clamp for $clean (1h)',
+          ],
+        );
+
+      case 'movement':
+        return MechanicArchetypeProfile(
+          category: 'movement',
+          goal: 'Build responsive $clean input handling, velocity acceleration, and recovery timing.',
+          doneWhen: 'Player chains $clean smoothly across arena obstacles with zero input drop or wall-clip.',
+          inScope: [
+            'Directional input read, acceleration curve, and velocity impulse for $clean',
+            'Screen-feel feedback (FOV kick / dust particles) and cooldown recovery',
+          ],
+          outOfScope: [
+            'Procedural skeletal IK foot placement',
+          ],
+          tuningParams: const [
+            'moveMaxSpeed: 240.0 px/s',
+            'burstImpulseSpeed: 420.0 px/s',
+            'moveCooldownSec: 0.35 s',
+          ],
+          edgeCases: const [
+            '[CORNER SLIDE GUARD] Slide smoothly along wall normals without zeroing tangential velocity',
+            '[BUFFER WINDOW] Queue input pressed 0.10s before landing or cooldown expiry',
+          ],
+          cp1Title: '$clean Velocity & Physics Loop',
+          cp1Playtest: 'Trigger $clean while moving -> character accelerates to burstImpulseSpeed and slides cleanly along walls.',
+          cp1Tasks: [
+            'Bind directional input and velocity impulse math for $clean (2h)',
+            'Enforce wall-slide normal projection and cooldown recovery timer (2h)',
+          ],
+          cp2Title: '$clean Feel Cues & Input Buffer',
+          cp2Playtest: 'Chain $clean repeatedly -> verify 0.10s input buffer and crisp FOV/trail feedback.',
+          cp2Tasks: [
+            'Hook up motion trail / FOV kick and sound cue on $clean trigger (1h)',
+            'Verify input buffer window and mid-air transition guard (1h)',
+          ],
+        );
+
+      case 'combat':
+        return MechanicArchetypeProfile(
+          category: 'combat',
+          goal: 'Build $clean hit detection, damage/knockback application, and reload/cooldown pacing.',
+          doneWhen: 'Player engages targets with $clean, registers crisp hit-confirm feedback, and clears enemy waves reliably.',
+          inScope: [
+            'Hitbox / raycast detection, damage application, and knockback impulse for $clean',
+            'Muzzle / impact flash, hit-stop frame, and ammo / cooldown HUD readout',
+          ],
+          outOfScope: [
+            'limb-specific gore dismemberment physics',
+          ],
+          tuningParams: const [
+            'baseDamage: 25.0 hp',
+            'fireCooldownSec: 0.45 s',
+            'knockbackImpulse: 14.0 m/s',
+          ],
+          edgeCases: const [
+            '[HIT-ONCE GUARD] Single attack swing or projectile hit-reg applies damage exactly once per target ID',
+            '[RELOAD INTERRUPT] Dodging or swapping mid-reload cancels reload timer cleanly without ammo duplication',
+          ],
+          cp1Title: '$clean Hit Detection & Knockback',
+          cp1Playtest: 'Fire/trigger $clean at test target -> deducts baseDamage, applies knockbackImpulse, and respects fireCooldownSec.',
+          cp1Tasks: [
+            'Implement raycast/hitbox query and baseDamage application for $clean (2h)',
+            'Apply knockbackImpulse and enforce single-hit-per-target guard (2h)',
+          ],
+          cp2Title: 'Impact Feel & Cooldown Readout',
+          cp2Playtest: 'Rapid-fire $clean in arena -> verify hit-flash, audio punch, and clean reload/cooldown interrupt.',
+          cp2Tasks: [
+            'Hook up target hit-flash, impact SFX, and HUD ammo/cooldown bar (1h)',
+            'Verify reload/cooldown interrupt guard when switching states (1h)',
+          ],
+        );
+
+      case 'farming':
+        return MechanicArchetypeProfile(
+          category: 'farming',
+          goal: 'Build $clean plot interaction, growth stage timer progression, and harvest item yield.',
+          doneWhen: 'Player plants, grows, and harvests crops via $clean with clear stage visuals and inventory pickup.',
+          inScope: [
+            'Plot tile state machine (Empty -> Planted -> Growing -> Ready) for $clean',
+            'Growth tick timer, harvest pickup spawn, and plot reset',
+          ],
+          outOfScope: [
+            'Seasonal weather simulation and soil pH chemistry',
+          ],
+          tuningParams: const [
+            'growthStageDuration: 12.0 s',
+            'harvestYieldCount: 3 items',
+            'interactRadius: 1.8 m',
+          ],
+          edgeCases: const [
+            '[OCCUPIED PLOT GUARD] Prevent planting a second seed on an already planted tile',
+            '[FULL INVENTORY DROP] If player storage is full on harvest, spawn pickup item on ground instead of deleting yield',
+          ],
+          cp1Title: '$clean Plot State & Growth Timer',
+          cp1Playtest: 'Interact with empty plot -> plants seed, advances through growthStageDuration, and marks Ready.',
+          cp1Tasks: [
+            'Implement plot state machine and growthStageDuration tick timer for $clean (2h)',
+            'Enforce occupied-plot guard and interaction range check (1h)',
+          ],
+          cp2Title: 'Harvest Yield & Visual Stage Cues',
+          cp2Playtest: 'Harvest mature plot -> spawns harvestYieldCount items, plays pop cue, and resets plot to Empty.',
+          cp2Tasks: [
+            'Spawn harvestYieldCount items on harvest and update storage readout (1h)',
+            'Hook up stage sprite swap and full-inventory overflow drop guard (1h)',
+          ],
+        );
+
+      case 'economy':
+        return MechanicArchetypeProfile(
+          category: 'economy',
+          goal: 'Build $clean item transaction logic, resource count validation, and immediate UI inventory sync.',
+          doneWhen: 'Player executes $clean transactions with accurate resource deduction/addition and zero duplicate item bugs.',
+          inScope: [
+            'Resource requirement check, count delta math, and output grant for $clean',
+            'Slot highlight, transaction sound cue, and live counter readout',
+          ],
+          outOfScope: [
+            'Dynamic NPC supply-and-demand market inflation',
+          ],
+          tuningParams: const [
+            'transactionCostBase: 25 gold',
+            'processDurationSec: 2.0 s',
+            'stackMaxCapacity: 99 items',
+          ],
+          edgeCases: const [
+            '[INSUFFICIENT FUNDS GUARD] Block transaction and flash cost label red when resources < transactionCostBase',
+            '[STACK CAP CLAMP] Clamp slot count at stackMaxCapacity and spill remainder to next open slot',
+          ],
+          cp1Title: '$clean Transaction & Resource Math',
+          cp1Playtest: 'Trigger $clean with valid resources -> deducts cost, grants output, and updates inventory count.',
+          cp1Tasks: [
+            'Implement resource check and inventory delta math for $clean (2h)',
+            'Enforce insufficient-funds and stackMaxCapacity overflow guards (1h)',
+          ],
+          cp2Title: '$clean UI Readout & Audio Cues',
+          cp2Playtest: 'Attempt $clean both with and without enough resources -> verify confirm chime vs. red reject flash.',
+          cp2Tasks: [
+            'Wire live resource counter labels and slot highlight for $clean (1h)',
+            'Hook up transaction confirm SFX and insufficient-resource shake cue (1h)',
+          ],
+        );
+
+      case 'building':
+        return MechanicArchetypeProfile(
+          category: 'building',
+          goal: 'Build $clean grid coordinate snapping, placement collision check, and structure instantiation.',
+          doneWhen: 'Player previews ghost placement on the grid, validates clear cells, and places/removes structures cleanly.',
+          inScope: [
+            'World-to-grid coordinate snapping and cell occupancy lookup for $clean',
+            'Valid/invalid ghost preview tint and placement confirmation cue',
+          ],
+          outOfScope: [
+            'Structural physics collapse simulation',
+          ],
+          tuningParams: const [
+            'gridCellSize: 32.0 px',
+            'placeReachDistance: 4.5 tiles',
+            'refundRatio: 1.0 x',
+          ],
+          edgeCases: const [
+            '[OVERLAP GUARD] Block placement and tint ghost red when target cell is occupied or overlaps player collider',
+            '[BOUNDARY CLAMP] Reject grid coordinates outside valid build bounds',
+          ],
+          cp1Title: '$clean Grid Snapping & Cell Occupancy',
+          cp1Playtest: 'Move cursor across arena -> ghost snaps to gridCellSize steps and places structure on open cell.',
+          cp1Tasks: [
+            'Implement world-to-grid snapping and cell occupancy dictionary for $clean (2h)',
+            'Instantiate placed structure and block overlapping cells (1h)',
+          ],
+          cp2Title: 'Placement Ghost Tint & Removal Guard',
+          cp2Playtest: 'Hover over occupied cell -> ghost tints red and blocks click; right-click removes and refunds cleanly.',
+          cp2Tasks: [
+            'Wire green/red ghost preview shader and placement thud SFX (1h)',
+            'Enforce player-overlap guard and clean cell release on removal (1h)',
+          ],
+        );
+
+      case 'ui':
+        return MechanicArchetypeProfile(
+          category: 'ui',
+          goal: 'Build $clean state binding, smooth camera/HUD interpolation, and threshold notifications.',
+          doneWhen: 'Camera and HUD readouts for $clean update at 60 FPS in sync with gameplay state changes.',
+          inScope: [
+            'Event-driven HUD readout binding and smooth interpolation for $clean',
+            'Threshold pop animation and clean reset on round restart',
+          ],
+          outOfScope: [
+            'Custom remappable HUD layout editor',
+          ],
+          tuningParams: const [
+            'cameraFollowLerp: 14.0',
+            'hudPopScale: 1.18 x',
+            'readoutLerpSpeed: 10.0',
+          ],
+          edgeCases: const [
+            '[ARENA BOUND CLAMP] Clamp camera and off-screen indicators cleanly at level edges',
+            '[RAPID EVENT DEBOUNCE] Coalesce simultaneous state changes in the same frame without UI flicker',
+          ],
+          cp1Title: '$clean State Signal & Smooth Readout',
+          cp1Playtest: 'Trigger state change in arena -> $clean updates immediately with smooth lerp and zero frame hitch.',
+          cp1Tasks: [
+            'Subscribe $clean presenter to gameplay state signal and update readout (2h)',
+            'Apply cameraFollowLerp / readoutLerpSpeed smoothing and arena bound clamp (2h)',
+          ],
+          cp2Title: 'Threshold Callout & Reset Cleanup',
+          cp2Playtest: 'Cross target threshold and reset round -> badge animates once and resets cleanly.',
+          cp2Tasks: [
+            'Trigger hudPopScale callout animation and audio chime on threshold (1h)',
+            'Enforce rapid-event debounce and clean HUD reset on loop restart (1h)',
+          ],
+        );
+
+      default:
+        final descSuffix = (beatDescription != null && beatDescription.trim().isNotEmpty)
+            ? ' (${beatDescription.trim()})'
+            : '';
+        return MechanicArchetypeProfile(
+          category: 'core',
+          goal: 'Build playable $clean mechanics, state transitions, and player feedback$descSuffix.',
+          doneWhen: 'Playtester can execute $clean reliably at 60 FPS with immediate visual and audio confirmation.',
+          inScope: [
+            'Core player input, state transition logic, and active execution for $clean',
+            'Immediate on-screen visual/audio feedback and clean transition to next beat',
+          ],
+          outOfScope: [
+            'Final production art shaders and meta-progression unlocks for $clean',
+          ],
+          tuningParams: const [
+            'actionResponseWindow: 0.10 s',
+            'stateCooldownSec: 0.25 s',
+          ],
+          edgeCases: const [
+            '[INPUT GUARD] Rapid repeated inputs during active state transition cleanly without state lock',
+          ],
+          cp1Title: '$clean Core State & Controls',
+          cp1Playtest: 'Trigger $clean in the test arena -> state activates within actionResponseWindow and updates gameplay.',
+          cp1Tasks: [
+            'Implement player input trigger and state logic for $clean (2h)',
+            'Apply actionResponseWindow timing and stateCooldownSec recovery (1h)',
+          ],
+          cp2Title: '$clean Visual/Audio Cues & Guardrails',
+          cp2Playtest: 'Spam input during $clean transition -> feedback plays cleanly and state never locks up.',
+          cp2Tasks: [
+            'Hook up immediate visual indicator and audio cue for $clean (1h)',
+            'Enforce rapid-input state guard and clean reset on round restart (1h)',
+          ],
+        );
+    }
+  }
+}
+
 /// Resolves and persists the structured Parent Task metadata (`numLabel`, `layerTag`,
 /// `cleanTitle`, `durationChip`, `whereLocation`, `engineLabel`) and ensures each Parent Task has
 /// 3 checkable `How-To` sub-steps (`Subtask.children`) with automatic rollup and engine-aware code formulas.
@@ -1434,6 +1845,9 @@ class TaskHowToBlueprint {
     final primaryGuard = checkpointNode.edgeCases.isNotEmpty
         ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
         : '[STATE GUARD] Prevent duplicate trigger while active';
+    final mechanicCategory = MechanicArchetypeProfile.inferCategory(
+      '$cleanTitle ${checkpointNode.name} ${checkpointNode.trigger}',
+    );
 
     String buildEngineSnippet({
       required int stepIdx,
@@ -1450,8 +1864,17 @@ class TaskHowToBlueprint {
           }
         } else {
           if (stepIdx == 0) {
+            if (mechanicCategory == 'grapple') {
+              return 'if (Input.GetButtonDown("Fire2") && Physics.Raycast(aimOrigin.position, aimDir, out RaycastHit hit, $primaryVarName)) {\n    activeAnchor = hit.point;\n    activeState = MechanicState.Active;\n}';
+            }
+            if (mechanicCategory == 'combat') {
+              return 'if (Input.GetButton("Fire1") && Time.time >= nextFireTime && CanEnterState()) {\n    activeState = MechanicState.Active;\n}';
+            }
             return 'if (Input.GetButton("Fire1") && CanEnterState()) {\n    activeState = MechanicState.Active;\n}';
           } else if (stepIdx == 1) {
+            if (mechanicCategory == 'grapple') {
+              return 'Vector3 pullDir = (activeAnchor - transform.position).normalized;\nrb.velocity = Vector3.MoveTowards(rb.velocity, pullDir * $primaryVarName, $primaryVarName * Time.fixedDeltaTime);';
+            }
             return 'currentVal = Mathf.MoveTowards(currentVal, targetVal, $primaryVarName * Time.fixedDeltaTime);\nApplyMechanicStep(currentVal);';
           } else {
             return 'if (IsBoundaryBlocked() || cooldownTimer > 0f) return; // Guard: $primaryGuard';
@@ -1469,6 +1892,9 @@ class TaskHowToBlueprint {
           }
         } else {
           if (stepIdx == 0) {
+            if (mechanicCategory == 'grapple') {
+              return 'if (bInputPressed && GetWorld()->LineTraceSingleByChannel(HitResult, StartLoc, EndLoc, ECC_Visibility)) {\n    ActiveAnchor = HitResult.ImpactPoint;\n    ActiveState = EMechanicState::Active;\n}';
+            }
             return 'if (bInputPressed && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n}';
           } else if (stepIdx == 1) {
             return 'CurrentVal = FMath::FInterpConstantTo(CurrentVal, TargetVal, DeltaTime, $primaryVarName);\nApplyMechanicStep(CurrentVal);';
@@ -1488,8 +1914,26 @@ class TaskHowToBlueprint {
         }
       } else {
         if (stepIdx == 0) {
+          if (mechanicCategory == 'grapple') {
+            return 'if Input.is_action_pressed("primary_action") and hook_ray.is_colliding() and can_enter_state():\n    activeAnchor = hook_ray.get_collision_point()\n    activeState = State.ACTIVE';
+          }
+          if (mechanicCategory == 'farming' || mechanicCategory == 'economy' || mechanicCategory == 'building') {
+            return 'if Input.is_action_just_pressed("primary_action") and can_enter_state():\n    activeState = State.ACTIVE';
+          }
           return 'if Input.is_action_pressed("primary_action") and can_enter_state():\n    activeState = State.ACTIVE';
         } else if (stepIdx == 1) {
+          if (mechanicCategory == 'grapple') {
+            return 'var pull_dir = global_position.direction_to(activeAnchor)\nvelocity = velocity.move_toward(pull_dir * $primaryVarName, $primaryVarName * delta)\nmove_and_slide()';
+          }
+          if (mechanicCategory == 'farming') {
+            return 'growthTimer = move_toward(growthTimer, $primaryVarName, delta)\nif growthTimer >= $primaryVarName:\n    advance_plot_stage()';
+          }
+          if (mechanicCategory == 'economy') {
+            return 'if currentResources >= $primaryVarName:\n    currentResources -= $primaryVarName\n    grant_transaction_output()';
+          }
+          if (mechanicCategory == 'building') {
+            return 'var grid_cell = local_to_map(get_global_mouse_position())\nplace_structure_at_cell(grid_cell, $primaryVarName)';
+          }
           return 'currentValue = move_toward(currentValue, targetValue, $primaryVarName * delta)\napply_mechanic_step(currentValue)';
         } else {
           return 'if is_boundary_blocked() or cooldownTimer > 0.0:\n    return // Guard: $primaryGuard';
@@ -1601,6 +2045,115 @@ class TaskHowToBlueprint {
       engineLabel: engineLabel,
       subSteps: resolvedSubs,
     );
+  }
+
+  /// Tailors `parentTask.children` (Step X.1, X.2, X.3) to the developer's exact scene/node/script context
+  /// (e.g. "CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual") and marks each sub-step
+  /// with `codeTargetFile = 'custom_snippet'` so it persists across re-renders.
+  static void tailorSubStepsForContext({
+    required Subtask parentTask,
+    required int taskIndex,
+    required FeatureStateNode checkpointNode,
+    required String userContext,
+    String? engineHint,
+  }) {
+    // Ensure base children exist first
+    resolve(
+      parentTask: parentTask,
+      taskIndex: taskIndex,
+      checkpointNode: checkpointNode,
+      engineHint: engineHint,
+    );
+
+    final taskNum = taskIndex + 1;
+    final cleanTitle = extractCleanTitle(parentTask.text);
+    final engineLabel = detectEngineLabel(engineHint);
+    final primaryVar = checkpointNode.tuningParams.isNotEmpty
+        ? checkpointNode.tuningParams[taskIndex % checkpointNode.tuningParams.length]
+        : 'responseTime: 0.12 s';
+    final primaryVarName = primaryVar.split(':').first.trim();
+    final primaryGuard = checkpointNode.edgeCases.isNotEmpty
+        ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
+        : '[STATE GUARD] Prevent duplicate trigger while active';
+
+    // Extract CamelCase / PascalCase / snake_case node or script identifiers from userContext
+    final stopWords = <String>{
+      'using',
+      'with',
+      'named',
+      'and',
+      'the',
+      'for',
+      'inside',
+      'from',
+      'into',
+      'node',
+      'script',
+      'class',
+      'component',
+      'scene',
+    };
+    final tokens = RegExp(r'[A-Za-z_][A-Za-z0-9_]{2,}')
+        .allMatches(userContext)
+        .map((m) => m.group(0)!)
+        .where((w) => !stopWords.contains(w.toLowerCase()))
+        .toList();
+
+    final primaryNode = tokens.isNotEmpty ? tokens.first : 'PlayerController';
+    final secondaryNode = tokens.length > 1 ? tokens[1] : primaryNode;
+    final tertiaryNode = tokens.length > 2 ? tokens[2] : secondaryNode;
+
+    String step1Code;
+    String step2Code;
+    String step3Code;
+
+    if (engineLabel == 'UNITY C#') {
+      step1Code =
+          '// Context: $userContext\nif (Input.GetButton("Fire1") && $secondaryNode != null && CanEnterState()) {\n    activeState = MechanicState.Active;\n}';
+      step2Code =
+          '$primaryNode.ExecuteStep($secondaryNode, $primaryVarName * Time.fixedDeltaTime);\n$tertiaryNode.SyncVisualState(activeState);';
+      step3Code =
+          'if (!$primaryNode.IsValidState($secondaryNode) || cooldownTimer > 0f) return; // Guard: $primaryGuard';
+    } else if (engineLabel == 'UNREAL 5') {
+      step1Code =
+          '// Context: $userContext\nif (bInputPressed && IsValid($secondaryNode) && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n}';
+      step2Code =
+          '$primaryNode->ExecuteStep($secondaryNode, DeltaTime * $primaryVarName);\n$tertiaryNode->SyncVisualState(ActiveState);';
+      step3Code =
+          'if (!$primaryNode->IsValidState($secondaryNode) || CooldownTimer > 0.f) return; // Guard: $primaryGuard';
+    } else {
+      step1Code =
+          '# Context: $userContext\nif Input.is_action_pressed("primary_action") and is_instance_valid($secondaryNode) and can_enter_state():\n    activeState = State.ACTIVE';
+      step2Code =
+          '$primaryNode.apply_mechanic_step($secondaryNode, $primaryVarName * delta)\n$tertiaryNode.sync_visual_state(activeState)';
+      step3Code =
+          'if not $primaryNode.is_valid_state($secondaryNode) or cooldownTimer > 0.0:\n    return # Guard: $primaryGuard';
+    }
+
+    if (parentTask.children.isNotEmpty) {
+      parentTask.children[0].text =
+          'STEP $taskNum.1 · BIND INPUT & VALIDATE ${secondaryNode.toUpperCase()} IN ${primaryNode.toUpperCase()}';
+      parentTask.children[0].specNotes =
+          'Inside $primaryNode, read player input and validate $secondaryNode before entering "$cleanTitle" ($userContext):';
+      parentTask.children[0].codeSnippet = step1Code;
+      parentTask.children[0].codeTargetFile = 'custom_snippet';
+    }
+    if (parentTask.children.length > 1) {
+      parentTask.children[1].text =
+          'STEP $taskNum.2 · APPLY ${primaryVarName.toUpperCase()} LOGIC ACROSS ${primaryNode.toUpperCase()} & ${tertiaryNode.toUpperCase()}';
+      parentTask.children[1].specNotes =
+          'Drive "$cleanTitle" on $primaryNode / $secondaryNode using inspector parameter $primaryVarName and update $tertiaryNode:';
+      parentTask.children[1].codeSnippet = step2Code;
+      parentTask.children[1].codeTargetFile = 'custom_snippet';
+    }
+    if (parentTask.children.length > 2) {
+      parentTask.children[2].text =
+          'STEP $taskNum.3 · ENFORCE GUARD CHECK ON ${secondaryNode.toUpperCase()}';
+      parentTask.children[2].specNotes =
+          'Guard $primaryNode / $secondaryNode against invalid state or rapid re-triggers to satisfy "$primaryGuard":';
+      parentTask.children[2].codeSnippet = step3Code;
+      parentTask.children[2].codeTargetFile = 'custom_snippet';
+    }
   }
 }
 
