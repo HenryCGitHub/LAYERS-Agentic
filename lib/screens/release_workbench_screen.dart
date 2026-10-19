@@ -374,6 +374,25 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 6),
+              // Visual Release Progress Bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: Container(
+                  height: 3.5,
+                  width: double.infinity,
+                  color: _borderSubtle,
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: (relProgress / 100.0).clamp(0.0, 1.0),
+                    child: Container(
+                      color: relProgress >= 100
+                          ? _accentEmerald
+                          : _accentAmber,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -394,45 +413,67 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             _buildFeatureRailItem(arch, activeVer: activeVer),
         ] else
           for (int bIdx = 0; bIdx < beats.length; bIdx++) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 14, 12, 5),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _accentEmerald.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: _accentEmerald.withValues(alpha: 0.35),
-                        width: 0.8,
+            Builder(
+              builder: (context) {
+                final beatFeats = widget.workbench.featuresForBeat(beats[bIdx].id);
+                final doneBeatCount = beatFeats
+                    .where((f) => widget.workbench.getDocumentProgress(f.id) >= 100)
+                    .length;
+                final allBeatDone = beatFeats.isNotEmpty && doneBeatCount == beatFeats.length;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 5),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _accentEmerald.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: _accentEmerald.withValues(alpha: 0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          'BEAT·${(bIdx + 1).toString().padLeft(2, '0')}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: _accentEmerald,
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      'BEAT·${(bIdx + 1).toString().padLeft(2, '0')}',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        color: _accentEmerald,
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          beats[bIdx].title.toUpperCase(),
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                            color: _textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
+                      if (beatFeats.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          allBeatDone
+                              ? '$doneBeatCount/${beatFeats.length} ✓'
+                              : '$doneBeatCount/${beatFeats.length}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: allBeatDone ? _accentEmerald : _textMuted,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      beats[bIdx].title.toUpperCase(),
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                        color: _textSecondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
             for (final feat in widget.workbench.featuresForBeat(beats[bIdx].id))
               _buildFeatureRailItem(feat, activeVer: activeVer),
@@ -814,6 +855,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       feat.sections,
       splitSingleSentence: false,
     );
+    final allFeats = <TierDocument>[
+      for (final b in widget.workbench.activeReleaseBeats)
+        ...widget.workbench.featuresForBeat(b.id),
+    ];
+    final currentFeatIdx = allFeats.indexWhere((f) => f.id == feat.id);
+    final prevFeat = currentFeatIdx > 0 ? allFeats[currentFeatIdx - 1] : null;
+    final nextSequentialFeat =
+        (currentFeatIdx != -1 && currentFeatIdx < allFeats.length - 1)
+            ? allFeats[currentFeatIdx + 1]
+            : null;
 
     Widget tag(String text, Color color, {double? width}) => Container(
           width: width,
@@ -875,7 +926,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       ],
                     ),
                     Wrap(
-                      spacing: 8,
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         if (outOfScope.isNotEmpty)
                           InkWell(
@@ -939,6 +991,58 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               ),
                             ),
                           ),
+                        if (allFeats.length > 1) ...[
+                          InkWell(
+                            key: const ValueKey('prev_feature_btn'),
+                            onTap: prevFeat == null
+                                ? null
+                                : () => widget.workbench.selectFeature(prevFeat.id),
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _bgRecessed,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                '‹ Prev',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: prevFeat == null
+                                      ? _textMuted.withValues(alpha: 0.45)
+                                      : _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            key: const ValueKey('next_feature_btn'),
+                            onTap: nextSequentialFeat == null
+                                ? null
+                                : () => widget.workbench.selectFeature(nextSequentialFeat.id),
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _bgRecessed,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                'Next ›',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: nextSequentialFeat == null
+                                      ? _textMuted.withValues(alpha: 0.45)
+                                      : _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -1112,61 +1216,196 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       widget.workbench.updateFeatureStates(feat.id, states);
     }
 
+    Future<void> promptTuningDialog({int? editIdx, String? currentVal}) async {
+      final ctrl = TextEditingController(text: currentVal ?? '');
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Text(
+            editIdx == null ? 'Add Tuning Parameter' : 'Edit Tuning Parameter',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: _textPrimary,
+            ),
+          ),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            onSubmitted: (_) => Navigator.of(ctx).pop('save'),
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 12.5,
+              color: _textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'e.g., move_speed: 220 px/s',
+              hintStyle: GoogleFonts.jetBrainsMono(
+                fontSize: 11.5,
+                color: _textMuted,
+              ),
+              filled: true,
+              fillColor: _bgRecessed,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: _borderSubtle),
+              ),
+            ),
+          ),
+          actions: [
+            if (editIdx != null)
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop('delete'),
+                child: Text(
+                  'Delete',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _accentCrimson,
+                  ),
+                ),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _focalAccent,
+                foregroundColor: _focalAccentFg,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('save'),
+              child: Text(
+                'Save',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || action == null || action == 'cancel') return;
+      final updatedTuning = List<String>.from(tuningItems);
+      if (action == 'delete' && editIdx != null && editIdx < updatedTuning.length) {
+        updatedTuning.removeAt(editIdx);
+      } else if (action == 'save') {
+        final trimmed = ctrl.text.trim();
+        if (trimmed.isEmpty) return;
+        if (editIdx != null && editIdx < updatedTuning.length) {
+          updatedTuning[editIdx] = trimmed;
+        } else {
+          updatedTuning.add(trimmed);
+        }
+      }
+      setState(() {
+        node.tuningParams = updatedTuning;
+      });
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
+
     final checklistPane = Padding(
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (int tIdx = 0; tIdx < node.checklist.length; tIdx++)
-            InkWell(
-              key: ValueKey('task_checkbox_${node.id}_$tIdx'),
-              onTap: () {
-                final wasDone = node.isCompleted;
-                node.checklist[tIdx].completed = !node.checklist[tIdx].completed;
-                final nowDone = node.isCompleted;
-                setState(() {
-                  if (!wasDone && nowDone) {
-                    // Hold checkpoint open so the developer can read the PLAYTEST instructions
-                    // and click "Verify Playtest & Advance"
-                    _awaitingPlaytestVerification.add(node.id);
-                  } else if (!nowDone) {
-                    _awaitingPlaytestVerification.remove(node.id);
-                  }
-                });
-                widget.workbench.updateFeatureStates(feat.id, states);
-              },
-              borderRadius: BorderRadius.circular(5),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      node.checklist[tIdx].completed
-                          ? Icons.check_box_rounded
-                          : Icons.check_box_outline_blank_rounded,
-                      size: 16,
-                      color: node.checklist[tIdx].completed
-                          ? _accentEmerald
-                          : _accentAmber,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        node.checklist[tIdx].text,
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          color: node.checklist[tIdx].completed
-                              ? _textMuted
-                              : _textPrimary,
-                          decoration: node.checklist[tIdx].completed
-                              ? TextDecoration.lineThrough
-                              : TextDecoration.none,
-                        ),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    key: ValueKey('task_checkbox_${node.id}_$tIdx'),
+                    onTap: () {
+                      final wasDone = node.isCompleted;
+                      node.checklist[tIdx].completed =
+                          !node.checklist[tIdx].completed;
+                      final nowDone = node.isCompleted;
+                      setState(() {
+                        if (!wasDone && nowDone) {
+                          // Hold checkpoint open so the developer can read the PLAYTEST instructions
+                          // and click "Verify Playtest & Advance"
+                          _awaitingPlaytestVerification.add(node.id);
+                        } else if (!nowDone) {
+                          _awaitingPlaytestVerification.remove(node.id);
+                        }
+                      });
+                      widget.workbench.updateFeatureStates(feat.id, states);
+                    },
+                    borderRadius: BorderRadius.circular(5),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 5,
+                        horizontal: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            node.checklist[tIdx].completed
+                                ? Icons.check_box_rounded
+                                : Icons.check_box_outline_blank_rounded,
+                            size: 16,
+                            color: node.checklist[tIdx].completed
+                                ? _accentEmerald
+                                : _accentAmber,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              node.checklist[tIdx].text,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                color: node.checklist[tIdx].completed
+                                    ? _textMuted
+                                    : _textPrimary,
+                                decoration: node.checklist[tIdx].completed
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                if (node.checklist.length > 1)
+                  InkWell(
+                    key: ValueKey('delete_task_${node.id}_$tIdx'),
+                    onTap: () {
+                      setState(() {
+                        node.checklist.removeAt(tIdx);
+                        if (!node.isCompleted) {
+                          _awaitingPlaytestVerification.remove(node.id);
+                        }
+                      });
+                      widget.workbench.updateFeatureStates(feat.id, states);
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 13,
+                        color: _textMuted.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           const SizedBox(height: 6),
           Container(
@@ -1301,14 +1540,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               style: GoogleFonts.inter(fontSize: 11, color: _textSecondary),
             ),
           ],
-          if (tuningItems.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 5,
-              children: [
-                for (final t in tuningItems)
-                  Container(
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 5,
+            children: [
+              for (int tuneIdx = 0; tuneIdx < tuningItems.length; tuneIdx++)
+                InkWell(
+                  key: ValueKey('tuning_pill_${index}_$tuneIdx'),
+                  onTap: () => promptTuningDialog(
+                    editIdx: tuneIdx,
+                    currentVal: tuningItems[tuneIdx],
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: _accentAmber.withValues(alpha: 0.12),
@@ -1319,7 +1564,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       ),
                     ),
                     child: Text(
-                      t,
+                      tuningItems[tuneIdx],
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -1327,9 +1572,30 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       ),
                     ),
                   ),
-              ],
-            ),
-          ],
+                ),
+              InkWell(
+                key: ValueKey('add_tuning_btn_$index'),
+                onTap: () => promptTuningDialog(),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    '+ Tune',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accentAmber,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           if (edgeItems.isNotEmpty) ...[
             const SizedBox(height: 6),
             Wrap(

@@ -693,7 +693,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           _buildStepperRail(draft),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1160),
@@ -704,6 +704,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               ),
             ),
           ),
+          _buildConceptStickyBottomDock(draft),
         ],
       ),
     );
@@ -1076,9 +1077,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     final sec = _sections[sectionIdx];
     final selectedOpt = _selectedOptionBySection[sectionIdx] ?? 0;
     final agentNote = _agentNotesBySection[sectionIdx];
-    final nextTitle = sectionIdx + 1 < _sections.length
-        ? 'Next: ${_sections[sectionIdx + 1].shortTitle} →'
-        : 'Next: Full Blueprint Review →';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1283,91 +1281,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       const SizedBox(height: 7),
                     ],
 
-                    const SizedBox(height: 6),
-
-                    // [ASK AGENT] Input Bar
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _bgSurface,
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(color: _borderSubtle),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  '[ASK AGENT]',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: _textSecondary,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: TextField(
-                                    key: const ValueKey('concept_chat_input_field'),
-                                    controller: _agentPromptController,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      color: _textPrimary,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText:
-                                          'Tell the Agent how to change or expand ${sec.title}...',
-                                      hintStyle: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        color: _textMuted,
-                                      ),
-                                      border: InputBorder.none,
-                                      enabledBorder: InputBorder.none,
-                                      focusedBorder: InputBorder.none,
-                                      filled: false,
-                                      isDense: true,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(vertical: 8),
-                                    ),
-                                    onSubmitted: (_) =>
-                                        _submitSectionPrompt(draft, sectionIdx),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: widget.workbench.isAgentBusy
-                              ? null
-                              : () => _submitSectionPrompt(draft, sectionIdx),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _textPrimary,
-                            backgroundColor: _bgSurface,
-                            side: BorderSide(color: _borderBright),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                          child: Text(
-                            widget.workbench.isAgentBusy ? 'Updating...' : 'Send to Agent',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
                     if (agentNote != null) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
@@ -1387,20 +1302,41 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
-              // STEP NAVIGATION BAR
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                color: _bgSurface,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  // ── Sticky Bottom Studio Dock (Steps `01`–`09` + Step `10 Full Review`) ─────
+  Widget _buildConceptStickyBottomDock(ProjectConceptBlueprint draft) {
+    final isFullReview = _currentStep >= _sections.length;
+    if (isFullReview) {
+      return Container(
+        key: const ValueKey('concept_sticky_bottom_dock'),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: _bgSurface,
+          border: Border(top: BorderSide(color: _borderBright)),
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1160),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 10,
+              spacing: 16,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     OutlinedButton(
-                      onPressed: sectionIdx == 0
-                          ? null
-                          : () => _goToStep(sectionIdx - 1),
+                      onPressed: () => _goToStep(_sections.length - 1),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: _textPrimary,
+                        backgroundColor: _bgRecessed,
                         side: BorderSide(color: _borderSubtle),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                         shape: RoundedRectangleBorder(
@@ -1408,59 +1344,244 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                         ),
                       ),
                       child: Text(
-                        '← Previous Section',
+                        '← Back to Section 09',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () => _goToStep(_sections.length),
-                          child: Text(
-                            'Skip to Final Review',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: _textSecondary,
-                            ),
-                          ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _accentEmerald.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: _accentEmerald.withValues(alpha: 0.45),
                         ),
-                        const SizedBox(width: 10),
-                        ElevatedButton(
-                          key: const ValueKey('next_section_btn'),
-                          onPressed: () => _goToStep(sectionIdx + 1),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _focalAccent,
-                            foregroundColor: _focalAccentFg,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 11,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                          child: Text(
-                            nextTitle,
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                      ),
+                      child: Text(
+                        'ALL 9 SECTIONS READY',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: _accentEmerald,
                         ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _copyBlueprintAsMarkdown(draft),
+                      icon: const Icon(Icons.copy_rounded, size: 14),
+                      label: Text(
+                        'Copy Markdown',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _textPrimary,
+                        backgroundColor: _bgRecessed,
+                        side: BorderSide(color: _borderSubtle),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    _buildPrimaryApproveButton(
+                      key: const ValueKey('approve_concept_plan_release_btn'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final sectionIdx = _currentStep;
+    final sec = _sections[sectionIdx];
+    final nextTitle = sectionIdx + 1 < _sections.length
+        ? 'Next: ${_sections[sectionIdx + 1].shortTitle} →'
+        : 'Next: Full Blueprint Review →';
+
+    return Container(
+      key: const ValueKey('concept_sticky_bottom_dock'),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        border: Border(top: BorderSide(color: _borderBright)),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1160),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // [ASK AGENT] Input Bar
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: _borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            '[ASK AGENT]',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              key: const ValueKey('concept_chat_input_field'),
+                              controller: _agentPromptController,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: _textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Tell the Agent how to change or expand ${sec.title}...',
+                                hintStyle: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  color: _textMuted,
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                filled: false,
+                                isDense: true,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              onSubmitted: (_) =>
+                                  _submitSectionPrompt(draft, sectionIdx),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: widget.workbench.isAgentBusy
+                        ? null
+                        : () => _submitSectionPrompt(draft, sectionIdx),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _textPrimary,
+                      backgroundColor: _bgRecessed,
+                      side: BorderSide(color: _borderBright),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
+                    child: Text(
+                      widget.workbench.isAgentBusy ? 'Updating...' : 'Send to Agent',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Step Navigation Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  OutlinedButton(
+                    onPressed: sectionIdx == 0
+                        ? null
+                        : () => _goToStep(sectionIdx - 1),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _textPrimary,
+                      backgroundColor: _bgRecessed,
+                      side: BorderSide(color: _borderSubtle),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
+                    child: Text(
+                      '← Previous Section',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => _goToStep(_sections.length),
+                        child: Text(
+                          'Skip to Final Review',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        key: const ValueKey('next_section_btn'),
+                        onPressed: () => _goToStep(sectionIdx + 1),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _focalAccent,
+                          foregroundColor: _focalAccentFg,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 11,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                        child: Text(
+                          nextTitle,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -2562,9 +2683,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    _buildPrimaryApproveButton(
-                      key: const ValueKey('approve_concept_plan_release_btn'),
-                    ),
+                    _buildPrimaryApproveButton(),
                   ],
                 ),
               ],
@@ -2639,86 +2758,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             ),
             const SizedBox(height: 20),
           ],
-
-          // Bottom Action Bar (Eliminates scrolling back to the top after reading Section 09)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: BoxDecoration(
-              color: _bgSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _borderBright),
-            ),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              runSpacing: 12,
-              spacing: 16,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: _accentEmerald.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: _accentEmerald.withValues(alpha: 0.45),
-                        ),
-                      ),
-                      child: Text(
-                        'ALL 9 SECTIONS READY',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: _accentEmerald,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Ready to generate your v0.1 Prototype Release Plan.',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: _textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _copyBlueprintAsMarkdown(draft),
-                      icon: const Icon(Icons.copy_rounded, size: 14),
-                      label: Text(
-                        'Copy Markdown',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _textPrimary,
-                        backgroundColor: _bgRecessed,
-                        side: BorderSide(color: _borderSubtle),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 14,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    _buildPrimaryApproveButton(),
-                  ],
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

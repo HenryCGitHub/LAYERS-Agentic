@@ -23,6 +23,8 @@ class ReleasePlanGateScreen extends StatefulWidget {
 
 class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   final TextEditingController _releaseChatController = TextEditingController();
+  final Set<String> _expandedFeatureIds = {};
+  final Map<String, TextEditingController> _newBeatFeatureControllers = {};
 
   bool get _isDark => widget.workbench.isDark;
   Color get _bgBase => AppTheme.bgBaseFor(_isDark);
@@ -40,9 +42,19 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   Color get _accentCrimson => AppTheme.accentRedFor(_isDark);
   Color get _accentAmber => AppTheme.accentAmberFor(_isDark);
 
+  TextEditingController _controllerForBeat(String beatId) {
+    return _newBeatFeatureControllers.putIfAbsent(
+      beatId,
+      () => TextEditingController(),
+    );
+  }
+
   @override
   void dispose() {
     _releaseChatController.dispose();
+    for (final c in _newBeatFeatureControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -734,6 +746,17 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     int beatIndex,
   ) {
     final beatCode = 'BEAT·${(beatIndex + 1).toString().padLeft(2, '0')}';
+    final activeFeatures = beat.features.where((f) => !f.isSuperseded).toList();
+    final allIncluded = activeFeatures.isNotEmpty && activeFeatures.every((f) => f.included);
+    final beatCtrl = _controllerForBeat(beat.id);
+
+    void submitNewBeatFeature() {
+      final text = beatCtrl.text.trim();
+      if (text.isEmpty) return;
+      beatCtrl.clear();
+      widget.workbench.addProposedFeatureToBeat(beat.id, text);
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -747,6 +770,24 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              InkWell(
+                key: ValueKey('toggle_beat_${beat.id}'),
+                onTap: () => widget.workbench.toggleProposedBeatScope(
+                  beat.id,
+                  !allIncluded,
+                ),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2, right: 8),
+                  child: Icon(
+                    allIncluded
+                        ? Icons.check_box_rounded
+                        : Icons.check_box_outline_blank_rounded,
+                    size: 17,
+                    color: allIncluded ? _accentEmerald : _textMuted,
+                  ),
+                ),
+              ),
               Container(
                 width: 68,
                 padding: const EdgeInsets.symmetric(vertical: 2.5),
@@ -821,6 +862,60 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             _buildFeatureToggleRow(bp, beat, beat.features[fIdx]),
             if (fIdx < beat.features.length - 1) const SizedBox(height: 7),
           ],
+          const SizedBox(height: 8),
+          // Inline "+ Add Feature to Beat" input bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+            decoration: BoxDecoration(
+              color: _bgSurface,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.add_rounded, size: 15, color: _textMuted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    key: ValueKey('add_beat_feature_input_${beat.id}'),
+                    controller: beatCtrl,
+                    onSubmitted: (_) => submitNewBeatFeature(),
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: _textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 7),
+                      hintText:
+                          'Add playable feature to $beatCode (e.g., Slide Boost & Cancel)...',
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: _textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  key: ValueKey('add_beat_feature_btn_${beat.id}'),
+                  onTap: submitNewBeatFeature,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    child: Text(
+                      '+ Add Feature (4h)',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: _accentAmber,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -832,111 +927,315 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     ProposedFeatureBlueprint feat,
   ) {
     final isIncluded = feat.included;
-    return Material(
-      color: isIncluded ? _bgSurface : _bgRecessed.withValues(alpha: 0.5),
-      borderRadius: BorderRadius.circular(5),
-      child: InkWell(
-        key: ValueKey('toggle_feat_${feat.id}'),
-        onTap: () => widget.workbench.toggleProposedFeatureScope(
-          beat.id,
-          feat.id,
-          !feat.included,
-        ),
+    final isExpanded = _expandedFeatureIds.contains(feat.id);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isIncluded ? _bgSurface : _bgRecessed.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(5),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-              color: isIncluded ? _borderBright : _borderSubtle,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isIncluded
-                    ? Icons.check_box_rounded
-                    : Icons.check_box_outline_blank_rounded,
-                size: 16,
-                color: isIncluded ? _accentEmerald : _textMuted,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+        border: Border.all(
+          color: isIncluded ? _borderBright : _borderSubtle,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                InkWell(
+                  key: ValueKey('toggle_feat_${feat.id}'),
+                  onTap: () => widget.workbench.toggleProposedFeatureScope(
+                    beat.id,
+                    feat.id,
+                    !feat.included,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(
+                      isIncluded
+                          ? Icons.check_box_rounded
+                          : Icons.check_box_outline_blank_rounded,
+                      size: 16,
+                      color: isIncluded ? _accentEmerald : _textMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => widget.workbench.toggleProposedFeatureScope(
+                      beat.id,
+                      feat.id,
+                      !feat.included,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              feat.title,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isIncluded ? _textPrimary : _textMuted,
+                                decoration: isIncluded
+                                    ? TextDecoration.none
+                                    : TextDecoration.lineThrough,
+                              ),
+                            ),
+                            _buildLifecycleBadge(feat, bp.releaseVersionTag),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
                         Text(
-                          feat.title,
+                          feat.lifecycle == FeatureLifecycleStatus.stable
+                              ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
+                              : feat.goal,
                           style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isIncluded ? _textPrimary : _textMuted,
-                            decoration: isIncluded
-                                ? TextDecoration.none
-                                : TextDecoration.lineThrough,
+                            fontSize: 11.5,
+                            color: isIncluded ? _textSecondary : _textMuted,
                           ),
                         ),
-                        _buildLifecycleBadge(feat, bp.releaseVersionTag),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      feat.lifecycle == FeatureLifecycleStatus.stable
-                          ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
-                          : '${feat.goal} (${feat.checkpoints.length} Checkpoints · ${feat.tuningParams.length} Tune · ${feat.edgeCases.length} Edge)',
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: isIncluded ? _textSecondary : _textMuted,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (feat.checkpoints.isNotEmpty) ...[
+                  InkWell(
+                    key: ValueKey('inspect_feat_${feat.id}'),
+                    onTap: () {
+                      setState(() {
+                        if (isExpanded) {
+                          _expandedFeatureIds.remove(feat.id);
+                        } else {
+                          _expandedFeatureIds.add(feat.id);
+                        }
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: isExpanded
+                            ? _accentAmber.withValues(alpha: 0.14)
+                            : _bgRecessed,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isExpanded
+                              ? _accentAmber.withValues(alpha: 0.45)
+                              : _borderSubtle,
+                        ),
+                      ),
+                      child: Text(
+                        '${feat.checkpoints.length} Checkpoints · ${feat.tuningParams.length} Tune ${isExpanded ? "▴" : "▾"}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: isExpanded ? _accentAmber : _textSecondary,
+                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: !isIncluded
-                      ? _accentCrimson.withValues(alpha: 0.12)
-                      : (feat.lifecycle == FeatureLifecycleStatus.stable
-                          ? _accentEmerald.withValues(alpha: 0.12)
-                          : _bgRecessed),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
                     color: !isIncluded
-                        ? _accentCrimson.withValues(alpha: 0.42)
+                        ? _accentCrimson.withValues(alpha: 0.12)
                         : (feat.lifecycle == FeatureLifecycleStatus.stable
-                            ? _accentEmerald.withValues(alpha: 0.42)
-                            : _borderSubtle),
+                            ? _accentEmerald.withValues(alpha: 0.12)
+                            : _bgRecessed),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: !isIncluded
+                          ? _accentCrimson.withValues(alpha: 0.42)
+                          : (feat.lifecycle == FeatureLifecycleStatus.stable
+                              ? _accentEmerald.withValues(alpha: 0.42)
+                              : _borderSubtle),
+                    ),
+                  ),
+                  child: Text(
+                    !isIncluded
+                        ? (feat.lifecycle == FeatureLifecycleStatus.superseded
+                            ? 'ARCHIVED'
+                            : 'DEFERRED')
+                        : (feat.lifecycle == FeatureLifecycleStatus.stable
+                            ? 'STABLE · 0h'
+                            : '${feat.activeDeltaHours}h'),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: !isIncluded
+                          ? _accentCrimson
+                          : (feat.lifecycle == FeatureLifecycleStatus.stable
+                              ? _accentEmerald
+                              : _textPrimary),
+                    ),
                   ),
                 ),
-                child: Text(
-                  !isIncluded
-                      ? (feat.lifecycle == FeatureLifecycleStatus.superseded
-                          ? 'ARCHIVED'
-                          : 'DEFERRED')
-                      : (feat.lifecycle == FeatureLifecycleStatus.stable
-                          ? 'STABLE · 0h'
-                          : '${feat.activeDeltaHours}h'),
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: !isIncluded
-                        ? _accentCrimson
-                        : (feat.lifecycle == FeatureLifecycleStatus.stable
-                            ? _accentEmerald
-                            : _textPrimary),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          if (isExpanded)
+            Container(
+              key: ValueKey('inspect_feat_drawer_${feat.id}'),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              decoration: BoxDecoration(
+                color: _bgRecessed,
+                border: Border(top: BorderSide(color: _borderSubtle)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _accentEmerald.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                            color: _accentEmerald.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          'DONE WHEN',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: _accentEmerald,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          feat.doneWhen,
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: _accentEmerald,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      for (int cIdx = 0; cIdx < feat.checkpoints.length; cIdx++)
+                        Container(
+                          width: 320,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: _bgSurface,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'CHECKPOINT ${cIdx + 1} · ${feat.checkpoints[cIdx].title}',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: _textPrimary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    'PLAYTEST',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: _accentAmber,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                feat.checkpoints[cIdx].playtestCriteria,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: _textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (feat.tuningParams.isNotEmpty || feat.edgeCases.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        for (final t in feat.tuningParams)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _accentAmber.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: _accentAmber.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              '⚙ $t',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: _textPrimary,
+                              ),
+                            ),
+                          ),
+                        for (final e in feat.edgeCases)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _accentCrimson.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: _accentCrimson.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              '⚠ $e',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

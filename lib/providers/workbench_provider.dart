@@ -464,6 +464,84 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
+  /// Toggles all non-superseded Features inside a Beat on or off at once in Stage 2.
+  void toggleProposedBeatScope(String beatId, bool included) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    for (final beat in bp.beats) {
+      if (beat.id == beatId) {
+        for (final feat in beat.features) {
+          if (!feat.isSuperseded) {
+            feat.included = included;
+          }
+        }
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  /// Adds a custom Playable Feature stub directly into a Beat in Stage 2 without waiting for AI regeneration.
+  void addProposedFeatureToBeat(String beatId, String rawTitle) {
+    final bp = _releaseBlueprint;
+    final cleanTitle = rawTitle.trim();
+    if (bp == null || cleanTitle.isEmpty) return;
+
+    for (final beat in bp.beats) {
+      if (beat.id == beatId) {
+        final featId = 'feat_${beat.id}_${beat.features.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+        beat.features.add(
+          ProposedFeatureBlueprint(
+            id: featId,
+            title: cleanTitle,
+            goal: 'Build playable $cleanTitle mechanics and player feedback for ${beat.title}.',
+            doneWhen: 'Player executes $cleanTitle in viewport with immediate visual response.',
+            estimatedHours: 4,
+            included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: bp.releaseVersionTag,
+            inScope: [
+              'Core $cleanTitle interaction & state',
+              'Immediate visual & HUD feedback',
+            ],
+            outOfScope: [
+              'Final production art polish',
+            ],
+            tuningParams: [
+              'responseTime: 0.15s',
+            ],
+            edgeCases: [
+              'Prevent duplicate trigger during active cooldown',
+            ],
+            checkpoints: [
+              ProposedCheckpointBlueprint(
+                title: '[BUILD PASS] $cleanTitle Core Execution',
+                playtestCriteria: 'Trigger $cleanTitle in viewport and verify responsive state change and feedback.',
+                tasks: [
+                  'Implement core player interaction and state for $cleanTitle (2h)',
+                  'Hook up immediate visual/audio cue and verify in viewport (2h)',
+                ],
+                coveredScope: [
+                  'Core $cleanTitle interaction & state',
+                  'Immediate visual & HUD feedback',
+                ],
+                tuningParams: [
+                  'responseTime: 0.15s',
+                ],
+                edgeCases: [
+                  'Prevent duplicate trigger during active cooldown',
+                ],
+                releaseVersion: bp.releaseVersionTag,
+              ),
+            ],
+          ),
+        );
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
   /// Stage 2 -> Stage 3: User approves the Release Plan Gate; Executor Agent builds or evolves the Release hierarchy.
   Future<void> approveAndExecuteReleasePlan() async {
     final bp = _releaseBlueprint;

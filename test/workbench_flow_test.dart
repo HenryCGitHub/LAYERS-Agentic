@@ -52,6 +52,7 @@ void main() {
 
         // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..09) ──
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
         expect(find.text('SECTION 01 / 09'), findsOneWidget);
         expect(find.text('Goal'), findsWidgets);
 
@@ -85,6 +86,7 @@ void main() {
 
         // ── Stage 1C: Step 10 Full Blueprint Review & Release Train ──
         expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
         expect(find.text('STEP 10 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
         expect(find.text('v0.1: Core Movement & Game Loop - Prototype'), findsOneWidget);
         final approveConceptBtn = find.byKey(const ValueKey('approve_concept_plan_release_btn'));
@@ -103,6 +105,17 @@ void main() {
         expect(provider.releaseBlueprint!.beats.length, 7);
         expect(provider.releaseBlueprint!.totalIncludedFeatures, 8);
         expect(find.byKey(const ValueKey('release_sticky_bottom_dock')), findsOneWidget);
+
+        // Verify Expandable Checkpoint & Playtest Preview Drawer on Beat 1 Feature 1
+        final firstProposedFeatId = provider.releaseBlueprint!.beats.first.features.first.id;
+        final inspectBtn = find.byKey(ValueKey('inspect_feat_$firstProposedFeatId'));
+        expect(find.byKey(ValueKey('inspect_feat_drawer_$firstProposedFeatId')), findsNothing);
+        await tester.ensureVisible(inspectBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(inspectBtn);
+        await tester.pumpAndSettle();
+        expect(find.byKey(ValueKey('inspect_feat_drawer_$firstProposedFeatId')), findsOneWidget);
+
         final buildRelBtn = find.byKey(const ValueKey('approve_and_build_release_btn'));
         await tester.ensureVisible(buildRelBtn);
         await tester.pumpAndSettle();
@@ -115,6 +128,9 @@ void main() {
         expect(find.text('CHECKPOINT 1'), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('add_tuning_btn_0')), findsOneWidget);
 
         // Verify 60/40 horizontal placement (Checklist Left | Spec Context Right)
         final leftTaskPos = tester.getTopLeft(
