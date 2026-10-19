@@ -653,14 +653,38 @@ class WorkbenchShell extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 14),
-                    Text(
-                      'SAVED PROJECTS IN VAULT (${projs.length})',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.4,
-                        color: textMuted,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'SAVED PROJECTS IN VAULT (${projs.length})',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                            color: textMuted,
+                          ),
+                        ),
+                        InkWell(
+                          key: const ValueKey('vault_new_project_btn'),
+                          onTap: () {
+                            workbench.createNewProject();
+                            Navigator.of(ctx).pop();
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            child: Text(
+                              '+ New Spark',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: accentEmerald,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     if (projs.isEmpty)
@@ -669,9 +693,21 @@ class WorkbenchShell extends StatelessWidget {
                         style: GoogleFonts.inter(fontSize: 11.5, color: textSecondary),
                       )
                     else
-                      for (final p in projs.take(5))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
+                      for (final p in projs.take(6))
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: p.id == workbench.activeProjectId
+                                ? bgRecessed
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: p.id == workbench.activeProjectId
+                                  ? borderBright
+                                  : borderSubtle,
+                            ),
+                          ),
                           child: Row(
                             children: [
                               Icon(
@@ -685,16 +721,106 @@ class WorkbenchShell extends StatelessWidget {
                               ),
                               const SizedBox(width: 7),
                               Expanded(
-                                child: Text(
-                                  p.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: p.id == workbench.activeProjectId
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: textPrimary,
+                                child: InkWell(
+                                  key: ValueKey('vault_switch_${p.id}'),
+                                  onTap: () {
+                                    workbench.switchProject(p.id);
+                                    setModalState(() {});
+                                  },
+                                  child: Text(
+                                    p.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: p.id == workbench.activeProjectId
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: 'Rename Project',
+                                child: InkWell(
+                                  key: ValueKey('vault_rename_${p.id}'),
+                                  onTap: () async {
+                                    final ctrl = TextEditingController(text: p.title);
+                                    final newTitle = await showDialog<String>(
+                                      context: ctx,
+                                      builder: (rCtx) => AlertDialog(
+                                        backgroundColor: bgSurface,
+                                        title: Text(
+                                          'Rename Project',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: textPrimary,
+                                          ),
+                                        ),
+                                        content: TextField(
+                                          controller: ctrl,
+                                          autofocus: true,
+                                          style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                                          onSubmitted: (val) => Navigator.of(rCtx).pop(val),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.of(rCtx).pop(),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
+                                            child: const Text('Save'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (newTitle != null && newTitle.trim().isNotEmpty) {
+                                      workbench.renameProject(p.id, newTitle.trim());
+                                      setModalState(() {});
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(Icons.edit_outlined, size: 13, color: textSecondary),
+                                  ),
+                                ),
+                              ),
+                              Tooltip(
+                                message: 'Duplicate Project',
+                                child: InkWell(
+                                  key: ValueKey('vault_duplicate_${p.id}'),
+                                  onTap: () {
+                                    workbench.duplicateProject(p.id);
+                                    setModalState(() {});
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(Icons.copy_all_rounded, size: 13, color: accentCyan),
+                                  ),
+                                ),
+                              ),
+                              Tooltip(
+                                message: 'Delete Project',
+                                child: InkWell(
+                                  key: ValueKey('vault_delete_${p.id}'),
+                                  onTap: () {
+                                    workbench.deleteProject(p.id);
+                                    setModalState(() {});
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.delete_outline_rounded,
+                                      size: 13,
+                                      color: AppTheme.accentRedFor(isDark),
+                                    ),
                                   ),
                                 ),
                               ),

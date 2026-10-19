@@ -1172,6 +1172,11 @@ class FeatureStateNode {
                 if (subtaskMap.containsKey(check.id)) {
                   check.completed = subtaskMap[check.id]!.completed;
                 }
+                for (final sub in check.children) {
+                  if (subtaskMap.containsKey(sub.id)) {
+                    sub.completed = subtaskMap[sub.id]!.completed;
+                  }
+                }
               }
             }
             autoHealStageNodes(doc, nodes);
@@ -1237,3 +1242,248 @@ class FeatureStateNode {
     }).toList();
   }
 }
+
+/// Represents a single checkable "How-To" sub-step inside a Parent Task's walkthrough.
+class TaskHowToSubStep {
+  final Subtask subtask;
+  final String stepNumberLabel; // e.g., "STEP 1.1 · READ INPUT & STATE"
+  final String instruction;     // Concrete implementation instruction
+  final String codeFormula;     // Short code / formula snippet
+  final bool isGuardStep;
+
+  const TaskHowToSubStep({
+    required this.subtask,
+    required this.stepNumberLabel,
+    required this.instruction,
+    required this.codeFormula,
+    this.isGuardStep = false,
+  });
+}
+
+/// Resolves and persists the structured Parent Task metadata (`numLabel`, `layerTag`,
+/// `cleanTitle`, `durationChip`, `whereLocation`) and ensures each Parent Task has
+/// 3 checkable `How-To` sub-steps (`Subtask.children`) with automatic rollup.
+class TaskHowToBlueprint {
+  final String numLabel;      // "01", "02", ...
+  final String layerTag;      // "INPUT", "PHYSICS", "STATE", "FEEL", "UI"
+  final String cleanTitle;    // Task title without trailing "(2h)"
+  final String durationChip;  // Extracted "2h" or "1h"
+  final String whereLocation; // e.g. "Script: PlayerController._physics_process(delta)"
+  final List<TaskHowToSubStep> subSteps;
+
+  const TaskHowToBlueprint({
+    required this.numLabel,
+    required this.layerTag,
+    required this.cleanTitle,
+    required this.durationChip,
+    required this.whereLocation,
+    required this.subSteps,
+  });
+
+  static final RegExp _trailingDurationRe =
+      RegExp(r'\s*\(([\d\.]+\s*[hm])\)\s*$', caseSensitive: false);
+
+  static String extractCleanTitle(String rawText) {
+    var cleaned = rawText.replaceAll(_trailingDurationRe, '').trim();
+    cleaned = cleaned
+        .replaceFirst(
+          RegExp(r'^\[(?:PREREQ|BUILD|HOOK|TEST|INPUT|STATE|PHYSICS|FEEL|UI)\]\s*',
+              caseSensitive: false),
+          '',
+        )
+        .trim();
+    return cleaned.isEmpty ? rawText.trim() : cleaned;
+  }
+
+  static String extractDurationChip(String rawText) {
+    final m = _trailingDurationRe.firstMatch(rawText);
+    if (m != null && m.group(1) != null) {
+      return m.group(1)!.replaceAll(' ', '');
+    }
+    return '1h';
+  }
+
+  static String inferLayerTag(String rawText, int taskIdx) {
+    final lower = rawText.toLowerCase();
+    if (lower.contains('input') ||
+        lower.contains('control') ||
+        lower.contains('key') ||
+        lower.contains('mouse') ||
+        lower.contains('aim') ||
+        lower.contains('strafe')) {
+      return 'INPUT';
+    }
+    if (lower.contains('physic') ||
+        lower.contains('velocity') ||
+        lower.contains('force') ||
+        lower.contains('speed') ||
+        lower.contains('gravity') ||
+        lower.contains('collision') ||
+        lower.contains('raycast') ||
+        lower.contains('movement')) {
+      return 'PHYSICS';
+    }
+    if (lower.contains('visual') ||
+        lower.contains('audio') ||
+        lower.contains('sfx') ||
+        lower.contains('vfx') ||
+        lower.contains('cue') ||
+        lower.contains('camera') ||
+        lower.contains('fov') ||
+        lower.contains('feel') ||
+        lower.contains('feedback') ||
+        lower.contains('anim')) {
+      return 'FEEL';
+    }
+    if (lower.contains('hud') ||
+        lower.contains('ui') ||
+        lower.contains('menu') ||
+        lower.contains('indicator') ||
+        lower.contains('readout') ||
+        lower.contains('badge')) {
+      return 'UI / HUD';
+    }
+    return taskIdx == 0 ? 'STATE' : (taskIdx == 1 ? 'FEEL' : 'LOGIC');
+  }
+
+  static String inferWhereLocation(String cleanTitle, String layerTag) {
+    switch (layerTag) {
+      case 'INPUT':
+        return 'Script: PlayerController._unhandled_input(event)';
+      case 'PHYSICS':
+        return 'Script: MechanicController._physics_process(delta)';
+      case 'FEEL':
+        return 'Scene: FeedbackPresenter & CameraController._process(delta)';
+      case 'UI / HUD':
+        return 'Scene: GameHudOverlay.update_state_readout()';
+      default:
+        return 'Script: CoreLoopStateController._physics_process(delta)';
+    }
+  }
+
+  /// Guarantees that `parentTask.children` contains 3 concrete, checkable "How-To" sub-steps
+  /// (Step X.1 Setup/Input, Step X.2 Core Logic + Variables, Step X.3 Edge-Case Guard Check)
+  /// and returns the resolved [TaskHowToBlueprint].
+  static TaskHowToBlueprint resolve({
+    required Subtask parentTask,
+    required int taskIndex,
+    required FeatureStateNode checkpointNode,
+  }) {
+    final taskNum = taskIndex + 1;
+    final numLabel = taskNum.toString().padLeft(2, '0');
+    final cleanTitle = extractCleanTitle(parentTask.text);
+    final durationChip = extractDurationChip(parentTask.text);
+    final layerTag = inferLayerTag(parentTask.text, taskIndex);
+    final whereLocation = parentTask.codeTargetFile?.trim().isNotEmpty == true
+        ? parentTask.codeTargetFile!.trim()
+        : inferWhereLocation(cleanTitle, layerTag);
+
+    final primaryVar = checkpointNode.tuningParams.isNotEmpty
+        ? checkpointNode.tuningParams[taskIndex % checkpointNode.tuningParams.length]
+        : 'responseTime: 0.12 s';
+    final primaryVarName = primaryVar.split(':').first.trim();
+    final primaryGuard = checkpointNode.edgeCases.isNotEmpty
+        ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
+        : '[STATE GUARD] Prevent duplicate trigger while active';
+
+    if (parentTask.children.isEmpty) {
+      final isParentCompleted = parentTask.completed;
+      if (layerTag == 'FEEL' || layerTag == 'UI / HUD') {
+        parentTask.children = [
+          Subtask(
+            id: '${parentTask.id}_sub_1',
+            text: 'STEP $taskNum.1 · BIND STATE CHANGE SIGNAL TO VISUAL/AUDIO PRESENTER',
+            specNotes:
+                'Subscribe your HUD/VFX presenter node to the mechanic state signal so feedback triggers on transition for $cleanTitle:',
+            codeSnippet:
+                'mechanicController.state_changed.connect(_on_mechanic_state_changed)',
+            completed: isParentCompleted,
+          ),
+          Subtask(
+            id: '${parentTask.id}_sub_2',
+            text: 'STEP $taskNum.2 · TRIGGER ON-SCREEN FEEDBACK & APPLY TUNING PARAMETER',
+            specNotes:
+                'Update the active on-screen indicator, camera/animation response, and audio cue scaled by $primaryVarName:',
+            codeSnippet:
+                'hudIndicator.set_active(true)\nfeedbackPlayer.play_cue(intensity = $primaryVarName)',
+            completed: isParentCompleted,
+          ),
+          Subtask(
+            id: '${parentTask.id}_sub_3',
+            text: 'STEP $taskNum.3 · ENFORCE CLEANUP & TRANSITION GUARD',
+            specNotes:
+                'Immediately clear active visual/audio effects on state exit or reset to satisfy "$primaryGuard":',
+            codeSnippet:
+                'if not is_state_active:\n    hudIndicator.reset_cleanly() // Guard cleanup',
+            completed: isParentCompleted,
+          ),
+        ];
+      } else {
+        parentTask.children = [
+          Subtask(
+            id: '${parentTask.id}_sub_1',
+            text: 'STEP $taskNum.1 · READ PLAYER INPUT & VALIDATE ENTRY STATE',
+            specNotes:
+                'Inside your update loop, read the player trigger input and verify the mechanic can enter "$cleanTitle":',
+            codeSnippet:
+                'if Input.is_action_pressed("primary_action") and can_enter_state():\n    activeState = State.ACTIVE',
+            completed: isParentCompleted,
+          ),
+          Subtask(
+            id: '${parentTask.id}_sub_2',
+            text: 'STEP $taskNum.2 · EXECUTE CORE MECHANIC LOGIC WITH INSPECTOR VARIABLES',
+            specNotes:
+                'Apply the state update and movement/interaction math for "$cleanTitle" driven by inspector variable $primaryVarName:',
+            codeSnippet:
+                'currentValue = move_toward(currentValue, targetValue, $primaryVarName * delta)\napply_mechanic_step(currentValue)',
+            completed: isParentCompleted,
+          ),
+          Subtask(
+            id: '${parentTask.id}_sub_3',
+            text: 'STEP $taskNum.3 · ADD EDGE-CASE GUARD CHECK BEFORE COMMITTING STATE',
+            specNotes:
+                'Add an explicit guard check to enforce "$primaryGuard" so rapid inputs or boundary hits never lock the loop:',
+            codeSnippet:
+                'if is_boundary_blocked() or cooldownTimer > 0.0:\n    return // Guard: $primaryGuard',
+            completed: isParentCompleted,
+          ),
+        ];
+      }
+    }
+
+    final resolvedSubs = <TaskHowToSubStep>[];
+    for (int i = 0; i < parentTask.children.length; i++) {
+      final child = parentTask.children[i];
+      final rawLabel = child.text.trim();
+      final stepLabel = rawLabel.toUpperCase().startsWith('STEP ')
+          ? rawLabel
+          : 'STEP $taskNum.${i + 1} · ${rawLabel.toUpperCase()}';
+      final instruction = (child.specNotes != null && child.specNotes!.trim().isNotEmpty)
+          ? child.specNotes!.trim()
+          : 'Implement and verify "$rawLabel" inside $whereLocation.';
+      final code = (child.codeSnippet != null && child.codeSnippet!.trim().isNotEmpty)
+          ? child.codeSnippet!.trim()
+          : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)';
+      resolvedSubs.add(
+        TaskHowToSubStep(
+          subtask: child,
+          stepNumberLabel: stepLabel,
+          instruction: instruction,
+          codeFormula: code,
+          isGuardStep: i == parentTask.children.length - 1 ||
+              stepLabel.toUpperCase().contains('GUARD'),
+        ),
+      );
+    }
+
+    return TaskHowToBlueprint(
+      numLabel: numLabel,
+      layerTag: layerTag,
+      cleanTitle: cleanTitle,
+      durationChip: durationChip,
+      whereLocation: whereLocation,
+      subSteps: resolvedSubs,
+    );
+  }
+}
+

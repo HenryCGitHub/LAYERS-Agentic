@@ -186,18 +186,51 @@ void main() {
         // Verify Focus Mode is ON by default
         expect(provider.focusMode, isTrue);
 
+        // Verify Option 2: Stage 3 Live Concept & Pillars Reference Drawer toggle
+        expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('toggle_pillars_drawer_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('toggle_pillars_drawer_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsNothing);
+
+        // Verify Checkable How-To Sub-Steps on the Right Pane + Automatic Rollup to Parent Task
+        final activeFeat = provider.selectedFeature!;
+        final cp0Id = provider.documents[activeFeat.id]!.subtasks.first.id;
+        expect(find.textContaining('0/3 steps'), findsWidgets);
+        final subStep0 = find.byKey(ValueKey('howto_substep_${cp0Id}_0_0'));
+        await tester.ensureVisible(subStep0);
+        await tester.pumpAndSettle();
+        await tester.tap(subStep0);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('1/3 steps'), findsOneWidget);
+
         // Verify interactive Out-of-Scope shelf toggle
         expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsNothing);
-        await tester.tap(find.byKey(const ValueKey('feat_out_of_scope_btn')));
+        final outBtn = find.byKey(const ValueKey('feat_out_of_scope_btn'));
+        await tester.ensureVisible(outBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(outBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsOneWidget);
 
         // Verify inline "+ Add task step..." input appends a task to Checkpoint 1
         final addInput = find.byKey(const ValueKey('add_checkpoint_task_input_0'));
+        await tester.ensureVisible(addInput);
+        await tester.pumpAndSettle();
         await tester.enterText(addInput, 'Verify grapple hook cooldown indicator');
         await tester.tap(find.byKey(const ValueKey('add_checkpoint_task_btn_0')));
         await tester.pumpAndSettle();
         expect(find.text('Verify grapple hook cooldown indicator'), findsOneWidget);
+
+        // Verify 1-Click "✓ Verify Checkpoint →" button completes Checkpoint 1
+        final quickVerifyBtn = find.byKey(const ValueKey('quick_verify_checkpoint_btn_0'));
+        await tester.ensureVisible(quickVerifyBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(quickVerifyBtn);
+        await tester.pumpAndSettle();
+        expect(find.text('VERIFIED ✓'), findsWidgets);
 
         // Verify 1-Click Co-Pilot Playing Card #1 (+ Add Polish Checkpoint) appends a new checkpoint
         await tester.tap(find.byKey(const ValueKey('copilot_card_add_checkpoint')));
@@ -241,6 +274,7 @@ void main() {
         expect(b1f1.lifecycle.name, 'upgrade');
         expect(b1f1.activeDeltaHours, 4);
         expect(b1f2.lifecycle.name, 'stable');
+        expect(b1f2.lifecycle.name, 'stable');
         expect(b1f2.activeDeltaHours, 0);
 
         // Execute v0.2 and verify v0.1 checkpoints are preserved + v0.2 checkpoint is appended
@@ -251,7 +285,7 @@ void main() {
     );
 
     test(
-      'Blueprint JSON serialization & Multi-Project Vault switching preserve Stage 1, 2, and 3 state',
+      'Blueprint JSON serialization & Multi-Project Vault Manager (Switch, Rename, Duplicate, Delete) preserve Stage 1, 2, and 3 state',
       () async {
         final provider = WorkbenchProvider();
         await provider.startConceptInterview('Tactical Mecha Extraction Shooter');
@@ -262,15 +296,29 @@ void main() {
         expect(provider.savedProjects.length, 1);
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
 
-        // Create a second project via createNewProject()
+        // Rename Project 1
+        provider.renameProject(proj1Id, 'Mecha Drop v1');
+        expect(provider.documents[proj1Id]!.title, 'Mecha Drop v1');
+
+        // Duplicate Project 1
+        final dupId = provider.duplicateProject(proj1Id);
+        expect(dupId, isNotNull);
+        expect(provider.savedProjects.length, 2);
+        expect(provider.activeProjectId, dupId);
+        expect(provider.documents[dupId!]!.title, 'Mecha Drop v1 (Copy)');
+
+        // Create a third project via createNewProject()
         provider.createNewProject();
         expect(provider.conceptDraft, isNull);
         expect(provider.currentStage, WorkbenchStage.projectPitch);
 
         await provider.startConceptInterview('Cozy Alchemy Shop & Dungeon Forager');
-        final proj2Id = provider.activeProjectId!;
+        final proj3Id = provider.activeProjectId!;
+        expect(provider.savedProjects.length, 3);
+
+        // Delete the duplicated project
+        provider.deleteProject(dupId);
         expect(provider.savedProjects.length, 2);
-        expect(proj2Id, isNot(equals(proj1Id)));
 
         // Switch back to Project 1 and verify Stage 1, 2, and 3 state restored from JSON metadata
         provider.switchProject(proj1Id);
@@ -279,6 +327,10 @@ void main() {
         expect(provider.releaseBlueprint, isNotNull);
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
         expect(provider.activeReleaseBeats, isNotEmpty);
+
+        // Delete Project 3
+        provider.deleteProject(proj3Id);
+        expect(provider.savedProjects.length, 1);
       },
     );
   });

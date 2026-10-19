@@ -1074,6 +1074,123 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               );
             },
           ),
+          if (widget.workbench.savedProjects.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Container(
+              key: const ValueKey('stage1_saved_projects_strip'),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _bgRecessed,
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(color: _borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'SAVED PROJECTS IN VAULT (${widget.workbench.savedProjects.length}) — 1-CLICK RESUME',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4,
+                          color: _accentEmerald,
+                        ),
+                      ),
+                      Text(
+                        widget.workbench.isCloudSynced ? '☁ Cloud Synced' : '⚡ Local Auto-Save',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          color: _textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final p in widget.workbench.savedProjects)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _bgSurface,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                key: ValueKey('spark_resume_project_${p.id}'),
+                                onTap: () => widget.workbench.switchProject(p.id),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.folder_open_rounded,
+                                      size: 13,
+                                      color: _accentAmber,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      p.title,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: _textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Resume →',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: _accentEmerald,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                key: ValueKey('spark_duplicate_project_${p.id}'),
+                                onTap: () => widget.workbench.duplicateProject(p.id),
+                                child: Tooltip(
+                                  message: 'Duplicate Project',
+                                  child: Icon(
+                                    Icons.copy_all_rounded,
+                                    size: 13,
+                                    color: _textMuted,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                key: ValueKey('spark_delete_project_${p.id}'),
+                                onTap: () => widget.workbench.deleteProject(p.id),
+                                child: Tooltip(
+                                  message: 'Delete Project',
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 13,
+                                    color: _textMuted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

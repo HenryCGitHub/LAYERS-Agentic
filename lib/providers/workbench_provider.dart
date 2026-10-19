@@ -168,6 +168,125 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Renames a saved project in the vault (updating both its TierDocument title and Concept Blueprint).
+  void renameProject(String projectId, String newTitle) {
+    final clean = newTitle.trim();
+    final proj = documents[projectId];
+    if (proj == null || clean.isEmpty) return;
+
+    proj.title = clean;
+    final rawConcept = proj.sections['concept_blueprint_json'];
+    if (rawConcept != null && rawConcept.isNotEmpty) {
+      try {
+        final bp = ProjectConceptBlueprint.fromJson(
+          jsonDecode(rawConcept) as Map<String, dynamic>,
+        );
+        bp.title = clean;
+        proj.sections['concept_blueprint_json'] = jsonEncode(bp.toJson());
+        if (_activeProjectId == projectId && _conceptDraft != null) {
+          _conceptDraft!.title = clean;
+        }
+      } catch (_) {}
+    }
+    _persistDocument(proj);
+    notifyListeners();
+  }
+
+  /// Duplicates an existing project (including its Concept Blueprint and Release Blueprint) and switches to the copy.
+  String? duplicateProject(String projectId) {
+    final src = documents[projectId];
+    if (src == null) return null;
+
+    final newId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    final copyTitle = '${src.title} (Copy)';
+    final copiedSections = Map<String, String>.from(src.sections);
+
+    final rawConcept = copiedSections['concept_blueprint_json'];
+    if (rawConcept != null && rawConcept.isNotEmpty) {
+      try {
+        final bp = ProjectConceptBlueprint.fromJson(
+          jsonDecode(rawConcept) as Map<String, dynamic>,
+        );
+        bp.title = copyTitle;
+        copiedSections['concept_blueprint_json'] = jsonEncode(bp.toJson());
+      } catch (_) {}
+    }
+
+    final newReleaseIds = <String>[];
+    for (int i = 0; i < src.childrenIds.length; i++) {
+      final oldRel = documents[src.childrenIds[i]];
+      if (oldRel == null) continue;
+      final newRelId = '${newId}_rel_v0_${i + 1}';
+      final newRelDoc = TierDocument(
+        id: newRelId,
+        title: oldRel.title,
+        tier: TierType.release,
+        parentId: newId,
+        sections: Map<String, String>.from(oldRel.sections),
+      );
+      documents[newRelId] = newRelDoc;
+      _persistDocument(newRelDoc);
+      newReleaseIds.add(newRelId);
+    }
+
+    if (newReleaseIds.isNotEmpty) {
+      copiedSections['active_release_id'] = newReleaseIds.first;
+    }
+
+    final copyDoc = TierDocument(
+      id: newId,
+      title: copyTitle,
+      tier: TierType.project,
+      childrenIds: newReleaseIds,
+      sections: copiedSections,
+    );
+    documents[newId] = copyDoc;
+    _persistDocument(copyDoc);
+    switchProject(newId);
+    return newId;
+  }
+
+  /// Deletes a project and its child documents from LocalVaultService and Cloud Firestore.
+  void deleteProject(String projectId) {
+    final proj = documents[projectId];
+    if (proj == null) return;
+
+    final idsToRemove = <String>{projectId};
+    for (final relId in proj.childrenIds) {
+      idsToRemove.add(relId);
+      final relDoc = documents[relId];
+      if (relDoc != null) {
+        for (final beatId in relDoc.childrenIds) {
+          idsToRemove.add(beatId);
+          final beatDoc = documents[beatId];
+          if (beatDoc != null) {
+            idsToRemove.addAll(beatDoc.childrenIds);
+          }
+        }
+      }
+    }
+
+    final user = _authService.currentUser;
+    for (final id in idsToRemove) {
+      documents.remove(id);
+      LocalVaultService.deleteDocument(id);
+      if (user != null) {
+        _firestoreService.deleteDocument(uid: user.uid, docId: id);
+      }
+    }
+
+    if (_activeProjectId == projectId) {
+      final remaining = savedProjects;
+      if (remaining.isNotEmpty) {
+        switchProject(remaining.first.id);
+      } else {
+        createNewProject();
+      }
+    } else {
+      notifyListeners();
+    }
+  }
+
   void _restoreProjectState(String projectId) {
     final proj = documents[projectId];
     if (proj == null) return;
