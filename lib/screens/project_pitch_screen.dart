@@ -88,9 +88,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Plain-English statement of what we are building and why.',
       question: 'How should we frame the core prototype goal for v0.1?',
       options: [
-        'Focus v0.1 strictly on the core gameplay loop in a single test arena',
-        'Include an interactive prep & staging zone before entering the active loop in v0.1',
-        'Focus v0.1 on primary player controls and core mechanic feel first',
+        'Single-Arena Loop: Focus v0.1 strictly on the core gameplay loop in a single test arena',
+        'Prep + Arena Loop: Include an interactive prep & staging zone before entering the active loop in v0.1',
+        'Controls & Feel First: Focus v0.1 on primary player controls and core mechanic feel first',
       ],
     ),
     _SectionConfig(
@@ -101,9 +101,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Camera view, player controls, mode, and arena layout.',
       question: 'Which camera perspective and control scheme fits best?',
       options: [
-        '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Single-Screen Arena',
-        '2D Side-Scrolling · Precision Controls · Multi-Room Stages',
-        '3D First-Person · Mouse + WASD · Enclosed Sandbox',
+        '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Singleplayer · Single-Screen Arena',
+        '2D Side-Scrolling · Precision Controls · Singleplayer · Multi-Room Stages',
+        '3D First-Person · Mouse + WASD · Singleplayer · Enclosed Sandbox',
       ],
     ),
     _SectionConfig(
@@ -114,9 +114,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Engine, target platform, asset pipeline, and save/network architecture.',
       question: 'What engine and technical pipeline are we targeting for v0.1?',
       options: [
-        'Godot 4 · PC Desktop · 2D Sprites / Greybox · Offline Local Save',
-        'Unity 6 · PC & Steam Deck · 2D/3D Hybrid · Steam Cloud Save',
-        'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Local Save',
+        'Godot 4 (2D) · PC Desktop · 2D Sprites + Particles · Offline Local Save',
+        'Unity 6 · PC & Steam Deck · 2D/3D Hybrid Pipeline · Steam Cloud Save',
+        'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Offline Local Save',
       ],
     ),
     _SectionConfig(
@@ -127,9 +127,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Core player experience truths (how the game feels, never a feature list).',
       question: 'Which player experience truth should anchor our design decisions?',
       options: [
-        'Prioritize unbroken movement momentum and readable telegraphs',
-        'Prioritize deliberate tactical positioning and high-clarity feedback',
-        'Prioritize fast chain-reactions and rewarding loop mastery',
+        'Unbroken Momentum: Prioritize continuous movement velocity and readable telegraphs',
+        'Tactical Positioning: Prioritize deliberate positioning and high-clarity feedback',
+        'Chain-Reaction Mastery: Prioritize fast chain-reactions and rewarding loop mastery',
       ],
     ),
     _SectionConfig(
@@ -140,9 +140,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Explicit engineering & design priority rules when mechanics conflict.',
       question: 'When mechanics conflict during production, what wins?',
       options: [
-        'Instant arcade input response over realistic physics inertia',
-        'Deliberate animation commitment over instant cancelable movement',
-        'Clean greybox readability over heavy visual shaders in v0.1',
+        'Instant Input Response: Instant arcade input response over realistic physics inertia',
+        'Animation Commitment: Deliberate animation commitment over instant cancelable movement',
+        'Greybox Readability: Clean greybox readability over heavy visual shaders in v0.1',
       ],
     ),
     _SectionConfig(
@@ -153,9 +153,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'The sequential playable beats that make up the complete game loop.',
       question: 'How should the playable core loop Beats flow from start to reset?',
       options: [
-        'Complete Loop: Staging & Prep → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
+        'Complete 4-Beat Loop: Staging & Prep → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
         'Direct Action Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
-        'Mastery Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
+        'Skill Mastery Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
       ],
     ),
     _SectionConfig(
@@ -166,9 +166,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Hard exclusions cut from the Prototype to prevent scope creep.',
       question: 'Which scope-creep features should we explicitly cut from the Prototype?',
       options: [
-        'Cut multi-branch skill trees, online co-op, and story cutscenes from Prototype',
-        'Also defer multi-phase bosses and deep inventory crafting until MVP releases',
-        'Also defer persistent meta-progression saves and audio settings until MVP',
+        'Cut Trees, Co-Op & Story: Cut multi-branch skill trees, online co-op, and story cutscenes from Prototype',
+        'Defer Bosses & Crafting: Defer multi-phase bosses and deep inventory crafting until MVP releases',
+        'Defer Meta-Save & Audio: Defer persistent meta-progression saves and audio settings until MVP',
       ],
     ),
     _SectionConfig(
@@ -179,9 +179,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Observable playtest condition that proves the Prototype is complete.',
       question: 'How will we verify that the Prototype loop is done?',
       options: [
-        'Playtester completes a full core loop cycle at 60 FPS with zero soft-locks',
-        'Playtester executes all core loop beats, collects rewards, and resets cleanly',
-        'Playtester completes 3 consecutive loop cycles with responsive controls and clear feedback',
+        '60 FPS Full Loop: Playtester completes a full core loop cycle at 60 FPS with zero soft-locks',
+        'All Beats & Clean Reset: Playtester executes all core loop beats, collects rewards, and resets cleanly',
+        '3 Consecutive Runs: Playtester completes 3 consecutive loop cycles with responsive controls and clear feedback',
       ],
     ),
     _SectionConfig(
@@ -192,8 +192,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       purpose: 'Focuses strictly on proving the Core Loop first. Subsequent phases (MVPs per Beat → Vertical Slice → Full Production) unlock as each phase completes.',
       question: 'How should we scope Phase 1 (Prototype) before unlocking MVP Beat Releases?',
       options: [
-        'Single Greybox Prototype (v0.1) proving the Core Loop Beats work together',
-        'Two-Step Prototype: v0.1 Player Movement & Controls → v0.2 Full Core Loop Arena',
+        'Single v0.1 Greybox: Single Greybox Prototype (v0.1) proving the Core Loop Beats work together',
+        'Two-Step v0.1 → v0.2: v0.1 Player Movement & Controls → v0.2 Full Core Loop Arena',
       ],
     ),
   ];
@@ -205,6 +205,57 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       return dynamicOpts;
     }
     return sec.options;
+  }
+
+  /// Splits an option string into `(title, description)` so Playing Cards always display
+  /// a crisp bold Card Title on top and a 2-line Short Description underneath.
+  ({String title, String description}) _splitOptionIntoCardTitleAndBody(
+    String rawOption,
+    int sectionIdx,
+    int optIdx,
+  ) {
+    final clean = rawOption.trim();
+    if (clean.contains(':')) {
+      final colonIdx = clean.indexOf(':');
+      final head = clean.substring(0, colonIdx).trim();
+      final tail = clean.substring(colonIdx + 1).trim();
+      if (head.isNotEmpty && tail.isNotEmpty && head.length <= 42) {
+        return (title: head, description: tail);
+      }
+    }
+    if (clean.contains('·')) {
+      final dotParts = clean
+          .split('·')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (dotParts.length >= 2) {
+        return (
+          title: dotParts.first,
+          description: dotParts.sublist(1).join(' · '),
+        );
+      }
+    }
+    if (clean.toLowerCase().contains(' over ')) {
+      final overParts = clean.split(RegExp(r'\s+over\s+', caseSensitive: false));
+      if (overParts.length >= 2) {
+        final winTitle = overParts.first
+            .replaceFirst(RegExp(r'^Prioritize\s+', caseSensitive: false), '')
+            .trim();
+        return (title: winTitle, description: clean);
+      }
+    }
+    final words = clean.split(RegExp(r'\s+'));
+    if (words.length > 4) {
+      return (
+        title: words.take(3).join(' '),
+        description: clean,
+      );
+    }
+    return (
+      title: 'Option 0${optIdx + 1}',
+      description: clean,
+    );
   }
 
   @override
@@ -276,11 +327,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     int optIdx,
     String optionText,
   ) {
+    final bodyAfterColon = optionText.contains(':')
+        ? optionText.substring(optionText.indexOf(':') + 1).trim()
+        : optionText.trim();
+
     widget.workbench.updateConceptDraft((d) {
       switch (sectionIdx) {
         case 0:
-          if (optionText.toLowerCase().startsWith('build ')) {
-            d.goal = optionText;
+          if (bodyAfterColon.toLowerCase().startsWith('build ')) {
+            d.goal = bodyAfterColon;
           } else if (optIdx == 0) {
             d.goal =
                 'Build a playable ${d.title} prototype centered on ${d.sparkIdea} with immediate loop feedback in a single arena.';
@@ -360,29 +415,29 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           }
           break;
         case 3:
+          final pillarValue = optionText.contains(':')
+              ? optionText
+              : 'Core Focus: $optionText';
           if (d.designPillars.isNotEmpty) {
-            d.designPillars[0] = 'Core Focus: $optionText';
+            d.designPillars[0] = pillarValue;
           } else {
-            d.designPillars = ['Core Focus: $optionText'];
+            d.designPillars = [pillarValue];
           }
           break;
         case 4:
-          if (optionText.toLowerCase().contains(' over ')) {
+          if (bodyAfterColon.toLowerCase().contains(' over ')) {
             if (d.tradeOffs.isNotEmpty) {
-              d.tradeOffs[0] = optionText;
+              d.tradeOffs[0] = bodyAfterColon;
             } else {
-              d.tradeOffs = [optionText];
+              d.tradeOffs = [bodyAfterColon];
             }
           }
           break;
         case 5:
           // Parse arrow-separated beats if the option describes a loop sequence,
           // otherwise preserve the concept's existing beats and adjust Beat 1!
-          if (optionText.contains('→')) {
-            final colonSplit = optionText.contains(':')
-                ? optionText.substring(optionText.indexOf(':') + 1)
-                : optionText;
-            final steps = colonSplit
+          if (bodyAfterColon.contains('→')) {
+            final steps = bodyAfterColon
                 .split('→')
                 .map((s) => s.trim())
                 .where((s) => s.isNotEmpty)
@@ -399,13 +454,13 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           break;
         case 6:
           if (d.exclusions.isNotEmpty) {
-            d.exclusions[0] = optionText;
+            d.exclusions[0] = bodyAfterColon;
           } else {
-            d.exclusions = [optionText];
+            d.exclusions = [bodyAfterColon];
           }
           break;
         case 7:
-          d.doneWhen = optionText;
+          d.doneWhen = bodyAfterColon;
           break;
         case 8:
           if (optIdx == 0) {
@@ -675,7 +730,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
+              constraints: const BoxConstraints(maxWidth: 960),
               child: _buildInitialSparkLauncher(),
             ),
           ),
@@ -712,11 +767,157 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
 
   // ── Initial Spark Launcher (Before Concept Draft Exists) ────────────────────
   Widget _buildInitialSparkLauncher() {
-    const sampleSparks = [
-      'High-speed grappling hook parkour roguelite',
-      'Cozy 2D submarine salvage & deep-sea creature photography',
-      'Top-down cyberpunk katana deflection boss-rush arena',
+    const starterCards = <({
+      String badge,
+      String title,
+      String description,
+      String prompt,
+      String accentType,
+    })>[
+      (
+        badge: '01 · ROGUELITE ACTION',
+        title: 'Grapple Hook Parkour',
+        description:
+            'Chain high-speed momentum swings, mid-air dashes, and hazard rooms in a fast-resetting roguelite arena.',
+        prompt: 'High-speed grappling hook parkour roguelite',
+        accentType: 'amber',
+      ),
+      (
+        badge: '02 · COZY EXPLORATION',
+        title: 'Deep-Sea Sub & Photo',
+        description:
+            'Pilot a 2D salvage submarine through dark ocean trenches, photograph rare sea life, and upgrade your hull.',
+        prompt: 'Cozy 2D submarine salvage & deep-sea creature photography',
+        accentType: 'emerald',
+      ),
+      (
+        badge: '03 · BOSS-RUSH ARENA',
+        title: 'Katana Deflect Arena',
+        description:
+            'Parry bullet-hell volleys and dash-strike multi-phase cyber bosses in a tight top-down arena.',
+        prompt: 'Top-down cyberpunk katana deflection boss-rush arena',
+        accentType: 'neutral',
+      ),
     ];
+
+    Widget buildStarterPlayingCard(int index) {
+      final card = starterCards[index];
+      final Color badgeColor = card.accentType == 'amber'
+          ? _accentAmber
+          : (card.accentType == 'emerald' ? _accentEmerald : _textPrimary);
+      final isCurrentText = _sparkController.text.trim() == card.prompt;
+
+      return Material(
+        color: isCurrentText ? _bgHover : _bgRecessed,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          key: ValueKey('spark_card_$index'),
+          onTap: widget.workbench.isAgentBusy
+              ? null
+              : () {
+                  _sparkController.text = card.prompt;
+                  widget.workbench.startConceptInterview(card.prompt);
+                },
+          borderRadius: BorderRadius.circular(7),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(
+                color: isCurrentText ? _accentAmber : _borderSubtle,
+                width: isCurrentText ? 1.5 : 1.0,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.13),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: badgeColor.withValues(alpha: 0.42),
+                        ),
+                      ),
+                      child: Text(
+                        card.badge,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4,
+                          color: badgeColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      card.title,
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: _textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      card.description,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        height: 1.45,
+                        color: _textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.only(top: 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(color: _borderSubtle),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Launch Concept',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _accentAmber,
+                            ),
+                          ),
+                          Text(
+                            '→',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: _accentAmber,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -761,7 +962,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Enter a 1-sentence game idea. The Agent will draft all 9 blueprint sections so you can review and refine them one focused section at a time.',
+            'Type your own 1-sentence game idea below, or click any Starter Concept Card to launch its blueprint immediately.',
             style: GoogleFonts.inter(fontSize: 13, color: _textSecondary),
           ),
           const SizedBox(height: 16),
@@ -824,32 +1025,54 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              for (final s in sampleSparks)
-                InkWell(
-                  onTap: () {
-                    _sparkController.text = s;
-                    widget.workbench.startConceptInterview(s);
-                  },
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _bgRecessed,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: _borderSubtle),
-                    ),
-                    child: Text(
-                      s,
-                      style: GoogleFonts.inter(fontSize: 11.5, color: _textSecondary),
-                    ),
-                  ),
+              Text(
+                'OR PICK A STARTER CONCEPT CARD (1-CLICK LAUNCH)',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: _textSecondary,
                 ),
+              ),
+              Text(
+                '3 ARCHETYPES',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  color: _textMuted,
+                ),
+              ),
             ],
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 660) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < starterCards.length; i++) ...[
+                      buildStarterPlayingCard(i),
+                      if (i < starterCards.length - 1) const SizedBox(height: 10),
+                    ],
+                  ],
+                );
+              }
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < starterCards.length; i++) ...[
+                      Expanded(child: buildStarterPlayingCard(i)),
+                      if (i < starterCards.length - 1) const SizedBox(width: 12),
+                    ],
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -870,6 +1093,35 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
+            InkWell(
+              key: const ValueKey('new_spark_reset_btn'),
+              onTap: () => widget.workbench.resetConceptToSpark(),
+              borderRadius: BorderRadius.circular(5),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _accentAmber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: _accentAmber.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Text(
+                  '✦ New Spark',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: _accentAmber,
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              width: 1,
+              height: 18,
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              color: _borderBright,
+            ),
             for (int i = 0; i < _sections.length; i++) ...[
               _buildStepNode(
                 index: i,
@@ -1267,19 +1519,49 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Clickable Radio Option Cards
-                    for (int optIdx = 0;
-                        optIdx < _optionsForSection(draft, sectionIdx).length;
-                        optIdx++) ...[
-                      _buildAgentOptionCard(
-                        draft: draft,
-                        sectionIdx: sectionIdx,
-                        optIdx: optIdx,
-                        label: _optionsForSection(draft, sectionIdx)[optIdx],
-                        isSelected: selectedOpt == optIdx,
-                      ),
-                      const SizedBox(height: 7),
-                    ],
+                    // Side-by-Side Agent Option Playing Cards
+                    LayoutBuilder(
+                      builder: (context, optConstraints) {
+                        final options = _optionsForSection(draft, sectionIdx);
+                        final isWide = optConstraints.maxWidth >= 680;
+                        if (!isWide) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (int optIdx = 0; optIdx < options.length; optIdx++) ...[
+                                _buildAgentOptionCard(
+                                  draft: draft,
+                                  sectionIdx: sectionIdx,
+                                  optIdx: optIdx,
+                                  label: options[optIdx],
+                                  isSelected: selectedOpt == optIdx,
+                                ),
+                                if (optIdx < options.length - 1) const SizedBox(height: 8),
+                              ],
+                            ],
+                          );
+                        }
+                        return IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (int optIdx = 0; optIdx < options.length; optIdx++) ...[
+                                Expanded(
+                                  child: _buildAgentOptionCard(
+                                    draft: draft,
+                                    sectionIdx: sectionIdx,
+                                    optIdx: optIdx,
+                                    label: options[optIdx],
+                                    isSelected: selectedOpt == optIdx,
+                                  ),
+                                ),
+                                if (optIdx < options.length - 1) const SizedBox(width: 10),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
 
                     if (agentNote != null) ...[
                       const SizedBox(height: 6),
@@ -1592,70 +1874,117 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     required String label,
     required bool isSelected,
   }) {
-    return InkWell(
-      onTap: () => _selectSectionOption(draft, sectionIdx, optIdx),
-      borderRadius: BorderRadius.circular(5),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? _bgHover : _bgSurface,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(
-            color: isSelected ? _textPrimary : _borderSubtle,
-            width: isSelected ? 1.5 : 1.0,
+    final parsed = _splitOptionIntoCardTitleAndBody(label, sectionIdx, optIdx);
+
+    return Material(
+      color: isSelected ? _bgHover : _bgSurface,
+      borderRadius: BorderRadius.circular(7),
+      child: InkWell(
+        key: ValueKey('agent_option_card_${sectionIdx}_$optIdx'),
+        onTap: () => _selectSectionOption(draft, sectionIdx, optIdx),
+        borderRadius: BorderRadius.circular(7),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: isSelected ? _textPrimary : _borderSubtle,
+              width: isSelected ? 1.5 : 1.0,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 15,
-              height: 15,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected ? _focalAccent : Colors.transparent,
-                border: Border.all(
-                  color: isSelected ? _focalAccent : _textMuted,
-                  width: 1.4,
-                ),
-              ),
-              child: isSelected
-                  ? Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _focalAccentFg,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 15,
+                        height: 15,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected ? _focalAccent : Colors.transparent,
+                          border: Border.all(
+                            color: isSelected ? _focalAccent : _textMuted,
+                            width: 1.4,
+                          ),
+                        ),
+                        child: isSelected
+                            ? Container(
+                                width: 5,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _focalAccentFg,
+                                ),
+                              )
+                            : null,
                       ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildFormattedLeadInText(label),
-            ),
-            if (optIdx == 0) ...[
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _accentEmerald.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: _accentEmerald.withValues(alpha: 0.42),
+                      if (optIdx == 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _accentEmerald.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: _accentEmerald.withValues(alpha: 0.42),
+                            ),
+                          ),
+                          child: Text(
+                            'RECOMMENDED',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: _accentEmerald,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _bgRecessed,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Text(
+                            'OPTION 0${optIdx + 1}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: _textSecondary,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-                child: Text(
-                  'RECOMMENDED',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: _accentEmerald,
+                  const SizedBox(height: 10),
+                  Text(
+                    parsed.title,
+                    style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 5),
+                  Text(
+                    parsed.description,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1686,18 +2015,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           keys: const ['ENGINE', 'PLATFORM', 'ASSET PIPELINE', 'NETWORK / SAVE'],
           values: draft.techSpec,
         );
-      case 3: // 04 Design Pillars — Indexed Rows (P·01, P·02, P·03) with Bold Lead-Ins & Click-to-Edit
-        return _buildIndexedRows(
-          prefix: 'P',
-          items: draft.designPillars,
-          isCoreLoop: false,
-          onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
-            final next = List<String>.from(d.designPillars);
-            next[i] = val;
-            d.designPillars = next;
-          }),
-        );
-      case 4: // 05 Trade-Offs — Split X OVER Y Comparison Bars (Click to Edit)
+      case 3: // 04 Design Pillars — 3 Side-by-Side Pillar Playing Cards + Inline Add/Remove
+        return _buildDesignPillarCards(draft);
+      case 4: // 05 Trade-Offs — Split X OVER Y Comparison Bars + Inline Add/Remove
         return _buildTradeOffSplitBars(
           draft.tradeOffs,
           onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
@@ -1705,8 +2025,21 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             next[i] = val;
             d.tradeOffs = next;
           }),
+          onDeleteItem: draft.tradeOffs.length > 1
+              ? (i) => widget.workbench.updateConceptDraft((d) {
+                    final next = List<String>.from(d.tradeOffs)..removeAt(i);
+                    d.tradeOffs = next;
+                  })
+              : null,
+          onAddItem: () => _showDirectSectionTextEditDialog(
+            title: 'Add Trade-Off (X over Y)',
+            initialText: 'Immediate arcade responsiveness over complex simulation depth',
+            onSave: (val) => widget.workbench.updateConceptDraft((d) {
+              d.tradeOffs = [...d.tradeOffs, val];
+            }),
+          ),
         );
-      case 5: // 06 Core Loop — Connected Beat Cycle Rows (BEAT·01 -> BEAT·0N -> Loop)
+      case 5: // 06 Core Loop — Connected Beat Cycle Rows + Inline Add/Remove
         return _buildIndexedRows(
           prefix: 'BEAT',
           items: draft.coreLoopBeats,
@@ -1716,8 +2049,21 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             next[i] = val;
             d.coreLoopBeats = next;
           }),
+          onDeleteItem: draft.coreLoopBeats.length > 1
+              ? (i) => widget.workbench.updateConceptDraft((d) {
+                    final next = List<String>.from(d.coreLoopBeats)..removeAt(i);
+                    d.coreLoopBeats = next;
+                  })
+              : null,
+          onAddItem: () => _showDirectSectionTextEditDialog(
+            title: 'Add Core Loop Beat',
+            initialText: 'Extract & Upgrade: Spend gathered resources on one immediate loadout upgrade.',
+            onSave: (val) => widget.workbench.updateConceptDraft((d) {
+              d.coreLoopBeats = [...d.coreLoopBeats, val];
+            }),
+          ),
         );
-      case 6: // 07 Out of Scope — Recessed Guardrail Chips with Muted Crimson [CUT] Badge
+      case 6: // 07 Out of Scope — 2-Column Recessed Guardrail Grid + Inline Add/Remove
         return _buildCutGuardrailChips(
           draft.exclusions,
           onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
@@ -1725,6 +2071,19 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             next[i] = val;
             d.exclusions = next;
           }),
+          onDeleteItem: draft.exclusions.length > 1
+              ? (i) => widget.workbench.updateConceptDraft((d) {
+                    final next = List<String>.from(d.exclusions)..removeAt(i);
+                    d.exclusions = next;
+                  })
+              : null,
+          onAddItem: () => _showDirectSectionTextEditDialog(
+            title: 'Add Out of Scope Exclusion (Cut)',
+            initialText: 'No procedural world generation or multiplayer networking in v0.1',
+            onSave: (val) => widget.workbench.updateConceptDraft((d) {
+              d.exclusions = [...d.exclusions, val];
+            }),
+          ),
         );
       case 7: // 08 Done When — Acceptance Callout Statement with Highlighted Playtest Metrics
         return _buildCalloutStatement(
@@ -1736,7 +2095,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             onSave: (val) => widget.workbench.updateConceptDraft((d) => d.doneWhen = val),
           ),
         );
-      case 8: // 09 Prototype Release — Phase 1 Active Target + Locked Subsequent Phases
+      case 8: // 09 Prototype Release — Phase 1 Active Target + 3 Horizontal Locked Phase Cards
       default:
         return _buildReleaseTrainPipeline(draft);
     }
@@ -2042,11 +2401,209 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
+  // ── Section 04: 3 Side-by-Side Design Pillar Playing Cards + Inline Add/Delete ──
+  Widget _buildDesignPillarCards(ProjectConceptBlueprint draft) {
+    final pillars = draft.designPillars;
+
+    Widget buildPillarCard(int idx) {
+      final raw = pillars[idx];
+      final colonIdx = raw.indexOf(':');
+      final String title = (colonIdx > 0 && colonIdx < 48)
+          ? raw.substring(0, colonIdx).trim()
+          : 'Pillar 0${idx + 1}';
+      final String body = (colonIdx > 0 && colonIdx < 48)
+          ? raw.substring(colonIdx + 1).trim()
+          : raw;
+
+      return Material(
+        color: _bgRecessed,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          onTap: () => _showDirectSectionTextEditDialog(
+            title: 'P·${(idx + 1).toString().padLeft(2, '0')} Design Pillar',
+            initialText: raw,
+            onSave: (val) => widget.workbench.updateConceptDraft((d) {
+              final next = List<String>.from(d.designPillars);
+              next[idx] = val;
+              d.designPillars = next;
+            }),
+          ),
+          borderRadius: BorderRadius.circular(7),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _bgSurface,
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: _borderBright),
+                      ),
+                      child: Text(
+                        'P·${(idx + 1).toString().padLeft(2, '0')}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: _textSecondary,
+                        ),
+                      ),
+                    ),
+                    if (pillars.length > 1)
+                      InkWell(
+                        onTap: () => widget.workbench.updateConceptDraft((d) {
+                          final next = List<String>.from(d.designPillars)..removeAt(idx);
+                          d.designPillars = next;
+                        }),
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          child: Text(
+                            '×',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: _textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  body,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    height: 1.45,
+                    color: _textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 680 && pillars.length <= 4;
+            if (!isWide) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < pillars.length; i++) ...[
+                    buildPillarCard(i),
+                    if (i < pillars.length - 1) const SizedBox(height: 8),
+                  ],
+                ],
+              );
+            }
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < pillars.length; i++) ...[
+                    Expanded(child: buildPillarCard(i)),
+                    if (i < pillars.length - 1) const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        _buildInlineAddBar(
+          label: '+ Add a custom Design Pillar...',
+          onTap: () => _showDirectSectionTextEditDialog(
+            title: 'Add Design Pillar',
+            initialText: 'Every Choice Echoes: Player actions leave visible feedback in the arena.',
+            onSave: (val) => widget.workbench.updateConceptDraft((d) {
+              d.designPillars = [...d.designPillars, val];
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInlineAddBar({
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: _bgRecessed.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(5),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(5),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: _borderSubtle),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _textMuted,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _bgSurface,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: _borderBright),
+                ),
+                child: Text(
+                  '+ Add',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildIndexedRows({
     required String prefix,
     required List<String> items,
     required bool isCoreLoop,
     void Function(int index, String newValue)? onEditItem,
+    void Function(int index)? onDeleteItem,
+    VoidCallback? onAddItem,
   }) {
     final badgeAccent = isCoreLoop ? _accentEmerald : _borderBright;
 
@@ -2103,6 +2660,24 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     Expanded(
                       child: _buildFormattedLeadInText(items[i]),
                     ),
+                    if (onDeleteItem != null) ...[
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => onDeleteItem(i),
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          child: Text(
+                            '×',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -2156,6 +2731,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             ),
           ),
         ],
+        if (onAddItem != null) ...[
+          const SizedBox(height: 10),
+          _buildInlineAddBar(
+            label: isCoreLoop
+                ? '+ Add a custom Core Loop Beat...'
+                : '+ Add item...',
+            onTap: onAddItem,
+          ),
+        ],
       ],
     );
   }
@@ -2163,8 +2747,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   Widget _buildTradeOffSplitBars(
     List<String> tradeOffs, {
     void Function(int index, String newValue)? onEditItem,
+    void Function(int index)? onDeleteItem,
+    VoidCallback? onAddItem,
   }) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < tradeOffs.length; i++) ...[
           _buildSingleTradeOffBar(
@@ -2176,14 +2763,26 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       initialText: tradeOffs[i],
                       onSave: (val) => onEditItem(i, val),
                     ),
+            onDelete: onDeleteItem == null ? null : () => onDeleteItem(i),
           ),
           if (i < tradeOffs.length - 1) const SizedBox(height: 7),
+        ],
+        if (onAddItem != null) ...[
+          const SizedBox(height: 10),
+          _buildInlineAddBar(
+            label: '+ Add a custom Trade-Off (X over Y)...',
+            onTap: onAddItem,
+          ),
         ],
       ],
     );
   }
 
-  Widget _buildSingleTradeOffBar(String rawRule, {VoidCallback? onTap}) {
+  Widget _buildSingleTradeOffBar(
+    String rawRule, {
+    VoidCallback? onTap,
+    VoidCallback? onDelete,
+  }) {
     final clean = rawRule.replaceFirst(RegExp(r'^Prioritize\s+', caseSensitive: false), '');
     final parts = clean.split(RegExp(r'\s+over\s+', caseSensitive: false));
     final winText = parts.isNotEmpty ? parts[0].trim() : clean;
@@ -2268,6 +2867,24 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                 ),
               ),
+              if (onDelete != null) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: onDelete,
+                  borderRadius: BorderRadius.circular(3),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    child: Text(
+                      '×',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -2278,66 +2895,136 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   Widget _buildCutGuardrailChips(
     List<String> exclusions, {
     void Function(int index, String newValue)? onEditItem,
+    void Function(int index)? onDeleteItem,
+    VoidCallback? onAddItem,
   }) {
-    return Column(
-      children: [
-        for (int i = 0; i < exclusions.length; i++) ...[
-          Material(
-            color: _bgRecessed.withValues(alpha: 0.55),
-            borderRadius: BorderRadius.circular(5),
-            child: InkWell(
-              onTap: onEditItem == null
-                  ? null
-                  : () => _showDirectSectionTextEditDialog(
-                        title: 'Out of Scope Exclusion #${i + 1}',
-                        initialText: exclusions[i],
-                        onSave: (val) => onEditItem(i, val),
-                      ),
-              borderRadius: BorderRadius.circular(5),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: _borderSubtle),
+    Widget buildExclusionCard(int idx) {
+      return Material(
+        color: _bgRecessed.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: onEditItem == null
+              ? null
+              : () => _showDirectSectionTextEditDialog(
+                    title: 'Out of Scope Exclusion #${idx + 1}',
+                    initialText: exclusions[idx],
+                    onSave: (val) => onEditItem(idx, val),
+                  ),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _accentCrimson.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: _accentCrimson.withValues(alpha: 0.42),
+                    ),
+                  ),
+                  child: Text(
+                    'CUT',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: _accentCrimson,
+                    ),
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 68,
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: _accentCrimson.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(
-                          color: _accentCrimson.withValues(alpha: 0.42),
-                        ),
-                      ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    exclusions[idx],
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: _textSecondary.withValues(alpha: 0.88),
+                    ),
+                  ),
+                ),
+                if (onDeleteItem != null) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => onDeleteItem(idx),
+                    borderRadius: BorderRadius.circular(3),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                       child: Text(
-                        'CUT',
+                        '×',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: _accentCrimson,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        exclusions[i],
-                        style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: _textSecondary.withValues(alpha: 0.85),
+                          fontWeight: FontWeight.w700,
+                          color: _textMuted,
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (i < exclusions.length - 1) const SizedBox(height: 7),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isTwoCol = constraints.maxWidth >= 620 && exclusions.length > 1;
+            if (!isTwoCol) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < exclusions.length; i++) ...[
+                    buildExclusionCard(i),
+                    if (i < exclusions.length - 1) const SizedBox(height: 7),
+                  ],
+                ],
+              );
+            }
+            final rows = <Widget>[];
+            for (int i = 0; i < exclusions.length; i += 2) {
+              final hasSecond = i + 1 < exclusions.length;
+              rows.add(
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: buildExclusionCard(i)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: hasSecond
+                            ? buildExclusionCard(i + 1)
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+              if (i + 2 < exclusions.length) {
+                rows.add(const SizedBox(height: 8));
+              }
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rows,
+            );
+          },
+        ),
+        if (onAddItem != null) ...[
+          const SizedBox(height: 10),
+          _buildInlineAddBar(
+            label: '+ Add an Out of Scope exclusion (Cut)...',
+            onTap: onAddItem,
+          ),
         ],
       ],
     );
@@ -2350,6 +3037,62 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       ProductionPhase.verticalSlice,
       ProductionPhase.fullProduction,
     ];
+
+    Widget buildLockedPhaseCard(int pIdx) {
+      final phase = lockedPhases[pIdx];
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _bgRecessed.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: _borderSubtle),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    'LOCKED · PHASE ${pIdx + 2}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: _textSecondary.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              phase.label,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: _textSecondary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              phase.summary,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                height: 1.4,
+                color: _textSecondary.withValues(alpha: 0.75),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2443,77 +3186,33 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        // Locked Future Production Phases (Defined One Phase at a Time After Completion)
-        for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: _bgRecessed.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: _borderSubtle),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 68,
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _bgSurface,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: _borderSubtle),
-                  ),
-                  child: Text(
-                    'LOCKED',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: _textSecondary.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '→ ${lockedPhases[pIdx].label}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: _textSecondary,
-                            ),
-                          ),
-                          Text(
-                            lockedPhases[pIdx].unlockCondition,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
-                              color: _textSecondary.withValues(alpha: 0.8),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        lockedPhases[pIdx].summary,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: _textSecondary.withValues(alpha: 0.75),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (pIdx < lockedPhases.length - 1) const SizedBox(height: 6),
-        ],
+        // Locked Future Production Phases (3 Horizontal Roadmap Cards on Desktop)
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 680) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
+                    buildLockedPhaseCard(pIdx),
+                    if (pIdx < lockedPhases.length - 1) const SizedBox(height: 6),
+                  ],
+                ],
+              );
+            }
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
+                    Expanded(child: buildLockedPhaseCard(pIdx)),
+                    if (pIdx < lockedPhases.length - 1) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }

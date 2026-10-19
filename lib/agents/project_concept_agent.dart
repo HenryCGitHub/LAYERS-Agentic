@@ -91,9 +91,9 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
   ],
   "sectionOptions": {
     "goal": [
-      "Option 1 for framing the v0.1 prototype goal of '$cleanSpark'",
-      "Option 2 for framing the v0.1 prototype goal of '$cleanSpark'",
-      "Option 3 for framing the v0.1 prototype goal of '$cleanSpark'"
+      "Short Card Title: Specific v0.1 prototype goal option 1 for '$cleanSpark'",
+      "Short Card Title: Specific v0.1 prototype goal option 2 for '$cleanSpark'",
+      "Short Card Title: Specific v0.1 prototype goal option 3 for '$cleanSpark'"
     ],
     "gameSpec": [
       "Camera · Controls · Mode · Level Layout option 1 tailored to '$cleanSpark'",
@@ -106,33 +106,33 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
       "Engine · Platform · Asset Pipeline · Save option 3 tailored to '$cleanSpark'"
     ],
     "designPillars": [
-      "Player experience focus option 1 tailored to '$cleanSpark'",
-      "Player experience focus option 2 tailored to '$cleanSpark'",
-      "Player experience focus option 3 tailored to '$cleanSpark'"
+      "Short Pillar Title: Player experience focus option 1 tailored to '$cleanSpark'",
+      "Short Pillar Title: Player experience focus option 2 tailored to '$cleanSpark'",
+      "Short Pillar Title: Player experience focus option 3 tailored to '$cleanSpark'"
     ],
     "tradeOffs": [
-      "Explicit X over Y trade-off option 1 tailored to '$cleanSpark'",
-      "Explicit X over Y trade-off option 2 tailored to '$cleanSpark'",
-      "Explicit X over Y trade-off option 3 tailored to '$cleanSpark'"
+      "Short Priority Title: Explicit X over Y trade-off option 1 tailored to '$cleanSpark'",
+      "Short Priority Title: Explicit X over Y trade-off option 2 tailored to '$cleanSpark'",
+      "Short Priority Title: Explicit X over Y trade-off option 3 tailored to '$cleanSpark'"
     ],
     "coreLoop": [
-      "Core loop structure option 1 tailored to '$cleanSpark' (e.g. Beat 1 → Beat 2 → Beat 3...)",
-      "Core loop structure option 2 tailored to '$cleanSpark'",
-      "Core loop structure option 3 tailored to '$cleanSpark'"
+      "Short Loop Title: Beat 1 → Beat 2 → Beat 3 → Beat 4 tailored to '$cleanSpark'",
+      "Short Loop Title: Alternative loop beat sequence tailored to '$cleanSpark'",
+      "Short Loop Title: Third loop beat sequence tailored to '$cleanSpark'"
     ],
     "exclusions": [
-      "Prototype scope-cut option 1 tailored to '$cleanSpark'",
-      "Prototype scope-cut option 2 tailored to '$cleanSpark'",
-      "Prototype scope-cut option 3 tailored to '$cleanSpark'"
+      "Short Cut Title: Prototype scope-cut option 1 tailored to '$cleanSpark'",
+      "Short Cut Title: Prototype scope-cut option 2 tailored to '$cleanSpark'",
+      "Short Cut Title: Prototype scope-cut option 3 tailored to '$cleanSpark'"
     ],
     "doneWhen": [
-      "Observable playtest verification option 1 tailored to '$cleanSpark'",
-      "Observable playtest verification option 2 tailored to '$cleanSpark'",
-      "Observable playtest verification option 3 tailored to '$cleanSpark'"
+      "Short Verification Title: Observable playtest verification option 1 tailored to '$cleanSpark'",
+      "Short Verification Title: Observable playtest verification option 2 tailored to '$cleanSpark'",
+      "Short Verification Title: Observable playtest verification option 3 tailored to '$cleanSpark'"
     ],
     "prototypeRelease": [
-      "Single Greybox Prototype (v0.1) proving the complete '$cleanSpark' core loop",
-      "Two-Step Prototype: v0.1 Core Mechanics Sandbox → v0.2 Full '$cleanSpark' Loop"
+      "Single v0.1 Greybox: Single Greybox Prototype (v0.1) proving the complete '$cleanSpark' core loop",
+      "Two-Step v0.1 → v0.2: v0.1 Core Mechanics Sandbox → v0.2 Full '$cleanSpark' Loop"
     ]
   },
   "goal": "Plain-English sentence starting with 'Build...' stating what mechanics are being built and why (zero corporate buzzwords or thematic fluff).",
@@ -930,48 +930,48 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
   ) {
     return {
       'goal': [
-        'Build a playable $title prototype centered on $spark in a single test arena',
-        'Include an interactive prep & staging zone before entering the core $title gameplay loop',
-        'Focus v0.1 on the primary $title player controls and core mechanic feel first',
+        'Single-Arena Loop: Build a playable $title prototype centered on $spark in a single test arena',
+        'Prep + Arena Loop: Include an interactive prep & staging zone before entering the core $title gameplay loop',
+        'Controls & Feel First: Focus v0.1 on the primary $title player controls and core mechanic feel first',
       ],
       'gameSpec': [
-        '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Single-Screen Arena',
-        '2D Side-Scrolling · Precision Controls · Multi-Room Stages',
-        '3D First-Person / Third-Person · Mouse + WASD · Enclosed Sandbox',
+        '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Singleplayer · Single-Screen Arena',
+        '2D Side-Scrolling · Precision Controls · Singleplayer · Multi-Room Stages',
+        '3D First-Person · Mouse + WASD · Singleplayer · Enclosed Sandbox',
       ],
       'techSpec': [
-        'Godot 4 · PC Desktop · 2D Sprites / Greybox · Offline Local Save',
-        'Unity 6 · PC & Steam Deck · 2D/3D Hybrid · Steam Cloud Save',
-        'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Local Save',
+        'Godot 4 (2D) · PC Desktop · 2D Sprites + Particles · Offline Local Save',
+        'Unity 6 · PC & Steam Deck · 2D/3D Hybrid Pipeline · Steam Cloud Save',
+        'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Offline Local Save',
       ],
       'designPillars': [
-        'Prioritize unbroken movement momentum and readable telegraphs for $title',
-        'Prioritize deliberate tactical decisions and high-clarity feedback for $title',
-        'Prioritize fast chain-reactions and rewarding loop mastery for $title',
+        'Unbroken Momentum: Prioritize continuous movement velocity and readable telegraphs for $title',
+        'Tactical Positioning: Prioritize deliberate positioning decisions and high-clarity feedback for $title',
+        'Chain-Reaction Mastery: Prioritize fast chain-reactions and rewarding loop mastery for $title',
       ],
       'tradeOffs': [
-        'Instant arcade input response over realistic physics inertia',
-        'Deliberate animation commitment over instant cancelable movement',
-        'Clean greybox readability over heavy visual shaders in v0.1',
+        'Instant Input Response: Instant arcade input response over realistic physics inertia',
+        'Animation Commitment: Deliberate animation commitment over instant cancelable movement',
+        'Greybox Readability: Clean greybox readability over heavy visual shaders in v0.1',
       ],
       'coreLoop': [
-        'Complete $title Loop: Prep & Loadout → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
-        'Direct Action $title Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
-        'Mastery $title Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
+        'Complete 4-Beat Loop: Prep & Loadout → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
+        'Direct Action Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
+        'Skill Mastery Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
       ],
       'exclusions': [
-        'Cut multi-branch skill trees, online co-op, and story cutscenes from the $title Prototype',
-        'Defer deep inventory crafting and multi-phase bosses until MVP releases',
-        'Defer persistent meta-progression save files and custom audio menus until MVP',
+        'Cut Trees, Co-Op & Story: Cut multi-branch skill trees, online co-op, and story cutscenes from the $title Prototype',
+        'Defer Bosses & Crafting: Defer deep inventory crafting and multi-phase bosses until MVP releases',
+        'Defer Meta-Save & Audio: Defer persistent meta-progression save files and custom audio menus until MVP',
       ],
       'doneWhen': [
-        'Playtester completes a full $title core loop cycle at 60 FPS with zero soft-locks',
-        'Playtester executes all $title core beats, collects rewards, and resets cleanly',
-        'Playtester completes 3 consecutive $title loop cycles with responsive controls and clear feedback',
+        '60 FPS Full Loop: Playtester completes a full $title core loop cycle at 60 FPS with zero soft-locks',
+        'All Beats & Clean Reset: Playtester executes all $title core beats, collects rewards, and resets cleanly',
+        '3 Consecutive Runs: Playtester completes 3 consecutive $title loop cycles with responsive controls and clear feedback',
       ],
       'prototypeRelease': [
-        'Single Greybox Prototype (v0.1) proving all $title Core Loop Beats work together',
-        'Two-Step Prototype: v0.1 Player Movement & Controls → v0.2 Full $title Core Loop Arena',
+        'Single v0.1 Greybox: Single Greybox Prototype (v0.1) proving all $title Core Loop Beats work together',
+        'Two-Step v0.1 → v0.2: v0.1 Player Movement & Controls → v0.2 Full $title Core Loop Arena',
       ],
     };
   }

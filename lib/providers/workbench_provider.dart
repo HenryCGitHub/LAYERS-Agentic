@@ -216,6 +216,13 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Resets the current Concept Blueprint draft so the user returns to Step 1A (`The Spark` Playing Cards).
+  void resetConceptToSpark() {
+    _conceptDraft = null;
+    _currentStage = WorkbenchStage.projectPitch;
+    notifyListeners();
+  }
+
   /// Step 1A -> 1B: User submits their 1-line Spark idea and starts the turn-by-turn Co-Design Chat.
   Future<void> startConceptInterview(String sparkText) async {
     _isAgentBusy = true;

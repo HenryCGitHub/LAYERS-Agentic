@@ -43,16 +43,24 @@ void main() {
         await tester.pumpWidget(LayersAgenticApp(provider: provider));
         await tester.pumpAndSettle();
 
-        // ── Stage 1A: The Spark ──
+        // ── Stage 1A: The Spark (3 Side-by-Side Starter Concept Playing Cards) ──
         expect(find.text('STEP 1A · THE SPARK'), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_card_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_card_1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_card_2')), findsOneWidget);
         expect(find.byKey(const ValueKey('start_concept_interview_btn')), findsOneWidget);
 
-        await tester.tap(find.byKey(const ValueKey('start_concept_interview_btn')));
+        // 1-Click Launch via Playing Card #1 ('Grapple Hook Parkour')
+        await tester.tap(find.byKey(const ValueKey('spark_card_0')));
         await tester.pumpAndSettle();
 
         // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..09) ──
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
+        expect(find.byKey(const ValueKey('new_spark_reset_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('agent_option_card_0_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('agent_option_card_0_1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('agent_option_card_0_2')), findsOneWidget);
         expect(find.text('SECTION 01 / 09'), findsOneWidget);
         expect(find.text('Goal'), findsWidgets);
 
