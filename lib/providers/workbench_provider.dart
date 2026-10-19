@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
@@ -6,6 +7,9 @@ import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_vault_service.dart';
+import '../services/local_vault_service.dart';
 
 /// Top-level stage in the streamlined 3-screen Antigravity workflow.
 enum WorkbenchStage {
@@ -21,9 +25,259 @@ enum WorkbenchStage {
 
 /// Central state provider for LAYERS-Agentic.
 /// Manages the 4-tier document hierarchy and orchestrates the 3-stage
-/// Interview -> Plan Gate -> Execute workflow.
+/// Interview -> Plan Gate -> Execute workflow with Cloud Firestore + Local persistence.
 class WorkbenchProvider extends ChangeNotifier {
   final Map<String, TierDocument> documents = {};
+
+  final AuthService _authService = AuthService();
+  final FirestoreVaultService _firestoreService = FirestoreVaultService();
+  final bool enableAutoLoad;
+
+  bool _isCloudSynced = false;
+  bool get isCloudSynced => _isCloudSynced;
+  bool get isUserLoggedIn => _authService.isLoggedIn;
+  String? get userEmail => _authService.currentUser?.email;
+  String? get userDisplayName => _authService.currentUser?.displayName;
+  String? get authLastError => _authService.lastError;
+
+  WorkbenchProvider({this.enableAutoLoad = false}) {
+    _authService.addListener(_onAuthStateChanged);
+    if (enableAutoLoad) {
+      initVault();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authService.removeListener(_onAuthStateChanged);
+    _firestoreService.stopRealtimeSync();
+    super.dispose();
+  }
+
+  void _onAuthStateChanged() {
+    final user = _authService.currentUser;
+    if (user != null) {
+      _isCloudSynced = true;
+      // Push any existing local documents up to Firestore on login
+      for (final doc in documents.values) {
+        _firestoreService.saveDocument(uid: user.uid, doc: doc);
+      }
+      if (_activeProjectId != null) {
+        _firestoreService.saveSettings(
+          uid: user.uid,
+          settings: {'activeDocumentId': _activeProjectId},
+        );
+      }
+      _firestoreService.startRealtimeSync(
+        uid: user.uid,
+        onSync: (remoteDocs) {
+          if (remoteDocs.isEmpty) return;
+          for (final entry in remoteDocs.entries) {
+            documents[entry.key] = entry.value;
+            LocalVaultService.saveDocument(entry.value);
+          }
+          if (_activeProjectId == null || !documents.containsKey(_activeProjectId)) {
+            final projs = savedProjects;
+            if (projs.isNotEmpty) {
+              _restoreProjectState(projs.first.id);
+            }
+          } else {
+            _restoreProjectState(_activeProjectId!);
+          }
+          notifyListeners();
+        },
+      );
+    } else {
+      _isCloudSynced = false;
+      _firestoreService.stopRealtimeSync();
+    }
+    notifyListeners();
+  }
+
+  Future<bool> signInWithGoogle() async {
+    final cred = await _authService.signInWithGoogle();
+    notifyListeners();
+    return cred != null;
+  }
+
+  Future<void> signOutFromCloud() async {
+    await _authService.signOut();
+    notifyListeners();
+  }
+
+  /// Loads saved projects from LocalStorage / SharedPreferences and starts Cloud Firestore sync if logged in.
+  Future<void> initVault() async {
+    try {
+      final loaded = await LocalVaultService.loadVaultData();
+      // Ignore legacy static placeholder docs (`proj_vanguard`) if they don't have a concept_blueprint_json
+      for (final doc in loaded.documents.values) {
+        if (doc.id == 'proj_vanguard' ||
+            doc.id == 'rel_01' ||
+            doc.id == 'epic_01' ||
+            doc.id == 'feat_01' ||
+            doc.id == 'feat_02') {
+          continue;
+        }
+        documents[doc.id] = doc;
+      }
+      if (loaded.themeMode != null) {
+        _isDark = loaded.themeMode != 'light';
+      }
+      if (loaded.apiKey != null && loaded.apiKey!.trim().isNotEmpty) {
+        _apiKey = loaded.apiKey!.trim();
+      }
+      final projs = savedProjects;
+      if (projs.isNotEmpty) {
+        final targetId = (loaded.activeDocumentId != null &&
+                documents.containsKey(loaded.activeDocumentId))
+            ? loaded.activeDocumentId!
+            : projs.first.id;
+        _restoreProjectState(targetId);
+      }
+    } catch (e) {
+      debugPrint('initVault error: $e');
+    }
+    _onAuthStateChanged();
+    notifyListeners();
+  }
+
+  /// All user-created Tier 1 Project documents in the vault.
+  List<TierDocument> get savedProjects {
+    return documents.values
+        .where((d) => d.tier == TierType.project)
+        .toList();
+  }
+
+  /// Switches the active project and restores its Stage 1/2/3 blueprints and selection.
+  void switchProject(String projectId) {
+    if (!documents.containsKey(projectId)) return;
+    _restoreProjectState(projectId);
+    _persistSettings();
+    notifyListeners();
+  }
+
+  /// Starts a brand-new Project at Stage 1A (`The Spark`) while keeping existing projects in the vault.
+  void createNewProject() {
+    _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    _activeReleaseId = null;
+    _selectedBeatId = null;
+    _selectedFeatureId = null;
+    _conceptDraft = null;
+    _releaseBlueprint = null;
+    _currentStage = WorkbenchStage.projectPitch;
+    notifyListeners();
+  }
+
+  void _restoreProjectState(String projectId) {
+    final proj = documents[projectId];
+    if (proj == null) return;
+    _activeProjectId = projectId;
+
+    // Restore Concept Blueprint
+    final rawConcept = proj.sections['concept_blueprint_json'];
+    if (rawConcept != null && rawConcept.isNotEmpty) {
+      try {
+        _conceptDraft = ProjectConceptBlueprint.fromJson(
+          jsonDecode(rawConcept) as Map<String, dynamic>,
+        );
+      } catch (e) {
+        debugPrint('Restore concept_blueprint_json error: $e');
+      }
+    }
+
+    // Restore Release Blueprint
+    final rawRelBp = proj.sections['release_blueprint_json'];
+    if (rawRelBp != null && rawRelBp.isNotEmpty) {
+      try {
+        _releaseBlueprint = ReleaseBlueprint.fromJson(
+          jsonDecode(rawRelBp) as Map<String, dynamic>,
+        );
+      } catch (e) {
+        debugPrint('Restore release_blueprint_json error: $e');
+      }
+    } else {
+      _releaseBlueprint = null;
+    }
+
+    // Restore active release, beat, and feature
+    final savedRelId = proj.sections['active_release_id'];
+    if (savedRelId != null && documents.containsKey(savedRelId)) {
+      _activeReleaseId = savedRelId;
+    } else if (proj.childrenIds.isNotEmpty) {
+      _activeReleaseId = proj.childrenIds.first;
+    } else {
+      _activeReleaseId = null;
+    }
+
+    final beats = activeReleaseBeats;
+    if (beats.isNotEmpty) {
+      _selectedBeatId = beats.first.id;
+      final feats = featuresForBeat(_selectedBeatId!);
+      _selectedFeatureId = feats.isNotEmpty ? feats.first.id : null;
+    } else {
+      _selectedBeatId = null;
+      _selectedFeatureId = null;
+    }
+
+    // Restore Stage
+    final savedStage = proj.sections['current_stage'];
+    if (savedStage == WorkbenchStage.releaseWorkbench.name && beats.isNotEmpty) {
+      _currentStage = WorkbenchStage.releaseWorkbench;
+    } else if (savedStage == WorkbenchStage.releasePlanGate.name &&
+        _releaseBlueprint != null) {
+      _currentStage = WorkbenchStage.releasePlanGate;
+    } else {
+      _currentStage = WorkbenchStage.projectPitch;
+    }
+  }
+
+  void _persistDocument(TierDocument doc) {
+    LocalVaultService.saveDocument(doc);
+    final user = _authService.currentUser;
+    if (user != null) {
+      _firestoreService.saveDocument(uid: user.uid, doc: doc);
+    }
+  }
+
+  void _persistSettings() {
+    final activeId = _activeProjectId ?? 'proj_main';
+    LocalVaultService.saveSettings(
+      activeDocumentId: activeId,
+      apiKey: _apiKey,
+      modelName: _conversationModel,
+      thinkingLevel: _thinkingLevel,
+      themeMode: _isDark ? 'dark' : 'light',
+    );
+    final user = _authService.currentUser;
+    if (user != null) {
+      _firestoreService.saveSettings(
+        uid: user.uid,
+        settings: {
+          'activeDocumentId': activeId,
+          'themeMode': _isDark ? 'dark' : 'light',
+        },
+      );
+    }
+  }
+
+  void _syncActiveProjectMetadata() {
+    final proj = activeProject;
+    if (proj == null) return;
+    proj.sections['current_stage'] = _currentStage.name;
+    if (_activeReleaseId != null) {
+      proj.sections['active_release_id'] = _activeReleaseId!;
+    }
+    if (_conceptDraft != null) {
+      proj.sections['concept_blueprint_json'] =
+          jsonEncode(_conceptDraft!.toJson());
+    }
+    if (_releaseBlueprint != null) {
+      proj.sections['release_blueprint_json'] =
+          jsonEncode(_releaseBlueprint!.toJson());
+    }
+    _persistDocument(proj);
+    _persistSettings();
+  }
 
   WorkbenchStage _currentStage = WorkbenchStage.projectPitch;
   WorkbenchStage get currentStage => _currentStage;
@@ -87,6 +341,7 @@ class WorkbenchProvider extends ChangeNotifier {
     if (thinkingLevel != null && thinkingLevel.trim().isNotEmpty) {
       _thinkingLevel = thinkingLevel.trim().toUpperCase();
     }
+    _persistSettings();
     notifyListeners();
   }
 
@@ -208,19 +463,19 @@ class WorkbenchProvider extends ChangeNotifier {
 
   void toggleTheme() {
     _isDark = !_isDark;
+    _persistSettings();
     notifyListeners();
   }
 
   void setStage(WorkbenchStage stage) {
     _currentStage = stage;
+    _syncActiveProjectMetadata();
     notifyListeners();
   }
 
   /// Resets the current Concept Blueprint draft so the user returns to Step 1A (`The Spark` Playing Cards).
   void resetConceptToSpark() {
-    _conceptDraft = null;
-    _currentStage = WorkbenchStage.projectPitch;
-    notifyListeners();
+    createNewProject();
   }
 
   /// Step 1A -> 1B: User submits their 1-line Spark idea and starts the turn-by-turn Co-Design Chat.
@@ -335,7 +590,9 @@ class WorkbenchProvider extends ChangeNotifier {
 
     final releaseIds = <String>[];
     for (int i = 0; i < draft.releaseTrainTitles.length; i++) {
-      final relId = 'rel_v0_${i + 1}';
+      final relId = projId == 'proj_main'
+          ? 'rel_v0_${i + 1}'
+          : '${projId}_rel_v0_${i + 1}';
       final relTitle = draft.releaseTrainTitles[i];
       final existingRel = documents[relId];
 
@@ -346,6 +603,7 @@ class WorkbenchProvider extends ChangeNotifier {
           existingRel.sections['scope'] =
               'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
         }
+        _persistDocument(existingRel);
         releaseIds.add(relId);
         continue;
       }
@@ -363,6 +621,7 @@ class WorkbenchProvider extends ChangeNotifier {
         },
       );
       documents[relId] = relDoc;
+      _persistDocument(relDoc);
       releaseIds.add(relId);
     }
 
@@ -370,6 +629,7 @@ class WorkbenchProvider extends ChangeNotifier {
     documents[projId] = projDoc;
     _activeProjectId = projId;
     _activeReleaseId ??= releaseIds.isNotEmpty ? releaseIds.first : null;
+    _syncActiveProjectMetadata();
   }
 
   /// Step 1C -> Stage 2: Lock in the Project Concept and open the Release Plan Gate for the active Release.
@@ -422,6 +682,7 @@ class WorkbenchProvider extends ChangeNotifier {
         thinkingLevel: _thinkingLevel,
       );
       _currentStage = WorkbenchStage.releasePlanGate;
+      _syncActiveProjectMetadata();
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -447,6 +708,7 @@ class WorkbenchProvider extends ChangeNotifier {
         modelName: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
+      _syncActiveProjectMetadata();
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -463,6 +725,7 @@ class WorkbenchProvider extends ChangeNotifier {
         for (final feat in beat.features) {
           if (feat.id == featureId) {
             feat.included = included;
+            _syncActiveProjectMetadata();
             notifyListeners();
             return;
           }
@@ -482,6 +745,7 @@ class WorkbenchProvider extends ChangeNotifier {
             feat.included = included;
           }
         }
+        _syncActiveProjectMetadata();
         notifyListeners();
         return;
       }
@@ -525,6 +789,7 @@ class WorkbenchProvider extends ChangeNotifier {
             }
           }
         }
+        _syncActiveProjectMetadata();
         notifyListeners();
         return;
       }
@@ -586,6 +851,7 @@ class WorkbenchProvider extends ChangeNotifier {
             ],
           ),
         );
+        _syncActiveProjectMetadata();
         notifyListeners();
         return;
       }
@@ -618,7 +884,10 @@ class WorkbenchProvider extends ChangeNotifier {
 
       for (final d in createdDocs) {
         documents[d.id] = d;
+        _persistDocument(d);
       }
+      _persistDocument(relDoc);
+      _syncActiveProjectMetadata();
 
       // Auto-select the first Feature that has incomplete checkpoints (or Beat 1 / Feature 1)
       final beats = activeReleaseBeats;
@@ -669,6 +938,7 @@ class WorkbenchProvider extends ChangeNotifier {
     final feat = documents[featureId];
     if (feat == null) return;
     FeatureStateNode.saveStatesToDocument(feat, states);
+    _persistDocument(feat);
     notifyListeners();
   }
 
@@ -759,7 +1029,9 @@ class WorkbenchProvider extends ChangeNotifier {
       String? firstNewMvpId;
       for (int i = 0; i < beatNames.length; i++) {
         final newIndex = proj.childrenIds.length + 1;
-        final newRelId = 'rel_v0_$newIndex';
+        final newRelId = proj.id == 'proj_main'
+            ? 'rel_v0_$newIndex'
+            : '${proj.id}_rel_v0_$newIndex';
         final beatLabel = beatNames[i];
         final newRelDoc = TierDocument(
           id: newRelId,
@@ -774,9 +1046,11 @@ class WorkbenchProvider extends ChangeNotifier {
           },
         );
         documents[newRelId] = newRelDoc;
+        _persistDocument(newRelDoc);
         proj.childrenIds.add(newRelId);
         firstNewMvpId ??= newRelId;
       }
+      _syncActiveProjectMetadata();
 
       if (firstNewMvpId != null) {
         await openReleasePlanGate(releaseId: firstNewMvpId);
@@ -785,7 +1059,9 @@ class WorkbenchProvider extends ChangeNotifier {
     } else if (_currentPhase == ProductionPhase.mvp) {
       _currentPhase = ProductionPhase.verticalSlice;
       final newIndex = proj.childrenIds.length + 1;
-      final newRelId = 'rel_v0_$newIndex';
+      final newRelId = proj.id == 'proj_main'
+          ? 'rel_v0_$newIndex'
+          : '${proj.id}_rel_v0_$newIndex';
       final newRelDoc = TierDocument(
         id: newRelId,
         title: 'v0.$newIndex: Gold Standard Level (Combined MVPs) - Vertical Slice',
@@ -799,7 +1075,9 @@ class WorkbenchProvider extends ChangeNotifier {
         },
       );
       documents[newRelId] = newRelDoc;
+      _persistDocument(newRelDoc);
       proj.childrenIds.add(newRelId);
+      _syncActiveProjectMetadata();
       await openReleasePlanGate(releaseId: newRelId);
       return;
     }
@@ -807,7 +1085,9 @@ class WorkbenchProvider extends ChangeNotifier {
     // Phase 4: Full Production content drops (reusing the Rough -> Polish pattern)
     _currentPhase = ProductionPhase.fullProduction;
     final newIndex = proj.childrenIds.length + 1;
-    final newRelId = 'rel_v0_$newIndex';
+    final newRelId = proj.id == 'proj_main'
+        ? 'rel_v0_$newIndex'
+        : '${proj.id}_rel_v0_$newIndex';
     final newRelDoc = TierDocument(
       id: newRelId,
       title: 'v0.$newIndex: Full Production World & Content Pass - Standard',
@@ -821,7 +1101,9 @@ class WorkbenchProvider extends ChangeNotifier {
       },
     );
     documents[newRelId] = newRelDoc;
+    _persistDocument(newRelDoc);
     proj.childrenIds.add(newRelId);
+    _syncActiveProjectMetadata();
     await openReleasePlanGate(releaseId: newRelId);
   }
 }

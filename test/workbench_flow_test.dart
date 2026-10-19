@@ -57,6 +57,8 @@ void main() {
 
         // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..09) ──
         expect(find.byKey(const ValueKey('top_bar_project_title')), findsOneWidget);
+        expect(find.byKey(const ValueKey('project_switcher_dropdown_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('cloud_sync_auth_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('global_export_spec_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
@@ -245,6 +247,38 @@ void main() {
         await provider.approveAndExecuteReleasePlan();
         final evolvedFeat = provider.documents[v1FirstFeat.id]!;
         expect(evolvedFeat.sections['lifecycle'], 'upgrade');
+      },
+    );
+
+    test(
+      'Blueprint JSON serialization & Multi-Project Vault switching preserve Stage 1, 2, and 3 state',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('Tactical Mecha Extraction Shooter');
+        await provider.openReleasePlanGate();
+        await provider.approveAndExecuteReleasePlan();
+
+        final proj1Id = provider.activeProjectId!;
+        expect(provider.savedProjects.length, 1);
+        expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
+
+        // Create a second project via createNewProject()
+        provider.createNewProject();
+        expect(provider.conceptDraft, isNull);
+        expect(provider.currentStage, WorkbenchStage.projectPitch);
+
+        await provider.startConceptInterview('Cozy Alchemy Shop & Dungeon Forager');
+        final proj2Id = provider.activeProjectId!;
+        expect(provider.savedProjects.length, 2);
+        expect(proj2Id, isNot(equals(proj1Id)));
+
+        // Switch back to Project 1 and verify Stage 1, 2, and 3 state restored from JSON metadata
+        provider.switchProject(proj1Id);
+        expect(provider.activeProjectId, proj1Id);
+        expect(provider.conceptDraft!.sparkIdea, 'Tactical Mecha Extraction Shooter');
+        expect(provider.releaseBlueprint, isNotNull);
+        expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
+        expect(provider.activeReleaseBeats, isNotEmpty);
       },
     );
   });

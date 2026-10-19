@@ -9,7 +9,7 @@ class FirestoreVaultService {
   factory FirestoreVaultService() => _instance;
   FirestoreVaultService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
   StreamSubscription? _docsSubscription;
 
   /// Starts listening to real-time Firestore changes for the logged-in user.
@@ -18,12 +18,13 @@ class FirestoreVaultService {
     required void Function(Map<String, TierDocument> remoteDocs) onSync,
   }) {
     _docsSubscription?.cancel();
-    _docsSubscription = _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('documents')
-        .snapshots()
-        .listen((snapshot) {
+    try {
+      _docsSubscription = _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('documents')
+          .snapshots()
+          .listen((snapshot) {
       final docsMap = <String, TierDocument>{};
       for (final docSnap in snapshot.docs) {
         try {
@@ -38,6 +39,9 @@ class FirestoreVaultService {
     }, onError: (e) {
       debugPrint('Firestore real-time sync error: $e');
     });
+    } catch (e) {
+      debugPrint('Firestore startRealtimeSync error: $e');
+    }
   }
 
   void stopRealtimeSync() {
