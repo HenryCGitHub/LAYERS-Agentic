@@ -135,7 +135,7 @@ void main() {
         await tester.tap(buildRelBtn);
         await tester.pumpAndSettle();
 
-        // ── Stage 3: Active Release Workbench (60/40 Checkpoints) ──
+        // ── Stage 3: Active Release Workbench (60/40 Checkpoints + Sticky Studio Dock) ──
         expect(find.text('ACTIVE RELEASE'), findsOneWidget);
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
         expect(find.text('CHECKPOINT 1'), findsOneWidget);
@@ -144,6 +144,19 @@ void main() {
         expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('add_tuning_btn_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('add_edge_guard_btn_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('edit_playtest_btn_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('add_checkpoint_header_btn')), findsOneWidget);
+
+        // Verify Stage 3 Sticky Bottom Studio Dock & 3 Co-Pilot Playing Cards
+        expect(find.byKey(const ValueKey('workbench_sticky_bottom_dock')), findsOneWidget);
+        expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsOneWidget);
+        expect(find.byKey(const ValueKey('copilot_card_suggest_tuning')), findsOneWidget);
+        expect(find.byKey(const ValueKey('copilot_card_add_guards')), findsOneWidget);
+        expect(find.byKey(const ValueKey('workbench_copilot_input')), findsOneWidget);
+        expect(find.byKey(const ValueKey('copy_feature_markdown_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('dock_prev_feature_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('dock_next_feature_btn')), findsOneWidget);
 
         // Verify 60/40 horizontal placement (Checklist Left | Spec Context Right)
         final leftTaskPos = tester.getTopLeft(
@@ -169,6 +182,11 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('add_checkpoint_task_btn_0')));
         await tester.pumpAndSettle();
         expect(find.text('Verify grapple hook cooldown indicator'), findsOneWidget);
+
+        // Verify 1-Click Co-Pilot Playing Card #1 (+ Add Polish Checkpoint) appends a new checkpoint
+        await tester.tap(find.byKey(const ValueKey('copilot_card_add_checkpoint')));
+        await tester.pumpAndSettle();
+        expect(find.text('Screen Feedback & Feel Pass'), findsOneWidget);
       },
     );
 

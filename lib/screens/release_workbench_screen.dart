@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
@@ -13,6 +14,7 @@ import '../utils/section_text_utils.dart';
 ///   - Release Completion Banner (when 100% of Checkpoints are VERIFIED ✓)
 ///   - Ultra-Compact Feature Header (Goal, Done When, Out of Scope badge, Inline Unassigned Spec Shelf)
 ///   - 60/40 Playable Checkpoint Cards (Checklist Left 60% | Playtest, Scope, Tuning, Edge Cases Right 40%)
+///   - Sticky Bottom Studio Dock (3 Side-by-Side Co-Pilot Playing Cards, [ASK AGENT] Input, Copy Markdown & Feature Nav)
 class ReleaseWorkbenchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
 
@@ -30,6 +32,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   final Set<String> _collapsedOpenCheckpoints = {};
   final Set<String> _awaitingPlaytestVerification = {};
   final Map<String, TextEditingController> _newTaskControllers = {};
+  final TextEditingController _copilotPromptController = TextEditingController();
   bool _showOutOfScopeShelf = false;
   bool _hideUnassignedSpecShelf = false;
 
@@ -38,6 +41,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     for (final c in _newTaskControllers.values) {
       c.dispose();
     }
+    _copilotPromptController.dispose();
     super.dispose();
   }
 
@@ -686,15 +690,43 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   ),
                 ],
               ),
-              if (widget.workbench.focusMode && activeFocusIndex != -1)
-                Text(
-                  '🎯 Focus Mode: Expanding Active Checkpoint ${activeFocusIndex + 1} of ${states.length}',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: _accentAmber,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.workbench.focusMode && activeFocusIndex != -1) ...[
+                    Text(
+                      '🎯 Focus Mode: Expanding Active Checkpoint ${activeFocusIndex + 1} of ${states.length}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: _accentAmber,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  InkWell(
+                    key: const ValueKey('add_checkpoint_header_btn'),
+                    onTap: () => _promptAddCheckpointDialog(feat, states),
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _bgSurface,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: _borderSubtle),
+                      ),
+                      child: Text(
+                        '+ Add Checkpoint',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: _accentAmber,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
+              ),
             ],
           ),
         ),
@@ -710,18 +742,44 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       ],
     );
 
-    if (shrinkWrap) return body;
+    final bottomDock = _buildWorkbenchStickyBottomDock(
+      rel,
+      feat,
+      states,
+      specBinding,
+      activeFocusIndex: activeFocusIndex,
+      completedCps: completedCps,
+    );
+
+    if (shrinkWrap) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          body,
+          const SizedBox(height: 16),
+          bottomDock,
+        ],
+      );
+    }
 
     return Container(
       color: _bgBase,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1100),
-            child: body,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: body,
+                ),
+              ),
+            ),
           ),
-        ),
+          bottomDock,
+        ],
       ),
     );
   }
@@ -1098,34 +1156,57 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           if (_showOutOfScopeShelf && outOfScope.isNotEmpty)
             Container(
               key: const ValueKey('feat_out_of_scope_shelf'),
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               decoration: BoxDecoration(
                 color: _bgRecessed,
                 border: Border(top: BorderSide(color: _borderSubtle)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final item in outOfScope)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          tag('CUT', _accentCrimson, width: 48),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              item,
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                color: _textSecondary,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isTwoCol = constraints.maxWidth >= 480 && outOfScope.length > 1;
+                  final colWidth = isTwoCol
+                      ? (constraints.maxWidth - 10) / 2
+                      : constraints.maxWidth;
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      for (final item in outOfScope)
+                        SizedBox(
+                          width: colWidth,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _bgSurface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: _accentCrimson.withValues(alpha: 0.28),
                               ),
                             ),
+                            child: Row(
+                              children: [
+                                tag('CUT', _accentCrimson, width: 42),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    item,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: _textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
-                    ),
-                ],
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           if (specBinding.hasUnassigned && !_hideUnassignedSpecShelf)
@@ -1316,6 +1397,185 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       widget.workbench.updateFeatureStates(feat.id, states);
     }
 
+    Future<void> promptPlaytestDialog() async {
+      final ctrl = TextEditingController(text: node.playtestCondition);
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Text(
+            'Edit Playtest Criteria',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: _textPrimary,
+            ),
+          ),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            maxLines: 3,
+            onSubmitted: (_) => Navigator.of(ctx).pop('save'),
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              color: _textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'e.g., Walk across all 4 walls and verify smooth sliding.',
+              hintStyle: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: _textMuted,
+              ),
+              filled: true,
+              fillColor: _bgRecessed,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: _borderSubtle),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _focalAccent,
+                foregroundColor: _focalAccentFg,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('save'),
+              child: Text(
+                'Save',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || action != 'save') return;
+      final trimmed = ctrl.text.trim();
+      if (trimmed.isEmpty) return;
+      setState(() {
+        node.trigger = trimmed;
+      });
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
+
+    Future<void> promptEdgeCaseDialog({int? editIdx, String? currentVal}) async {
+      final ctrl = TextEditingController(text: currentVal ?? '');
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Text(
+            editIdx == null ? 'Add Edge-Case Guard' : 'Edit Edge-Case Guard',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: _textPrimary,
+            ),
+          ),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            onSubmitted: (_) => Navigator.of(ctx).pop('save'),
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              color: _textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'e.g., [GUARD] Prevent movement during hitstun',
+              hintStyle: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: _textMuted,
+              ),
+              filled: true,
+              fillColor: _bgRecessed,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: _borderSubtle),
+              ),
+            ),
+          ),
+          actions: [
+            if (editIdx != null)
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop('delete'),
+                child: Text(
+                  'Delete',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _accentCrimson,
+                  ),
+                ),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _focalAccent,
+                foregroundColor: _focalAccentFg,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('save'),
+              child: Text(
+                'Save',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || action == null || action == 'cancel') return;
+      final updatedEdges = List<String>.from(edgeItems);
+      if (action == 'delete' && editIdx != null && editIdx < updatedEdges.length) {
+        updatedEdges.removeAt(editIdx);
+      } else if (action == 'save') {
+        final trimmed = ctrl.text.trim();
+        if (trimmed.isEmpty) return;
+        if (editIdx != null && editIdx < updatedEdges.length) {
+          updatedEdges[editIdx] = trimmed;
+        } else {
+          updatedEdges.add(trimmed);
+        }
+      }
+      setState(() {
+        node.edgeCases = updatedEdges;
+      });
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
+
     final checklistPane = Padding(
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -1470,36 +1730,44 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: (isDone ? _accentEmerald : _accentAmber).withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'PLAYTEST',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w800,
-                    color: isDone ? _accentEmerald : _accentAmber,
+          InkWell(
+            key: ValueKey('edit_playtest_btn_$index'),
+            onTap: promptPlaytestDialog,
+            borderRadius: BorderRadius.circular(5),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: (isDone ? _accentEmerald : _accentAmber).withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'PLAYTEST ✎',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        color: isDone ? _accentEmerald : _accentAmber,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  node.playtestCondition,
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: _textPrimary,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      node.playtestCondition,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
           if (isAwaitingPlaytest) ...[
             const SizedBox(height: 10),
@@ -1594,6 +1862,27 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   ),
                 ),
               ),
+              InkWell(
+                key: ValueKey('add_edge_guard_btn_$index'),
+                onTap: () => promptEdgeCaseDialog(),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    '+ Edge Guard',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accentCrimson,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           if (edgeItems.isNotEmpty) ...[
@@ -1602,23 +1891,31 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               spacing: 6,
               runSpacing: 5,
               children: [
-                for (final e in edgeItems)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _accentCrimson.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: _accentCrimson.withValues(alpha: 0.25),
-                        width: 0.8,
-                      ),
+                for (int edgeIdx = 0; edgeIdx < edgeItems.length; edgeIdx++)
+                  InkWell(
+                    key: ValueKey('edge_pill_${index}_$edgeIdx'),
+                    onTap: () => promptEdgeCaseDialog(
+                      editIdx: edgeIdx,
+                      currentVal: edgeItems[edgeIdx],
                     ),
-                    child: Text(
-                      e,
-                      style: GoogleFonts.inter(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        color: _textPrimary,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _accentCrimson.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: _accentCrimson.withValues(alpha: 0.25),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        edgeItems[edgeIdx],
+                        style: GoogleFonts.inter(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          color: _textPrimary,
+                        ),
                       ),
                     ),
                   ),
@@ -1826,6 +2123,709 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               },
             ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _promptAddCheckpointDialog(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+  ) async {
+    final titleCtrl = TextEditingController();
+    final playtestCtrl = TextEditingController();
+    final taskCtrl = TextEditingController();
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: _borderBright),
+        ),
+        title: Text(
+          'Add Playable Checkpoint',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: _textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                autofocus: true,
+                style: GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Checkpoint Title (2–4 plain game-dev words)',
+                  labelStyle: GoogleFonts.inter(fontSize: 11.5, color: _textSecondary),
+                  hintText: 'e.g., Wall Slide & Corner Push',
+                  hintStyle: GoogleFonts.inter(fontSize: 11.5, color: _textMuted),
+                  filled: true,
+                  fillColor: _bgRecessed,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: _borderSubtle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: playtestCtrl,
+                style: GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Playtest Criteria (Observable on screen)',
+                  labelStyle: GoogleFonts.inter(fontSize: 11.5, color: _textSecondary),
+                  hintText: 'e.g., Walk diagonally into a corner and verify smooth sliding.',
+                  hintStyle: GoogleFonts.inter(fontSize: 11.5, color: _textMuted),
+                  filled: true,
+                  fillColor: _bgRecessed,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: _borderSubtle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: taskCtrl,
+                onSubmitted: (_) => Navigator.of(ctx).pop('save'),
+                style: GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'First Task Step',
+                  labelStyle: GoogleFonts.inter(fontSize: 11.5, color: _textSecondary),
+                  hintText: 'e.g., Add corner push nudge on collider contact',
+                  hintStyle: GoogleFonts.inter(fontSize: 11.5, color: _textMuted),
+                  filled: true,
+                  fillColor: _bgRecessed,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: _borderSubtle),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('cancel'),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: _textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _focalAccent,
+              foregroundColor: _focalAccentFg,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop('save'),
+            child: Text(
+              'Add Checkpoint',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || action != 'save') return;
+    final rawTitle = titleCtrl.text.trim();
+    final cpTitle = rawTitle.isEmpty
+        ? 'Stage ${states.length + 1}: Polish & Tuning Pass'
+        : (rawTitle.toLowerCase().startsWith('stage ')
+            ? rawTitle
+            : 'Stage ${states.length + 1}: $rawTitle');
+    final cpPlaytest = playtestCtrl.text.trim().isEmpty
+        ? 'Playtest ${feat.title} in the scene and verify responsive feel.'
+        : playtestCtrl.text.trim();
+    final firstTask = taskCtrl.text.trim().isEmpty
+        ? 'Wire up and test ${rawTitle.isEmpty ? "checkpoint mechanics" : rawTitle}'
+        : taskCtrl.text.trim();
+    final activeVer = widget.workbench.activeRelease?.sections['versionTag'] ?? 'v0.1';
+    final newCp = FeatureStateNode(
+      id: generateUniqueId('cp'),
+      name: cpTitle,
+      trigger: cpPlaytest,
+      parameters: {'releaseVersion': activeVer},
+      checklist: [
+        Subtask(
+          id: generateUniqueId('check'),
+          text: firstTask,
+          completed: false,
+        ),
+      ],
+    );
+    setState(() {
+      states.add(newCp);
+      _expandedDoneCheckpoints.add(newCp.id);
+    });
+    widget.workbench.updateFeatureStates(feat.id, states);
+  }
+
+  Future<void> _copyFeatureAsMarkdown(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureSpecBindingResult specBinding,
+  ) async {
+    final scopeGoal = SectionTextUtils.resolveGoal(feat.sections);
+    final doneIf = SectionTextUtils.resolveDoneWhen(feat.sections);
+    final outOfScope = SectionTextUtils.resolveExclusions(
+      feat.sections,
+      splitSingleSentence: false,
+    );
+    final sb = StringBuffer();
+    sb.writeln('# Feature: ${feat.title} (${feat.estimatedDuration})');
+    sb.writeln('- **Goal**: $scopeGoal');
+    sb.writeln('- **Done When**: $doneIf');
+    if (outOfScope.isNotEmpty) {
+      sb.writeln('- **Out of Scope**:');
+      for (final cut in outOfScope) {
+        sb.writeln('  - [CUT] $cut');
+      }
+    }
+    sb.writeln('\n## Playable Checkpoints (${states.length})');
+    for (int i = 0; i < states.length; i++) {
+      final cp = states[i];
+      final statusTag = cp.isCompleted ? 'VERIFIED ✓' : 'OPEN';
+      sb.writeln(
+        '\n### Checkpoint ${i + 1} (${cp.releaseVersion}): ${cp.cleanStageTitle} [$statusTag]',
+      );
+      sb.writeln('- **Playtest**: ${cp.playtestCondition}');
+      final tunes = specBinding.checkpointTuning[cp.id] ?? cp.tuningParams;
+      if (tunes.isNotEmpty) {
+        sb.writeln('- **Tuning**: ${tunes.join(' · ')}');
+      }
+      final edges = specBinding.checkpointEdgeCases[cp.id] ?? cp.edgeCases;
+      if (edges.isNotEmpty) {
+        sb.writeln('- **Edge Guards**: ${edges.join(' · ')}');
+      }
+      sb.writeln('- **Tasks**:');
+      for (final t in cp.checklist) {
+        sb.writeln('  - [${t.completed ? "x" : " "}] ${t.text}');
+      }
+    }
+    await Clipboard.setData(ClipboardData(text: sb.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: _bgSurface,
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          'Copied ${feat.title} Markdown spec to clipboard ✓',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: _accentEmerald,
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _applyFeatureCoPilotAction(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureSpecBindingResult specBinding,
+    int activeFocusIndex,
+    String actionOrPrompt,
+  ) {
+    final targetIdx = (activeFocusIndex >= 0 && activeFocusIndex < states.length)
+        ? activeFocusIndex
+        : (states.isNotEmpty ? states.length - 1 : -1);
+    final activeVer = widget.workbench.activeRelease?.sections['versionTag'] ?? 'v0.1';
+    final lower = actionOrPrompt.trim().toLowerCase();
+
+    String feedbackMsg = 'Updated ${feat.title}';
+
+    if (actionOrPrompt == 'add_polish_checkpoint' ||
+        lower.contains('checkpoint') ||
+        lower.contains('stage')) {
+      final customTitle = (actionOrPrompt != 'add_polish_checkpoint' &&
+              actionOrPrompt.trim().isNotEmpty)
+          ? actionOrPrompt.trim()
+          : 'Screen Feedback & Feel Pass';
+      final newCp = FeatureStateNode(
+        id: generateUniqueId('cp'),
+        name: 'Stage ${states.length + 1}: $customTitle',
+        trigger:
+            'Trigger ${feat.title} in the scene and verify immediate visual and audio feedback with zero frame hitches.',
+        parameters: {'releaseVersion': activeVer},
+        tuningParams: const [
+          'hit_flash_ms: 85 ms',
+          'sfx_pitch_jitter: ±0.06',
+        ],
+        edgeCases: const [
+          '[GUARD] Cancel active tween cleanly when interrupted',
+        ],
+        checklist: [
+          Subtask(
+            id: generateUniqueId('check'),
+            text: 'Hook up visual flash and sound cue for ${feat.title}',
+            completed: false,
+          ),
+          Subtask(
+            id: generateUniqueId('check'),
+            text: 'Playtest rapid repeated inputs and tune timing values',
+            completed: false,
+          ),
+        ],
+      );
+      setState(() {
+        states.add(newCp);
+        _expandedDoneCheckpoints.add(newCp.id);
+      });
+      feedbackMsg = 'Added Checkpoint ${states.length} (${newCp.cleanStageTitle}) ✓';
+    } else if (actionOrPrompt == 'suggest_tuning' ||
+        lower.contains('tune') ||
+        lower.contains('tuning')) {
+      if (targetIdx != -1) {
+        final node = states[targetIdx];
+        final currentTuning = List<String>.from(
+          specBinding.checkpointTuning[node.id] ?? node.tuningParams,
+        );
+        final candidates = <String>[
+          'response_window_ms: 90 ms',
+          'cooldown_sec: 0.35 s',
+          'lerp_damping: 14.0',
+        ];
+        for (final c in candidates) {
+          if (!currentTuning.contains(c)) {
+            currentTuning.add(c);
+          }
+        }
+        setState(() {
+          node.tuningParams = currentTuning;
+          _expandedDoneCheckpoints.add(node.id);
+        });
+        feedbackMsg = 'Added tuning parameters to Checkpoint ${targetIdx + 1} ✓';
+      }
+    } else if (actionOrPrompt == 'add_edge_guards' ||
+        lower.contains('guard') ||
+        lower.contains('edge')) {
+      if (targetIdx != -1) {
+        final node = states[targetIdx];
+        final currentEdges = List<String>.from(
+          specBinding.checkpointEdgeCases[node.id] ?? node.edgeCases,
+        );
+        final candidates = <String>[
+          '[GUARD] Ignore duplicate input while state transition is active',
+          '[GUARD] Clamp velocity and position within arena bounds on frame spike',
+        ];
+        for (final c in candidates) {
+          if (!currentEdges.contains(c)) {
+            currentEdges.add(c);
+          }
+        }
+        setState(() {
+          node.edgeCases = currentEdges;
+          _expandedDoneCheckpoints.add(node.id);
+        });
+        feedbackMsg = 'Added [GUARD] edge cases to Checkpoint ${targetIdx + 1} ✓';
+      }
+    } else if (targetIdx != -1 && actionOrPrompt.trim().isNotEmpty) {
+      final node = states[targetIdx];
+      setState(() {
+        node.checklist.add(
+          Subtask(
+            id: generateUniqueId('check'),
+            text: actionOrPrompt.trim(),
+            completed: false,
+          ),
+        );
+        _awaitingPlaytestVerification.remove(node.id);
+        _expandedDoneCheckpoints.add(node.id);
+      });
+      feedbackMsg = 'Added task to Checkpoint ${targetIdx + 1} ✓';
+    }
+
+    widget.workbench.updateFeatureStates(feat.id, states);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: _bgSurface,
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          feedbackMsg,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: _accentEmerald,
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildWorkbenchStickyBottomDock(
+    TierDocument rel,
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureSpecBindingResult specBinding, {
+    required int activeFocusIndex,
+    required int completedCps,
+  }) {
+    final allFeats = <TierDocument>[
+      for (final b in widget.workbench.activeReleaseBeats)
+        ...widget.workbench.featuresForBeat(b.id),
+    ];
+    final currentFeatIdx = allFeats.indexWhere((f) => f.id == feat.id);
+    final prevFeat = currentFeatIdx > 0 ? allFeats[currentFeatIdx - 1] : null;
+    final nextFeat = (currentFeatIdx != -1 && currentFeatIdx < allFeats.length - 1)
+        ? allFeats[currentFeatIdx + 1]
+        : widget.workbench.nextIncompleteFeature;
+    final isReleaseComplete = widget.workbench.isActiveReleaseComplete;
+
+    Widget buildCoPilotCard({
+      required Key key,
+      required String badge,
+      required Color badgeColor,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap,
+    }) {
+      return Expanded(
+        child: InkWell(
+          key: key,
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(7),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        badge,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          color: badgeColor,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '1-Click ↗',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                        color: badgeColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    height: 1.3,
+                    color: _textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    void submitCustomPrompt() {
+      final raw = _copilotPromptController.text.trim();
+      if (raw.isEmpty) return;
+      _copilotPromptController.clear();
+      _applyFeatureCoPilotAction(
+        feat,
+        states,
+        specBinding,
+        activeFocusIndex,
+        raw,
+      );
+    }
+
+    return Container(
+      key: const ValueKey('workbench_sticky_bottom_dock'),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        border: Border(top: BorderSide(color: _borderSubtle)),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Row 1: 3 Side-by-Side Co-Pilot Playing Cards
+              Row(
+                children: [
+                  buildCoPilotCard(
+                    key: const ValueKey('copilot_card_add_checkpoint'),
+                    badge: 'CO-PILOT 01 · CHECKPOINT',
+                    badgeColor: _accentEmerald,
+                    title: '+ Add Polish Checkpoint',
+                    subtitle: 'Append a 60/40 playtest checkpoint with tasks & tuning.',
+                    onTap: () => _applyFeatureCoPilotAction(
+                      feat,
+                      states,
+                      specBinding,
+                      activeFocusIndex,
+                      'add_polish_checkpoint',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  buildCoPilotCard(
+                    key: const ValueKey('copilot_card_suggest_tuning'),
+                    badge: 'CO-PILOT 02 · TUNING',
+                    badgeColor: _accentAmber,
+                    title: 'Suggest Tuning Values',
+                    subtitle: 'Generate concrete numeric parameters for the active checkpoint.',
+                    onTap: () => _applyFeatureCoPilotAction(
+                      feat,
+                      states,
+                      specBinding,
+                      activeFocusIndex,
+                      'suggest_tuning',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  buildCoPilotCard(
+                    key: const ValueKey('copilot_card_add_guards'),
+                    badge: 'CO-PILOT 03 · EDGE GUARDS',
+                    badgeColor: _accentCrimson,
+                    title: 'Add Edge-Case Guards',
+                    subtitle: 'Append [GUARD] boundary conditions to prevent state bugs.',
+                    onTap: () => _applyFeatureCoPilotAction(
+                      feat,
+                      states,
+                      specBinding,
+                      activeFocusIndex,
+                      'add_edge_guards',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Row 2: [ASK AGENT] Feature Co-Pilot Input Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _bgRecessed,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _borderSubtle),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _accentEmerald.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'ASK AGENT',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: _accentEmerald,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('workbench_copilot_input'),
+                        controller: _copilotPromptController,
+                        onSubmitted: (_) => submitCustomPrompt(),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: _textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                          hintText:
+                              'Ask Agent to add a task, checkpoint, tuning value, or edge guard for ${feat.title}...',
+                          hintStyle: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            color: _textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      key: const ValueKey('workbench_copilot_send_btn'),
+                      onTap: submitCustomPrompt,
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Icon(
+                          Icons.send_rounded,
+                          size: 15,
+                          color: _accentAmber,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Row 3: Feature Navigation & Copy Markdown Spec Bar
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        key: const ValueKey('dock_prev_feature_btn'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _textSecondary,
+                          side: BorderSide(color: _borderSubtle),
+                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                          minimumSize: Size.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        onPressed: prevFeat == null
+                            ? null
+                            : () => widget.workbench.selectFeature(prevFeat.id),
+                        child: Text(
+                          '← Prev Feature',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        key: const ValueKey('copy_feature_markdown_btn'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _textPrimary,
+                          side: BorderSide(color: _borderSubtle),
+                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                          minimumSize: Size.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        onPressed: () => _copyFeatureAsMarkdown(feat, states, specBinding),
+                        icon: Icon(Icons.copy_rounded, size: 13, color: _accentAmber),
+                        label: Text(
+                          'Copy Feature Markdown',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (currentFeatIdx != -1)
+                        Text(
+                          'Feature ${currentFeatIdx + 1}/${allFeats.length} · $completedCps/${states.length} Checkpoints',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            color: _textMuted,
+                          ),
+                        ),
+                      if (isReleaseComplete)
+                        ElevatedButton.icon(
+                          key: const ValueKey('dock_ship_release_btn'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _focalAccent,
+                            foregroundColor: _focalAccentFg,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          onPressed: () => widget.workbench.advanceToNextRelease(),
+                          icon: const Icon(Icons.rocket_launch_rounded, size: 14),
+                          label: Text(
+                            'Ship & Plan Next Release ✦',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        )
+                      else if (nextFeat != null && nextFeat.id != feat.id)
+                        ElevatedButton(
+                          key: const ValueKey('dock_next_feature_btn'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _focalAccent,
+                            foregroundColor: _focalAccentFg,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          onPressed: () => widget.workbench.selectFeature(nextFeat.id),
+                          child: Text(
+                            'Next Feature →',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
