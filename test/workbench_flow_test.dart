@@ -141,6 +141,23 @@ void main() {
         expect(find.text('SECTION 04 / 09'), findsOneWidget);
         expect(find.text('Design Pillars'), findsWidgets);
         expect(find.textContaining('Load-Bearing'), findsNothing);
+        // Verify Stage 1 + / ✓ Multi-Select Playing Cards on Section 04
+        expect(find.byKey(const ValueKey('multi_select_badge_3')), findsOneWidget);
+        expect(find.text('+ Add to Design Pillars'), findsNWidgets(3));
+        await tester.tap(find.byKey(const ValueKey('agent_option_card_3_0')));
+        await tester.pumpAndSettle();
+        expect(find.text('✓ Added to Design Pillars'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('agent_option_card_3_1')));
+        await tester.pumpAndSettle();
+        expect(find.text('✓ Added to Design Pillars'), findsNWidgets(2));
+        expect(
+          provider.conceptDraft!.designPillars.join(' '),
+          contains('Unbroken Momentum'),
+        );
+        expect(
+          provider.conceptDraft!.designPillars.join(' '),
+          contains('Tactical Positioning'),
+        );
 
         // Jump to Step 10: Full Blueprint Review
         final synthBtn = find.byKey(const ValueKey('synthesize_concept_btn'));
@@ -202,11 +219,14 @@ void main() {
         await tester.tap(buildRelBtn);
         await tester.pumpAndSettle();
 
-        // ── Stage 3: Active Release Workbench (60/40 Checkpoints + Sticky Studio Dock) ──
+        // ── Stage 3: Active Release Workbench (Single-Panel Flow + 1-Click Split-View Switcher) ──
         expect(find.text('ACTIVE RELEASE'), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage3_top_feature_stepper_rail')), findsOneWidget);
+        expect(find.byKey(const ValueKey('checkpoint_stepper_bar')), findsOneWidget);
+        expect(find.byKey(const ValueKey('checkpoint_single_col_0')), findsOneWidget);
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
         expect(find.text('CHECKPOINT 1'), findsOneWidget);
-        expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
@@ -215,9 +235,18 @@ void main() {
         expect(find.byKey(const ValueKey('edit_playtest_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('add_checkpoint_header_btn')), findsOneWidget);
 
+        // Switch from Single-Panel Flow to Split-Panel Studio via stage3_view_mode_toggle_btn
+        await tester.tap(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
+
         // Verify Stage 3 Sticky Bottom Studio Dock & Toggleable 3 Co-Pilot Playing Cards Drawer
         expect(find.byKey(const ValueKey('workbench_sticky_bottom_dock')), findsOneWidget);
         expect(find.byKey(const ValueKey('toggle_copilot_drawer_btn')), findsOneWidget);
+        // Starts in slim 1-line mode by default; tap toggle to open the 3 full Co-Pilot cards
+        expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('toggle_copilot_drawer_btn')));
+        await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsOneWidget);
         expect(find.byKey(const ValueKey('copilot_card_suggest_tuning')), findsOneWidget);
         expect(find.byKey(const ValueKey('copilot_card_add_guards')), findsOneWidget);

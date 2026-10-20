@@ -14,6 +14,7 @@ class _SectionConfig {
   final String purpose;
   final String question;
   final List<String> options;
+  final bool isMultiSelect;
 
   const _SectionConfig({
     required this.numLabel,
@@ -23,6 +24,7 @@ class _SectionConfig {
     required this.purpose,
     required this.question,
     required this.options,
+    this.isMultiSelect = false,
   });
 }
 
@@ -51,6 +53,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   int _currentStep = 0;
   final Set<int> _visitedSteps = {0};
   final Map<int, int?> _selectedOptionBySection = {};
+  final Map<int, Set<int>> _selectedOptionsBySection = {};
   final Map<int, dynamic> _initialSectionDefaults = {};
   final Map<int, String> _agentNotesBySection = {};
 
@@ -123,6 +126,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       title: 'Design Pillars',
       purpose: 'Core player experience truths (how the game feels, never a feature list).',
       question: 'Which player experience truth should anchor our design decisions?',
+      isMultiSelect: true,
       options: [
         'Unbroken Momentum: Prioritize continuous movement velocity and readable telegraphs',
         'Tactical Positioning: Prioritize deliberate positioning and high-clarity feedback',
@@ -136,6 +140,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       title: 'Trade-Offs (X over Y)',
       purpose: 'Explicit engineering & design priority rules when mechanics conflict.',
       question: 'When mechanics conflict during production, what wins?',
+      isMultiSelect: true,
       options: [
         'Instant Input Response: Instant arcade input response over realistic physics inertia',
         'Animation Commitment: Deliberate animation commitment over instant cancelable movement',
@@ -149,6 +154,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       title: 'In Scope: Core Loop Beats',
       purpose: 'The sequential playable beats that make up the complete game loop.',
       question: 'How should the playable core loop Beats flow from start to reset?',
+      isMultiSelect: true,
       options: [
         'Complete 4-Beat Loop: Staging & Prep → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
         'Direct Action Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
@@ -162,6 +168,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       title: 'Out of Scope (Exclusions)',
       purpose: 'Hard exclusions cut from the Prototype to prevent scope creep.',
       question: 'Which scope-creep features should we explicitly cut from the Prototype?',
+      isMultiSelect: true,
       options: [
         'Cut Trees, Co-Op & Story: Cut multi-branch skill trees, online co-op, and story cutscenes from Prototype',
         'Defer Bosses & Crafting: Defer multi-phase bosses and deep inventory crafting until MVP releases',
@@ -354,6 +361,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     });
   }
 
+  bool _isSectionOptionSelected(int sectionIdx, int optIdx) {
+    final sec = _sections[sectionIdx];
+    if (sec.isMultiSelect) {
+      return _selectedOptionsBySection[sectionIdx]?.contains(optIdx) ?? false;
+    }
+    return _selectedOptionBySection[sectionIdx] == optIdx;
+  }
+
   Future<void> _selectSectionOption(
     ProjectConceptBlueprint draft,
     int sectionIdx,
@@ -363,6 +378,46 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     if (optIdx < 0 || optIdx >= opts.length) return;
     final optionText = opts[optIdx];
     final sec = _sections[sectionIdx];
+
+    if (sec.isMultiSelect) {
+      _captureSectionDefaultIfNeeded(draft, sectionIdx);
+      final currentSet = Set<int>.from(
+        _selectedOptionsBySection[sectionIdx] ?? const <int>{},
+      );
+      final wasSelected = currentSet.contains(optIdx);
+      if (wasSelected) {
+        currentSet.remove(optIdx);
+      } else {
+        currentSet.add(optIdx);
+      }
+      if (currentSet.isEmpty) {
+        _restoreSectionDefault(draft, sectionIdx);
+        setState(() {
+          _selectedOptionsBySection.remove(sectionIdx);
+          _selectedOptionBySection.remove(sectionIdx);
+          _agentNotesBySection[sectionIdx] =
+              'Cleared selections — restored default ${sec.title}.';
+        });
+        return;
+      }
+
+      setState(() {
+        _selectedOptionsBySection[sectionIdx] = currentSet;
+        _selectedOptionBySection[sectionIdx] = currentSet.last;
+      });
+      _applyMultiSelectSectionOptionsDeterministic(
+        draft,
+        sectionIdx,
+        currentSet,
+        opts,
+      );
+      if (!mounted) return;
+      setState(() {
+        _agentNotesBySection[sectionIdx] =
+            'Combined ${currentSet.length} selected option(s) into ${sec.title} ✓';
+      });
+      return;
+    }
 
     // Clicking the already-selected Option Card unselects it and restores the initial generated default!
     if (_selectedOptionBySection[sectionIdx] == optIdx) {
@@ -402,6 +457,103 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     setState(() {
       _agentNotesBySection[sectionIdx] =
           'Agent updated ${sec.title}: Applied "$optionText".';
+    });
+  }
+
+  void _applyMultiSelectSectionOptionsDeterministic(
+    ProjectConceptBlueprint draft,
+    int sectionIdx,
+    Set<int> selectedIndices,
+    List<String> opts,
+  ) {
+    final sorted = selectedIndices.toList()..sort();
+    final savedDefault = _initialSectionDefaults[sectionIdx];
+    final baseList = savedDefault is List<String>
+        ? List<String>.from(savedDefault)
+        : <String>[];
+
+    widget.workbench.updateConceptDraft((d) {
+      switch (sectionIdx) {
+        case 3: // 04 Design Pillars
+          final combined = <String>[];
+          for (final idx in sorted) {
+            if (idx < 0 || idx >= opts.length) continue;
+            final raw = opts[idx].trim();
+            final val = raw.contains(':') ? raw : 'Core Focus: $raw';
+            if (!combined.contains(val)) combined.add(val);
+          }
+          for (final existing in baseList) {
+            if (combined.length < 4 && !combined.contains(existing)) {
+              combined.add(existing);
+            }
+          }
+          d.designPillars = combined;
+          break;
+        case 4: // 05 Trade-Offs
+          final combined = <String>[];
+          for (final idx in sorted) {
+            if (idx < 0 || idx >= opts.length) continue;
+            final raw = opts[idx].trim();
+            final body = raw.contains(':')
+                ? raw.substring(raw.indexOf(':') + 1).trim()
+                : raw;
+            if (!combined.contains(body)) combined.add(body);
+          }
+          for (final existing in baseList) {
+            if (combined.length < 3 && !combined.contains(existing)) {
+              combined.add(existing);
+            }
+          }
+          d.tradeOffs = combined;
+          break;
+        case 5: // 06 Core Loop Beats
+          final combined = <String>[];
+          for (final idx in sorted) {
+            if (idx < 0 || idx >= opts.length) continue;
+            final raw = opts[idx].trim();
+            final body = raw.contains(':')
+                ? raw.substring(raw.indexOf(':') + 1).trim()
+                : raw;
+            if (body.contains('→')) {
+              final steps = body
+                  .split('→')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty);
+              for (final step in steps) {
+                final formatted = step.contains(':')
+                    ? step
+                    : '$step: Execute $step for ${d.title} (${d.sparkIdea})';
+                if (!combined.any((c) => c.toLowerCase().startsWith(
+                    step.split(':').first.trim().toLowerCase()))) {
+                  combined.add(formatted);
+                }
+              }
+            } else if (!combined.contains(raw)) {
+              combined.add(raw);
+            }
+          }
+          if (combined.isNotEmpty) {
+            d.coreLoopBeats = combined;
+          }
+          break;
+        case 6: // 07 Out of Scope Exclusions
+          final combined = <String>[];
+          for (final idx in sorted) {
+            if (idx < 0 || idx >= opts.length) continue;
+            final raw = opts[idx].trim();
+            final body = raw.contains(':')
+                ? raw.substring(raw.indexOf(':') + 1).trim()
+                : raw;
+            if (!combined.contains(body)) combined.add(body);
+          }
+          for (final existing in baseList) {
+            if (!combined.contains(existing)) {
+              combined.add(existing);
+            }
+          }
+          d.exclusions = combined;
+          break;
+      }
     });
   }
 
@@ -1875,7 +2027,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   // ── Steps `01`–`09`: De-Boxed Full-Width Single-Section Workspace ──────────
   Widget _buildFocusedSectionWorkspace(ProjectConceptBlueprint draft, int sectionIdx) {
     final sec = _sections[sectionIdx];
-    final selectedOpt = _selectedOptionBySection[sectionIdx];
     final agentNote = _agentNotesBySection[sectionIdx];
     final stage1Interventions = widget.workbench.stage1Interventions;
 
@@ -2166,12 +2317,38 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                             ),
                           ),
                         ),
+                        if (sec.isMultiSelect) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            key: ValueKey('multi_select_badge_$sectionIdx'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _accentEmerald.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _accentEmerald.withValues(alpha: 0.45),
+                              ),
+                            ),
+                            child: Text(
+                              '+ / ✓ MULTI-SELECT · ADD ANY',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: _accentEmerald,
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         InkWell(
                           key: const ValueKey('regenerate_section_options_btn'),
                           onTap: () {
                             setState(() {
                               _selectedOptionBySection.remove(sectionIdx);
+                              _selectedOptionsBySection.remove(sectionIdx);
                             });
                             widget.workbench.regenerateStage1SectionOptions(
                               sec.optionKey,
@@ -2217,7 +2394,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                   sectionIdx: sectionIdx,
                                   optIdx: optIdx,
                                   label: options[optIdx],
-                                  isSelected: selectedOpt == optIdx,
+                                  isSelected: _isSectionOptionSelected(sectionIdx, optIdx),
                                 ),
                                 if (optIdx < options.length - 1) const SizedBox(height: 8),
                               ],
@@ -2235,7 +2412,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                     sectionIdx: sectionIdx,
                                     optIdx: optIdx,
                                     label: options[optIdx],
-                                    isSelected: selectedOpt == optIdx,
+                                    isSelected: _isSectionOptionSelected(sectionIdx, optIdx),
                                   ),
                                 ),
                                 if (optIdx < options.length - 1) const SizedBox(width: 10),
@@ -2558,6 +2735,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     required bool isSelected,
   }) {
     final parsed = _splitOptionIntoCardTitleAndBody(label, sectionIdx, optIdx);
+    final sec = _sections[sectionIdx];
+    final isMulti = sec.isMultiSelect;
 
     return Material(
       color: isSelected ? _bgHover : _bgSurface,
@@ -2571,7 +2750,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(7),
             border: Border.all(
-              color: isSelected ? _textPrimary : _borderSubtle,
+              color: isSelected
+                  ? (isMulti ? _accentEmerald : _textPrimary)
+                  : _borderSubtle,
               width: isSelected ? 1.5 : 1.0,
             ),
           ),
@@ -2585,61 +2766,67 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        width: 15,
-                        height: 15,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected ? _focalAccent : Colors.transparent,
-                          border: Border.all(
-                            color: isSelected ? _focalAccent : _textMuted,
-                            width: 1.4,
-                          ),
-                        ),
-                        child: isSelected
-                            ? Container(
-                                width: 5,
-                                height: 5,
+                      if (isMulti)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (optIdx == 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: _focalAccentFg,
+                                  color: _accentEmerald.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: _accentEmerald.withValues(alpha: 0.42),
+                                  ),
+                                ),
+                                child: Text(
+                                  'RECOMMENDED',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _accentEmerald,
+                                  ),
                                 ),
                               )
-                            : null,
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (optIdx == 0)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _accentEmerald.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: _accentEmerald.withValues(alpha: 0.42),
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _bgRecessed,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(color: _borderSubtle),
+                                ),
+                                child: Text(
+                                  'OPTION 0${optIdx + 1}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textSecondary,
+                                  ),
                                 ),
                               ),
-                              child: Text(
-                                'RECOMMENDED',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: _accentEmerald,
-                                ),
-                              ),
-                            )
-                          else
+                            const SizedBox(width: 5),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
                               decoration: BoxDecoration(
                                 color: _bgRecessed,
                                 borderRadius: BorderRadius.circular(3),
-                                border: Border.all(color: _borderSubtle),
+                                border: Border.all(
+                                  color: _borderBright.withValues(alpha: 0.6),
+                                ),
                               ),
                               child: Text(
-                                'OPTION 0${optIdx + 1}',
+                                'Key ${optIdx + 1}',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 8.5,
                                   fontWeight: FontWeight.w700,
@@ -2647,25 +2834,110 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                 ),
                               ),
                             ),
-                          const SizedBox(width: 5),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: _bgRecessed,
-                              borderRadius: BorderRadius.circular(3),
-                              border: Border.all(color: _borderBright.withValues(alpha: 0.6)),
-                            ),
-                            child: Text(
-                              'Key ${optIdx + 1}',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w700,
-                                color: _textSecondary,
-                              ),
+                          ],
+                        )
+                      else
+                        Container(
+                          width: 15,
+                          height: 15,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isSelected ? _focalAccent : Colors.transparent,
+                            border: Border.all(
+                              color: isSelected ? _focalAccent : _textMuted,
+                              width: 1.4,
                             ),
                           ),
-                        ],
-                      ),
+                          child: isSelected
+                              ? Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _focalAccentFg,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      if (isMulti)
+                        Icon(
+                          isSelected
+                              ? Icons.check_circle_rounded
+                              : Icons.add_circle_outline_rounded,
+                          size: 16,
+                          color: isSelected ? _accentEmerald : _textMuted,
+                        )
+                      else
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (optIdx == 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _accentEmerald.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: _accentEmerald.withValues(alpha: 0.42),
+                                  ),
+                                ),
+                                child: Text(
+                                  'RECOMMENDED',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _accentEmerald,
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _bgRecessed,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(color: _borderSubtle),
+                                ),
+                                child: Text(
+                                  'OPTION 0${optIdx + 1}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textSecondary,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgRecessed,
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: _borderBright.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: Text(
+                                'Key ${optIdx + 1}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -2688,6 +2960,48 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                 ],
               ),
+              if (isMulti)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.only(top: 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(color: _borderSubtle),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              isSelected
+                                  ? '✓ Added to ${sec.shortTitle}'
+                                  : '+ Add to ${sec.shortTitle}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: isSelected ? _accentEmerald : _accentAmber,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            isSelected ? '✓' : '+',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: isSelected ? _accentEmerald : _accentAmber,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -4449,8 +4763,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                 color: _bgSurface,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                  color: (_selectedOptionBySection[sectionIdx] ?? 0) == optIdx
-                                      ? _textPrimary
+                                  color: _isSectionOptionSelected(sectionIdx, optIdx)
+                                      ? (_sections[sectionIdx].isMultiSelect
+                                          ? _accentEmerald
+                                          : _textPrimary)
                                       : _borderSubtle,
                                 ),
                               ),
