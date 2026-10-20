@@ -1506,39 +1506,66 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   ),
                   const SizedBox(width: 8),
                 ],
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: !isIncluded
-                        ? _accentCrimson.withValues(alpha: 0.12)
-                        : (feat.lifecycle == FeatureLifecycleStatus.stable
-                            ? _accentEmerald.withValues(alpha: 0.12)
-                            : _bgRecessed),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: !isIncluded
-                          ? _accentCrimson.withValues(alpha: 0.42)
-                          : (feat.lifecycle == FeatureLifecycleStatus.stable
-                              ? _accentEmerald.withValues(alpha: 0.42)
-                              : _borderSubtle),
+                InkWell(
+                  key: ValueKey('edit_stage2_feat_${feat.id}'),
+                  onTap: () => _showEditProposedFeatureDialog(beat.id, feat),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: _bgRecessed,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: _borderSubtle),
+                    ),
+                    child: Text(
+                      'Edit ✎',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: _textSecondary,
+                      ),
                     ),
                   ),
-                  child: Text(
-                    !isIncluded
-                        ? (feat.lifecycle == FeatureLifecycleStatus.superseded
-                            ? 'ARCHIVED'
-                            : 'DEFERRED')
-                        : (feat.lifecycle == FeatureLifecycleStatus.stable
-                            ? 'STABLE · 0h'
-                            : '${feat.activeDeltaHours}h'),
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  key: ValueKey('edit_stage2_feat_hours_${feat.id}'),
+                  onTap: () => _showEditProposedFeatureDialog(beat.id, feat),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
                       color: !isIncluded
-                          ? _accentCrimson
+                          ? _accentCrimson.withValues(alpha: 0.12)
                           : (feat.lifecycle == FeatureLifecycleStatus.stable
-                              ? _accentEmerald
-                              : _textPrimary),
+                              ? _accentEmerald.withValues(alpha: 0.12)
+                              : _bgRecessed),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: !isIncluded
+                            ? _accentCrimson.withValues(alpha: 0.42)
+                            : (feat.lifecycle == FeatureLifecycleStatus.stable
+                                ? _accentEmerald.withValues(alpha: 0.42)
+                                : _borderSubtle),
+                      ),
+                    ),
+                    child: Text(
+                      !isIncluded
+                          ? (feat.lifecycle == FeatureLifecycleStatus.superseded
+                              ? 'ARCHIVED'
+                              : 'DEFERRED')
+                          : (feat.lifecycle == FeatureLifecycleStatus.stable
+                              ? 'STABLE · 0h'
+                              : '${feat.activeDeltaHours}h'),
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: !isIncluded
+                            ? _accentCrimson
+                            : (feat.lifecycle == FeatureLifecycleStatus.stable
+                                ? _accentEmerald
+                                : _textPrimary),
+                      ),
                     ),
                   ),
                 ),
@@ -1996,6 +2023,249 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _showEditProposedFeatureDialog(
+    String beatId,
+    ProposedFeatureBlueprint feat,
+  ) async {
+    final titleCtrl = TextEditingController(text: feat.title);
+    final hoursCtrl = TextEditingController(text: '${feat.estimatedHours}');
+    final goalCtrl = TextEditingController(text: feat.goal);
+    final doneWhenCtrl = TextEditingController(text: feat.doneWhen);
+    final cpLines = feat.checkpoints
+        .map((c) => '${c.title} | ${c.playtestCriteria}')
+        .join('\n');
+    final cpCtrl = TextEditingController(text: cpLines);
+    final tuningCtrl = TextEditingController(
+      text: feat.tuningParams.join(', '),
+    );
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: _borderBright),
+        ),
+        title: Text(
+          'Edit Proposed Feature',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: _textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 540,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: _buildDialogField(
+                        label: 'FEATURE TITLE',
+                        controller: titleCtrl,
+                        fieldKey: const ValueKey('edit_feat_title_input'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 1,
+                      child: _buildDialogField(
+                        label: 'HOURS',
+                        controller: hoursCtrl,
+                        fieldKey: const ValueKey('edit_feat_hours_input'),
+                        mono: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                _buildDialogField(
+                  label: 'GOAL (1 SENTENCE)',
+                  controller: goalCtrl,
+                  fieldKey: const ValueKey('edit_feat_goal_input'),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 10),
+                _buildDialogField(
+                  label: 'DONE WHEN (PLAYTEST CONDITION)',
+                  controller: doneWhenCtrl,
+                  fieldKey: const ValueKey('edit_feat_done_when_input'),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 10),
+                _buildDialogField(
+                  label: 'CHECKPOINTS (1 PER LINE: Title | Playtest Criteria)',
+                  controller: cpCtrl,
+                  fieldKey: const ValueKey('edit_feat_checkpoints_input'),
+                  maxLines: 3,
+                  mono: true,
+                ),
+                const SizedBox(height: 10),
+                _buildDialogField(
+                  label: 'TUNING PARAMETERS (COMMA SEPARATED)',
+                  controller: tuningCtrl,
+                  fieldKey: const ValueKey('edit_feat_tuning_input'),
+                  mono: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('delete_stage2_feat_btn'),
+            onPressed: () => Navigator.of(ctx).pop('delete'),
+            child: Text(
+              'Remove Feature',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _accentCrimson,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('cancel'),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: _textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('save_stage2_feat_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accentEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop('save'),
+            child: Text(
+              'Save Changes',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || action == null || action == 'cancel') return;
+    if (action == 'delete') {
+      widget.workbench.removeProposedFeatureFromBeat(beatId, feat.id);
+      return;
+    }
+
+    final parsedHours = int.tryParse(
+          hoursCtrl.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        feat.estimatedHours;
+    final parsedTuning = tuningCtrl.text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    final rawCpLines = cpCtrl.text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final updatedCheckpoints = <ProposedCheckpointBlueprint>[];
+    for (int i = 0; i < rawCpLines.length; i++) {
+      final parts = rawCpLines[i].split('|');
+      final cpTitle = parts.first.trim();
+      final cpPlaytest = parts.length > 1
+          ? parts.sublist(1).join('|').trim()
+          : (i < feat.checkpoints.length
+              ? feat.checkpoints[i].playtestCriteria
+              : feat.doneWhen);
+      final existingCp =
+          i < feat.checkpoints.length ? feat.checkpoints[i] : null;
+      updatedCheckpoints.add(
+        ProposedCheckpointBlueprint(
+          title: cpTitle,
+          playtestCriteria: cpPlaytest,
+          tasks: existingCp?.tasks ??
+              const [
+                'Wire core input & movement state (2h)',
+                'Connect feedback & boundary guard (1h)',
+              ],
+          coveredScope: existingCp?.coveredScope ?? feat.inScope,
+          tuningParams: parsedTuning,
+          edgeCases: existingCp?.edgeCases ?? feat.edgeCases,
+          releaseVersion: existingCp?.releaseVersion ?? feat.originVersion,
+        ),
+      );
+    }
+
+    widget.workbench.updateProposedFeatureInBeat(
+      beatId: beatId,
+      featureId: feat.id,
+      title: titleCtrl.text,
+      goal: goalCtrl.text,
+      doneWhen: doneWhenCtrl.text,
+      estimatedHours: parsedHours,
+      checkpoints:
+          updatedCheckpoints.isNotEmpty ? updatedCheckpoints : feat.checkpoints,
+      tuningParams: parsedTuning,
+    );
+  }
+
+  Widget _buildDialogField({
+    required String label,
+    required TextEditingController controller,
+    required Key fieldKey,
+    int maxLines = 1,
+    bool mono = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w800,
+            color: _textMuted,
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          key: fieldKey,
+          controller: controller,
+          maxLines: maxLines,
+          style: mono
+              ? GoogleFonts.jetBrainsMono(fontSize: 12, color: _textPrimary)
+              : GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 9,
+            ),
+            filled: true,
+            fillColor: _bgRecessed,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(5),
+              borderSide: BorderSide(color: _borderSubtle),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

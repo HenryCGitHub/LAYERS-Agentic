@@ -1119,6 +1119,151 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
+  /// Updates a proposed Feature's Title, Hours, Goal, Done When, Checkpoints, or Tuning
+  /// parameters inline inside Stage 2 (`Release Plan Gate`).
+  void updateProposedFeatureInBeat({
+    required String beatId,
+    required String featureId,
+    String? title,
+    String? goal,
+    String? doneWhen,
+    int? estimatedHours,
+    List<ProposedCheckpointBlueprint>? checkpoints,
+    List<String>? tuningParams,
+    List<String>? edgeCases,
+  }) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    for (final beat in bp.beats) {
+      if (beat.id == beatId) {
+        for (final feat in beat.features) {
+          if (feat.id == featureId) {
+            if (title != null && title.trim().isNotEmpty) {
+              feat.title = title.trim();
+            }
+            if (goal != null && goal.trim().isNotEmpty) {
+              feat.goal = goal.trim();
+            }
+            if (doneWhen != null && doneWhen.trim().isNotEmpty) {
+              feat.doneWhen = doneWhen.trim();
+            }
+            if (estimatedHours != null && estimatedHours >= 0) {
+              feat.estimatedHours = estimatedHours;
+            }
+            if (checkpoints != null && checkpoints.isNotEmpty) {
+              feat.checkpoints = checkpoints;
+            }
+            if (tuningParams != null) {
+              feat.tuningParams = tuningParams;
+            }
+            if (edgeCases != null) {
+              feat.edgeCases = edgeCases;
+            }
+            _syncActiveProjectMetadata();
+            notifyListeners();
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  /// Removes a proposed Feature card from a Beat in Stage 2 (`Release Plan Gate`).
+  void removeProposedFeatureFromBeat(String beatId, String featureId) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    for (final beat in bp.beats) {
+      if (beat.id == beatId) {
+        beat.features.removeWhere((f) => f.id == featureId);
+        _syncActiveProjectMetadata();
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  /// Logs a Playtest Issue on a Checkpoint in Stage 3 (`Release Workbench`):
+  /// 1. Appends a `[FIX] <issueDescription> (1h)` Parent Task to `cpNode.checklist` with
+  ///    3 checkable, engine-aware debug/fix How-To Sub-Steps.
+  /// 2. Appends `[PLAYTEST GUARD] <issueDescription>` to `cpNode.edgeCases`.
+  /// Returns the index of the newly created `[FIX]` Parent Task.
+  int logPlaytestIssueOnCheckpoint({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required String issueDescription,
+  }) {
+    final cleanIssue = issueDescription.trim();
+    if (cleanIssue.isEmpty ||
+        checkpointIndex < 0 ||
+        checkpointIndex >= states.length) {
+      return -1;
+    }
+    final cpNode = states[checkpointIndex];
+    final newTaskIndex = cpNode.checklist.length;
+    final taskNum = newTaskIndex + 1;
+    final engineHint = _conceptDraft?.techSpec.join(' ') ??
+        activeProject?.sections['tech_spec'];
+    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final isUnity = engineLabel.contains('Unity');
+    final isUnreal = engineLabel.contains('Unreal');
+    final primaryTune = cpNode.tuningParams.isNotEmpty
+        ? cpNode.tuningParams.first
+        : 'threshold: 1.0';
+
+    final fixTask = Subtask(
+      id: generateUniqueId('fix_task'),
+      text: '[FIX] $cleanIssue (1h)',
+      completed: false,
+      children: [
+        Subtask(
+          id: generateUniqueId('fix_sub_1'),
+          text: 'STEP $taskNum.1 · REPRODUCE & INSPECT PLAYTEST ISSUE',
+          specNotes:
+              'Trigger "$cleanIssue" in the game viewport and log the live state before applying changes.',
+          codeTargetFile: 'custom_snippet',
+          codeSnippet: isUnity
+              ? '// Debug log state when "$cleanIssue" occurs\nDebug.LogWarning("[PLAYTEST FIX] Issue triggered | Tune: $primaryTune");'
+              : (isUnreal
+                  ? '// Log state when "$cleanIssue" occurs\nUE_LOG(LogTemp, Warning, TEXT("[PLAYTEST FIX] Issue triggered: %s"), *GetName());'
+                  : '# Log state when "$cleanIssue" occurs\nprint("[PLAYTEST FIX] Issue triggered -> ", name, " | Tune: $primaryTune")'),
+        ),
+        Subtask(
+          id: generateUniqueId('fix_sub_2'),
+          text: 'STEP $taskNum.2 · APPLY FIX & CLAMP TUNING BOUNDS',
+          specNotes:
+              'Adjust the update/collision logic and clamp $primaryTune so "$cleanIssue" cannot happen.',
+          codeTargetFile: 'custom_snippet',
+          codeSnippet: isUnity
+              ? '// Clamp and resolve: $cleanIssue\nif (!isValidState) { ResetStateSafely(); return; }'
+              : (isUnreal
+                  ? '// Clamp and resolve: $cleanIssue\nif (!bIsValidState) { ResetStateSafely(); return; }'
+                  : '# Clamp and resolve: $cleanIssue\nif not is_valid_state:\n    reset_state_safely()\n    return'),
+        ),
+        Subtask(
+          id: generateUniqueId('fix_sub_3'),
+          text: 'STEP $taskNum.3 · VERIFY PLAYTEST GUARD IN VIEWPORT',
+          specNotes:
+              'Re-run the checkpoint playtest gate ("${cpNode.playtestCondition}") 3 times to confirm "$cleanIssue" is resolved.',
+          codeTargetFile: 'custom_snippet',
+          codeSnippet: isUnity
+              ? 'Debug.Assert(isValidState, "[PLAYTEST GUARD] $cleanIssue");'
+              : (isUnreal
+                  ? 'checkf(bIsValidState, TEXT("[PLAYTEST GUARD] $cleanIssue"));'
+                  : 'assert(is_valid_state, "[PLAYTEST GUARD] $cleanIssue")'),
+        ),
+      ],
+    );
+
+    cpNode.checklist.add(fixTask);
+    final guardText = '[PLAYTEST GUARD] $cleanIssue';
+    if (!cpNode.edgeCases.contains(guardText)) {
+      cpNode.edgeCases = [...cpNode.edgeCases, guardText];
+    }
+    updateFeatureStates(featureId, states);
+    return newTaskIndex;
+  }
+
   /// Tailors the 3 checkable How-To sub-steps (`Step X.1`, `Step X.2`, `Step X.3`) for a specific
   /// Parent Task in Stage 3 using either Gemini AI (`gemini-flash-latest`) or deterministic
   /// Scene/Node context injection when offline.

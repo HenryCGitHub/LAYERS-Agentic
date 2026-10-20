@@ -1677,83 +1677,169 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     Future<void> promptTuningDialog({int? editIdx, String? currentVal}) async {
       final ctrl = TextEditingController(text: currentVal ?? '');
+      void applyPercentageBump(double multiplier) {
+        final raw = ctrl.text;
+        final match = RegExp(r'(-?\d+(?:\.\d+)?)').firstMatch(raw);
+        if (match == null) return;
+        final currentNum = double.tryParse(match.group(1)!);
+        if (currentNum == null) return;
+        final nextNum = currentNum * multiplier;
+        final hasDecimal = match.group(1)!.contains('.');
+        final formatted = (!hasDecimal && (nextNum - nextNum.round()).abs() < 0.05)
+            ? '${nextNum.round()}'
+            : nextNum
+                .toStringAsFixed(2)
+                .replaceAll(RegExp(r'0+$'), '')
+                .replaceAll(RegExp(r'\.$'), '');
+        ctrl.text = raw.replaceRange(match.start, match.end, formatted);
+        ctrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: ctrl.text.length),
+        );
+      }
+
       final action = await showDialog<String>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: _bgSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: _borderBright),
-          ),
-          title: Text(
-            editIdx == null ? 'Add Tuning Parameter' : 'Edit Tuning Parameter',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: _textPrimary,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setModalState) => AlertDialog(
+            backgroundColor: _bgSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: _borderBright),
             ),
-          ),
-          content: TextField(
-            controller: ctrl,
-            autofocus: true,
-            onSubmitted: (_) => Navigator.of(ctx).pop('save'),
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 12.5,
-              color: _textPrimary,
-            ),
-            decoration: InputDecoration(
-              hintText: 'e.g., move_speed: 220 px/s',
-              hintStyle: GoogleFonts.jetBrainsMono(
-                fontSize: 11.5,
-                color: _textMuted,
-              ),
-              filled: true,
-              fillColor: _bgRecessed,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: _borderSubtle),
+            title: Text(
+              editIdx == null ? 'Add Tuning Parameter' : 'Edit Tuning Parameter',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: _textPrimary,
               ),
             ),
-          ),
-          actions: [
-            if (editIdx != null)
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    key: const ValueKey('tuning_param_input'),
+                    controller: ctrl,
+                    autofocus: true,
+                    onChanged: (_) => setModalState(() {}),
+                    onSubmitted: (_) => Navigator.of(ctx).pop('save'),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12.5,
+                      color: _textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'e.g., move_speed: 220 px/s',
+                      hintStyle: GoogleFonts.jetBrainsMono(
+                        fontSize: 11.5,
+                        color: _textMuted,
+                      ),
+                      filled: true,
+                      fillColor: _bgRecessed,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: _borderSubtle),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Text(
+                        'QUICK-BUMP:',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: _textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      for (final bump in const [
+                        (label: '-25%', mult: 0.75, key: 'tuning_bump_minus25_btn'),
+                        (label: '-10%', mult: 0.90, key: 'tuning_bump_minus10_btn'),
+                        (label: '+10%', mult: 1.10, key: 'tuning_bump_plus10_btn'),
+                        (label: '+25%', mult: 1.25, key: 'tuning_bump_plus25_btn'),
+                      ]) ...[
+                        InkWell(
+                          key: ValueKey(bump.key),
+                          onTap: () {
+                            setModalState(() {
+                              applyPercentageBump(bump.mult);
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _accentAmber.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _accentAmber.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Text(
+                              bump.label,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: _accentAmber,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              if (editIdx != null)
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop('delete'),
+                  child: Text(
+                    'Delete',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _accentCrimson,
+                    ),
+                  ),
+                ),
               TextButton(
-                onPressed: () => Navigator.of(ctx).pop('delete'),
+                onPressed: () => Navigator.of(ctx).pop('cancel'),
                 child: Text(
-                  'Delete',
+                  'Cancel',
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _accentCrimson,
+                    color: _textSecondary,
                   ),
                 ),
               ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop('cancel'),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: _textSecondary,
+              ElevatedButton(
+                key: const ValueKey('save_tuning_param_btn'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _focalAccent,
+                  foregroundColor: _focalAccentFg,
+                  elevation: 0,
+                ),
+                onPressed: () => Navigator.of(ctx).pop('save'),
+                child: Text(
+                  'Save',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _focalAccent,
-                foregroundColor: _focalAccentFg,
-                elevation: 0,
-              ),
-              onPressed: () => Navigator.of(ctx).pop('save'),
-              child: Text(
-                'Save',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
       if (!mounted || action == null || action == 'cancel') return;
@@ -1773,6 +1859,121 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         node.tuningParams = updatedTuning;
       });
       widget.workbench.updateFeatureStates(feat.id, states);
+    }
+
+    Future<void> promptLogPlaytestIssueDialog() async {
+      final ctrl = TextEditingController();
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.flag_rounded, size: 16, color: _accentCrimson),
+              const SizedBox(width: 8),
+              Text(
+                'Log Playtest Issue / Triage',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: _textPrimary,
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Describe what failed or felt off during viewport playtesting. This appends a [FIX] task (with 3 checkable debug/fix sub-steps) and pins a [PLAYTEST GUARD] edge case.',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    height: 1.45,
+                    color: _textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('playtest_issue_input'),
+                  controller: ctrl,
+                  autofocus: true,
+                  maxLines: 2,
+                  onSubmitted: (_) => Navigator.of(ctx).pop('log'),
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: _textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText:
+                        'e.g., Hook pulls player through thin walls on high velocity',
+                    hintStyle: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: _textMuted,
+                    ),
+                    filled: true,
+                    fillColor: _bgRecessed,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderSubtle),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              key: const ValueKey('confirm_playtest_issue_btn'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accentCrimson,
+                foregroundColor: Colors.white,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('log'),
+              icon: const Icon(Icons.build_circle_outlined, size: 14),
+              label: Text(
+                'Create [FIX] Task & Guard',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || action != 'log') return;
+      final issueText = ctrl.text.trim();
+      if (issueText.isEmpty) return;
+      final newIdx = widget.workbench.logPlaytestIssueOnCheckpoint(
+        featureId: feat.id,
+        states: states,
+        checkpointIndex: index,
+        issueDescription: issueText,
+      );
+      if (newIdx >= 0) {
+        setState(() {
+          _selectedTaskIndexByCheckpoint[node.id] = newIdx;
+          _awaitingPlaytestVerification.remove(node.id);
+        });
+      }
     }
 
     Future<void> promptPlaytestDialog() async {
@@ -3202,8 +3403,35 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      key: ValueKey('log_playtest_issue_btn_$index'),
+                      onTap: promptLogPlaytestIssueDialog,
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _accentCrimson.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _accentCrimson.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          '⚑ Log Issue',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: _accentCrimson,
+                          ),
+                        ),
+                      ),
+                    ),
                     if (!isDone) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       InkWell(
                         key: ValueKey('quick_verify_checkpoint_btn_$index'),
                         onTap: quickVerifyEntireCheckpoint,

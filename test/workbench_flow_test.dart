@@ -489,5 +489,65 @@ void main() {
         );
       },
     );
+
+    test(
+      'Stage 2 Inline Feature Editing and Stage 3 Playtest Issue Triage ([FIX] task + [PLAYTEST GUARD] edge case)',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('Cyberpunk Grapple Arena');
+        await provider.openReleasePlanGate();
+
+        final firstBeat = provider.releaseBlueprint!.beats.first;
+        provider.addProposedFeatureToBeat(firstBeat.id, 'Temp Debug Feature');
+        final tempFeatId = firstBeat.features.last.id;
+        provider.removeProposedFeatureFromBeat(firstBeat.id, tempFeatId);
+        expect(firstBeat.features.any((f) => f.id == tempFeatId), isFalse);
+
+        final targetFeat = firstBeat.features.first;
+        provider.updateProposedFeatureInBeat(
+          beatId: firstBeat.id,
+          featureId: targetFeat.id,
+          title: 'Wall Grapple & Vault',
+          goal: 'Let the player latch onto walls and vault over ledges.',
+          doneWhen: 'Player vaults 5 ledges in a row without clipping.',
+          estimatedHours: 6,
+          tuningParams: const ['grapplePullSpeed: 32.0 m/s', 'vaultBoost: 12.0 m/s'],
+        );
+        expect(targetFeat.title, 'Wall Grapple & Vault');
+        expect(targetFeat.estimatedHours, 6);
+        expect(targetFeat.tuningParams, contains('grapplePullSpeed: 32.0 m/s'));
+
+        await provider.approveAndExecuteReleasePlan();
+        final stage3Feats = provider.featuresForBeat(
+          provider.activeReleaseBeats.first.id,
+        );
+        final builtFeat = stage3Feats.firstWhere(
+          (f) => f.title == 'Wall Grapple & Vault',
+        );
+        final states = FeatureStateNode.getStatesForDocument(builtFeat);
+        final initialTaskCount = states.first.checklist.length;
+
+        final newFixIdx = provider.logPlaytestIssueOnCheckpoint(
+          featureId: builtFeat.id,
+          states: states,
+          checkpointIndex: 0,
+          issueDescription: 'Hook pulls player through thin walls',
+        );
+        expect(newFixIdx, initialTaskCount);
+
+        final updatedStates = FeatureStateNode.getStatesForDocument(builtFeat);
+        final fixTask = updatedStates.first.checklist.last;
+        expect(fixTask.text, '[FIX] Hook pulls player through thin walls (1h)');
+        expect(fixTask.children.length, 3);
+        expect(
+          fixTask.children.first.text,
+          contains('REPRODUCE & INSPECT PLAYTEST ISSUE'),
+        );
+        expect(
+          updatedStates.first.edgeCases,
+          contains('[PLAYTEST GUARD] Hook pulls player through thin walls'),
+        );
+      },
+    );
   });
 }
