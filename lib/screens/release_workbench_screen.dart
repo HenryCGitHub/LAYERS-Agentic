@@ -38,8 +38,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   bool _hideUnassignedSpecShelf = false;
   bool _showCoPilotDrawer = false;
   bool _showPillarsReferenceDrawer = false;
-  bool _showBeatContextDetails = true;
+  bool _showBeatContextDetails = false;
   bool _isSinglePanelMode = true;
+  bool _showCodeFormulasInSinglePanel = false;
   bool _showAllCheckpointsInFocus = false;
   int? _manualCheckpointFocusIndex;
   String _selectedVersionFilter = 'ALL';
@@ -977,7 +978,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         ],
         Container(
           key: const ValueKey('stage3_active_feature_sheet'),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+          padding: EdgeInsets.symmetric(
+            horizontal: _isSinglePanelMode ? 28 : 24,
+            vertical: _isSinglePanelMode ? 24 : 18,
+          ),
           decoration: BoxDecoration(
             color: _bgSurface,
             borderRadius: BorderRadius.circular(8),
@@ -1015,10 +1019,17 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              padding: EdgeInsets.fromLTRB(
+                _isSinglePanelMode ? 40 : 24,
+                _isSinglePanelMode ? 28 : 20,
+                _isSinglePanelMode ? 40 : 24,
+                _isSinglePanelMode ? 32 : 24,
+              ),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1160),
+                  constraints: BoxConstraints(
+                    maxWidth: _isSinglePanelMode ? 980 : 1160,
+                  ),
                   child: body,
                 ),
               ),
@@ -3950,6 +3961,48 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 ),
                               ),
                             ),
+                            if (_isSinglePanelMode)
+                              InkWell(
+                                key: ValueKey(
+                                  'toggle_code_details_btn_$index',
+                                ),
+                                onTap: () {
+                                  setState(() {
+                                    _showCodeFormulasInSinglePanel =
+                                        !_showCodeFormulasInSinglePanel;
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _showCodeFormulasInSinglePanel
+                                        ? AppTheme.accentCyanFor(_isDark)
+                                            .withValues(alpha: 0.14)
+                                        : _bgSurface,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: _showCodeFormulasInSinglePanel
+                                          ? AppTheme.accentCyanFor(_isDark)
+                                              .withValues(alpha: 0.45)
+                                          : _borderSubtle,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '</> Code ${_showCodeFormulasInSinglePanel ? "▾" : "▸"}',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: _showCodeFormulasInSinglePanel
+                                          ? AppTheme.accentCyanFor(_isDark)
+                                          : _textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                         Container(
@@ -4173,6 +4226,38 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                             ),
                                           ),
                                         ),
+                                        if (_isSinglePanelMode &&
+                                            !_showCodeFormulasInSinglePanel) ...[
+                                          InkWell(
+                                            key: ValueKey(
+                                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
+                                            ),
+                                            onTap: () => copySubStepCodeFormula(
+                                              selectedTaskIdx,
+                                              subIdx,
+                                              subStep.codeFormula,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 5,
+                                                vertical: 1.5,
+                                              ),
+                                              child: Text(
+                                                'Copy 📋',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _textSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                        ],
                                         InkWell(
                                           key: ValueKey(
                                             'edit_howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
@@ -4214,77 +4299,83 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                             : TextDecoration.none,
                                       ),
                                     ),
-                                    const SizedBox(height: 5),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _bgRecessed,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border:
-                                            Border.all(color: _borderSubtle),
-                                      ),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              subStep.codeFormula,
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10,
-                                                height: 1.35,
-                                                color: subDone
-                                                    ? _textMuted
-                                                    : AppTheme.accentCyanFor(
-                                                        _isDark,
-                                                      ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          InkWell(
-                                            key: ValueKey(
-                                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
-                                            ),
-                                            onTap: () => copySubStepCodeFormula(
-                                              selectedTaskIdx,
-                                              subIdx,
-                                              subStep.codeFormula,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 5,
-                                                vertical: 1.5,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: _bgSurface,
-                                                borderRadius:
-                                                    BorderRadius.circular(3),
-                                                border: Border.all(
-                                                  color: _borderSubtle,
-                                                ),
-                                              ),
+                                    if (!_isSinglePanelMode ||
+                                        _showCodeFormulasInSinglePanel) ...[
+                                      const SizedBox(height: 5),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _bgRecessed,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border:
+                                              Border.all(color: _borderSubtle),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
                                               child: Text(
-                                                'Copy 📋',
+                                                subStep.codeFormula,
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 8.5,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _textSecondary,
+                                                  fontSize: 10,
+                                                  height: 1.35,
+                                                  color: subDone
+                                                      ? _textMuted
+                                                      : AppTheme.accentCyanFor(
+                                                          _isDark,
+                                                        ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(width: 6),
+                                            InkWell(
+                                              key: ValueKey(
+                                                'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
+                                              ),
+                                              onTap: () =>
+                                                  copySubStepCodeFormula(
+                                                selectedTaskIdx,
+                                                subIdx,
+                                                subStep.codeFormula,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(3),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 5,
+                                                  vertical: 1.5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: _bgSurface,
+                                                  borderRadius:
+                                                      BorderRadius.circular(3),
+                                                  border: Border.all(
+                                                    color: _borderSubtle,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  'Copy 📋',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 8.5,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: _textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                     if (isCoreStep) ...[
                                       const SizedBox(height: 6),
                                       Wrap(

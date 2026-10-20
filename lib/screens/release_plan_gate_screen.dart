@@ -26,8 +26,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   final TextEditingController _releaseChatController = TextEditingController();
   final Set<String> _expandedFeatureIds = {};
   final Map<String, TextEditingController> _newBeatFeatureControllers = {};
-  bool _collapseQuestions = false;
-  bool _isStepByBeatMode = false;
+  bool _collapseQuestions = true;
+  bool _isStepByBeatMode = true;
   int _activeBeatIndex = 0;
 
   bool get _isDark => widget.workbench.isDark;
@@ -91,10 +91,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              padding: const EdgeInsets.fromLTRB(36, 26, 36, 32),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1160),
+                  constraints: BoxConstraints(
+                    maxWidth: _isStepByBeatMode ? 980 : 1160,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -800,10 +802,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           bottom: BorderSide(color: _borderSubtle),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 6,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 numLabel,
@@ -814,13 +820,15 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                title.toUpperCase(),
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                  color: _textPrimary,
+              Flexible(
+                child: Text(
+                  title.toUpperCase(),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: _textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -874,10 +882,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               bottom: BorderSide(color: _borderSubtle),
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 6,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     '01',
@@ -899,8 +911,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   ),
                 ],
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     '${bp.questions.length} Playtest Priorities · Live-Syncs Blueprint',
@@ -910,7 +924,6 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       color: _textSecondary,
                     ),
                   ),
-                  const SizedBox(width: 10),
                   InkWell(
                     key: const ValueKey('toggle_release_questions_btn'),
                     onTap: () {

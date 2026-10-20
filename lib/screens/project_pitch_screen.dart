@@ -3010,7 +3010,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   }
 
   // ── 6 Distinct Structural Section Layouts ──────────────────────────────────
-  Widget _buildSectionContentWidget(ProjectConceptBlueprint draft, int sectionIdx) {
+  Widget _buildSectionContentWidget(
+    ProjectConceptBlueprint draft,
+    int sectionIdx, {
+    bool isReadOnlySummary = false,
+  }) {
     switch (sectionIdx) {
       case 0: // 01 Goal — Callout Blockquote (Click to Edit)
         return _buildCalloutStatement(
@@ -3035,7 +3039,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           values: draft.techSpec,
         );
       case 3: // 04 Design Pillars — 3 Side-by-Side Pillar Playing Cards + Inline Add/Remove
-        return _buildDesignPillarCards(draft);
+        return _buildDesignPillarCards(draft, isReadOnlySummary: isReadOnlySummary);
       case 4: // 05 Trade-Offs — Split X OVER Y Comparison Bars + Inline Add/Remove
         return _buildTradeOffSplitBars(
           draft.tradeOffs,
@@ -3044,19 +3048,21 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             next[i] = val;
             d.tradeOffs = next;
           }),
-          onDeleteItem: draft.tradeOffs.length > 1
+          onDeleteItem: (!isReadOnlySummary && draft.tradeOffs.length > 1)
               ? (i) => widget.workbench.updateConceptDraft((d) {
                     final next = List<String>.from(d.tradeOffs)..removeAt(i);
                     d.tradeOffs = next;
                   })
               : null,
-          onAddItem: () => _showDirectSectionTextEditDialog(
-            title: 'Add Trade-Off (X over Y)',
-            initialText: 'Immediate arcade responsiveness over complex simulation depth',
-            onSave: (val) => widget.workbench.updateConceptDraft((d) {
-              d.tradeOffs = [...d.tradeOffs, val];
-            }),
-          ),
+          onAddItem: isReadOnlySummary
+              ? null
+              : () => _showDirectSectionTextEditDialog(
+                    title: 'Add Trade-Off (X over Y)',
+                    initialText: 'Immediate arcade responsiveness over complex simulation depth',
+                    onSave: (val) => widget.workbench.updateConceptDraft((d) {
+                      d.tradeOffs = [...d.tradeOffs, val];
+                    }),
+                  ),
         );
       case 5: // 06 Core Loop — Connected Beat Cycle Rows + Inline Add/Remove
         return _buildIndexedRows(
@@ -3068,19 +3074,21 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             next[i] = val;
             d.coreLoopBeats = next;
           }),
-          onDeleteItem: draft.coreLoopBeats.length > 1
+          onDeleteItem: (!isReadOnlySummary && draft.coreLoopBeats.length > 1)
               ? (i) => widget.workbench.updateConceptDraft((d) {
                     final next = List<String>.from(d.coreLoopBeats)..removeAt(i);
                     d.coreLoopBeats = next;
                   })
               : null,
-          onAddItem: () => _showDirectSectionTextEditDialog(
-            title: 'Add Core Loop Beat',
-            initialText: 'Extract & Upgrade: Spend gathered resources on one immediate loadout upgrade.',
-            onSave: (val) => widget.workbench.updateConceptDraft((d) {
-              d.coreLoopBeats = [...d.coreLoopBeats, val];
-            }),
-          ),
+          onAddItem: isReadOnlySummary
+              ? null
+              : () => _showDirectSectionTextEditDialog(
+                    title: 'Add Core Loop Beat',
+                    initialText: 'Extract & Upgrade: Spend gathered resources on one immediate loadout upgrade.',
+                    onSave: (val) => widget.workbench.updateConceptDraft((d) {
+                      d.coreLoopBeats = [...d.coreLoopBeats, val];
+                    }),
+                  ),
         );
       case 6: // 07 Out of Scope — 2-Column Recessed Guardrail Grid + Inline Add/Remove
         return _buildCutGuardrailChips(
@@ -3090,19 +3098,21 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             next[i] = val;
             d.exclusions = next;
           }),
-          onDeleteItem: draft.exclusions.length > 1
+          onDeleteItem: (!isReadOnlySummary && draft.exclusions.length > 1)
               ? (i) => widget.workbench.updateConceptDraft((d) {
                     final next = List<String>.from(d.exclusions)..removeAt(i);
                     d.exclusions = next;
                   })
               : null,
-          onAddItem: () => _showDirectSectionTextEditDialog(
-            title: 'Add Out of Scope Exclusion (Cut)',
-            initialText: 'No procedural world generation or multiplayer networking in v0.1',
-            onSave: (val) => widget.workbench.updateConceptDraft((d) {
-              d.exclusions = [...d.exclusions, val];
-            }),
-          ),
+          onAddItem: isReadOnlySummary
+              ? null
+              : () => _showDirectSectionTextEditDialog(
+                    title: 'Add Out of Scope Exclusion (Cut)',
+                    initialText: 'No procedural world generation or multiplayer networking in v0.1',
+                    onSave: (val) => widget.workbench.updateConceptDraft((d) {
+                      d.exclusions = [...d.exclusions, val];
+                    }),
+                  ),
         );
       case 7: // 08 Done When — Acceptance Callout Statement with Highlighted Playtest Metrics
         return _buildCalloutStatement(
@@ -3116,7 +3126,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         );
       case 8: // 09 Prototype Release — Phase 1 Active Target + 3 Horizontal Locked Phase Cards
       default:
-        return _buildReleaseTrainPipeline(draft);
+        return _buildReleaseTrainPipeline(
+          draft,
+          isReadOnlySummary: isReadOnlySummary,
+        );
     }
   }
 
@@ -3421,7 +3434,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   }
 
   // ── Section 04: 3 Side-by-Side Design Pillar Playing Cards + Inline Add/Delete ──
-  Widget _buildDesignPillarCards(ProjectConceptBlueprint draft) {
+  Widget _buildDesignPillarCards(
+    ProjectConceptBlueprint draft, {
+    bool isReadOnlySummary = false,
+  }) {
     final pillars = draft.designPillars;
 
     Widget buildPillarCard(int idx) {
@@ -3476,7 +3492,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                         ),
                       ),
                     ),
-                    if (pillars.length > 1)
+                    if (!isReadOnlySummary && pillars.length > 1)
                       InkWell(
                         onTap: () => widget.workbench.updateConceptDraft((d) {
                           final next = List<String>.from(d.designPillars)..removeAt(idx);
@@ -3552,17 +3568,19 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             );
           },
         ),
-        const SizedBox(height: 10),
-        _buildInlineAddBar(
-          label: '+ Add a custom Design Pillar...',
-          onTap: () => _showDirectSectionTextEditDialog(
-            title: 'Add Design Pillar',
-            initialText: 'Every Choice Echoes: Player actions leave visible feedback in the arena.',
-            onSave: (val) => widget.workbench.updateConceptDraft((d) {
-              d.designPillars = [...d.designPillars, val];
-            }),
+        if (!isReadOnlySummary) ...[
+          const SizedBox(height: 10),
+          _buildInlineAddBar(
+            label: '+ Add a custom Design Pillar...',
+            onTap: () => _showDirectSectionTextEditDialog(
+              title: 'Add Design Pillar',
+              initialText: 'Every Choice Echoes: Player actions leave visible feedback in the arena.',
+              onSave: (val) => widget.workbench.updateConceptDraft((d) {
+                d.designPillars = [...d.designPillars, val];
+              }),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -4049,7 +4067,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
-  Widget _buildReleaseTrainPipeline(ProjectConceptBlueprint draft) {
+  Widget _buildReleaseTrainPipeline(
+    ProjectConceptBlueprint draft, {
+    bool isReadOnlySummary = false,
+  }) {
     final releases = draft.releaseTrainTitles;
     const lockedPhases = [
       ProductionPhase.mvp,
@@ -4204,34 +4225,36 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        // Locked Future Production Phases (3 Horizontal Roadmap Cards on Desktop)
-        LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 680) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
-                    buildLockedPhaseCard(pIdx),
-                    if (pIdx < lockedPhases.length - 1) const SizedBox(height: 6),
+        if (!isReadOnlySummary) ...[
+          const SizedBox(height: 10),
+          // Locked Future Production Phases (3 Horizontal Roadmap Cards on Desktop)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 680) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
+                      buildLockedPhaseCard(pIdx),
+                      if (pIdx < lockedPhases.length - 1) const SizedBox(height: 6),
+                    ],
                   ],
-                ],
+                );
+              }
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
+                      Expanded(child: buildLockedPhaseCard(pIdx)),
+                      if (pIdx < lockedPhases.length - 1) const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
               );
-            }
-            return IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++) ...[
-                    Expanded(child: buildLockedPhaseCard(pIdx)),
-                    if (pIdx < lockedPhases.length - 1) const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-            );
-          },
-        ),
+            },
+          ),
+        ],
       ],
     );
   }
@@ -4321,7 +4344,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
-  // ── Step `10 · Full Review`: Clean De-Boxed Blueprint Sheet ───────────────
+  // ── Step `10 · Full Review`: Clean Single Dossier Blueprint Sheet ───────────
   Widget _buildFullReviewWorkspace(ProjectConceptBlueprint draft) {
     return Container(
       key: const ValueKey('project_blueprint_card'),
@@ -4331,7 +4354,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         children: [
           // Top Verification Banner Card
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
             decoration: BoxDecoration(
               color: _bgSurface,
               borderRadius: BorderRadius.circular(8),
@@ -4358,15 +4381,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     const SizedBox(height: 4),
                     Text(
                       '${draft.title} — Complete Project Concept Blueprint',
-                      style: GoogleFonts.inter(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
+                      style: AppTheme.displayFont(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
                         color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Hover any section to adjust it inline with the Agent, or click any 02/03 Spec cell to edit directly.',
+                      'Hover any section to adjust it inline with the Agent, or click any item to edit directly.',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         color: _textSecondary,
@@ -4410,72 +4433,132 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
 
           const SizedBox(height: 20),
 
-          // 01 Goal (Full Width)
-          _buildFullReviewBlock(
-            draft: draft,
-            sectionIdx: 0,
-            child: _buildSectionContentWidget(draft, 0),
-          ),
-
-          const SizedBox(height: 20),
-
-          // 02 Game Spec + 03 Tech Spec (50/50 Side-by-Side Row with Equal Height)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth < 720) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildFullReviewBlock(
-                      draft: draft,
-                      sectionIdx: 1,
-                      child: _buildSectionContentWidget(draft, 1),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildFullReviewBlock(
-                      draft: draft,
-                      sectionIdx: 2,
-                      child: _buildSectionContentWidget(draft, 2),
-                    ),
-                  ],
-                );
-              }
-              return IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _buildFullReviewBlock(
-                        draft: draft,
-                        sectionIdx: 1,
-                        child: _buildSectionContentWidget(draft, 1),
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: _buildFullReviewBlock(
-                        draft: draft,
-                        sectionIdx: 2,
-                        child: _buildSectionContentWidget(draft, 2),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 20),
-
-          // 04 Design Pillars through 09 Prototype Release (Strict 04 -> 09 Sequential Order)
-          for (int idx = 3; idx < _sections.length; idx++) ...[
-            _buildFullReviewBlock(
-              draft: draft,
-              sectionIdx: idx,
-              child: _buildSectionContentWidget(draft, idx),
+          // Single Unified Blueprint Dossier Sheet (Clean Hairline Dividers, No Outer Box-Within-Box Clutter)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
+            decoration: BoxDecoration(
+              color: _bgSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _borderSubtle),
             ),
-            const SizedBox(height: 20),
-          ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 01 Goal (Full Width)
+                _buildFullReviewBlock(
+                  draft: draft,
+                  sectionIdx: 0,
+                  child: _buildSectionContentWidget(
+                    draft,
+                    0,
+                    isReadOnlySummary: true,
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 22),
+                  child: Divider(height: 1, thickness: 1, color: _borderSubtle),
+                ),
+
+                // 02 Game Spec + 03 Tech Spec (50/50 Side-by-Side Row with Equal Height)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 720) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildFullReviewBlock(
+                            draft: draft,
+                            sectionIdx: 1,
+                            child: _buildSectionContentWidget(
+                              draft,
+                              1,
+                              isReadOnlySummary: true,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 22),
+                            child: Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: _borderSubtle,
+                            ),
+                          ),
+                          _buildFullReviewBlock(
+                            draft: draft,
+                            sectionIdx: 2,
+                            child: _buildSectionContentWidget(
+                              draft,
+                              2,
+                              isReadOnlySummary: true,
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: _buildFullReviewBlock(
+                              draft: draft,
+                              sectionIdx: 1,
+                              child: _buildSectionContentWidget(
+                                draft,
+                                1,
+                                isReadOnlySummary: true,
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: VerticalDivider(
+                              width: 1,
+                              thickness: 1,
+                              color: _borderSubtle,
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildFullReviewBlock(
+                              draft: draft,
+                              sectionIdx: 2,
+                              child: _buildSectionContentWidget(
+                                draft,
+                                2,
+                                isReadOnlySummary: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
+                // 04 Design Pillars through 09 Prototype Release
+                for (int idx = 3; idx < _sections.length; idx++) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 22),
+                    child: Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: _borderSubtle,
+                    ),
+                  ),
+                  _buildFullReviewBlock(
+                    draft: draft,
+                    sectionIdx: idx,
+                    child: _buildSectionContentWidget(
+                      draft,
+                      idx,
+                      isReadOnlySummary: true,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -4552,13 +4635,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          color: _bgSurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: showControls ? _borderBright : _borderSubtle,
-          ),
+          color: isInlineOpen
+              ? _bgRecessed.withValues(alpha: 0.65)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

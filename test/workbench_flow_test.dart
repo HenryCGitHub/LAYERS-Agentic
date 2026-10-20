@@ -185,28 +185,38 @@ void main() {
         expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_beat_jump_bar')), findsOneWidget);
         expect(find.byKey(const ValueKey('toggle_all_feat_specs_btn')), findsOneWidget);
+        expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
+        expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
+
+        // Option A: Stage 2 defaults to Step-by-Beat mode & collapsed Answered Decisions Strip
+        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_next_beat_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_question_card_0_0')), findsNothing);
+
+        // Verify expanding Clarifying Release Questions from the Answered Decisions Summary Strip
+        final toggleQuestionsBtn = find.byKey(const ValueKey('toggle_release_questions_btn'));
+        await tester.ensureVisible(toggleQuestionsBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(toggleQuestionsBtn);
+        await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('release_question_card_0_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_2')), findsOneWidget);
-        expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
-        expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
-        expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
-        expect(find.byKey(const ValueKey('restore_deferred_feat_feat_7_2')), findsOneWidget);
-
-        // Verify Stage 2 [ ▯ Step-by-Beat | ◫ Full Blueprint ] switcher
-        await tester.tap(find.byKey(const ValueKey('stage2_view_mode_toggle_btn')));
+        await tester.ensureVisible(toggleQuestionsBtn);
         await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_next_beat_btn')), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('stage2_view_mode_toggle_btn')));
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsNothing);
-
-        // Verify collapsing Clarifying Release Questions into the Answered Decisions Summary Strip
-        await tester.tap(find.byKey(const ValueKey('toggle_release_questions_btn')));
+        await tester.tap(toggleQuestionsBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('release_question_card_0_0')), findsNothing);
-        expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
+
+        // Verify Stage 2 [ ▯ Step-by-Beat | ◫ Full Blueprint ] switcher
+        final stage2ViewModeBtn = find.byKey(const ValueKey('stage2_view_mode_toggle_btn'));
+        await tester.ensureVisible(stage2ViewModeBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(stage2ViewModeBtn);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsNothing);
+        expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
+        expect(find.byKey(const ValueKey('restore_deferred_feat_feat_7_2')), findsOneWidget);
 
         // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats)
         expect(provider.releaseBlueprint!.beats.length, 7);
@@ -234,8 +244,14 @@ void main() {
         expect(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_beat_context_banner')), findsOneWidget);
         expect(find.byKey(const ValueKey('toggle_beat_context_btn')), findsOneWidget);
+        expect(find.text('BEAT GOAL'), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('toggle_beat_context_btn')));
+        await tester.pumpAndSettle();
         expect(find.text('BEAT GOAL'), findsOneWidget);
         expect(find.text('BEAT DONE WHEN'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('toggle_beat_context_btn')));
+        await tester.pumpAndSettle();
+        expect(find.text('BEAT GOAL'), findsNothing);
         final firstBeatId = provider.activeReleaseBeats.first.id;
         expect(find.byKey(ValueKey('rail_beat_$firstBeatId')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
