@@ -27,6 +27,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   final Set<String> _expandedFeatureIds = {};
   final Map<String, TextEditingController> _newBeatFeatureControllers = {};
   bool _collapseQuestions = false;
+  bool _isStepByBeatMode = false;
+  int _activeBeatIndex = 0;
 
   bool get _isDark => widget.workbench.isDark;
   Color get _bgBase => AppTheme.bgBaseFor(_isDark);
@@ -349,6 +351,45 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        key: const ValueKey('stage2_view_mode_toggle_btn'),
+                        onTap: () {
+                          setState(() {
+                            _isStepByBeatMode = !_isStepByBeatMode;
+                            if (_activeBeatIndex >= bp.beats.length) {
+                              _activeBeatIndex = 0;
+                            }
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _isStepByBeatMode
+                                ? _accentEmerald.withValues(alpha: 0.14)
+                                : _bgRecessed,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: _isStepByBeatMode
+                                  ? _accentEmerald.withValues(alpha: 0.45)
+                                  : _borderSubtle,
+                            ),
+                          ),
+                          child: Text(
+                            _isStepByBeatMode
+                                ? '▯ Step-by-Beat'
+                                : '◫ Full Blueprint',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: _isStepByBeatMode
+                                  ? _accentEmerald
+                                  : _accentAmber,
+                            ),
                           ),
                         ),
                       ),
@@ -1221,19 +1262,39 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   for (int bIdx = 0; bIdx < bp.beats.length; bIdx++)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: _bgRecessed,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: _borderSubtle),
-                      ),
-                      child: Text(
-                        'B${(bIdx + 1).toString().padLeft(2, '0')} · ${bp.beats[bIdx].title} (${bp.beats[bIdx].totalIncludedHours}h)',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: _textSecondary,
+                    InkWell(
+                      key: ValueKey('stage2_beat_chip_$bIdx'),
+                      onTap: () {
+                        setState(() {
+                          _activeBeatIndex = bIdx;
+                          _isStepByBeatMode = true;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (_isStepByBeatMode && _activeBeatIndex == bIdx)
+                              ? _accentAmber.withValues(alpha: 0.16)
+                              : _bgRecessed,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: (_isStepByBeatMode && _activeBeatIndex == bIdx)
+                                ? _accentAmber.withValues(alpha: 0.65)
+                                : _borderSubtle,
+                          ),
+                        ),
+                        child: Text(
+                          'B${(bIdx + 1).toString().padLeft(2, '0')} · ${bp.beats[bIdx].title} (${bp.beats[bIdx].totalIncludedHours}h)',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: (_isStepByBeatMode && _activeBeatIndex == bIdx)
+                                ? FontWeight.w800
+                                : FontWeight.w700,
+                            color: (_isStepByBeatMode && _activeBeatIndex == bIdx)
+                                ? _accentAmber
+                                : _textSecondary,
+                          ),
                         ),
                       ),
                     ),
@@ -1272,20 +1333,100 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) ...[
-          _buildBeatCard(bp, bp.beats[bIdx], bIdx),
-          if (bIdx < bp.beats.length - 1)
-            Row(
-              children: [
-                const SizedBox(width: 47),
-                Container(
-                  width: 2,
-                  height: 10,
-                  color: _accentEmerald.withValues(alpha: 0.45),
-                ),
-              ],
-            ),
-        ],
+        if (_isStepByBeatMode && bp.beats.isNotEmpty) ...[
+          Builder(
+            builder: (context) {
+              final safeIdx = _activeBeatIndex.clamp(0, bp.beats.length - 1);
+              return Column(
+                key: const ValueKey('stage2_step_by_beat_card'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildBeatCard(bp, bp.beats[safeIdx], safeIdx),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InkWell(
+                        key: const ValueKey('stage2_prev_beat_btn'),
+                        onTap: safeIdx > 0
+                            ? () => setState(() => _activeBeatIndex = safeIdx - 1)
+                            : null,
+                        borderRadius: BorderRadius.circular(5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _bgSurface,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Text(
+                            safeIdx > 0
+                                ? '‹ Prev Beat: B${safeIdx.toString().padLeft(2, '0')} ${bp.beats[safeIdx - 1].title}'
+                                : '‹ First Beat',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: safeIdx > 0 ? _textSecondary : _textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'BEAT ${safeIdx + 1} OF ${bp.beats.length}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: _accentAmber,
+                        ),
+                      ),
+                      InkWell(
+                        key: const ValueKey('stage2_next_beat_btn'),
+                        onTap: safeIdx < bp.beats.length - 1
+                            ? () => setState(() => _activeBeatIndex = safeIdx + 1)
+                            : () => setState(() => _isStepByBeatMode = false),
+                        borderRadius: BorderRadius.circular(5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _accentEmerald.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: _accentEmerald.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          child: Text(
+                            safeIdx < bp.beats.length - 1
+                                ? 'Next Beat: B${(safeIdx + 2).toString().padLeft(2, '0')} ${bp.beats[safeIdx + 1].title} →'
+                                : 'View Full Blueprint ◫',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: _accentEmerald,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ] else
+          for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) ...[
+            _buildBeatCard(bp, bp.beats[bIdx], bIdx),
+            if (bIdx < bp.beats.length - 1)
+              Row(
+                children: [
+                  const SizedBox(width: 47),
+                  Container(
+                    width: 2,
+                    height: 10,
+                    color: _accentEmerald.withValues(alpha: 0.45),
+                  ),
+                ],
+              ),
+          ],
       ],
     );
   }

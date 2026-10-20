@@ -179,6 +179,7 @@ void main() {
 
         // ── Stage 2: Antigravity Release Plan Gate ──
         expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_view_mode_toggle_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_hour_budget_bar')), findsOneWidget);
         expect(find.byKey(const ValueKey('toggle_release_questions_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
@@ -191,6 +192,15 @@ void main() {
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
         expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
         expect(find.byKey(const ValueKey('restore_deferred_feat_feat_7_2')), findsOneWidget);
+
+        // Verify Stage 2 [ ▯ Step-by-Beat | ◫ Full Blueprint ] switcher
+        await tester.tap(find.byKey(const ValueKey('stage2_view_mode_toggle_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_next_beat_btn')), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('stage2_view_mode_toggle_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsNothing);
 
         // Verify collapsing Clarifying Release Questions into the Answered Decisions Summary Strip
         await tester.tap(find.byKey(const ValueKey('toggle_release_questions_btn')));
@@ -228,8 +238,19 @@ void main() {
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
         expect(find.text('CHECKPOINT 1'), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
+        // Item 1: Duplicate header Prev/Next buttons are subtracted in Single-Panel Mode
+        expect(find.byKey(const ValueKey('prev_feature_btn')), findsNothing);
+        expect(find.byKey(const ValueKey('next_feature_btn')), findsNothing);
+        // Item 2: True Inline Task Accordion — Task 01's How-To sub-steps expand directly above Task 02
+        final activeFeat0 = provider.selectedFeature!;
+        final cp0NodeId = provider.documents[activeFeat0.id]!.subtasks.first.id;
+        final inlineSubStepY = tester.getTopLeft(
+          find.byKey(ValueKey('howto_substep_${cp0NodeId}_0_0')),
+        ).dy;
+        final secondTaskRowY = tester.getTopLeft(
+          find.byKey(ValueKey('select_task_row_${cp0NodeId}_1')),
+        ).dy;
+        expect(inlineSubStepY, lessThan(secondTaskRowY));
         expect(find.byKey(const ValueKey('add_tuning_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('add_edge_guard_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('edit_playtest_btn_0')), findsOneWidget);
@@ -239,6 +260,8 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')));
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
 
         // Verify Stage 3 Sticky Bottom Studio Dock & Toggleable 3 Co-Pilot Playing Cards Drawer
         expect(find.byKey(const ValueKey('workbench_sticky_bottom_dock')), findsOneWidget);
