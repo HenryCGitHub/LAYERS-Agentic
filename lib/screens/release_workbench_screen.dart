@@ -38,6 +38,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   bool _hideUnassignedSpecShelf = false;
   bool _showCoPilotDrawer = false;
   bool _showPillarsReferenceDrawer = false;
+  bool _showBeatContextDetails = true;
   bool _isSinglePanelMode = true;
   bool _showAllCheckpointsInFocus = false;
   int? _manualCheckpointFocusIndex;
@@ -95,16 +96,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (_isSinglePanelMode) {
-          return _buildFeatureMainCanvas(rel);
-        }
         final isWide = constraints.maxWidth >= 780;
         if (isWide) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 288,
+                width: 308,
                 child: _buildLeftBeatFeatureRail(rel),
               ),
               Expanded(
@@ -430,8 +428,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   decoration: BoxDecoration(
                     color: _bgSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: _borderSubtle),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: _borderBright),
                   ),
                   child: Row(
                     children: [
@@ -439,8 +437,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         child: Text(
                           rel.title,
                           style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                             color: _textPrimary,
                           ),
                           maxLines: 1,
@@ -498,90 +496,175 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           for (int bIdx = 0; bIdx < beats.length; bIdx++) ...[
             Builder(
               builder: (context) {
-                final beatFeats = widget.workbench.featuresForBeat(beats[bIdx].id);
+                final beat = beats[bIdx];
+                final beatFeats = widget.workbench.featuresForBeat(beat.id);
                 final doneBeatCount = beatFeats
                     .where((f) => widget.workbench.getDocumentProgress(f.id) >= 100)
                     .length;
                 final allBeatDone = beatFeats.isNotEmpty && doneBeatCount == beatFeats.length;
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 5),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _accentEmerald.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: _accentEmerald.withValues(alpha: 0.35),
-                            width: 0.8,
+                final isBeatActive = beatFeats.any(
+                  (f) => f.id == widget.workbench.selectedFeatureId,
+                );
+                final beatGoal = SectionTextUtils.resolveGoal(beat.sections);
+                int prevFeaturesBeforeBeat = 0;
+                for (int prevB = 0; prevB < bIdx; prevB++) {
+                  prevFeaturesBeforeBeat +=
+                      widget.workbench.featuresForBeat(beats[prevB].id).length;
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 10, 8, 3),
+                      child: InkWell(
+                        key: ValueKey('rail_beat_${beat.id}'),
+                        borderRadius: BorderRadius.circular(5),
+                        onTap: () {
+                          if (beatFeats.isEmpty) return;
+                          final targetFeat = beatFeats.firstWhere(
+                            (f) => widget.workbench.getDocumentProgress(f.id) < 100,
+                            orElse: () => beatFeats.first,
+                          );
+                          setState(() {
+                            _manualCheckpointFocusIndex = null;
+                            _showBeatContextDetails = true;
+                          });
+                          widget.workbench.selectFeature(targetFeat.id);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
                           ),
-                        ),
-                        child: Text(
-                          'BEAT·${(bIdx + 1).toString().padLeft(2, '0')}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w800,
-                            color: _accentEmerald,
+                          decoration: BoxDecoration(
+                            color: isBeatActive ? _bgRecessed : Colors.transparent,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: isBeatActive ? _borderBright : Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: allBeatDone
+                                      ? _accentEmerald.withValues(alpha: 0.14)
+                                      : _bgRecessed,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: allBeatDone
+                                        ? _accentEmerald.withValues(alpha: 0.45)
+                                        : _borderBright,
+                                  ),
+                                ),
+                                child: Text(
+                                  'BEAT·${(bIdx + 1).toString().padLeft(2, '0')}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: allBeatDone
+                                        ? _accentEmerald
+                                        : _textPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Expanded(
+                                child: Text(
+                                  beat.title.toUpperCase(),
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                    color: isBeatActive
+                                        ? _textPrimary
+                                        : _textSecondary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (beatFeats.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  allBeatDone
+                                      ? '$doneBeatCount/${beatFeats.length} ✓'
+                                      : '$doneBeatCount/${beatFeats.length}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: allBeatDone
+                                        ? _accentEmerald
+                                        : _textMuted,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 7),
-                      Expanded(
+                    ),
+                    if (isBeatActive && beatGoal.trim().isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 0, 10, 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: const BorderRadius.horizontal(
+                            right: Radius.circular(4),
+                          ),
+                          border: Border(
+                            left: BorderSide(
+                              color: _accentEmerald,
+                              width: 2.0,
+                            ),
+                          ),
+                        ),
                         child: Text(
-                          beats[bIdx].title.toUpperCase(),
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.4,
+                          'BEAT GOAL: $beatGoal',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            height: 1.35,
                             color: _textSecondary,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (beatFeats.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          allBeatDone
-                              ? '$doneBeatCount/${beatFeats.length} ✓'
-                              : '$doneBeatCount/${beatFeats.length}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: allBeatDone ? _accentEmerald : _textMuted,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                    for (int fIdx = 0; fIdx < beatFeats.length; fIdx++)
+                      Builder(
+                        builder: (context) {
+                          final feat = beatFeats[fIdx];
+                          final depTier =
+                              WorkspaceAgentOrchestrator.classifyDependencyTier(
+                            featureTitle: feat.title,
+                            beatIndex: bIdx,
+                            featureIndexInBeat: fIdx,
+                          );
+                          if (_criticalPathOnly && depTier.tierRank > 2) {
+                            return const SizedBox.shrink();
+                          }
+                          return _buildFeatureRailItem(
+                            feat,
+                            activeVer: activeVer,
+                            beatIndex: bIdx,
+                            featureIndexInBeat: fIdx,
+                            globalFeatureIndex: prevFeaturesBeforeBeat + fIdx,
+                          );
+                        },
+                      ),
+                  ],
                 );
               },
             ),
-            for (int fIdx = 0;
-                fIdx < widget.workbench.featuresForBeat(beats[bIdx].id).length;
-                fIdx++)
-              Builder(
-                builder: (context) {
-                  final feat = widget.workbench
-                      .featuresForBeat(beats[bIdx].id)[fIdx];
-                  final depTier =
-                      WorkspaceAgentOrchestrator.classifyDependencyTier(
-                    featureTitle: feat.title,
-                    beatIndex: bIdx,
-                    featureIndexInBeat: fIdx,
-                  );
-                  if (_criticalPathOnly && depTier.tierRank > 2) {
-                    return const SizedBox.shrink();
-                  }
-                  return _buildFeatureRailItem(
-                    feat,
-                    activeVer: activeVer,
-                    beatIndex: bIdx,
-                    featureIndexInBeat: fIdx,
-                  );
-                },
-              ),
           ],
       ],
     );
@@ -591,7 +674,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         decoration: BoxDecoration(
           color: _bgSurface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _borderSubtle),
+          border: Border.all(color: _borderBright),
         ),
         child: content,
       );
@@ -600,7 +683,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     return Container(
       decoration: BoxDecoration(
         color: _bgSurface,
-        border: Border(right: BorderSide(color: _borderSubtle)),
+        border: Border(right: BorderSide(color: _borderBright)),
       ),
       child: SingleChildScrollView(child: content),
     );
@@ -611,6 +694,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     required String activeVer,
     int beatIndex = 0,
     int featureIndexInBeat = 0,
+    int globalFeatureIndex = 0,
   }) {
     final isSelected = widget.workbench.selectedFeatureId == feat.id;
     final progress = widget.workbench.getDocumentProgress(feat.id);
@@ -644,41 +728,73 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     }
 
     final shouldDim = isFocus && !isSelected;
+    final featCode = 'FEAT·${(globalFeatureIndex + 1).toString().padLeft(2, '0')}';
 
     return Opacity(
-      opacity: shouldDim ? 0.55 : 1.0,
+      opacity: shouldDim ? 0.65 : 1.0,
       child: InkWell(
         key: ValueKey('rail_feat_${feat.id}'),
-        onTap: () => widget.workbench.selectFeature(feat.id),
+        onTap: () {
+          setState(() {
+            _manualCheckpointFocusIndex = null;
+          });
+          widget.workbench.selectFeature(feat.id);
+        },
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          margin: const EdgeInsets.fromLTRB(16, 2, 8, 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: isSelected ? _bgHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
+            color: isSelected ? _bgRecessed : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: isSelected
-                  ? _borderBright
-                  : Colors.transparent,
+              color: isSelected ? _borderBright : Colors.transparent,
             ),
           ),
           child: Row(
             children: [
-              Icon(
-                isDone ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 14,
-                color: isDone
-                    ? _accentEmerald
-                    : (isSelected ? _accentAmber : _textMuted),
+              Container(
+                width: 3,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? _focalAccent
+                      : (isDone ? _accentEmerald : _borderSubtle),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 7),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: isDone
+                      ? _accentEmerald.withValues(alpha: 0.14)
+                      : _bgSurface,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: isDone
+                        ? _accentEmerald.withValues(alpha: 0.45)
+                        : (isSelected ? _borderBright : _borderSubtle),
+                  ),
+                ),
+                child: Text(
+                  featCode,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    color: isDone
+                        ? _accentEmerald
+                        : (isSelected ? _textPrimary : _textSecondary),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
               Expanded(
                 child: Text(
                   feat.title,
                   style: GoogleFonts.inter(
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: _textPrimary,
+                    color: isSelected ? _textPrimary : _textSecondary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -786,33 +902,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         states.any((s) => (s.releaseVersion.trim().isNotEmpty ? s.releaseVersion.trim() : 'v0.1') != 'v0.1');
 
     final beats = widget.workbench.activeReleaseBeats;
-    final allItems = <({TierDocument feat, int beatIndex, int featIdxInBeat, int globalIdx})>[];
-    int gIdx = 0;
+    TierDocument? parentBeat;
+    int parentBeatIdx = 0;
     for (int bIdx = 0; bIdx < beats.length; bIdx++) {
       final bFeats = widget.workbench.featuresForBeat(beats[bIdx].id);
-      for (int fIdx = 0; fIdx < bFeats.length; fIdx++) {
-        final dep = WorkspaceAgentOrchestrator.classifyDependencyTier(
-          featureTitle: bFeats[fIdx].title,
-          beatIndex: bIdx,
-          featureIndexInBeat: fIdx,
-        );
-        if (_criticalPathOnly && dep.tierRank > 2) continue;
-        allItems.add((
-          feat: bFeats[fIdx],
-          beatIndex: bIdx,
-          featIdxInBeat: fIdx,
-          globalIdx: gIdx,
-        ));
-        gIdx++;
+      if (bFeats.any((f) => f.id == feat.id)) {
+        parentBeat = beats[bIdx];
+        parentBeatIdx = bIdx;
+        break;
       }
     }
-    final activeGlobalIdx = allItems.indexWhere((it) => it.feat.id == feat.id);
-    final beforeSiblings = activeGlobalIdx > 0
-        ? allItems.sublist(0, activeGlobalIdx)
-        : const <({TierDocument feat, int beatIndex, int featIdxInBeat, int globalIdx})>[];
-    final afterSiblings = (activeGlobalIdx != -1 && activeGlobalIdx < allItems.length - 1)
-        ? allItems.sublist(activeGlobalIdx + 1)
-        : const <({TierDocument feat, int beatIndex, int featIdxInBeat, int globalIdx})>[];
 
     final activeFeatureContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -832,7 +931,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           _buildStage1PillarsReferenceDrawer(),
         ],
         SizedBox(height: _isSinglePanelMode ? 12 : 20),
-        // De-boxed Stage 1 style section header for Playable Checkpoints + Horizontal Stepper Tabs
+        // Stage 1/2 style section header for Playable Checkpoints + Horizontal Stepper Tabs
         _buildCheckpointStepperBar(
           feat,
           states,
@@ -867,48 +966,25 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       children: [
         if (widget.workbench.isActiveReleaseComplete) ...[
           _buildReleaseShippedBanner(rel),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
         ] else if (isDone && nextFeat != null) ...[
           _buildNextFeatureAdvanceBanner(feat, nextFeat),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
         ],
-        if (_isSinglePanelMode) ...[
-          for (final item in beforeSiblings)
-            _buildCollapsedSiblingFeatureRow(
-              item.feat,
-              beatTitle: beats[item.beatIndex].title,
-              beatIndex: item.beatIndex,
-              featIdxInBeat: item.featIdxInBeat,
-              globalIdx: item.globalIdx,
-            ),
-          Container(
-            key: const ValueKey('stage3_active_feature_sheet'),
-            margin: EdgeInsets.symmetric(
-              vertical: (beforeSiblings.isNotEmpty || afterSiblings.isNotEmpty) ? 10 : 0,
-            ),
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-            decoration: BoxDecoration(
-              color: _bgSurface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isDone
-                    ? _accentEmerald.withValues(alpha: 0.45)
-                    : _accentAmber.withValues(alpha: 0.45),
-                width: 1.2,
-              ),
-            ),
-            child: activeFeatureContent,
+        if (parentBeat != null) ...[
+          _buildParentBeatContextBanner(parentBeat, parentBeatIdx),
+          const SizedBox(height: 12),
+        ],
+        Container(
+          key: const ValueKey('stage3_active_feature_sheet'),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+          decoration: BoxDecoration(
+            color: _bgSurface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _borderBright),
           ),
-          for (final item in afterSiblings)
-            _buildCollapsedSiblingFeatureRow(
-              item.feat,
-              beatTitle: beats[item.beatIndex].title,
-              beatIndex: item.beatIndex,
-              featIdxInBeat: item.featIdxInBeat,
-              globalIdx: item.globalIdx,
-            ),
-        ] else
-          activeFeatureContent,
+          child: activeFeatureContent,
+        ),
       ],
     );
 
@@ -939,16 +1015,238 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1100),
+                  constraints: const BoxConstraints(maxWidth: 1160),
                   child: body,
                 ),
               ),
             ),
           ),
           bottomDock,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParentBeatContextBanner(TierDocument beat, int beatIdx) {
+    final beatFeats = widget.workbench.featuresForBeat(beat.id);
+    final doneBeatCount = beatFeats
+        .where((f) => widget.workbench.getDocumentProgress(f.id) >= 100)
+        .length;
+    final allBeatDone = beatFeats.isNotEmpty && doneBeatCount == beatFeats.length;
+    final beatGoal = SectionTextUtils.resolveGoal(beat.sections);
+    final beatDoneWhen = SectionTextUtils.resolveDoneWhen(beat.sections);
+    final beatCode = 'CORE LOOP BEAT·${(beatIdx + 1).toString().padLeft(2, '0')}';
+
+    return Container(
+      key: const ValueKey('stage3_beat_context_banner'),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 6,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _accentEmerald.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: _accentEmerald.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      beatCode,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: _accentEmerald,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    beat.title,
+                    style: AppTheme.displayFont(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _bgRecessed,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: _borderSubtle),
+                    ),
+                    child: Text(
+                      '$doneBeatCount/${beatFeats.length} features ${allBeatDone ? "✓" : "done"} · ${beat.estimatedDuration}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: allBeatDone ? _accentEmerald : _textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              InkWell(
+                key: const ValueKey('toggle_beat_context_btn'),
+                onTap: () {
+                  setState(() {
+                    _showBeatContextDetails = !_showBeatContextDetails;
+                  });
+                },
+                borderRadius: BorderRadius.circular(5),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _bgRecessed,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    'Beat Context ${_showBeatContextDetails ? "▾" : "▸"}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_showBeatContextDetails &&
+              (beatGoal.trim().isNotEmpty || beatDoneWhen.trim().isNotEmpty)) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: _borderSubtle)),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isTwoCol = constraints.maxWidth >= 620;
+                  final goalItem = Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: _borderSubtle),
+                        ),
+                        child: Text(
+                          'BEAT GOAL',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          beatGoal,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            height: 1.38,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                  final doneItem = Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                            color: _accentEmerald.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          'BEAT DONE WHEN',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: _accentEmerald,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          beatDoneWhen,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            height: 1.38,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                  if (isTwoCol) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: goalItem),
+                        const SizedBox(width: 14),
+                        Expanded(child: doneItem),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      goalItem,
+                      const SizedBox(height: 6),
+                      doneItem,
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -974,17 +1272,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         runSpacing: 6,
         children: [
           Wrap(
-            spacing: 6,
+            spacing: 8,
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _bgRecessed,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: _borderBright),
+                ),
+                child: Text(
+                  '01',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: _textPrimary,
+                  ),
+                ),
+              ),
               Text(
-                '01 · CHECKPOINTS (${states.length}):',
+                'PLAYABLE CHECKPOINTS (${states.length})',
                 style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  color: _textSecondary,
+                  letterSpacing: 0.4,
+                  color: _textPrimary,
                 ),
               ),
               for (int i = 0; i < states.length; i++) ...[
@@ -1018,14 +1332,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? _accentAmber.withValues(alpha: 0.14)
+                              ? _bgHover
                               : (isDone
                                   ? _accentEmerald.withValues(alpha: 0.12)
-                                  : _bgSurface),
+                                  : _bgRecessed),
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
                             color: isSelected
-                                ? _accentAmber.withValues(alpha: 0.55)
+                                ? _borderBright
                                 : (isDone
                                     ? _accentEmerald.withValues(alpha: 0.42)
                                     : _borderSubtle),
@@ -1037,7 +1351,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             fontSize: 9.5,
                             fontWeight: FontWeight.w800,
                             color: isSelected
-                                ? _accentAmber
+                                ? _textPrimary
                                 : (isDone ? _accentEmerald : _textSecondary),
                           ),
                         ),
@@ -1872,112 +2186,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
-  Widget _buildCollapsedSiblingFeatureRow(
-    TierDocument siblingFeat, {
-    required String beatTitle,
-    required int beatIndex,
-    required int featIdxInBeat,
-    required int globalIdx,
-  }) {
-    final progress = widget.workbench.getDocumentProgress(siblingFeat.id);
-    final isDone = progress >= 100;
-    final depTier = WorkspaceAgentOrchestrator.classifyDependencyTier(
-      featureTitle: siblingFeat.title,
-      beatIndex: beatIndex,
-      featureIndexInBeat: featIdxInBeat,
-    );
-    final depColor = depTier.severity == 'emerald'
-        ? _accentEmerald
-        : (depTier.severity == 'amber' ? _accentAmber : _textMuted);
-    final numStr = (globalIdx + 1).toString().padLeft(2, '0');
-    final beatShort = beatTitle.split(':').first.split('—').first.trim();
-
-    return InkWell(
-      key: ValueKey('rail_feat_${siblingFeat.id}'),
-      onTap: () {
-        setState(() {
-          _manualCheckpointFocusIndex = null;
-        });
-        widget.workbench.selectFeature(siblingFeat.id);
-      },
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: _borderSubtle)),
-        ),
-        child: Row(
-          children: [
-            Text(
-              isDone ? '✓ $numStr' : '○ $numStr',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: isDone ? _accentEmerald : _textMuted,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                siblingFeat.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: isDone ? _accentEmerald : _textSecondary,
-                  decoration: isDone
-                      ? TextDecoration.lineThrough
-                      : TextDecoration.none,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '· BEAT ${(beatIndex + 1).toString().padLeft(2, '0')} ($beatShort)',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9.5,
-                color: _textMuted,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              key: ValueKey('stage3_dep_tier_${siblingFeat.id}'),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: depColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Text(
-                depTier.shortBadge,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w800,
-                  color: depColor,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              isDone ? '100% ✓' : '$progress%',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: isDone ? _accentEmerald : _textMuted,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 15,
-              color: _textMuted,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildUltraCompactFeatureHeader(
     TierDocument feat, {
     required TierDocument rel,
@@ -2026,11 +2234,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final activeDepColor = activeDepTier.severity == 'emerald'
         ? _accentEmerald
         : (activeDepTier.severity == 'amber' ? _accentAmber : _textMuted);
-    final relProgress = widget.workbench.getDocumentProgress(rel.id);
-    final releases = widget.workbench.projectReleases;
-    final archivedFeats = widget.workbench.supersededFeatures;
-    final isFocus = widget.workbench.focusMode;
-    final activeVer = rel.sections['versionTag'] ?? 'v0.1';
+    final featCode = 'FEAT·${(currentFeatIdx + 1).toString().padLeft(2, '0')}';
 
     Widget tag(String text, Color color, {double? width}) => Container(
           width: width,
@@ -2052,978 +2256,654 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           ),
         );
 
-    final innerContent = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: _isSinglePanelMode
-              ? const EdgeInsets.only(bottom: 10)
-              : const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    Widget buildCalloutBar({
+      required String label,
+      required Color accentColor,
+      required String text,
+    }) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _bgRecessed,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: _borderSubtle),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_isSinglePanelMode) ...[
-                // De-boxed Single-Panel Top Utility Breadcrumb Line inside the Active Feature Sheet
-                Container(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  margin: const EdgeInsets.only(bottom: 10),
+              Container(
+                width: 3,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  width: 68,
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: _borderSubtle)),
+                    color: _bgSurface,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: _borderSubtle),
                   ),
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            'ACTIVE RELEASE',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                              color: _accentAmber,
-                            ),
-                          ),
-                          PopupMenuButton<String>(
-                            key: const ValueKey('release_selector_dropdown_btn'),
-                            color: _bgSurface,
-                            tooltip: 'Switch Release View or Evolve Scope',
-                            onSelected: (value) {
-                              if (value == '__evolve__') {
-                                widget.workbench.advanceToNextRelease();
-                              } else if (value == '__replan__') {
-                                widget.workbench.openReleasePlanGate(
-                                  releaseId: rel.id,
-                                );
-                              } else if (value.startsWith('rel:')) {
-                                final targetId = value.substring(4);
-                                widget.workbench.openReleasePlanGate(
-                                  releaseId: targetId,
-                                );
-                              } else {
-                                widget.workbench.setReleaseViewFilter(value);
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              PopupMenuItem<String>(
-                                value: 'active',
-                                child: Text(
-                                  '● Active: ${rel.title} ($relProgress%)',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'all',
-                                child: Text(
-                                  '🌳 All Live Game Features ($activeVer)',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                              ),
-                              if (archivedFeats.isNotEmpty)
-                                PopupMenuItem<String>(
-                                  value: 'archived',
-                                  child: Text(
-                                    '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: _textSecondary,
-                                    ),
-                                  ),
-                                ),
-                              const PopupMenuDivider(),
-                              for (final r in releases)
-                                PopupMenuItem<String>(
-                                  value: 'rel:${r.id}',
-                                  child: Text(
-                                    '${r.id == rel.id ? "▸ " : "  "}${r.title}',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11.5,
-                                      fontWeight: r.id == rel.id
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: _textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              const PopupMenuDivider(),
-                              PopupMenuItem<String>(
-                                value: '__replan__',
-                                child: Text(
-                                  '✎ Edit ${rel.title} Scope in Plan Gate',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    color: _accentAmber,
-                                  ),
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: '__evolve__',
-                                child: Text(
-                                  '+ Evolve to Next Release Milestone ✦',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: _accentEmerald,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: _borderSubtle),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${rel.title} ($relProgress%)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: _textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    size: 14,
-                                    color: _textSecondary,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '/',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              color: _textMuted,
-                            ),
-                          ),
-                          Text(
-                            'BEAT ${(activeBeatIdx + 1).toString().padLeft(2, '0')} · ${activeBeatTitle.split(':').first.split('—').first.trim().toUpperCase()}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: _accentEmerald,
-                            ),
-                          ),
-                          Container(
-                            key: ValueKey('stage3_dep_tier_${feat.id}'),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: activeDepColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(
-                              activeDepTier.shortBadge,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 8,
-                                fontWeight: FontWeight.w800,
-                                color: activeDepColor,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          _buildViewModeTogglePill(),
-                          InkWell(
-                            key: const ValueKey('critical_path_filter_btn'),
-                            onTap: () {
-                              setState(() {
-                                _criticalPathOnly = !_criticalPathOnly;
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: _criticalPathOnly
-                                      ? _accentEmerald.withValues(alpha: 0.45)
-                                      : _borderSubtle,
-                                ),
-                              ),
-                              child: Text(
-                                '⚡ Crit: ${_criticalPathOnly ? "ON" : "OFF"}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: _criticalPathOnly
-                                      ? _accentEmerald
-                                      : _textMuted,
-                                ),
-                              ),
-                            ),
-                          ),
-                          InkWell(
-                            key: const ValueKey('focus_mode_toggle_btn'),
-                            onTap: () => widget.workbench.toggleFocusMode(),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: isFocus
-                                      ? _accentAmber.withValues(alpha: 0.45)
-                                      : _borderSubtle,
-                                ),
-                              ),
-                              child: Text(
-                                'Focus: ${isFocus ? "ON" : "OFF"}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: isFocus ? _accentAmber : _textMuted,
-                                ),
-                              ),
-                            ),
-                          ),
-                          InkWell(
-                            key: const ValueKey('generate_feature_script_btn'),
-                            onTap: () => _showFeatureScriptBundleModal(
-                              context,
-                              feat,
-                              states,
-                            ),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2.5,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: _accentEmerald.withValues(alpha: 0.45),
-                                ),
-                              ),
-                              child: Text(
-                                '✦ Script',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: _accentEmerald,
-                                ),
-                              ),
-                            ),
-                          ),
-                          InkWell(
-                            key: const ValueKey('toggle_pillars_drawer_btn'),
-                            onTap: () {
-                              setState(() {
-                                _showPillarsReferenceDrawer =
-                                    !_showPillarsReferenceDrawer;
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2.5,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: _showPillarsReferenceDrawer
-                                      ? _accentAmber.withValues(alpha: 0.45)
-                                      : _borderSubtle,
-                                ),
-                              ),
-                              child: Text(
-                                '◈ Pillars ${_showPillarsReferenceDrawer ? "▴" : "▾"}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: _showPillarsReferenceDrawer
-                                      ? _accentAmber
-                                      : _textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (outOfScope.isNotEmpty)
-                            InkWell(
-                              key: const ValueKey('feat_out_of_scope_btn'),
-                              onTap: () {
-                                setState(() {
-                                  _showOutOfScopeShelf = !_showOutOfScopeShelf;
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(5),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: _showOutOfScopeShelf
-                                        ? _accentCrimson.withValues(alpha: 0.45)
-                                        : _borderSubtle,
-                                  ),
-                                ),
-                                child: Text(
-                                  '⊘ ${outOfScope.length} Out ${_showOutOfScopeShelf ? "▴" : "▾"}',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: _showOutOfScopeShelf
-                                        ? _accentCrimson
-                                        : _textMuted,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (specBinding.hasUnassigned)
-                            InkWell(
-                              key: const ValueKey('feat_unassigned_spec_btn'),
-                              onTap: () {
-                                setState(() {
-                                  _hideUnassignedSpecShelf =
-                                      !_hideUnassignedSpecShelf;
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(5),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: _accentAmber.withValues(alpha: 0.35),
-                                  ),
-                                ),
-                                child: Text(
-                                  '${specBinding.totalUnassignedCount} unassigned',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: _accentAmber,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    label,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                      color: accentColor == _focalAccent
+                          ? _textSecondary
+                          : accentColor,
+                    ),
                   ),
                 ),
-                // Option 1 Hero Feature Title IS the Beat-Grouped Dropdown (clean typography, zero heavy border box)
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    PopupMenuButton<String>(
-                      key: const ValueKey('stage3_feature_dropdown_btn'),
-                      color: _bgSurface,
-                      tooltip: 'Switch Active Feature',
-                      onSelected: (featId) {
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    height: 1.4,
+                    color: _textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Top Eyebrow Bar (Stage 1 / Stage 2 Studio Style)
+        Container(
+          padding: const EdgeInsets.only(bottom: 10),
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: _borderSubtle)),
+          ),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _bgRecessed,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: _borderSubtle),
+                    ),
+                    child: Text(
+                      'BEAT·${(activeBeatIdx + 1).toString().padLeft(2, '0')} · ${activeBeatTitle.split(':').first.split('—').first.trim().toUpperCase()}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: _textSecondary,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: activeDepColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: activeDepColor.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      activeDepTier.shortBadge,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        color: activeDepColor,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _bgRecessed,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: _borderSubtle),
+                    ),
+                    child: Text(
+                      statsLabel,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  InkWell(
+                    key: const ValueKey('generate_feature_script_btn'),
+                    onTap: () => _showFeatureScriptBundleModal(
+                      context,
+                      feat,
+                      states,
+                    ),
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                          color: _accentEmerald.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: Text(
+                        '✦ Script',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: _accentEmerald,
+                        ),
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    key: const ValueKey('toggle_pillars_drawer_btn'),
+                    onTap: () {
+                      setState(() {
+                        _showPillarsReferenceDrawer =
+                            !_showPillarsReferenceDrawer;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                          color: _showPillarsReferenceDrawer
+                              ? _borderBright
+                              : _borderSubtle,
+                        ),
+                      ),
+                      child: Text(
+                        '◈ Pillars ${_showPillarsReferenceDrawer ? "▴" : "▾"}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: _showPillarsReferenceDrawer
+                              ? _textPrimary
+                              : _textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (outOfScope.isNotEmpty)
+                    InkWell(
+                      key: const ValueKey('feat_out_of_scope_btn'),
+                      onTap: () {
                         setState(() {
-                          _manualCheckpointFocusIndex = null;
+                          _showOutOfScopeShelf = !_showOutOfScopeShelf;
                         });
-                        widget.workbench.selectFeature(featId);
                       },
-                      itemBuilder: (context) {
-                        final entries = <PopupMenuEntry<String>>[];
-                        int seq = 0;
-                        for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-                          final b = beats[bIdx];
-                          final bFeats =
-                              widget.workbench.featuresForBeat(b.id);
-                          if (bFeats.isEmpty) continue;
-                          if (entries.isNotEmpty) {
-                            entries.add(const PopupMenuDivider());
-                          }
-                          final doneInBeat = bFeats
-                              .where((f) =>
-                                  widget.workbench.getDocumentProgress(f.id) >=
-                                  100)
-                              .length;
-                          entries.add(
-                            PopupMenuItem<String>(
-                              enabled: false,
-                              height: 26,
-                              child: Text(
-                                'BEAT ${(bIdx + 1).toString().padLeft(2, '0')} · ${b.title.toUpperCase()} ($doneInBeat/${bFeats.length})',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: _accentEmerald,
-                                ),
-                              ),
-                            ),
-                          );
-                          for (final f in bFeats) {
-                            seq++;
-                            final fProg =
-                                widget.workbench.getDocumentProgress(f.id);
-                            final fDone = fProg >= 100;
-                            final fSel = f.id == feat.id;
-                            entries.add(
-                              PopupMenuItem<String>(
-                                value: f.id,
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '${fDone ? "✓" : (fSel ? "●" : "○")} ${seq.toString().padLeft(2, '0')} · ${f.title}',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          fontWeight: fSel
-                                              ? FontWeight.w800
-                                              : FontWeight.w500,
-                                          color: fSel
-                                              ? _accentAmber
-                                              : (fDone
-                                                  ? _accentEmerald
-                                                  : _textPrimary),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '$fProg%',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: fDone
-                                            ? _accentEmerald
-                                            : _textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }
-                        }
-                        return entries;
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _showOutOfScopeShelf
+                                ? _accentCrimson.withValues(alpha: 0.45)
+                                : _borderSubtle,
+                          ),
+                        ),
+                        child: Text(
+                          '⊘ ${outOfScope.length} Out ${_showOutOfScopeShelf ? "▴" : "▾"}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: _showOutOfScopeShelf
+                                ? _accentCrimson
+                                : _textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (specBinding.hasUnassigned)
+                    InkWell(
+                      key: const ValueKey('feat_unassigned_spec_btn'),
+                      onTap: () {
+                        setState(() {
+                          _hideUnassignedSpecShelf = !_hideUnassignedSpecShelf;
+                        });
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _bgRecessed,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _accentAmber.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          '${specBinding.totalUnassignedCount} unassigned',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: _accentAmber,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Hero Feature Title Dropdown + Prev/Next Buttons
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            PopupMenuButton<String>(
+              key: const ValueKey('stage3_feature_dropdown_btn'),
+              color: _bgSurface,
+              tooltip: 'Switch Active Feature',
+              onSelected: (featId) {
+                setState(() {
+                  _manualCheckpointFocusIndex = null;
+                });
+                widget.workbench.selectFeature(featId);
+              },
+              itemBuilder: (context) {
+                final entries = <PopupMenuEntry<String>>[];
+                int seq = 0;
+                for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+                  final b = beats[bIdx];
+                  final bFeats = widget.workbench.featuresForBeat(b.id);
+                  if (bFeats.isEmpty) continue;
+                  if (entries.isNotEmpty) {
+                    entries.add(const PopupMenuDivider());
+                  }
+                  final doneInBeat = bFeats
+                      .where(
+                        (f) => widget.workbench.getDocumentProgress(f.id) >= 100,
+                      )
+                      .length;
+                  entries.add(
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      height: 26,
+                      child: Text(
+                        'BEAT ${(bIdx + 1).toString().padLeft(2, '0')} · ${b.title.toUpperCase()} ($doneInBeat/${bFeats.length})',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: _accentEmerald,
+                        ),
+                      ),
+                    ),
+                  );
+                  for (final f in bFeats) {
+                    seq++;
+                    final fProg = widget.workbench.getDocumentProgress(f.id);
+                    final fDone = fProg >= 100;
+                    final fSel = f.id == feat.id;
+                    entries.add(
+                      PopupMenuItem<String>(
+                        value: f.id,
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              '${(currentFeatIdx + 1).toString().padLeft(2, '0')} · ${feat.title}',
-                              style: AppTheme.displayFont(
-                                fontSize: 19,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.35,
-                                color: _textPrimary,
+                            Expanded(
+                              child: Text(
+                                '${fDone ? "✓" : (fSel ? "●" : "○")} ${seq.toString().padLeft(2, '0')} · ${f.title}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: fSel
+                                      ? FontWeight.w800
+                                      : FontWeight.w500,
+                                  color: fSel
+                                      ? _textPrimary
+                                      : (fDone ? _accentEmerald : _textSecondary),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
+                            Text(
+                              '$fProg%',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: fDone ? _accentEmerald : _textMuted,
                               ),
-                              decoration: BoxDecoration(
-                                color: (isDone ? _accentEmerald : _accentAmber)
-                                    .withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${progress.round()}%',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: isDone ? _accentEmerald : _accentAmber,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 18,
-                              color: _accentAmber,
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    if (allFeats.length > 1)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          InkWell(
-                            key: const ValueKey('prev_feature_btn'),
-                            onTap: prevFeat == null
-                                ? null
-                                : () {
-                                    setState(() {
-                                      _manualCheckpointFocusIndex = null;
-                                    });
-                                    widget.workbench.selectFeature(prevFeat.id);
-                                  },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: _borderSubtle),
-                              ),
-                              child: Text(
-                                '‹ Prev',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: prevFeat == null
-                                      ? _textMuted.withValues(alpha: 0.45)
-                                      : _textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          InkWell(
-                            key: const ValueKey('next_feature_btn'),
-                            onTap: nextSequentialFeat == null
-                                ? null
-                                : () {
-                                    setState(() {
-                                      _manualCheckpointFocusIndex = null;
-                                    });
-                                    widget.workbench.selectFeature(
-                                      nextSequentialFeat.id,
-                                    );
-                                  },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: nextSequentialFeat == null
-                                      ? _borderSubtle
-                                      : _accentEmerald.withValues(alpha: 0.45),
-                                ),
-                              ),
-                              child: Text(
-                                'Next ›',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: nextSequentialFeat == null
-                                      ? _textMuted.withValues(alpha: 0.45)
-                                      : _accentEmerald,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                    );
+                  }
+                }
+                return entries;
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: _borderBright),
+                      ),
+                      child: Text(
+                        featCode,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        feat.title,
+                        style: AppTheme.displayFont(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDone
+                            ? _accentEmerald.withValues(alpha: 0.14)
+                            : _bgRecessed,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isDone
+                              ? _accentEmerald.withValues(alpha: 0.45)
+                              : _borderSubtle,
+                        ),
+                      ),
+                      child: Text(
+                        '${progress.round()}%',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: isDone ? _accentEmerald : _textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: _textSecondary,
+                    ),
                   ],
                 ),
-              ] else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        tag('FEATURE', _accentAmber),
-                        const SizedBox(width: 8),
-                        Text(
-                          feat.title,
-                          style: AppTheme.displayFont(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.35,
-                            color: _textPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        tag(presetLabel.toUpperCase(), _textSecondary),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        InkWell(
-                          key: const ValueKey('generate_feature_script_btn'),
-                          onTap: () => _showFeatureScriptBundleModal(
-                            context,
-                            feat,
-                            states,
-                          ),
-                          borderRadius: BorderRadius.circular(5),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _accentEmerald.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(
-                                color: _accentEmerald.withValues(alpha: 0.45),
-                              ),
-                            ),
-                            child: Text(
-                              '✦ Script',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: _accentEmerald,
-                              ),
-                            ),
-                          ),
-                        ),
-                        InkWell(
-                          key: const ValueKey('toggle_pillars_drawer_btn'),
-                          onTap: () {
+              ),
+            ),
+            if (allFeats.length > 1)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    key: const ValueKey('prev_feature_btn'),
+                    onTap: prevFeat == null
+                        ? null
+                        : () {
                             setState(() {
-                              _showPillarsReferenceDrawer = !_showPillarsReferenceDrawer;
+                              _manualCheckpointFocusIndex = null;
                             });
+                            widget.workbench.selectFeature(prevFeat.id);
                           },
-                          borderRadius: BorderRadius.circular(5),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _showPillarsReferenceDrawer
-                                  ? _accentAmber.withValues(alpha: 0.14)
-                                  : _bgRecessed,
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(
-                                color: _showPillarsReferenceDrawer
-                                    ? _accentAmber.withValues(alpha: 0.45)
-                                    : _borderSubtle,
-                              ),
-                            ),
-                            child: Text(
-                              '◈ Pillars & Spec ${_showPillarsReferenceDrawer ? "▴" : "▾"}',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: _showPillarsReferenceDrawer
-                                    ? _accentAmber
-                                    : _textSecondary,
-                              ),
-                            ),
-                          ),
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: _borderSubtle),
+                      ),
+                      child: Text(
+                        '← Prev',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: prevFeat == null
+                              ? _textMuted.withValues(alpha: 0.45)
+                              : _textPrimary,
                         ),
-                        if (outOfScope.isNotEmpty)
-                          InkWell(
-                            key: const ValueKey('feat_out_of_scope_btn'),
-                            onTap: () {
-                              setState(() {
-                                _showOutOfScopeShelf = !_showOutOfScopeShelf;
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: _showOutOfScopeShelf
-                                    ? _accentCrimson.withValues(alpha: 0.14)
-                                    : _bgRecessed,
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: _showOutOfScopeShelf
-                                      ? _accentCrimson.withValues(alpha: 0.45)
-                                      : _borderSubtle,
-                                ),
-                              ),
-                              child: Text(
-                                '⊘ ${outOfScope.length} Out ${_showOutOfScopeShelf ? "▴" : "▾"}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: _showOutOfScopeShelf
-                                      ? _accentCrimson
-                                      : _textMuted,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (specBinding.hasUnassigned)
-                          InkWell(
-                            key: const ValueKey('feat_unassigned_spec_btn'),
-                            onTap: () {
-                              setState(() {
-                                _hideUnassignedSpecShelf = !_hideUnassignedSpecShelf;
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: _accentAmber.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: _accentAmber.withValues(alpha: 0.35),
-                                ),
-                              ),
-                              child: Text(
-                                '${specBinding.totalUnassignedCount} unassigned',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: _accentAmber,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (!_isSinglePanelMode && allFeats.length > 1) ...[
-                          InkWell(
-                            key: const ValueKey('prev_feature_btn'),
-                            onTap: prevFeat == null
-                                ? null
-                                : () => widget.workbench.selectFeature(prevFeat.id),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: _bgRecessed,
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: _borderSubtle),
-                              ),
-                              child: Text(
-                                '‹ Prev',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: prevFeat == null
-                                      ? _textMuted.withValues(alpha: 0.45)
-                                      : _textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          InkWell(
-                            key: const ValueKey('next_feature_btn'),
-                            onTap: nextSequentialFeat == null
-                                ? null
-                                : () => widget.workbench.selectFeature(nextSequentialFeat.id),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: _bgRecessed,
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: _borderSubtle),
-                              ),
-                              child: Text(
-                                'Next ›',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: nextSequentialFeat == null
-                                      ? _textMuted.withValues(alpha: 0.45)
-                                      : _textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    key: const ValueKey('next_feature_btn'),
+                    onTap: nextSequentialFeat == null
+                        ? null
+                        : () {
+                            setState(() {
+                              _manualCheckpointFocusIndex = null;
+                            });
+                            widget.workbench.selectFeature(
+                              nextSequentialFeat.id,
+                            );
+                          },
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _bgRecessed,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                          color: nextSequentialFeat == null
+                              ? _borderSubtle
+                              : _borderBright,
+                        ),
+                      ),
+                      child: Text(
+                        'Next →',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: nextSequentialFeat == null
+                              ? _textMuted.withValues(alpha: 0.45)
+                              : _textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        // Stage 2 Callout Bars for GOAL and DONE WHEN
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isTwoCol = constraints.maxWidth >= 620;
+            final goalBar = buildCalloutBar(
+              label: 'GOAL',
+              accentColor: _focalAccent,
+              text: scopeGoal,
+            );
+            final doneBar = buildCalloutBar(
+              label: 'DONE WHEN',
+              accentColor: _accentEmerald,
+              text: doneIf,
+            );
+            if (isTwoCol) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: goalBar),
+                  const SizedBox(width: 10),
+                  Expanded(child: doneBar),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                goalBar,
                 const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                doneBar,
+              ],
+            );
+          },
+        ),
+        if (_showOutOfScopeShelf && outOfScope.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('feat_out_of_scope_shelf'),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isTwoCol =
+                    constraints.maxWidth >= 480 && outOfScope.length > 1;
+                final colWidth = isTwoCol
+                    ? (constraints.maxWidth - 10) / 2
+                    : constraints.maxWidth;
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
-                    Text(
-                      'GOAL:',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: _accentAmber,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        scopeGoal,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          height: 1.4,
-                          color: _textSecondary,
+                    for (final item in outOfScope)
+                      SizedBox(
+                        width: colWidth,
+                        child: Row(
+                          children: [
+                            tag('CUT', _accentCrimson, width: 42),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                item,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
                   ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'DONE WHEN:',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: _accentEmerald,
-                      ),
+                );
+              },
+            ),
+          ),
+        ],
+        if (specBinding.hasUnassigned && !_hideUnassignedSpecShelf) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('feat_inline_spec_shelf'),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                for (final sc in specBinding.unassignedScope)
+                  Text(
+                    '✓ $sc',
+                    style: GoogleFonts.inter(fontSize: 10.5, color: _textPrimary),
+                  ),
+                for (final t in specBinding.unassignedTuning)
+                  Text(
+                    '⚙ $t',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: _textPrimary,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        doneIf,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _accentEmerald,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      statsLabel,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: _textMuted),
-                    ),
-                  ],
-                ),
+                  ),
+                for (final e in specBinding.unassignedEdgeCases)
+                  Text(
+                    '⚠ $e',
+                    style: GoogleFonts.inter(fontSize: 10.5, color: _textPrimary),
+                  ),
               ],
             ),
           ),
-          if (_showOutOfScopeShelf && outOfScope.isNotEmpty)
-            Container(
-              key: const ValueKey('feat_out_of_scope_shelf'),
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-              decoration: BoxDecoration(
-                color: _bgRecessed,
-                border: Border(top: BorderSide(color: _borderSubtle)),
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isTwoCol = constraints.maxWidth >= 480 && outOfScope.length > 1;
-                  final colWidth = isTwoCol
-                      ? (constraints.maxWidth - 10) / 2
-                      : constraints.maxWidth;
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
-                    children: [
-                      for (final item in outOfScope)
-                        SizedBox(
-                          width: colWidth,
-                          child: Row(
-                            children: [
-                              tag('CUT', _accentCrimson, width: 42),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  item,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w500,
-                                    color: _textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          if (specBinding.hasUnassigned && !_hideUnassignedSpecShelf)
-            Container(
-              key: const ValueKey('feat_inline_spec_shelf'),
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-              decoration: BoxDecoration(
-                color: _bgRecessed,
-                border: Border(top: BorderSide(color: _borderSubtle)),
-              ),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  for (final sc in specBinding.unassignedScope)
-                    Text('✓ $sc', style: GoogleFonts.inter(fontSize: 10.5, color: _textPrimary)),
-                  for (final t in specBinding.unassignedTuning)
-                    Text('⚙ $t', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: _textPrimary)),
-                  for (final e in specBinding.unassignedEdgeCases)
-                    Text('⚠ $e', style: GoogleFonts.inter(fontSize: 10.5, color: _textPrimary)),
-                ],
-              ),
-            ),
-          if (!_isSinglePanelMode)
-            Container(
-              height: 2.5,
-              color: _borderSubtle,
-              child: FractionallySizedBox(
-                alignment: Alignment.centerLeft,
-                widthFactor: (progress / 100.0).clamp(0.0, 1.0),
-                child: Container(
-                  color: isDone ? _accentEmerald : _accentAmber,
-                ),
-              ),
-            ),
         ],
-      );
-
-    if (_isSinglePanelMode) {
-      return innerContent;
-    }
-
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _borderSubtle),
-      ),
-      child: innerContent,
+      ],
     );
   }
 
@@ -4631,11 +4511,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           ),
         ],
         const SizedBox(height: 6),
-        // Bottom Checkpoint Playtest Gate Bar
+        // Bottom Checkpoint Playtest Gate Bar (Stage 2 3px Left Accent Callout Style)
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: _bgSurface,
+            color: _bgRecessed,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: isDone
@@ -4643,194 +4523,207 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   : _borderSubtle,
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              InkWell(
-                key: ValueKey('edit_playtest_btn_$index'),
-                onTap: promptPlaytestDialog,
-                borderRadius: BorderRadius.circular(5),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: (isDone ? _accentEmerald : _accentAmber)
-                            .withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'PLAYTEST GATE ✎',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          color: isDone ? _accentEmerald : _accentAmber,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        node.playtestCondition,
-                        style: GoogleFonts.inter(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: _textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 3,
+                  decoration: BoxDecoration(
+                    color: isDone ? _accentEmerald : _accentAmber,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  InkWell(
-                    key: ValueKey('simulate_playtest_btn_$index'),
-                    onTap: () {
-                      final sim = widget.workbench.simulateCheckpointPlaytest(
-                        featureDoc: feat,
-                        states: states,
-                        checkpointIndex: index,
-                      );
-                      setState(() {});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: _bgSurface,
-                          behavior: SnackBarBehavior.floating,
-                          content: Text(
-                            '⚡ Simulated: ${sim.recommendedTuningClamp} + [SIMULATION GUARD] added ✓',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: _accentAmber,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InkWell(
+                        key: ValueKey('edit_playtest_btn_$index'),
+                        onTap: promptPlaytestDialog,
+                        borderRadius: BorderRadius.circular(5),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgSurface,
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                'PLAYTEST GATE ✎',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDone ? _accentEmerald : _accentAmber,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                node.playtestCondition,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          InkWell(
+                            key: ValueKey('simulate_playtest_btn_$index'),
+                            onTap: () {
+                              final sim = widget.workbench.simulateCheckpointPlaytest(
+                                featureDoc: feat,
+                                states: states,
+                                checkpointIndex: index,
+                              );
+                              setState(() {});
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: _bgSurface,
+                                  behavior: SnackBarBehavior.floating,
+                                  content: Text(
+                                    '⚡ Simulated: ${sim.recommendedTuningClamp} + [SIMULATION GUARD] added ✓',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _accentAmber,
+                                    ),
+                                  ),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgSurface,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                '⚡ Simulate',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: _accentAmber,
+                                ),
+                              ),
                             ),
                           ),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
+                          InkWell(
+                            key: ValueKey('log_playtest_issue_btn_$index'),
+                            onTap: promptLogPlaytestIssueDialog,
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgSurface,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                '⚑ Log Issue',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: _accentCrimson,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!isDone)
+                            InkWell(
+                              key: ValueKey('quick_verify_checkpoint_btn_$index'),
+                              onTap: quickVerifyEntireCheckpoint,
+                              borderRadius: BorderRadius.circular(5),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _accentEmerald.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: _accentEmerald.withValues(alpha: 0.45),
+                                  ),
+                                ),
+                                child: Text(
+                                  '✓ Verify Checkpoint →',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: _accentEmerald,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                      decoration: BoxDecoration(
-                        color: _accentAmber.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                          color: _accentAmber.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        '⚡ Simulate',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: _accentAmber,
-                        ),
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    key: ValueKey('log_playtest_issue_btn_$index'),
-                    onTap: promptLogPlaytestIssueDialog,
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _accentCrimson.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                          color: _accentCrimson.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        '⚑ Log Issue',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: _accentCrimson,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (!isDone)
-                    InkWell(
-                      key: ValueKey('quick_verify_checkpoint_btn_$index'),
-                      onTap: quickVerifyEntireCheckpoint,
-                      borderRadius: BorderRadius.circular(5),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _accentEmerald.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: _accentEmerald.withValues(alpha: 0.45),
+                      if (isAwaitingPlaytest) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            key: ValueKey('verify_playtest_btn_$index'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _accentEmerald,
+                              foregroundColor: _focalAccentFg,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 9,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _awaitingPlaytestVerification.remove(node.id);
+                                _expandedDoneCheckpoints.remove(node.id);
+                              });
+                            },
+                            icon: const Icon(Icons.verified_rounded, size: 15),
+                            label: Text(
+                              'Verify Playtest & Advance →',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          '✓ Verify Checkpoint →',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: _accentEmerald,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (isAwaitingPlaytest) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    key: ValueKey('verify_playtest_btn_$index'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accentEmerald,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 9,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _awaitingPlaytestVerification.remove(node.id);
-                        _expandedDoneCheckpoints.remove(node.id);
-                      });
-                    },
-                    icon: const Icon(Icons.verified_rounded, size: 15),
-                    label: Text(
-                      'Verify Playtest & Advance →',
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                      ],
+                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -4959,7 +4852,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: isSelectedTask
-                                                ? _accentAmber
+                                                ? _focalAccent
                                                 : _bgSurface,
                                             borderRadius:
                                                 BorderRadius.circular(3),
@@ -4970,7 +4863,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                               fontSize: 8.5,
                                               fontWeight: FontWeight.w800,
                                               color: isSelectedTask
-                                                  ? Colors.black
+                                                  ? _focalAccentFg
                                                   : _textMuted,
                                             ),
                                           ),
@@ -5766,11 +5659,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
       decoration: BoxDecoration(
         color: _bgSurface,
-        border: Border(top: BorderSide(color: _borderSubtle)),
+        border: Border(top: BorderSide(color: _borderBright)),
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1100),
+          constraints: const BoxConstraints(maxWidth: 1160),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

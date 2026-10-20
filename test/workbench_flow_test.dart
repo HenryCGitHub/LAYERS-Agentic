@@ -229,9 +229,15 @@ void main() {
         await tester.tap(buildRelBtn);
         await tester.pumpAndSettle();
 
-        // ── Stage 3: Active Release Workbench (Single-Panel Flow + 1-Click Split-View Switcher) ──
+        // ── Stage 3: Active Release Workbench (Left Sidebar Outline View + Single-Feature Workspace) ──
         expect(find.text('ACTIVE RELEASE'), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage3_beat_context_banner')), findsOneWidget);
+        expect(find.byKey(const ValueKey('toggle_beat_context_btn')), findsOneWidget);
+        expect(find.text('BEAT GOAL'), findsOneWidget);
+        expect(find.text('BEAT DONE WHEN'), findsOneWidget);
+        final firstBeatId = provider.activeReleaseBeats.first.id;
+        expect(find.byKey(ValueKey('rail_beat_$firstBeatId')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_feature_dropdown_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_stepper_bar')), findsOneWidget);
@@ -318,10 +324,15 @@ void main() {
 
         // Verify Option 2: Stage 3 Live Concept & Pillars Reference Drawer toggle
         expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsNothing);
-        await tester.tap(find.byKey(const ValueKey('toggle_pillars_drawer_btn')));
+        final togglePillarsBtn = find.byKey(const ValueKey('toggle_pillars_drawer_btn'));
+        await tester.ensureVisible(togglePillarsBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(togglePillarsBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('toggle_pillars_drawer_btn')));
+        await tester.ensureVisible(togglePillarsBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(togglePillarsBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsNothing);
 
