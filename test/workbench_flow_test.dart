@@ -232,15 +232,16 @@ void main() {
         // ── Stage 3: Active Release Workbench (Single-Panel Flow + 1-Click Split-View Switcher) ──
         expect(find.text('ACTIVE RELEASE'), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage3_top_feature_stepper_rail')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage3_feature_dropdown_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_stepper_bar')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_single_col_0')), findsOneWidget);
-        expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
+        expect(find.textContaining('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
         expect(find.text('CHECKPOINT 1'), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
-        // Item 1: Duplicate header Prev/Next buttons are subtracted in Single-Panel Mode
-        expect(find.byKey(const ValueKey('prev_feature_btn')), findsNothing);
-        expect(find.byKey(const ValueKey('next_feature_btn')), findsNothing);
+        // Option 1 + Option 4 Hybrid: Hero header has Prev/Next buttons + clickable feature dropdown
+        expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
         // Item 2: True Inline Task Accordion — Task 01's How-To sub-steps expand directly above Task 02
         final activeFeat0 = provider.selectedFeature!;
         final cp0NodeId = provider.documents[activeFeat0.id]!.subtasks.first.id;
@@ -256,8 +257,33 @@ void main() {
         expect(find.byKey(const ValueKey('edit_playtest_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('add_checkpoint_header_btn')), findsOneWidget);
 
+        // Verify clicking a How-To sub-step on Feature 2 preserves focus on Feature 2 (does NOT jump back to Feature 1)
+        await tester.tap(find.byKey(const ValueKey('next_feature_btn')));
+        await tester.pumpAndSettle();
+        final secondFeat = provider.selectedFeature!;
+        expect(secondFeat.id, isNot(equals(activeFeat0.id)));
+        final secondCp0NodeId = provider.documents[secondFeat.id]!.subtasks.first.id;
+        final secondFeatSubStepFinder = find.byKey(ValueKey('howto_substep_${secondCp0NodeId}_0_0'));
+        await tester.ensureVisible(secondFeatSubStepFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(secondFeatSubStepFinder);
+        await tester.pumpAndSettle();
+        expect(provider.selectedFeature!.id, equals(secondFeat.id));
+        // Uncheck the sub-step to restore clean state, then navigate back to Feature 1
+        await tester.tap(secondFeatSubStepFinder);
+        await tester.pumpAndSettle();
+        final prevFeatBtn = find.byKey(const ValueKey('prev_feature_btn'));
+        await tester.ensureVisible(prevFeatBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(prevFeatBtn);
+        await tester.pumpAndSettle();
+        expect(provider.selectedFeature!.id, equals(activeFeat0.id));
+
         // Switch from Single-Panel Flow to Split-Panel Studio via stage3_view_mode_toggle_btn
-        await tester.tap(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')));
+        final viewModeToggleBtn = find.byKey(const ValueKey('stage3_view_mode_toggle_btn'));
+        await tester.ensureVisible(viewModeToggleBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(viewModeToggleBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);

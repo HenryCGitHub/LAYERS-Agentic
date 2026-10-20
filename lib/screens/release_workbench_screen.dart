@@ -96,15 +96,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (_isSinglePanelMode) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildTopFeatureStepperRail(rel),
-              Expanded(
-                child: _buildFeatureMainCanvas(rel),
-              ),
-            ],
-          );
+          return _buildFeatureMainCanvas(rel);
         }
         final isWide = constraints.maxWidth >= 780;
         if (isWide) {
@@ -236,405 +228,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
-  Widget _buildTopFeatureStepperRail(TierDocument rel) {
-    final beats = widget.workbench.activeReleaseBeats;
-    final relProgress = widget.workbench.getDocumentProgress(rel.id);
-    final releases = widget.workbench.projectReleases;
-    final archivedFeats = widget.workbench.supersededFeatures;
-    final isFocus = widget.workbench.focusMode;
-    final activeVer = rel.sections['versionTag'] ?? 'v0.1';
-
-    final allItems = <({TierDocument feat, int beatIndex, int featIdxInBeat})>[];
-    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-      final bFeats = widget.workbench.featuresForBeat(beats[bIdx].id);
-      for (int fIdx = 0; fIdx < bFeats.length; fIdx++) {
-        final dep = WorkspaceAgentOrchestrator.classifyDependencyTier(
-          featureTitle: bFeats[fIdx].title,
-          beatIndex: bIdx,
-          featureIndexInBeat: fIdx,
-        );
-        if (_criticalPathOnly && dep.tierRank > 2) continue;
-        allItems.add((
-          feat: bFeats[fIdx],
-          beatIndex: bIdx,
-          featIdxInBeat: fIdx,
-        ));
-      }
-    }
-
-    return Container(
-      key: const ValueKey('stage3_top_feature_stepper_rail'),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-      decoration: BoxDecoration(
-        color: _bgRecessed,
-        border: Border(bottom: BorderSide(color: _borderSubtle)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
-            runSpacing: 6,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    'ACTIVE RELEASE',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                      color: _accentAmber,
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    key: const ValueKey('release_selector_dropdown_btn'),
-                    color: _bgSurface,
-                    tooltip: 'Switch Release View or Evolve Scope',
-                    onSelected: (value) {
-                      if (value == '__evolve__') {
-                        widget.workbench.advanceToNextRelease();
-                      } else if (value == '__replan__') {
-                        widget.workbench.openReleasePlanGate(releaseId: rel.id);
-                      } else if (value.startsWith('rel:')) {
-                        final targetId = value.substring(4);
-                        widget.workbench.openReleasePlanGate(releaseId: targetId);
-                      } else {
-                        widget.workbench.setReleaseViewFilter(value);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem<String>(
-                        value: 'active',
-                        child: Text(
-                          '● Active: ${rel.title} ($relProgress%)',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _textPrimary,
-                          ),
-                        ),
-                      ),
-                      PopupMenuItem<String>(
-                        value: 'all',
-                        child: Text(
-                          '🌳 All Live Game Features ($activeVer)',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: _textPrimary,
-                          ),
-                        ),
-                      ),
-                      if (archivedFeats.isNotEmpty)
-                        PopupMenuItem<String>(
-                          value: 'archived',
-                          child: Text(
-                            '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: _textSecondary,
-                            ),
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      for (final r in releases)
-                        PopupMenuItem<String>(
-                          value: 'rel:${r.id}',
-                          child: Text(
-                            '${r.id == rel.id ? "▸ " : "  "}${r.title}',
-                            style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              fontWeight: r.id == rel.id
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: _textPrimary,
-                            ),
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem<String>(
-                        value: '__replan__',
-                        child: Text(
-                          '✎ Edit ${rel.title} Scope in Plan Gate',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: _accentAmber,
-                          ),
-                        ),
-                      ),
-                      PopupMenuItem<String>(
-                        value: '__evolve__',
-                        child: Text(
-                          '+ Evolve to Next Release Milestone ✦',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _accentEmerald,
-                          ),
-                        ),
-                      ),
-                    ],
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _bgSurface,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: _borderSubtle),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            rel.title,
-                            style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                              color: _textPrimary,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            size: 14,
-                            color: _textSecondary,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  _buildViewModeTogglePill(),
-                  InkWell(
-                    key: const ValueKey('critical_path_filter_btn'),
-                    onTap: () {
-                      setState(() {
-                        _criticalPathOnly = !_criticalPathOnly;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _criticalPathOnly
-                            ? _accentEmerald.withValues(alpha: 0.14)
-                            : _bgSurface,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                          color: _criticalPathOnly
-                              ? _accentEmerald.withValues(alpha: 0.45)
-                              : _borderSubtle,
-                        ),
-                      ),
-                      child: Text(
-                        '⚡ Crit: ${_criticalPathOnly ? "ON" : "OFF"}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          color: _criticalPathOnly ? _accentEmerald : _textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    key: const ValueKey('focus_mode_toggle_btn'),
-                    onTap: () => widget.workbench.toggleFocusMode(),
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isFocus
-                            ? _accentAmber.withValues(alpha: 0.14)
-                            : _bgSurface,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                          color: isFocus
-                              ? _accentAmber.withValues(alpha: 0.45)
-                              : _borderSubtle,
-                        ),
-                      ),
-                      child: Text(
-                        'Focus: ${isFocus ? "ON" : "OFF"}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          color: isFocus ? _accentAmber : _textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '$relProgress%',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: relProgress >= 100 ? _accentEmerald : _accentAmber,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (int i = 0; i < allItems.length; i++) ...[
-                  if (i > 0)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      child: Text(
-                        '→',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          color: _textMuted,
-                        ),
-                      ),
-                    ),
-                  Builder(
-                    builder: (context) {
-                      final item = allItems[i];
-                      final feat = item.feat;
-                      final isSelected =
-                          widget.workbench.selectedFeatureId == feat.id;
-                      final progress =
-                          widget.workbench.getDocumentProgress(feat.id);
-                      final isDone = progress >= 100;
-                      final depTier =
-                          WorkspaceAgentOrchestrator.classifyDependencyTier(
-                        featureTitle: feat.title,
-                        beatIndex: item.beatIndex,
-                        featureIndexInBeat: item.featIdxInBeat,
-                      );
-                      final depColor = depTier.severity == 'emerald'
-                          ? _accentEmerald
-                          : (depTier.severity == 'amber'
-                              ? _accentAmber
-                              : _textMuted);
-                      final shouldDim = isFocus && !isSelected;
-
-                      return Opacity(
-                        opacity: shouldDim ? 0.65 : 1.0,
-                        child: InkWell(
-                          key: ValueKey('rail_feat_${feat.id}'),
-                          onTap: () {
-                            setState(() {
-                              _manualCheckpointFocusIndex = null;
-                            });
-                            widget.workbench.selectFeature(feat.id);
-                          },
-                          borderRadius: BorderRadius.circular(5),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? _accentAmber.withValues(alpha: 0.14)
-                                  : _bgSurface,
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(
-                                color: isSelected
-                                    ? _accentAmber.withValues(alpha: 0.55)
-                                    : (isDone
-                                        ? _accentEmerald.withValues(alpha: 0.4)
-                                        : _borderSubtle),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  isDone
-                                      ? Icons.check_circle
-                                      : Icons.radio_button_unchecked,
-                                  size: 12,
-                                  color: isDone
-                                      ? _accentEmerald
-                                      : (isSelected
-                                          ? _accentAmber
-                                          : _textMuted),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '${(i + 1).toString().padLeft(2, '0')} · ${feat.title}',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11.5,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: _textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  key: ValueKey('stage3_dep_tier_${feat.id}'),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: depColor.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(3),
-                                    border: Border.all(
-                                      color: depColor.withValues(alpha: 0.35),
-                                      width: 0.7,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    depTier.shortBadge,
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.w800,
-                                      color: depColor,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  '$progress%',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDone ? _accentEmerald : _textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
   Widget _buildLeftBeatFeatureRail(TierDocument rel, {bool shrinkWrap = false}) {
     final beats = widget.workbench.activeReleaseBeats;
     final relProgress = widget.workbench.getDocumentProgress(rel.id);
@@ -1192,18 +785,41 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final hasMultiVersionHistory =
         states.any((s) => (s.releaseVersion.trim().isNotEmpty ? s.releaseVersion.trim() : 'v0.1') != 'v0.1');
 
-    final body = Column(
+    final beats = widget.workbench.activeReleaseBeats;
+    final allItems = <({TierDocument feat, int beatIndex, int featIdxInBeat, int globalIdx})>[];
+    int gIdx = 0;
+    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+      final bFeats = widget.workbench.featuresForBeat(beats[bIdx].id);
+      for (int fIdx = 0; fIdx < bFeats.length; fIdx++) {
+        final dep = WorkspaceAgentOrchestrator.classifyDependencyTier(
+          featureTitle: bFeats[fIdx].title,
+          beatIndex: bIdx,
+          featureIndexInBeat: fIdx,
+        );
+        if (_criticalPathOnly && dep.tierRank > 2) continue;
+        allItems.add((
+          feat: bFeats[fIdx],
+          beatIndex: bIdx,
+          featIdxInBeat: fIdx,
+          globalIdx: gIdx,
+        ));
+        gIdx++;
+      }
+    }
+    final activeGlobalIdx = allItems.indexWhere((it) => it.feat.id == feat.id);
+    final beforeSiblings = activeGlobalIdx > 0
+        ? allItems.sublist(0, activeGlobalIdx)
+        : const <({TierDocument feat, int beatIndex, int featIdxInBeat, int globalIdx})>[];
+    final afterSiblings = (activeGlobalIdx != -1 && activeGlobalIdx < allItems.length - 1)
+        ? allItems.sublist(activeGlobalIdx + 1)
+        : const <({TierDocument feat, int beatIndex, int featIdxInBeat, int globalIdx})>[];
+
+    final activeFeatureContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.workbench.isActiveReleaseComplete) ...[
-          _buildReleaseShippedBanner(rel),
-          const SizedBox(height: 16),
-        ] else if (isDone && nextFeat != null) ...[
-          _buildNextFeatureAdvanceBanner(feat, nextFeat),
-          const SizedBox(height: 16),
-        ],
         _buildUltraCompactFeatureHeader(
           feat,
+          rel: rel,
           states: states,
           specBinding: specBinding,
           statsLabel: '$completedCps/${states.length} cp · $completedTasks/$totalTasks tasks · ${feat.estimatedDuration}',
@@ -1215,7 +831,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           const SizedBox(height: 10),
           _buildStage1PillarsReferenceDrawer(),
         ],
-        const SizedBox(height: 20),
+        SizedBox(height: _isSinglePanelMode ? 12 : 20),
         // De-boxed Stage 1 style section header for Playable Checkpoints + Horizontal Stepper Tabs
         _buildCheckpointStepperBar(
           feat,
@@ -1226,7 +842,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           const SizedBox(height: 10),
           _buildVersionEvolutionTimelineBar(states),
         ],
-        const SizedBox(height: 10),
+        SizedBox(height: _isSinglePanelMode ? 6 : 10),
         for (int i = 0; i < states.length; i++)
           if (_selectedVersionFilter == 'ALL' ||
               !states.any((s) => s.releaseVersion == _selectedVersionFilter) ||
@@ -1243,6 +859,56 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 activeFocusIndex: effectiveFocusIndex,
                 specBinding: specBinding,
               ),
+      ],
+    );
+
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.workbench.isActiveReleaseComplete) ...[
+          _buildReleaseShippedBanner(rel),
+          const SizedBox(height: 16),
+        ] else if (isDone && nextFeat != null) ...[
+          _buildNextFeatureAdvanceBanner(feat, nextFeat),
+          const SizedBox(height: 16),
+        ],
+        if (_isSinglePanelMode) ...[
+          for (final item in beforeSiblings)
+            _buildCollapsedSiblingFeatureRow(
+              item.feat,
+              beatTitle: beats[item.beatIndex].title,
+              beatIndex: item.beatIndex,
+              featIdxInBeat: item.featIdxInBeat,
+              globalIdx: item.globalIdx,
+            ),
+          Container(
+            key: const ValueKey('stage3_active_feature_sheet'),
+            margin: EdgeInsets.symmetric(
+              vertical: (beforeSiblings.isNotEmpty || afterSiblings.isNotEmpty) ? 10 : 0,
+            ),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+            decoration: BoxDecoration(
+              color: _bgSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDone
+                    ? _accentEmerald.withValues(alpha: 0.45)
+                    : _accentAmber.withValues(alpha: 0.45),
+                width: 1.2,
+              ),
+            ),
+            child: activeFeatureContent,
+          ),
+          for (final item in afterSiblings)
+            _buildCollapsedSiblingFeatureRow(
+              item.feat,
+              beatTitle: beats[item.beatIndex].title,
+              beatIndex: item.beatIndex,
+              featIdxInBeat: item.featIdxInBeat,
+              globalIdx: item.globalIdx,
+            ),
+        ] else
+          activeFeatureContent,
       ],
     );
 
@@ -2206,8 +1872,115 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
+  Widget _buildCollapsedSiblingFeatureRow(
+    TierDocument siblingFeat, {
+    required String beatTitle,
+    required int beatIndex,
+    required int featIdxInBeat,
+    required int globalIdx,
+  }) {
+    final progress = widget.workbench.getDocumentProgress(siblingFeat.id);
+    final isDone = progress >= 100;
+    final depTier = WorkspaceAgentOrchestrator.classifyDependencyTier(
+      featureTitle: siblingFeat.title,
+      beatIndex: beatIndex,
+      featureIndexInBeat: featIdxInBeat,
+    );
+    final depColor = depTier.severity == 'emerald'
+        ? _accentEmerald
+        : (depTier.severity == 'amber' ? _accentAmber : _textMuted);
+    final numStr = (globalIdx + 1).toString().padLeft(2, '0');
+    final beatShort = beatTitle.split(':').first.split('—').first.trim();
+
+    return InkWell(
+      key: ValueKey('rail_feat_${siblingFeat.id}'),
+      onTap: () {
+        setState(() {
+          _manualCheckpointFocusIndex = null;
+        });
+        widget.workbench.selectFeature(siblingFeat.id);
+      },
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: _borderSubtle)),
+        ),
+        child: Row(
+          children: [
+            Text(
+              isDone ? '✓ $numStr' : '○ $numStr',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: isDone ? _accentEmerald : _textMuted,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                siblingFeat.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDone ? _accentEmerald : _textSecondary,
+                  decoration: isDone
+                      ? TextDecoration.lineThrough
+                      : TextDecoration.none,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '· BEAT ${(beatIndex + 1).toString().padLeft(2, '0')} ($beatShort)',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 9.5,
+                color: _textMuted,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              key: ValueKey('stage3_dep_tier_${siblingFeat.id}'),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: depColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text(
+                depTier.shortBadge,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w800,
+                  color: depColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isDone ? '100% ✓' : '$progress%',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: isDone ? _accentEmerald : _textMuted,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 15,
+              color: _textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildUltraCompactFeatureHeader(
     TierDocument feat, {
+    required TierDocument rel,
     required List<FeatureStateNode> states,
     required FeatureSpecBindingResult specBinding,
     required String statsLabel,
@@ -2221,9 +1994,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       feat.sections,
       splitSingleSentence: false,
     );
+    final beats = widget.workbench.activeReleaseBeats;
     final allFeats = <TierDocument>[
-      for (final b in widget.workbench.activeReleaseBeats)
-        ...widget.workbench.featuresForBeat(b.id),
+      for (final b in beats) ...widget.workbench.featuresForBeat(b.id),
     ];
     final currentFeatIdx = allFeats.indexWhere((f) => f.id == feat.id);
     final prevFeat = currentFeatIdx > 0 ? allFeats[currentFeatIdx - 1] : null;
@@ -2231,6 +2004,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         (currentFeatIdx != -1 && currentFeatIdx < allFeats.length - 1)
             ? allFeats[currentFeatIdx + 1]
             : null;
+
+    int activeBeatIdx = 0;
+    int activeFeatIdxInBeat = 0;
+    String activeBeatTitle = '';
+    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+      final bFeats = widget.workbench.featuresForBeat(beats[bIdx].id);
+      final fIdx = bFeats.indexWhere((f) => f.id == feat.id);
+      if (fIdx != -1) {
+        activeBeatIdx = bIdx;
+        activeFeatIdxInBeat = fIdx;
+        activeBeatTitle = beats[bIdx].title;
+        break;
+      }
+    }
+    final activeDepTier = WorkspaceAgentOrchestrator.classifyDependencyTier(
+      featureTitle: feat.title,
+      beatIndex: activeBeatIdx,
+      featureIndexInBeat: activeFeatIdxInBeat,
+    );
+    final activeDepColor = activeDepTier.severity == 'emerald'
+        ? _accentEmerald
+        : (activeDepTier.severity == 'amber' ? _accentAmber : _textMuted);
+    final relProgress = widget.workbench.getDocumentProgress(rel.id);
+    final releases = widget.workbench.projectReleases;
+    final archivedFeats = widget.workbench.supersededFeatures;
+    final isFocus = widget.workbench.focusMode;
+    final activeVer = rel.sections['versionTag'] ?? 'v0.1';
 
     Widget tag(String text, Color color, {double? width}) => Container(
           width: width,
@@ -2252,21 +2052,619 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           ),
         );
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+    final innerContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: _isSinglePanelMode
+              ? const EdgeInsets.only(bottom: 10)
+              : const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_isSinglePanelMode) ...[
+                // De-boxed Single-Panel Top Utility Breadcrumb Line inside the Active Feature Sheet
+                Container(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: _borderSubtle)),
+                  ),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'ACTIVE RELEASE',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: _accentAmber,
+                            ),
+                          ),
+                          PopupMenuButton<String>(
+                            key: const ValueKey('release_selector_dropdown_btn'),
+                            color: _bgSurface,
+                            tooltip: 'Switch Release View or Evolve Scope',
+                            onSelected: (value) {
+                              if (value == '__evolve__') {
+                                widget.workbench.advanceToNextRelease();
+                              } else if (value == '__replan__') {
+                                widget.workbench.openReleasePlanGate(
+                                  releaseId: rel.id,
+                                );
+                              } else if (value.startsWith('rel:')) {
+                                final targetId = value.substring(4);
+                                widget.workbench.openReleasePlanGate(
+                                  releaseId: targetId,
+                                );
+                              } else {
+                                widget.workbench.setReleaseViewFilter(value);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem<String>(
+                                value: 'active',
+                                child: Text(
+                                  '● Active: ${rel.title} ($relProgress%)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textPrimary,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'all',
+                                child: Text(
+                                  '🌳 All Live Game Features ($activeVer)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: _textPrimary,
+                                  ),
+                                ),
+                              ),
+                              if (archivedFeats.isNotEmpty)
+                                PopupMenuItem<String>(
+                                  value: 'archived',
+                                  child: Text(
+                                    '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: _textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              const PopupMenuDivider(),
+                              for (final r in releases)
+                                PopupMenuItem<String>(
+                                  value: 'rel:${r.id}',
+                                  child: Text(
+                                    '${r.id == rel.id ? "▸ " : "  "}${r.title}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      fontWeight: r.id == rel.id
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: _textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem<String>(
+                                value: '__replan__',
+                                child: Text(
+                                  '✎ Edit ${rel.title} Scope in Plan Gate',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: _accentAmber,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem<String>(
+                                value: '__evolve__',
+                                child: Text(
+                                  '+ Evolve to Next Release Milestone ✦',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _accentEmerald,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${rel.title} ($relProgress%)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    size: 14,
+                                    color: _textSecondary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '/',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              color: _textMuted,
+                            ),
+                          ),
+                          Text(
+                            'BEAT ${(activeBeatIdx + 1).toString().padLeft(2, '0')} · ${activeBeatTitle.split(':').first.split('—').first.trim().toUpperCase()}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: _accentEmerald,
+                            ),
+                          ),
+                          Container(
+                            key: ValueKey('stage3_dep_tier_${feat.id}'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: activeDepColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              activeDepTier.shortBadge,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                color: activeDepColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _buildViewModeTogglePill(),
+                          InkWell(
+                            key: const ValueKey('critical_path_filter_btn'),
+                            onTap: () {
+                              setState(() {
+                                _criticalPathOnly = !_criticalPathOnly;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _criticalPathOnly
+                                      ? _accentEmerald.withValues(alpha: 0.45)
+                                      : _borderSubtle,
+                                ),
+                              ),
+                              child: Text(
+                                '⚡ Crit: ${_criticalPathOnly ? "ON" : "OFF"}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: _criticalPathOnly
+                                      ? _accentEmerald
+                                      : _textMuted,
+                                ),
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            key: const ValueKey('focus_mode_toggle_btn'),
+                            onTap: () => widget.workbench.toggleFocusMode(),
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: isFocus
+                                      ? _accentAmber.withValues(alpha: 0.45)
+                                      : _borderSubtle,
+                                ),
+                              ),
+                              child: Text(
+                                'Focus: ${isFocus ? "ON" : "OFF"}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: isFocus ? _accentAmber : _textMuted,
+                                ),
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            key: const ValueKey('generate_feature_script_btn'),
+                            onTap: () => _showFeatureScriptBundleModal(
+                              context,
+                              feat,
+                              states,
+                            ),
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _accentEmerald.withValues(alpha: 0.45),
+                                ),
+                              ),
+                              child: Text(
+                                '✦ Script',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: _accentEmerald,
+                                ),
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            key: const ValueKey('toggle_pillars_drawer_btn'),
+                            onTap: () {
+                              setState(() {
+                                _showPillarsReferenceDrawer =
+                                    !_showPillarsReferenceDrawer;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _showPillarsReferenceDrawer
+                                      ? _accentAmber.withValues(alpha: 0.45)
+                                      : _borderSubtle,
+                                ),
+                              ),
+                              child: Text(
+                                '◈ Pillars ${_showPillarsReferenceDrawer ? "▴" : "▾"}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: _showPillarsReferenceDrawer
+                                      ? _accentAmber
+                                      : _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (outOfScope.isNotEmpty)
+                            InkWell(
+                              key: const ValueKey('feat_out_of_scope_btn'),
+                              onTap: () {
+                                setState(() {
+                                  _showOutOfScopeShelf = !_showOutOfScopeShelf;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(5),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: _showOutOfScopeShelf
+                                        ? _accentCrimson.withValues(alpha: 0.45)
+                                        : _borderSubtle,
+                                  ),
+                                ),
+                                child: Text(
+                                  '⊘ ${outOfScope.length} Out ${_showOutOfScopeShelf ? "▴" : "▾"}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _showOutOfScopeShelf
+                                        ? _accentCrimson
+                                        : _textMuted,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (specBinding.hasUnassigned)
+                            InkWell(
+                              key: const ValueKey('feat_unassigned_spec_btn'),
+                              onTap: () {
+                                setState(() {
+                                  _hideUnassignedSpecShelf =
+                                      !_hideUnassignedSpecShelf;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(5),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: _accentAmber.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Text(
+                                  '${specBinding.totalUnassignedCount} unassigned',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: _accentAmber,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Option 1 Hero Feature Title IS the Beat-Grouped Dropdown (clean typography, zero heavy border box)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    PopupMenuButton<String>(
+                      key: const ValueKey('stage3_feature_dropdown_btn'),
+                      color: _bgSurface,
+                      tooltip: 'Switch Active Feature',
+                      onSelected: (featId) {
+                        setState(() {
+                          _manualCheckpointFocusIndex = null;
+                        });
+                        widget.workbench.selectFeature(featId);
+                      },
+                      itemBuilder: (context) {
+                        final entries = <PopupMenuEntry<String>>[];
+                        int seq = 0;
+                        for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+                          final b = beats[bIdx];
+                          final bFeats =
+                              widget.workbench.featuresForBeat(b.id);
+                          if (bFeats.isEmpty) continue;
+                          if (entries.isNotEmpty) {
+                            entries.add(const PopupMenuDivider());
+                          }
+                          final doneInBeat = bFeats
+                              .where((f) =>
+                                  widget.workbench.getDocumentProgress(f.id) >=
+                                  100)
+                              .length;
+                          entries.add(
+                            PopupMenuItem<String>(
+                              enabled: false,
+                              height: 26,
+                              child: Text(
+                                'BEAT ${(bIdx + 1).toString().padLeft(2, '0')} · ${b.title.toUpperCase()} ($doneInBeat/${bFeats.length})',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: _accentEmerald,
+                                ),
+                              ),
+                            ),
+                          );
+                          for (final f in bFeats) {
+                            seq++;
+                            final fProg =
+                                widget.workbench.getDocumentProgress(f.id);
+                            final fDone = fProg >= 100;
+                            final fSel = f.id == feat.id;
+                            entries.add(
+                              PopupMenuItem<String>(
+                                value: f.id,
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${fDone ? "✓" : (fSel ? "●" : "○")} ${seq.toString().padLeft(2, '0')} · ${f.title}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: fSel
+                                              ? FontWeight.w800
+                                              : FontWeight.w500,
+                                          color: fSel
+                                              ? _accentAmber
+                                              : (fDone
+                                                  ? _accentEmerald
+                                                  : _textPrimary),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '$fProg%',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: fDone
+                                            ? _accentEmerald
+                                            : _textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                        return entries;
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${(currentFeatIdx + 1).toString().padLeft(2, '0')} · ${feat.title}',
+                              style: AppTheme.displayFont(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.35,
+                                color: _textPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (isDone ? _accentEmerald : _accentAmber)
+                                    .withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${progress.round()}%',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDone ? _accentEmerald : _accentAmber,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: _accentAmber,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (allFeats.length > 1)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          InkWell(
+                            key: const ValueKey('prev_feature_btn'),
+                            onTap: prevFeat == null
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _manualCheckpointFocusIndex = null;
+                                    });
+                                    widget.workbench.selectFeature(prevFeat.id);
+                                  },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                '‹ Prev',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: prevFeat == null
+                                      ? _textMuted.withValues(alpha: 0.45)
+                                      : _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            key: const ValueKey('next_feature_btn'),
+                            onTap: nextSequentialFeat == null
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _manualCheckpointFocusIndex = null;
+                                    });
+                                    widget.workbench.selectFeature(
+                                      nextSequentialFeat.id,
+                                    );
+                                  },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: nextSequentialFeat == null
+                                      ? _borderSubtle
+                                      : _accentEmerald.withValues(alpha: 0.45),
+                                ),
+                              ),
+                              child: Text(
+                                'Next ›',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: nextSequentialFeat == null
+                                      ? _textMuted.withValues(alpha: 0.45)
+                                      : _accentEmerald,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ] else
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
@@ -2473,19 +2871,26 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    tag('GOAL', _accentAmber, width: 68),
-                    const SizedBox(width: 10),
+                    Text(
+                      'GOAL:',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: _accentAmber,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         scopeGoal,
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           height: 1.4,
-                          color: _textPrimary,
+                          color: _textSecondary,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -2493,12 +2898,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    tag('DONE WHEN', _accentEmerald, width: 68),
-                    const SizedBox(width: 10),
+                    Text(
+                      'DONE WHEN:',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: _accentEmerald,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         doneIf,
@@ -2524,7 +2936,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           if (_showOutOfScopeShelf && outOfScope.isNotEmpty)
             Container(
               key: const ValueKey('feat_out_of_scope_shelf'),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
               decoration: BoxDecoration(
                 color: _bgRecessed,
                 border: Border(top: BorderSide(color: _borderSubtle)),
@@ -2542,34 +2954,21 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       for (final item in outOfScope)
                         SizedBox(
                           width: colWidth,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _bgSurface,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: _accentCrimson.withValues(alpha: 0.28),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                tag('CUT', _accentCrimson, width: 42),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    item,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: _textSecondary,
-                                    ),
+                          child: Row(
+                            children: [
+                              tag('CUT', _accentCrimson, width: 42),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  item,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: _textSecondary,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                     ],
@@ -2580,7 +2979,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           if (specBinding.hasUnassigned && !_hideUnassignedSpecShelf)
             Container(
               key: const ValueKey('feat_inline_spec_shelf'),
-              padding: const EdgeInsets.fromLTRB(16, 8, 12, 10),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
               decoration: BoxDecoration(
                 color: _bgRecessed,
                 border: Border(top: BorderSide(color: _borderSubtle)),
@@ -2598,19 +2997,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 ],
               ),
             ),
-          Container(
-            height: 2.5,
-            color: _borderSubtle,
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: (progress / 100.0).clamp(0.0, 1.0),
-              child: Container(
-                color: isDone ? _accentEmerald : _accentAmber,
+          if (!_isSinglePanelMode)
+            Container(
+              height: 2.5,
+              color: _borderSubtle,
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: (progress / 100.0).clamp(0.0, 1.0),
+                child: Container(
+                  color: isDone ? _accentEmerald : _accentAmber,
+                ),
               ),
             ),
-          ),
         ],
+      );
+
+    if (_isSinglePanelMode) {
+      return innerContent;
+    }
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _borderSubtle),
       ),
+      child: innerContent,
     );
   }
 
@@ -3535,12 +3948,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           parentTask.children.isNotEmpty && parentTask.children.every((c) => c.completed);
       final nowDone = node.isCompleted;
       setState(() {
-        if (parentTask.completed) {
-          final nextIncomplete = node.checklist.indexWhere((t) => !t.completed);
-          if (nextIncomplete != -1) {
-            _selectedTaskIndexByCheckpoint[node.id] = nextIncomplete;
-          }
-        }
+        _selectedTaskIndexByCheckpoint[node.id] = pIdx;
         if (!wasDone && nowDone) {
           _awaitingPlaytestVerification.add(node.id);
         } else if (!nowDone) {
@@ -3713,103 +4121,93 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
                     // Auto-collapse completed How-To sub-steps in Single-Panel Mode so the active sub-step stays front and center
                     if (_isSinglePanelMode && subDone) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        decoration: BoxDecoration(
-                          color: _accentEmerald.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: _accentEmerald.withValues(alpha: 0.35),
-                          ),
+                      return InkWell(
+                        key: ValueKey(
+                          'howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
                         ),
-                        child: InkWell(
-                          key: ValueKey(
-                            'howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
+                        onTap: () => toggleHowToSubStepCompletion(
+                          selectedTaskIdx,
+                          subIdx,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 5,
                           ),
-                          onTap: () => toggleHowToSubStepCompletion(
-                            selectedTaskIdx,
-                            subIdx,
-                          ),
-                          borderRadius: BorderRadius.circular(5),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 6,
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.check_box_rounded,
-                                  size: 14,
-                                  color: _accentEmerald,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.check_box_rounded,
+                                size: 14,
+                                color: _accentEmerald,
+                              ),
+                              const SizedBox(width: 7),
+                              Expanded(
+                                child: Text(
+                                  '${subStep.stepNumberLabel} — ${subStep.instruction}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _accentEmerald,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
                                 ),
-                                const SizedBox(width: 7),
-                                Expanded(
+                              ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                key: ValueKey(
+                                  'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
+                                ),
+                                onTap: () => copySubStepCodeFormula(
+                                  selectedTaskIdx,
+                                  subIdx,
+                                  subStep.codeFormula,
+                                ),
+                                borderRadius: BorderRadius.circular(3),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 1,
+                                  ),
                                   child: Text(
-                                    '${subStep.stepNumberLabel} — ${subStep.instruction}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _accentEmerald,
-                                      decoration: TextDecoration.lineThrough,
+                                    'Copy 📋',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textSecondary,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  key: ValueKey(
-                                    'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
+                              ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                key: ValueKey(
+                                  'edit_howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
+                                ),
+                                onTap: () => promptEditHowToSubStepDialog(
+                                  selectedTaskIdx,
+                                  subIdx,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 1,
                                   ),
-                                  onTap: () => copySubStepCodeFormula(
-                                    selectedTaskIdx,
-                                    subIdx,
-                                    subStep.codeFormula,
-                                  ),
-                                  borderRadius: BorderRadius.circular(3),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 1,
-                                    ),
-                                    child: Text(
-                                      'Copy 📋',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: _textSecondary,
-                                      ),
+                                  child: Text(
+                                    'Edit ✎',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textMuted,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  key: ValueKey(
-                                    'edit_howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
-                                  ),
-                                  onTap: () => promptEditHowToSubStepDialog(
-                                    selectedTaskIdx,
-                                    subIdx,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 1,
-                                    ),
-                                    child: Text(
-                                      'Edit ✎',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: _textMuted,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -3817,19 +4215,27 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 7),
-                      decoration: BoxDecoration(
-                        color: subDone
-                            ? _accentEmerald.withValues(alpha: 0.05)
-                            : _bgSurface,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: subDone
-                              ? _accentEmerald.withValues(alpha: 0.35)
-                              : (isGuardStep
-                                  ? _accentCrimson.withValues(alpha: 0.28)
-                                  : _borderSubtle),
-                        ),
-                      ),
+                      decoration: _isSinglePanelMode
+                          ? BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: _borderSubtle.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            )
+                          : BoxDecoration(
+                              color: subDone
+                                  ? _accentEmerald.withValues(alpha: 0.05)
+                                  : _bgSurface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: subDone
+                                    ? _accentEmerald.withValues(alpha: 0.35)
+                                    : (isGuardStep
+                                        ? _accentCrimson.withValues(alpha: 0.28)
+                                        : _borderSubtle),
+                              ),
+                            ),
                       child: InkWell(
                         key: ValueKey(
                           'howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
@@ -3838,9 +4244,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           selectedTaskIdx,
                           subIdx,
                         ),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(4),
                         child: Padding(
-                          padding: const EdgeInsets.all(9),
+                          padding: _isSinglePanelMode
+                              ? const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 7,
+                                )
+                              : const EdgeInsets.all(9),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -4426,7 +4837,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
 
     final checklistPane = Padding(
-      padding: const EdgeInsets.all(14),
+      padding: _isSinglePanelMode
+          ? const EdgeInsets.only(top: 10, bottom: 4)
+          : const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -4469,18 +4882,34 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 6),
-                  decoration: BoxDecoration(
-                    color: isSelectedTask
-                        ? _accentAmber.withValues(alpha: 0.08)
-                        : _bgRecessed,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isSelectedTask
-                          ? _accentAmber.withValues(alpha: 0.55)
-                          : _borderSubtle,
-                      width: isSelectedTask ? 1.2 : 1.0,
-                    ),
-                  ),
+                  decoration: _isSinglePanelMode
+                      ? BoxDecoration(
+                          color: isSelectedTask
+                              ? _accentAmber.withValues(alpha: 0.04)
+                              : Colors.transparent,
+                          border: Border(
+                            left: BorderSide(
+                              color: task.completed
+                                  ? _accentEmerald
+                                  : (isSelectedTask
+                                      ? _accentAmber
+                                      : _borderSubtle),
+                              width: isSelectedTask ? 3.0 : 2.0,
+                            ),
+                          ),
+                        )
+                      : BoxDecoration(
+                          color: isSelectedTask
+                              ? _accentAmber.withValues(alpha: 0.08)
+                              : _bgRecessed,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isSelectedTask
+                                ? _accentAmber.withValues(alpha: 0.55)
+                                : _borderSubtle,
+                            width: isSelectedTask ? 1.2 : 1.0,
+                          ),
+                        ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -4657,17 +5086,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ],
                       ),
                       if (_isSinglePanelMode && isSelectedTask)
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-                          decoration: BoxDecoration(
-                            color: _bgRecessed,
-                            borderRadius: const BorderRadius.vertical(
-                              bottom: Radius.circular(5),
-                            ),
-                            border: Border(
-                              top: BorderSide(color: _borderSubtle),
-                            ),
-                          ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(22, 6, 4, 8),
                           child: selectedTaskHowToSection,
                         ),
                     ],
@@ -4752,31 +5172,41 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: _bgSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isActiveFocus
-              ? _borderBright
-              : _borderSubtle,
-          width: isActiveFocus ? 1.4 : 1.0,
-        ),
-      ),
+      margin: EdgeInsets.only(bottom: _isSinglePanelMode ? 6 : 12),
+      decoration: _isSinglePanelMode
+          ? BoxDecoration(
+              border: Border(
+                top: BorderSide(color: _borderSubtle),
+              ),
+            )
+          : BoxDecoration(
+              color: _bgSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isActiveFocus ? _borderBright : _borderSubtle,
+                width: isActiveFocus ? 1.4 : 1.0,
+              ),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: isActiveFocus ? _bgHover : _bgSurface,
-              borderRadius: isCollapsed
-                  ? BorderRadius.circular(7)
-                  : const BorderRadius.vertical(top: Radius.circular(7)),
-              border: Border(
-                bottom: isCollapsed ? BorderSide.none : BorderSide(color: _borderSubtle),
-              ),
-            ),
+            padding: _isSinglePanelMode
+                ? const EdgeInsets.only(top: 10, bottom: 6)
+                : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: _isSinglePanelMode
+                ? null
+                : BoxDecoration(
+                    color: isActiveFocus ? _bgHover : _bgSurface,
+                    borderRadius: isCollapsed
+                        ? BorderRadius.circular(7)
+                        : const BorderRadius.vertical(top: Radius.circular(7)),
+                    border: Border(
+                      bottom: isCollapsed
+                          ? BorderSide.none
+                          : BorderSide(color: _borderSubtle),
+                    ),
+                  ),
             child: Row(
               children: [
                 Container(

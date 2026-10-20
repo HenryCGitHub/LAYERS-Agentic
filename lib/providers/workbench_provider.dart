@@ -539,9 +539,33 @@ class WorkbenchProvider extends ChangeNotifier {
 
     final beats = activeReleaseBeats;
     if (beats.isNotEmpty) {
-      _selectedBeatId = beats.first.id;
-      final feats = featuresForBeat(_selectedBeatId!);
-      _selectedFeatureId = feats.isNotEmpty ? feats.first.id : null;
+      final candidateFeatId = (projectId == _activeProjectId &&
+              _selectedFeatureId != null &&
+              documents.containsKey(_selectedFeatureId))
+          ? _selectedFeatureId
+          : proj.sections['selected_feature_id'];
+      TierDocument? matchedBeat;
+      TierDocument? matchedFeat;
+      if (candidateFeatId != null) {
+        for (final b in beats) {
+          for (final f in featuresForBeat(b.id)) {
+            if (f.id == candidateFeatId) {
+              matchedBeat = b;
+              matchedFeat = f;
+              break;
+            }
+          }
+          if (matchedFeat != null) break;
+        }
+      }
+      if (matchedBeat != null && matchedFeat != null) {
+        _selectedBeatId = matchedBeat.id;
+        _selectedFeatureId = matchedFeat.id;
+      } else {
+        _selectedBeatId = beats.first.id;
+        final feats = featuresForBeat(_selectedBeatId!);
+        _selectedFeatureId = feats.isNotEmpty ? feats.first.id : null;
+      }
     } else {
       _selectedBeatId = null;
       _selectedFeatureId = null;
@@ -594,6 +618,12 @@ class WorkbenchProvider extends ChangeNotifier {
     proj.sections['current_stage'] = _currentStage.name;
     if (_activeReleaseId != null) {
       proj.sections['active_release_id'] = _activeReleaseId!;
+    }
+    if (_selectedBeatId != null) {
+      proj.sections['selected_beat_id'] = _selectedBeatId!;
+    }
+    if (_selectedFeatureId != null) {
+      proj.sections['selected_feature_id'] = _selectedFeatureId!;
     }
     if (_conceptDraft != null) {
       proj.sections['concept_blueprint_json'] =
@@ -2309,6 +2339,14 @@ Return ONLY a JSON object with this exact schema:
     _selectedBeatId = beatId;
     final feats = featuresForBeat(beatId);
     _selectedFeatureId = feats.isNotEmpty ? feats.first.id : null;
+    final proj = activeProject;
+    if (proj != null) {
+      proj.sections['selected_beat_id'] = beatId;
+      if (_selectedFeatureId != null) {
+        proj.sections['selected_feature_id'] = _selectedFeatureId!;
+      }
+      LocalVaultService.saveDocument(proj);
+    }
     notifyListeners();
   }
 
@@ -2318,6 +2356,14 @@ Return ONLY a JSON object with this exact schema:
     _selectedFeatureId = featureId;
     if (feat.parentId != null) {
       _selectedBeatId = feat.parentId;
+    }
+    final proj = activeProject;
+    if (proj != null) {
+      proj.sections['selected_feature_id'] = featureId;
+      if (_selectedBeatId != null) {
+        proj.sections['selected_beat_id'] = _selectedBeatId!;
+      }
+      LocalVaultService.saveDocument(proj);
     }
     notifyListeners();
   }
