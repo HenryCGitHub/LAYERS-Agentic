@@ -658,5 +658,82 @@ void main() {
         );
       },
     );
+
+    test(
+      'Options 1-4: Stage 1 Concept Critic & Refresh, Stage 3 Starter Script Bundle, AI Playtest Simulator, and Post-Release Retrospective',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('Cyberpunk Grapple Arena');
+
+        // Option 2: Stage 1 Concept Critic detects Online vs Offline-Only conflict & resolves in 1 click
+        provider.updateConceptDraft((draft) {
+          draft.gameSpec = ['2D Top-Down', 'Online Multiplayer Co-Op'];
+          draft.techSpec = ['Godot 4 (2D)', 'Offline-Only Local Save'];
+        });
+        expect(provider.stage1Interventions, isNotEmpty);
+        expect(
+          provider.stage1Interventions.first.toolName,
+          'resolve_stage1_netcode_conflict',
+        );
+        await provider.applyAgentIntervention(provider.stage1Interventions.first);
+        expect(
+          provider.conceptDraft!.gameSpec.join(' '),
+          contains('Singleplayer'),
+        );
+
+        // Option 2: Regenerate Stage 1 section options
+        provider.regenerateStage1SectionOptions('goal');
+        expect(provider.conceptDraft!.sectionOptions['goal'], isNotEmpty);
+        expect(
+          provider.conceptDraft!.sectionOptions['goal']!.first,
+          contains('(1):'),
+        );
+
+        // Advance to Stage 2 & Stage 3
+        await provider.openReleasePlanGate();
+        await provider.approveAndExecuteReleasePlan();
+        final firstBeat = provider.activeReleaseBeats.first;
+        final firstFeat = provider.featuresForBeat(firstBeat.id).first;
+        final states = FeatureStateNode.getStatesForDocument(firstFeat);
+
+        // Option 3: Stage 3 AI Playtest Simulator (`⚡ Simulate`)
+        final sim = provider.simulateCheckpointPlaytest(
+          featureDoc: firstFeat,
+          states: states,
+          checkpointIndex: 0,
+        );
+        expect(sim.recommendedTuningClamp, 'min_retrigger_lockout_ms: 110 ms');
+        final afterSimStates = FeatureStateNode.getStatesForDocument(firstFeat);
+        expect(
+          afterSimStates.first.tuningParams,
+          contains('min_retrigger_lockout_ms: 110 ms'),
+        );
+        expect(
+          afterSimStates.first.edgeCases.any((g) => g.startsWith('[SIMULATION GUARD]')),
+          isTrue,
+        );
+
+        // Option 1: Stage 3 Generate Starter Script Bundle (`.gd` for Godot 4)
+        final scriptBundle = provider.generateStarterScriptForFeature(
+          firstFeat,
+          afterSimStates,
+        );
+        expect(scriptBundle.fileName, endsWith('.gd'));
+        expect(scriptBundle.code, contains('@export var '));
+        expect(scriptBundle.code, contains('min_retrigger_lockout_ms'));
+        expect(scriptBundle.code, contains('[SIMULATION GUARD]'));
+
+        // Option 4: Post-Release Retrospective & Auto-Carryover Summary into v0.2
+        final retro = provider.buildActiveReleaseRetrospective();
+        expect(retro.playtestGuardsAdded, greaterThanOrEqualTo(1));
+        expect(retro.carryoverFeatureTitles, isNotEmpty);
+        await provider.advanceToNextRelease();
+        expect(provider.lastReleaseRetrospective, isNotNull);
+        expect(
+          provider.lastAgentTrace?.agentRole,
+          'Post-Release Retrospective & Carryover Agent',
+        );
+      },
+    );
   });
 }

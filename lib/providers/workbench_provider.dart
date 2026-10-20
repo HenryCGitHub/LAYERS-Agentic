@@ -728,6 +728,13 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 0-Token Autonomous Concept Critic Interventions for Stage 1 (`ProjectConceptBlueprint`).
+  List<AgentIntervention> get stage1Interventions {
+    final draft = _conceptDraft;
+    if (draft == null) return const [];
+    return WorkspaceAgentOrchestrator.auditConceptBlueprint(draft);
+  }
+
   /// 0-Token Autonomous Producer Scope-Guard Interventions for Stage 2 (`Release Plan Gate`).
   List<AgentIntervention> get stage2Interventions {
     final bp = _releaseBlueprint;
@@ -760,6 +767,105 @@ class WorkbenchProvider extends ChangeNotifier {
     final payload = intervention.payload;
 
     switch (intervention.toolName) {
+      case 'resolve_stage1_netcode_conflict':
+        if (_conceptDraft != null) {
+          _conceptDraft!.gameSpec = _conceptDraft!.gameSpec
+              .map(
+                (s) => (s.toLowerCase().contains('online') ||
+                        s.toLowerCase().contains('multiplayer'))
+                    ? 'Singleplayer (Local Shared-Screen Optional)'
+                    : s,
+              )
+              .toList();
+          _commitConceptToVault(_conceptDraft!);
+          _lastAgentTrace = AgentRunTrace(
+            agentRole: 'Stage 1 Concept Critic',
+            userGoal: intervention.title,
+            reasoning: intervention.reason,
+            toolCalls: const [
+              AgentToolCall(
+                toolName: 'resolve_stage1_netcode_conflict',
+                targetTitle: '02 · Game Spec',
+                summary: 'Aligned Game Spec to Singleplayer to match Offline-Only Tech Spec',
+              ),
+            ],
+          );
+          notifyListeners();
+        }
+        return;
+
+      case 'resolve_stage1_dimension_conflict':
+        if (_conceptDraft != null) {
+          _conceptDraft!.techSpec = _conceptDraft!.techSpec
+              .map((s) => s.replaceAll('2D', '3D'))
+              .toList();
+          _commitConceptToVault(_conceptDraft!);
+          _lastAgentTrace = AgentRunTrace(
+            agentRole: 'Stage 1 Concept Critic',
+            userGoal: intervention.title,
+            reasoning: intervention.reason,
+            toolCalls: const [
+              AgentToolCall(
+                toolName: 'resolve_stage1_dimension_conflict',
+                targetTitle: '03 · Tech Spec',
+                summary: 'Aligned Tech Spec renderer & engine pipeline to 3D',
+              ),
+            ],
+          );
+          notifyListeners();
+        }
+        return;
+
+      case 'append_stage1_loop_reset_beat':
+        if (_conceptDraft != null) {
+          _conceptDraft!.coreLoopBeats = [
+            ..._conceptDraft!.coreLoopBeats,
+            'Run Summary & Loop Reset: tally run rewards and reset cleanly to the starting stage in 1 key press',
+          ];
+          _commitConceptToVault(_conceptDraft!);
+          _lastAgentTrace = AgentRunTrace(
+            agentRole: 'Stage 1 Concept Critic',
+            userGoal: intervention.title,
+            reasoning: intervention.reason,
+            toolCalls: const [
+              AgentToolCall(
+                toolName: 'append_stage1_loop_reset_beat',
+                targetTitle: '06 · Core Loop',
+                summary: 'Appended "Run Summary & Loop Reset" beat to close the core loop',
+              ),
+            ],
+          );
+          notifyListeners();
+        }
+        return;
+
+      case 'populate_stage1_exclusions':
+        if (_conceptDraft != null) {
+          final updated = List<String>.from(_conceptDraft!.exclusions);
+          for (final ex in const [
+            'No online multiplayer or matchmaking in v0.1',
+            'No procedural world generation or cutscene cinematics in v0.1',
+          ]) {
+            if (!updated.contains(ex)) updated.add(ex);
+          }
+          _conceptDraft!.exclusions = updated;
+          _commitConceptToVault(_conceptDraft!);
+          _lastAgentTrace = AgentRunTrace(
+            agentRole: 'Stage 1 Concept Critic',
+            userGoal: intervention.title,
+            reasoning: intervention.reason,
+            toolCalls: const [
+              AgentToolCall(
+                toolName: 'populate_stage1_exclusions',
+                targetTitle: '07 · Out of Scope',
+                summary: 'Added 2 explicit v0.1 Out-of-Scope guardrails',
+              ),
+            ],
+          );
+          notifyListeners();
+        }
+        return;
+
       case 'defer_conflicting_feature':
         final beatId = payload['beatId']?.toString() ?? '';
         final featId = payload['featureId']?.toString() ?? '';
@@ -937,6 +1043,218 @@ class WorkbenchProvider extends ChangeNotifier {
     _lastAgentTrace = trace;
     notifyListeners();
     return trace;
+  }
+
+  final Map<String, int> _sectionOptionRefreshOffsets = {};
+
+  /// Option 2: Regenerates the 3 Option Playing Cards for a specific Stage 1 section (`01`..`09`).
+  void regenerateStage1SectionOptions(String optionKey) {
+    final draft = _conceptDraft;
+    if (draft == null) return;
+    final offset = (_sectionOptionRefreshOffsets[optionKey] ?? 0) + 1;
+    _sectionOptionRefreshOffsets[optionKey] = offset;
+    final title = draft.title;
+
+    List<String> fresh;
+    switch (optionKey) {
+      case 'goal':
+        fresh = [
+          'Speed & Precision Core ($offset): Build a responsive $title greybox loop focused on sub-second movement recovery.',
+          'High-Tension Risk/Reward ($offset): Build a compact $title arena where aggressive positioning multiplies score.',
+          'Tactile Sandbox Toy ($offset): Build a physics-driven $title testbed where core controls feel fun before adding enemies.',
+        ];
+        break;
+      case 'gameSpec':
+        fresh = [
+          '2D Side-Scroller · Gamepad + Keyboard · Singleplayer · Tight Room-to-Room Stages',
+          '3D Third-Person Action · Mouse + WASD · Singleplayer · Modular Arena Waves',
+          '2D Isometric Top-Down · Twin-Stick Aim · Singleplayer · Compact Extraction Map',
+        ];
+        break;
+      case 'techSpec':
+        fresh = [
+          'Godot 4 (2D/3D) · PC Desktop · Greybox Primitives + Particles · Local JSON Save',
+          'Unity 6 (C#) · PC & Steam Deck · Stylized Low-Poly + VFX Graph · Local Binary Save',
+          'Unreal Engine 5 · PC Desktop · Unlit Prototype Materials · Local SaveSlot',
+        ];
+        break;
+      case 'designPillars':
+        fresh = [
+          'Aggression Is Recovery: Attacking or dashing forward is the fastest way to recover from a mistake · Readable Chaos: Every hazard telegraph is clear at a glance · Zero Dead Time: Restarting a run takes under 1 second',
+          'Momentum Is Currency: Speed unlocks stronger moves and shortcuts · Tactile Impact: Every hit lands with crisp frame-freeze and audio punch · Learn by Doing: Mechanics teach themselves without text popups',
+          'High-Stakes Positioning: Where you stand matters more than button mashing · Expressive Mastery: Simple inputs combine into high-ceiling movement tricks · Instant Feedback: Every action visibly changes the arena state',
+        ];
+        break;
+      case 'tradeOffs':
+        fresh = [
+          'Snappy 1-frame input cancel over long realistic animation windups · Single-screen clarity over sprawling multi-zone maps in v0.1 · Hardcoded tuning constants over complex data tables',
+          'Deterministic arcade physics over unpredictable ragdoll simulation · Fast greybox blockouts over final environment art in v0.1 · Instant restart loop over persistent save trees',
+          'Deep core movement verb over having 10 shallow weapon types · Clear silhouette contrast over heavy post-processing shaders · Tight 3-minute run loop over marathon sessions',
+        ];
+        break;
+      case 'coreLoop':
+        fresh = [
+          'Loadout Select: Pick primary movement rig in staging room · Arena Drop: Enter active hazard zone · High-Speed Objective: Clear 3 targets before timer expires · Extraction & Reset: Bank score and restart in 1 key press',
+          'Scout & Aim: Survey obstacle layout from launch pad · Chain Movement: Grapple and vault across hazard gaps · Combat Burst: Defeat elite blocker to unlock exit · Upgrade & Loop: Pick 1 modifier and start next wave',
+          'Warmup Room: Test controls in safe hub · Wave Escalation: Survive 3 escalating 45-second waves · Boss/Climax Check: Break core shield under pressure · Run Summary & Reset: Review best time and loop immediately',
+        ];
+        break;
+      case 'exclusions':
+        fresh = [
+          'No online multiplayer or leaderboards in v0.1 · No branching dialogue or story cutscenes in v0.1 · No crafting or inventory weight menus in v0.1',
+          'No procedural biome generation in v0.1 · No skill trees with >3 nodes in v0.1 · No custom shader pipelines before core loop sign-off',
+          'No save-file migration or cloud profiles in v0.1 · No companion AI party members in v0.1 · No multi-floor minimap UI in v0.1',
+        ];
+        break;
+      case 'doneWhen':
+        fresh = [
+          'A playtester completes 3 consecutive $title runs in under 5 minutes with zero physics clipping or state softlocks.',
+          'A new player understands the primary $title control loop within 30 seconds without verbal instructions and asks for another run.',
+          'All core loop beats transition cleanly at 60 FPS and resetting the arena restores 100% of dynamic objects.',
+        ];
+        break;
+      case 'releaseTrain':
+      default:
+        fresh = [
+          'v0.1: Greybox Core Controls & Loop Reset - Prototype · v0.2: Hazard Escalation & Combat Feel - MVP · v0.3: Gold Standard Vertical Slice Arena - Vertical Slice',
+          'v0.1: Primary Mechanic & Physics Toy - Prototype · v0.2: Full 3-Beat Run Loop & Scoring - MVP · v0.3: Polished Audio/VFX Vertical Slice - Vertical Slice',
+          'v0.1: Single-Room Core Loop Testbed - Prototype · v0.2: Enemy Archetypes & Upgrade Beat - MVP · v1.0: Launch Content & Balance Pass - Standard',
+        ];
+        break;
+    }
+
+    // Rotate list by offset so each click surfaces a new top recommendation
+    final rotated = <String>[
+      for (int i = 0; i < fresh.length; i++) fresh[(i + offset) % fresh.length],
+    ];
+    draft.sectionOptions[optionKey] = rotated;
+    _commitConceptToVault(draft);
+    _lastAgentTrace = AgentRunTrace(
+      agentRole: 'Stage 1 Co-Design Agent',
+      userGoal: 'Refresh options for $optionKey',
+      reasoning:
+          'Synthesized 3 fresh option cards tailored to $title ($optionKey variant #$offset).',
+      toolCalls: [
+        AgentToolCall(
+          toolName: 'regenerate_section_options',
+          targetTitle: 'Stage 1 · $optionKey',
+          summary: 'Generated 3 fresh Option Playing Cards for $optionKey',
+        ),
+      ],
+    );
+    notifyListeners();
+  }
+
+  /// Option 1: Generates a complete Starter Script Bundle (`.gd`, `.cs`, or `.cpp`) for a Stage 3 Feature.
+  FeatureScriptBundle generateStarterScriptForFeature(
+    TierDocument featureDoc,
+    List<FeatureStateNode> states,
+  ) {
+    final engineHint = _conceptDraft?.techSpec.join(' ') ??
+        activeProject?.sections['tech_spec'];
+    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final bundle = WorkspaceAgentOrchestrator.generateFeatureScriptBundle(
+      featureDoc: featureDoc,
+      states: states,
+      engineLabel: engineLabel,
+    );
+    _lastAgentTrace = AgentRunTrace(
+      agentRole: 'Engine Architect Agent',
+      userGoal: 'Generate Starter Script for ${featureDoc.title}',
+      reasoning:
+          'Compiled ${bundle.fileName} ($engineLabel) with ${bundle.exportedVariables.length} exported tuning variables and ${bundle.embeddedGuards.length} embedded guard clauses.',
+      toolCalls: [
+        AgentToolCall(
+          toolName: 'generate_starter_script_bundle',
+          targetTitle: bundle.fileName,
+          summary: 'Generated ${bundle.fileName} (${bundle.exportedVariables.length} tuning vars, ${states.length} checkpoints)',
+        ),
+      ],
+    );
+    notifyListeners();
+    return bundle;
+  }
+
+  /// Option 3: Runs the Stage 3 AI Playtest Simulator / Dry-Run Stress Test on a Checkpoint.
+  PlaytestSimulationResult simulateCheckpointPlaytest({
+    required TierDocument featureDoc,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+  }) {
+    final engineHint = _conceptDraft?.techSpec.join(' ') ??
+        activeProject?.sections['tech_spec'];
+    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final result = WorkspaceAgentOrchestrator.simulateCheckpointPlaytest(
+      featureDoc: featureDoc,
+      states: states,
+      checkpointIndex: checkpointIndex,
+      engineLabel: engineLabel,
+      onSaveStates: (featId, updatedStates) {
+        updateFeatureStates(featId, updatedStates);
+      },
+    );
+    _lastAgentTrace = result.trace;
+    notifyListeners();
+    return result;
+  }
+
+  /// Option 4: Builds a Post-Release Retrospective & Auto-Carryover Summary for the active Release.
+  ReleaseRetrospectiveSummary buildActiveReleaseRetrospective() {
+    final rel = activeRelease;
+    final beats = activeReleaseBeats;
+    final allFeats = <TierDocument>[
+      for (final b in beats) ...featuresForBeat(b.id),
+    ];
+    int verifiedCps = 0;
+    int totalCps = 0;
+    int fixTasks = 0;
+    int playtestGuards = 0;
+    final carryover = <String>[];
+    final hardened = <String>[];
+
+    for (final f in allFeats) {
+      final states = FeatureStateNode.getStatesForDocument(f);
+      totalCps += states.length;
+      bool featHasIncomplete = false;
+      bool featWasHardened = false;
+      for (final s in states) {
+        if (s.isCompleted) {
+          verifiedCps++;
+        } else {
+          featHasIncomplete = true;
+        }
+        for (final t in s.checklist) {
+          if (t.text.startsWith('[FIX]')) {
+            fixTasks++;
+            featWasHardened = true;
+          }
+        }
+        for (final g in s.edgeCases) {
+          if (g.startsWith('[PLAYTEST GUARD]') ||
+              g.startsWith('[SIMULATION GUARD]')) {
+            playtestGuards++;
+            featWasHardened = true;
+          }
+        }
+      }
+      if (featHasIncomplete) {
+        carryover.add(f.title);
+      }
+      if (featWasHardened) {
+        hardened.add(f.title);
+      }
+    }
+
+    return ReleaseRetrospectiveSummary(
+      releaseTitle: rel?.title ?? 'v0.1 Prototype',
+      totalFeatures: allFeats.length,
+      verifiedCheckpoints: verifiedCps,
+      totalCheckpoints: totalCps,
+      fixTasksTriaged: fixTasks,
+      playtestGuardsAdded: playtestGuards,
+      carryoverFeatureTitles: carryover,
+      hardenedFeatureTitles: hardened,
+    );
   }
 
   TierDocument? get activeProject =>
@@ -1869,6 +2187,10 @@ Return ONLY a JSON object with this exact schema:
   ProductionPhase _currentPhase = ProductionPhase.prototype;
   ProductionPhase get currentPhase => _currentPhase;
 
+  ReleaseRetrospectiveSummary? _lastReleaseRetrospective;
+  ReleaseRetrospectiveSummary? get lastReleaseRetrospective =>
+      _lastReleaseRetrospective;
+
   /// Advances to the next queued Release in the current Production Phase, or unlocks the
   /// next Production Phase once the current phase's releases are completed:
   /// - Phase 1 (Prototype) complete -> Phase 2 (MVP Track: 1 MVP Release per Core Loop Beat)
@@ -1880,10 +2202,44 @@ Return ONLY a JSON object with this exact schema:
     final releases = projectReleases;
     if (releases.isEmpty) return;
 
+    _lastReleaseRetrospective = buildActiveReleaseRetrospective();
+    final retro = _lastReleaseRetrospective!;
+
+    Future<void> openGateAndRecordRetro(String targetRelId) async {
+      await openReleasePlanGate(releaseId: targetRelId);
+      if (_releaseBlueprint != null) {
+        final carryoverNote = retro.carryoverFeatureTitles.isEmpty
+            ? '100% of ${retro.totalCheckpoints} checkpoints verified'
+            : 'Carried over ${retro.carryoverFeatureTitles.length} unfinished feature(s) (${retro.carryoverFeatureTitles.join(", ")}) as UPGRADING';
+        _lastAgentTrace = AgentRunTrace(
+          agentRole: 'Post-Release Retrospective & Carryover Agent',
+          userGoal: 'Evolve from ${retro.releaseTitle} to ${_releaseBlueprint!.releaseTitle}',
+          reasoning:
+              '$carryoverNote · Preserved ${retro.fixTasksTriaged} playtest [FIX] tasks and ${retro.playtestGuardsAdded} [PLAYTEST GUARD] rules in the live tree.',
+          toolCalls: [
+            AgentToolCall(
+              toolName: 'compile_release_retrospective',
+              targetTitle: retro.releaseTitle,
+              summary:
+                  'Verified ${retro.verifiedCheckpoints}/${retro.totalCheckpoints} checkpoints (${retro.fixTasksTriaged} fixes, ${retro.playtestGuardsAdded} guards)',
+            ),
+            if (retro.carryoverFeatureTitles.isNotEmpty)
+              AgentToolCall(
+                toolName: 'auto_carryover_incomplete_features',
+                targetTitle: _releaseBlueprint!.releaseVersionTag,
+                summary:
+                    'Carried over ${retro.carryoverFeatureTitles.join(", ")} into ${_releaseBlueprint!.releaseVersionTag}',
+              ),
+          ],
+        );
+        notifyListeners();
+      }
+    }
+
     final currentIdx = releases.indexWhere((r) => r.id == _activeReleaseId);
     final nextIdx = currentIdx + 1;
     if (nextIdx < releases.length) {
-      await openReleasePlanGate(releaseId: releases[nextIdx].id);
+      await openGateAndRecordRetro(releases[nextIdx].id);
       return;
     }
 
@@ -1933,7 +2289,7 @@ Return ONLY a JSON object with this exact schema:
       _syncActiveProjectMetadata();
 
       if (firstNewMvpId != null) {
-        await openReleasePlanGate(releaseId: firstNewMvpId);
+        await openGateAndRecordRetro(firstNewMvpId);
         return;
       }
     } else if (_currentPhase == ProductionPhase.mvp) {
@@ -1958,7 +2314,7 @@ Return ONLY a JSON object with this exact schema:
       _persistDocument(newRelDoc);
       proj.childrenIds.add(newRelId);
       _syncActiveProjectMetadata();
-      await openReleasePlanGate(releaseId: newRelId);
+      await openGateAndRecordRetro(newRelId);
       return;
     }
 
@@ -1984,6 +2340,6 @@ Return ONLY a JSON object with this exact schema:
     _persistDocument(newRelDoc);
     proj.childrenIds.add(newRelId);
     _syncActiveProjectMetadata();
-    await openReleasePlanGate(releaseId: newRelId);
+    await openGateAndRecordRetro(newRelId);
   }
 }

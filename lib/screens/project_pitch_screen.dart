@@ -1719,10 +1719,96 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     final sec = _sections[sectionIdx];
     final selectedOpt = _selectedOptionBySection[sectionIdx];
     final agentNote = _agentNotesBySection[sectionIdx];
+    final stage1Interventions = widget.workbench.stage1Interventions;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        for (final intervention in stage1Interventions.take(1)) ...[
+          Container(
+            key: const ValueKey('stage1_intervention_banner'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: _bgSurface,
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(
+                color: (intervention.severity == 'crimson'
+                        ? _accentCrimson
+                        : _accentAmber)
+                    .withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (intervention.severity == 'crimson'
+                            ? _accentCrimson
+                            : _accentAmber)
+                        .withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    intervention.badge,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: intervention.severity == 'crimson'
+                          ? _accentCrimson
+                          : _accentAmber,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${intervention.title} — ${intervention.reason}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                InkWell(
+                  key: const ValueKey('stage1_apply_intervention_btn'),
+                  onTap: () => widget.workbench.applyAgentIntervention(intervention),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (intervention.severity == 'crimson'
+                              ? _accentCrimson
+                              : _accentAmber)
+                          .withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: (intervention.severity == 'crimson'
+                                ? _accentCrimson
+                                : _accentAmber)
+                            .withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Text(
+                      intervention.actionLabel,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: intervention.severity == 'crimson'
+                            ? _accentCrimson
+                            : _accentAmber,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         // CARD 1: THE FOCUSED ARTIFACT SECTION CARD (Full-Width 1160px Canvas, Matching Step 10 Hierarchy)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -1919,6 +2005,38 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                               color: _textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          key: const ValueKey('regenerate_section_options_btn'),
+                          onTap: () {
+                            setState(() {
+                              _selectedOptionBySection.remove(sectionIdx);
+                            });
+                            widget.workbench.regenerateStage1SectionOptions(
+                              sec.optionKey,
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _bgSurface,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: _borderSubtle),
+                            ),
+                            child: Text(
+                              '↻ Refresh Options',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: _accentAmber,
+                              ),
                             ),
                           ),
                         ),

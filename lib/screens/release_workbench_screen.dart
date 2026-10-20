@@ -930,7 +930,130 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
+  void _showFeatureScriptBundleModal(
+    BuildContext context,
+    TierDocument feat,
+    List<FeatureStateNode> states,
+  ) {
+    final bundle = widget.workbench.generateStarterScriptForFeature(feat, states);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const ValueKey('feature_script_bundle_dialog'),
+        backgroundColor: _bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: _accentEmerald.withValues(alpha: 0.55)),
+        ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _accentEmerald.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    bundle.engineLabel.toUpperCase(),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: _accentEmerald,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  bundle.fileName,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '${bundle.exportedVariables.length} tuning vars · ${bundle.embeddedGuards.length} guards',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                color: _textMuted,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 680,
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 420),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _bgRecessed,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                bundle.code,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11.5,
+                  height: 1.48,
+                  color: _textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Close',
+              style: GoogleFonts.inter(fontSize: 12, color: _textSecondary),
+            ),
+          ),
+          ElevatedButton.icon(
+            key: const ValueKey('copy_starter_script_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _focalAccent,
+              foregroundColor: _focalAccentFg,
+              elevation: 0,
+            ),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: bundle.code));
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: _bgSurface,
+                  behavior: SnackBarBehavior.floating,
+                  content: Text(
+                    'Copied ${bundle.fileName} to clipboard ✓',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _accentEmerald,
+                    ),
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 14),
+            label: Text(
+              'Copy ${bundle.fileName}',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showReleaseShippedSummaryModal(BuildContext context, TierDocument rel) {
+    final retro = widget.workbench.buildActiveReleaseRetrospective();
     final beats = widget.workbench.activeReleaseBeats;
     final allFeats = <TierDocument>[
       for (final b in beats) ...widget.workbench.featuresForBeat(b.id),
@@ -1066,6 +1189,48 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _bgRecessed,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _borderSubtle),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AGENT RETROSPECTIVE · PLAYTEST HARDENING & CARRYOVER',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: _accentAmber,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '• ${retro.fixTasksTriaged} playtest [FIX] task(s) triaged · ${retro.playtestGuardsAdded} [PLAYTEST/SIMULATION GUARD] rules locked into live tree',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: _textSecondary,
+                      ),
+                    ),
+                    if (retro.carryoverFeatureTitles.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          '• Auto-Carryover to next Release: ${retro.carryoverFeatureTitles.join(", ")}',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: _accentAmber,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1332,6 +1497,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       spacing: 6,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        InkWell(
+                          key: const ValueKey('generate_feature_script_btn'),
+                          onTap: () => _showFeatureScriptBundleModal(
+                            context,
+                            feat,
+                            states,
+                          ),
+                          borderRadius: BorderRadius.circular(5),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: _accentEmerald.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: _accentEmerald.withValues(alpha: 0.45),
+                              ),
+                            ),
+                            child: Text(
+                              '✦ Script',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: _accentEmerald,
+                              ),
+                            ),
+                          ),
+                        ),
                         InkWell(
                           key: const ValueKey('toggle_pillars_drawer_btn'),
                           onTap: () {
@@ -3358,52 +3550,100 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                InkWell(
+                  key: ValueKey('edit_playtest_btn_$index'),
+                  onTap: promptPlaytestDialog,
+                  borderRadius: BorderRadius.circular(5),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (isDone ? _accentEmerald : _accentAmber)
+                              .withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'PLAYTEST GATE ✎',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: isDone ? _accentEmerald : _accentAmber,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          node.playtestCondition,
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Expanded(
-                      child: InkWell(
-                        key: ValueKey('edit_playtest_btn_$index'),
-                        onTap: promptPlaytestDialog,
-                        borderRadius: BorderRadius.circular(5),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: (isDone ? _accentEmerald : _accentAmber)
-                                    .withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'PLAYTEST GATE ✎',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: isDone ? _accentEmerald : _accentAmber,
-                                ),
+                    InkWell(
+                      key: ValueKey('simulate_playtest_btn_$index'),
+                      onTap: () {
+                        final sim = widget.workbench.simulateCheckpointPlaytest(
+                          featureDoc: feat,
+                          states: states,
+                          checkpointIndex: index,
+                        );
+                        setState(() {});
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: _bgSurface,
+                            behavior: SnackBarBehavior.floating,
+                            content: Text(
+                              '⚡ Simulated: ${sim.recommendedTuningClamp} + [SIMULATION GUARD] added ✓',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _accentAmber,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                node.playtestCondition,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: _textPrimary,
-                                ),
-                              ),
-                            ),
-                          ],
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _accentAmber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _accentAmber.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          '⚡ Simulate',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: _accentAmber,
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     InkWell(
                       key: ValueKey('log_playtest_issue_btn_$index'),
                       onTap: promptLogPlaytestIssueDialog,
@@ -3430,8 +3670,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ),
                       ),
                     ),
-                    if (!isDone) ...[
-                      const SizedBox(width: 6),
+                    if (!isDone)
                       InkWell(
                         key: ValueKey('quick_verify_checkpoint_btn_$index'),
                         onTap: quickVerifyEntireCheckpoint,
@@ -3458,7 +3697,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           ),
                         ),
                       ),
-                    ],
                   ],
                 ),
                 if (isAwaitingPlaytest) ...[
