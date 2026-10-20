@@ -3917,124 +3917,36 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
-  void _applyFeatureCoPilotAction(
+  Future<void> _applyFeatureCoPilotAction(
     TierDocument feat,
     List<FeatureStateNode> states,
     FeatureSpecBindingResult specBinding,
     int activeFocusIndex,
     String actionOrPrompt,
-  ) {
+  ) async {
     final targetIdx = (activeFocusIndex >= 0 && activeFocusIndex < states.length)
         ? activeFocusIndex
-        : (states.isNotEmpty ? states.length - 1 : -1);
-    final activeVer = widget.workbench.activeRelease?.sections['versionTag'] ?? 'v0.1';
-    final lower = actionOrPrompt.trim().toLowerCase();
+        : (states.isNotEmpty ? states.length - 1 : 0);
 
-    String feedbackMsg = 'Updated ${feat.title}';
+    final trace = await widget.workbench.runStage3AgentCoPilot(
+      featureDoc: feat,
+      states: states,
+      activeCheckpointIndex: targetIdx,
+      directive: actionOrPrompt,
+    );
 
-    if (actionOrPrompt == 'add_polish_checkpoint' ||
-        lower.contains('checkpoint') ||
-        lower.contains('stage')) {
-      final customTitle = (actionOrPrompt != 'add_polish_checkpoint' &&
-              actionOrPrompt.trim().isNotEmpty)
-          ? actionOrPrompt.trim()
-          : 'Screen Feedback & Feel Pass';
-      final newCp = FeatureStateNode(
-        id: generateUniqueId('cp'),
-        name: 'Stage ${states.length + 1}: $customTitle',
-        trigger:
-            'Trigger ${feat.title} in the scene and verify immediate visual and audio feedback with zero frame hitches.',
-        parameters: {'releaseVersion': activeVer},
-        tuningParams: const [
-          'hit_flash_ms: 85 ms',
-          'sfx_pitch_jitter: ±0.06',
-        ],
-        edgeCases: const [
-          '[GUARD] Cancel active tween cleanly when interrupted',
-        ],
-        checklist: [
-          Subtask(
-            id: generateUniqueId('check'),
-            text: 'Hook up visual flash and sound cue for ${feat.title}',
-            completed: false,
-          ),
-          Subtask(
-            id: generateUniqueId('check'),
-            text: 'Playtest rapid repeated inputs and tune timing values',
-            completed: false,
-          ),
-        ],
-      );
+    if (states.isNotEmpty) {
       setState(() {
-        states.add(newCp);
-        _expandedDoneCheckpoints.add(newCp.id);
-      });
-      feedbackMsg = 'Added Checkpoint ${states.length} (${newCp.cleanStageTitle}) ✓';
-    } else if (actionOrPrompt == 'suggest_tuning' ||
-        lower.contains('tune') ||
-        lower.contains('tuning')) {
-      if (targetIdx != -1) {
-        final node = states[targetIdx];
-        final currentTuning = List<String>.from(
-          specBinding.checkpointTuning[node.id] ?? node.tuningParams,
-        );
-        final candidates = <String>[
-          'response_window_ms: 90 ms',
-          'cooldown_sec: 0.35 s',
-          'lerp_damping: 14.0',
-        ];
-        for (final c in candidates) {
-          if (!currentTuning.contains(c)) {
-            currentTuning.add(c);
-          }
+        for (final s in states) {
+          _expandedDoneCheckpoints.add(s.id);
         }
-        setState(() {
-          node.tuningParams = currentTuning;
-          _expandedDoneCheckpoints.add(node.id);
-        });
-        feedbackMsg = 'Added tuning parameters to Checkpoint ${targetIdx + 1} ✓';
-      }
-    } else if (actionOrPrompt == 'add_edge_guards' ||
-        lower.contains('guard') ||
-        lower.contains('edge')) {
-      if (targetIdx != -1) {
-        final node = states[targetIdx];
-        final currentEdges = List<String>.from(
-          specBinding.checkpointEdgeCases[node.id] ?? node.edgeCases,
-        );
-        final candidates = <String>[
-          '[GUARD] Ignore duplicate input while state transition is active',
-          '[GUARD] Clamp velocity and position within arena bounds on frame spike',
-        ];
-        for (final c in candidates) {
-          if (!currentEdges.contains(c)) {
-            currentEdges.add(c);
-          }
-        }
-        setState(() {
-          node.edgeCases = currentEdges;
-          _expandedDoneCheckpoints.add(node.id);
-        });
-        feedbackMsg = 'Added [GUARD] edge cases to Checkpoint ${targetIdx + 1} ✓';
-      }
-    } else if (targetIdx != -1 && actionOrPrompt.trim().isNotEmpty) {
-      final node = states[targetIdx];
-      setState(() {
-        node.checklist.add(
-          Subtask(
-            id: generateUniqueId('check'),
-            text: actionOrPrompt.trim(),
-            completed: false,
-          ),
-        );
-        _awaitingPlaytestVerification.remove(node.id);
-        _expandedDoneCheckpoints.add(node.id);
       });
-      feedbackMsg = 'Added task to Checkpoint ${targetIdx + 1} ✓';
     }
 
-    widget.workbench.updateFeatureStates(feat.id, states);
     if (!mounted) return;
+    final feedbackMsg = trace.toolCalls.isNotEmpty
+        ? 'Agent (${trace.toolCalls.first.toolName}): ${trace.toolCalls.first.summary} ✓'
+        : 'Updated ${feat.title} ✓';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: _bgSurface,
@@ -4179,6 +4091,137 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (widget.workbench.lastAgentTrace != null &&
+                  widget.workbench.lastAgentTrace!.toolCalls.isNotEmpty) ...[
+                Container(
+                  key: const ValueKey('stage3_agent_trace_banner'),
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: _bgRecessed,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _accentEmerald.withValues(alpha: 0.42),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: _accentEmerald.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          'AGENT TRACE · ${widget.workbench.lastAgentTrace!.toolCalls.first.toolName}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: _accentEmerald,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${widget.workbench.lastAgentTrace!.toolCalls.map((c) => c.summary).join(" · ")} — ${widget.workbench.lastAgentTrace!.reasoning}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        key: const ValueKey('dismiss_stage3_trace_btn'),
+                        onTap: () => widget.workbench.clearLastAgentTrace(),
+                        child: Text(
+                          '×',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _textMuted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+              for (final intervention in widget.workbench
+                  .stage3InterventionsForFeature(feat, states, activeFocusIndex)
+                  .take(1)) ...[
+                Container(
+                  key: const ValueKey('stage3_intervention_banner'),
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: _bgRecessed,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _accentAmber.withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: _accentAmber.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          intervention.badge,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            color: _accentAmber,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${intervention.title} — ${intervention.reason}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        key: const ValueKey('stage3_apply_intervention_btn'),
+                        onTap: () => widget.workbench.applyAgentIntervention(
+                          intervention,
+                          stage3States: states,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _accentAmber.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: _accentAmber.withValues(alpha: 0.5)),
+                          ),
+                          child: Text(
+                            intervention.actionLabel,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: _accentAmber,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
               // Collapsible 3 Side-by-Side Co-Pilot Playing Cards Drawer
               if (_showCoPilotDrawer) ...[
                 Row(

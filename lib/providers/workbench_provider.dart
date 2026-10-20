@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
 import '../agents/release_planner_agent.dart';
+import '../agents/workspace_agent_tools.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
@@ -719,6 +720,225 @@ class WorkbenchProvider extends ChangeNotifier {
   final List<String> _executionLog = [];
   List<String> get executionLog => List.unmodifiable(_executionLog);
 
+  AgentRunTrace? _lastAgentTrace;
+  AgentRunTrace? get lastAgentTrace => _lastAgentTrace;
+
+  void clearLastAgentTrace() {
+    _lastAgentTrace = null;
+    notifyListeners();
+  }
+
+  /// 0-Token Autonomous Producer Scope-Guard Interventions for Stage 2 (`Release Plan Gate`).
+  List<AgentIntervention> get stage2Interventions {
+    final bp = _releaseBlueprint;
+    if (bp == null) return const [];
+    return WorkspaceAgentOrchestrator.auditReleaseBlueprint(
+      blueprint: bp,
+      concept: _conceptDraft,
+    );
+  }
+
+  /// 0-Token Autonomous Producer & Engine Architect Interventions for Stage 3 (`Active Release Workbench`).
+  List<AgentIntervention> stage3InterventionsForFeature(
+    TierDocument featureDoc,
+    List<FeatureStateNode> states,
+    int activeCheckpointIndex,
+  ) {
+    return WorkspaceAgentOrchestrator.auditStage3Feature(
+      featureDoc: featureDoc,
+      states: states,
+      activeCheckpointIndex: activeCheckpointIndex,
+    );
+  }
+
+  /// Executes a 1-click `[Let Agent Fix ✦]` intervention from the Autonomous Producer / Engine Architect.
+  Future<void> applyAgentIntervention(
+    AgentIntervention intervention, {
+    List<FeatureStateNode>? stage3States,
+  }) async {
+    final bp = _releaseBlueprint;
+    final payload = intervention.payload;
+
+    switch (intervention.toolName) {
+      case 'defer_conflicting_feature':
+        final beatId = payload['beatId']?.toString() ?? '';
+        final featId = payload['featureId']?.toString() ?? '';
+        final featTitle = payload['featureTitle']?.toString() ?? 'Feature';
+        toggleProposedFeatureScope(beatId, featId, false);
+        _lastAgentTrace = AgentRunTrace(
+          agentRole: 'Producer Scope Guard',
+          userGoal: intervention.title,
+          reasoning: intervention.reason,
+          toolCalls: [
+            AgentToolCall(
+              toolName: 'defer_conflicting_feature',
+              targetTitle: featTitle,
+              summary: 'Deferred "$featTitle" to Out of Scope to protect ${bp?.releaseVersionTag ?? "v0.1"} boundaries',
+            ),
+          ],
+        );
+        notifyListeners();
+        return;
+
+      case 'trim_oversized_feature':
+        final beatId = payload['beatId']?.toString() ?? '';
+        final featId = payload['featureId']?.toString() ?? '';
+        final featTitle = payload['featureTitle']?.toString() ?? 'Feature';
+        if (bp != null) {
+          for (final beat in bp.beats) {
+            if (beat.id == beatId) {
+              for (final feat in beat.features) {
+                if (feat.id == featId) {
+                  feat.estimatedHours = 5;
+                  if (feat.checkpoints.length > 2) {
+                    feat.checkpoints = feat.checkpoints.take(2).toList();
+                  }
+                  break;
+                }
+              }
+            }
+          }
+          _lastAgentTrace = AgentRunTrace(
+            agentRole: 'Producer Scope Guard',
+            userGoal: intervention.title,
+            reasoning:
+                'Trimmed "$featTitle" to a 5h greybox core so playtesting is never blocked by a >8h ticket.',
+            toolCalls: [
+              AgentToolCall(
+                toolName: 'trim_oversized_feature',
+                targetTitle: featTitle,
+                summary: 'Capped "$featTitle" at 5h and focused on 2 core playable checkpoints',
+              ),
+            ],
+          );
+          _syncActiveProjectMetadata();
+          notifyListeners();
+        }
+        return;
+
+      case 'auto_prune_milestone_scope':
+        if (bp != null) {
+          final deferredTitles = <String>[];
+          for (final beat in bp.beats) {
+            if (beat.includedFeatures.length > 1) {
+              final candidate = beat.includedFeatures.last;
+              candidate.included = false;
+              deferredTitles.add(candidate.title);
+            }
+          }
+          _lastAgentTrace = AgentRunTrace(
+            agentRole: 'Producer Scope Guard',
+            userGoal: intervention.title,
+            reasoning:
+                'Auto-deferred secondary features (${deferredTitles.join(", ")}) to bring ${bp.releaseVersionTag} within budget.',
+            toolCalls: [
+              for (final t in deferredTitles)
+                AgentToolCall(
+                  toolName: 'defer_secondary_feature',
+                  targetTitle: t,
+                  summary: 'Deferred "$t" to Out of Scope',
+                ),
+            ],
+          );
+          _syncActiveProjectMetadata();
+          notifyListeners();
+        }
+        return;
+
+      case 'split_overloaded_checkpoint':
+        final featId = payload['featureId']?.toString() ?? _selectedFeatureId ?? '';
+        final cpIdx = (payload['checkpointIndex'] as int?) ?? 0;
+        final featDoc = documents[featId];
+        if (featDoc != null && stage3States != null && cpIdx < stage3States.length) {
+          final heavyCp = stage3States[cpIdx];
+          if (heavyCp.checklist.length > 3) {
+            final overflowTasks = heavyCp.checklist.sublist(3);
+            heavyCp.checklist = heavyCp.checklist.sublist(0, 3);
+            final splitCp = FeatureStateNode(
+              id: generateUniqueId('cp_split'),
+              name: 'Stage ${stage3States.length + 1}: ${heavyCp.cleanStageTitle} (Part 2)',
+              trigger: heavyCp.trigger,
+              parameters: Map<String, String>.from(heavyCp.parameters),
+              tuningParams: List<String>.from(heavyCp.tuningParams),
+              edgeCases: List<String>.from(heavyCp.edgeCases),
+              checklist: overflowTasks,
+            );
+            stage3States.insert(cpIdx + 1, splitCp);
+            updateFeatureStates(featId, stage3States);
+            _lastAgentTrace = AgentRunTrace(
+              agentRole: 'Producer Scope Guard',
+              userGoal: intervention.title,
+              reasoning:
+                  'Split overloaded Checkpoint ${cpIdx + 1} into two focused 60/40 Playable Checkpoints.',
+              toolCalls: [
+                AgentToolCall(
+                  toolName: 'split_overloaded_checkpoint',
+                  targetTitle: featDoc.title,
+                  summary: 'Moved ${overflowTasks.length} tasks into ${splitCp.name}',
+                ),
+              ],
+            );
+          }
+        }
+        return;
+
+      case 'rebalance_tuning_params':
+      case 'add_edge_case_guards':
+      default:
+        final featId = payload['featureId']?.toString() ?? _selectedFeatureId ?? '';
+        final cpIdx = (payload['checkpointIndex'] as int?) ?? 0;
+        final featDoc = documents[featId];
+        if (featDoc != null && stage3States != null) {
+          await runStage3AgentCoPilot(
+            featureDoc: featDoc,
+            states: stage3States,
+            activeCheckpointIndex: cpIdx,
+            directive: intervention.toolName == 'rebalance_tuning_params'
+                ? 'suggest_tuning'
+                : 'add_edge_guards',
+          );
+        }
+        return;
+    }
+  }
+
+  /// Runs the Stage 3 Agentic Co-Pilot (`[ASK AGENT]` bar & Co-Pilot Cards) using
+  /// low-token surgical Workspace Tool Calls (`WorkspaceAgentOrchestrator.runStage3CoPilotTools`).
+  Future<AgentRunTrace> runStage3AgentCoPilot({
+    required TierDocument featureDoc,
+    required List<FeatureStateNode> states,
+    required int activeCheckpointIndex,
+    required String directive,
+  }) async {
+    final engineHint = _conceptDraft?.techSpec.join(' ') ??
+        activeProject?.sections['tech_spec'];
+    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final releaseVer = activeRelease?.sections['versionTag'] ?? 'v0.1';
+    final allReleaseFeats = <TierDocument>[
+      for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
+    ];
+
+    final trace = await WorkspaceAgentOrchestrator.runStage3CoPilotTools(
+      userDirective: directive,
+      activeFeature: featureDoc,
+      activeStates: states,
+      activeCheckpointIndex: activeCheckpointIndex,
+      siblingFeatures: allReleaseFeats,
+      engineLabel: engineLabel,
+      releaseVersionTag: releaseVer,
+      onSaveStates: (featId, updatedStates) {
+        updateFeatureStates(featId, updatedStates);
+      },
+      apiKey: _apiKey,
+      modelName: _conversationModel,
+      thinkingLevel: _thinkingLevel,
+    );
+
+    _lastAgentTrace = trace;
+    notifyListeners();
+    return trace;
+  }
+
   TierDocument? get activeProject =>
       _activeProjectId != null ? documents[_activeProjectId] : null;
 
@@ -1014,6 +1234,33 @@ class WorkbenchProvider extends ChangeNotifier {
         modelName: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
+      final bp = _releaseBlueprint;
+      if (bp != null) {
+        final totalFeats = bp.totalIncludedFeatures;
+        _lastAgentTrace = AgentRunTrace(
+          agentRole: '3-Agent Release Pipeline',
+          userGoal: 'Plan ${bp.releaseTitle}',
+          reasoning:
+              'Systems Designer drafted ${bp.beats.length} Beats ($totalFeats Features) → Producer Scope Critic checked ${bp.explicitExclusions.length} exclusions → Engine Architect bound tuning & guards.',
+          toolCalls: [
+            AgentToolCall(
+              toolName: 'draft_release_beats',
+              targetTitle: bp.releaseVersionTag,
+              summary: 'Generated ${bp.beats.length} Core Loop Beats & $totalFeats Playable Features (${bp.totalIncludedHours}h)',
+            ),
+            AgentToolCall(
+              toolName: 'audit_scope_exclusions',
+              targetTitle: 'Producer Scope Guard',
+              summary: 'Verified against ${bp.explicitExclusions.length} Out-of-Scope boundaries',
+            ),
+            AgentToolCall(
+              toolName: 'bind_engine_tuning_and_guards',
+              targetTitle: 'Engine Architect',
+              summary: 'Injected 60/40 Checkpoints, numeric tuning variables, and [GUARD] rules',
+            ),
+          ],
+        );
+      }
       _currentStage = WorkbenchStage.releasePlanGate;
       _syncActiveProjectMetadata();
     } finally {
@@ -1207,6 +1454,19 @@ class WorkbenchProvider extends ChangeNotifier {
             ],
           ),
         );
+        _lastAgentTrace = AgentRunTrace(
+          agentRole: 'Systems & Engine Architect',
+          userGoal: 'Add Feature "$cleanTitle" to ${beat.title}',
+          reasoning:
+              'Synthesized 2 playable 60/40 Checkpoints, ${archetype.tuningParams.length} numeric tuning variables, and ${archetype.edgeCases.length} [GUARD] rules.',
+          toolCalls: [
+            AgentToolCall(
+              toolName: 'create_feature_blueprint',
+              targetTitle: cleanTitle,
+              summary: 'Added "$cleanTitle" (4h) with ${archetype.cp1Title} & ${archetype.cp2Title}',
+            ),
+          ],
+        );
         _syncActiveProjectMetadata();
         notifyListeners();
         return;
@@ -1355,6 +1615,20 @@ class WorkbenchProvider extends ChangeNotifier {
     if (!cpNode.edgeCases.contains(guardText)) {
       cpNode.edgeCases = [...cpNode.edgeCases, guardText];
     }
+    final featTitle = documents[featureId]?.title ?? cpNode.cleanStageTitle;
+    _lastAgentTrace = AgentRunTrace(
+      agentRole: 'Playtest Root-Cause Debugger',
+      userGoal: 'Log Issue: $cleanIssue',
+      reasoning:
+          'Diagnosed "$cleanIssue" in $engineLabel ($primaryTune) and injected a 3-step root-cause fix + [PLAYTEST GUARD].',
+      toolCalls: [
+        AgentToolCall(
+          toolName: 'diagnose_and_fix_playtest_bug',
+          targetTitle: '$featTitle · Checkpoint ${checkpointIndex + 1}',
+          summary: 'Added [FIX] $cleanIssue (1h) + [PLAYTEST GUARD] boundary rule',
+        ),
+      ],
+    );
     updateFeatureStates(featureId, states);
     return newTaskIndex;
   }

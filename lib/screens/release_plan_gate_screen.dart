@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../agents/workspace_agent_tools.dart';
 import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
@@ -96,7 +97,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildGateBanner(bp),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 10),
+                      _buildStage2AgentStrip(),
+                      const SizedBox(height: 10),
                       if (bp.questions.isNotEmpty) ...[
                         _buildReleaseQuestionsSection(bp),
                         const SizedBox(height: 22),
@@ -112,6 +115,153 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             ),
           ),
           _buildStickyBottomDock(bp),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStage2AgentStrip() {
+    final interventions = widget.workbench.stage2Interventions;
+    final trace = widget.workbench.lastAgentTrace;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (trace != null && trace.toolCalls.isNotEmpty)
+          Container(
+            key: const ValueKey('stage2_agent_trace_banner'),
+            margin: EdgeInsets.only(bottom: interventions.isNotEmpty ? 8 : 0),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: _bgSurface,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _accentEmerald.withValues(alpha: 0.42)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _accentEmerald.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'AGENT TRACE · ${trace.agentRole.toUpperCase()}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: _accentEmerald,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${trace.toolCalls.map((c) => "⚙ ${c.toolName}").join(" · ")} — ${trace.reasoning}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: _textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => widget.workbench.clearLastAgentTrace(),
+                  child: Text(
+                    'Dismiss ×',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      color: _textMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        for (int i = 0; i < interventions.length; i++) ...[
+          _buildInterventionBanner(interventions[i], i),
+          if (i < interventions.length - 1) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildInterventionBanner(AgentIntervention item, int index) {
+    final color = item.severity == 'crimson'
+        ? _accentCrimson
+        : (item.severity == 'emerald' ? _accentEmerald : _accentAmber);
+    return Container(
+      key: ValueKey('stage2_intervention_$index'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    item.badge,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.title,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.reason,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: _textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            key: ValueKey('stage2_apply_intervention_btn_$index'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: _bgBase,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            onPressed: () => widget.workbench.applyAgentIntervention(item),
+            child: Text(
+              item.actionLabel,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
         ],
       ),
     );

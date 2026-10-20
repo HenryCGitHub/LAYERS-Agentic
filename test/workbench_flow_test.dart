@@ -598,5 +598,65 @@ void main() {
         );
       },
     );
+
+    test(
+      'Autonomous Producer Scope-Guard Interventions & Stage 3 Cross-Feature Tool-Calling Co-Pilot',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('Cyberpunk Grapple Arena');
+        // Add an explicit exclusion to test the 0-token Producer Scope Guard
+        provider.updateConceptDraft((draft) {
+          draft.exclusions = ['Online Multiplayer Matchmaking', 'Cutscene Cinematics'];
+        });
+        await provider.openReleasePlanGate();
+        expect(provider.lastAgentTrace, isNotNull);
+        expect(provider.lastAgentTrace!.toolCalls.length, 3);
+
+        // Add a feature that conflicts with the "Online Multiplayer Matchmaking" exclusion
+        final firstBeat = provider.releaseBlueprint!.beats.first;
+        provider.addProposedFeatureToBeat(
+          firstBeat.id,
+          'Online Multiplayer Lobby',
+        );
+        final stage2Interventions = provider.stage2Interventions;
+        expect(stage2Interventions, isNotEmpty);
+        expect(
+          stage2Interventions.first.toolName,
+          'defer_conflicting_feature',
+        );
+
+        // Apply the 1-click Producer Intervention and verify it defers the conflicting feature
+        await provider.applyAgentIntervention(stage2Interventions.first);
+        final conflictingFeat = firstBeat.features.firstWhere(
+          (f) => f.title == 'Online Multiplayer Lobby',
+        );
+        expect(conflictingFeat.included, isFalse);
+
+        // Execute Stage 3 and test Cross-Feature Tool-Calling Co-Pilot
+        await provider.approveAndExecuteReleasePlan();
+        final allStage3Feats = <TierDocument>[
+          for (final b in provider.activeReleaseBeats)
+            ...provider.featuresForBeat(b.id),
+        ];
+        expect(allStage3Feats.length, greaterThanOrEqualTo(2));
+        final activeFeat = allStage3Feats.first;
+        final siblingFeat = allStage3Feats[1];
+        final activeStates = FeatureStateNode.getStatesForDocument(activeFeat);
+
+        final trace = await provider.runStage3AgentCoPilot(
+          featureDoc: activeFeat,
+          states: activeStates,
+          activeCheckpointIndex: 0,
+          directive: 'Rebalance and make movement snappier across coupled features',
+        );
+        expect(trace.toolCalls.length, greaterThanOrEqualTo(2));
+        final updatedSiblingStates =
+            FeatureStateNode.getStatesForDocument(siblingFeat);
+        expect(
+          updatedSiblingStates.first.tuningParams,
+          contains('coupled_sync_window_ms: 90 ms'),
+        );
+      },
+    );
   });
 }
