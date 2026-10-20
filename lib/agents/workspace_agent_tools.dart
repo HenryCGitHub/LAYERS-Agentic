@@ -1088,4 +1088,77 @@ Return ONLY valid JSON:
       trace: trace,
     );
   }
+
+  /// Option 7: 0-Token Critical Path & Dependency Tier Classifier for Stage 2 and Stage 3.
+  /// Returns:
+  /// - `tierRank`: `1` (Foundation · Build 1st), `2` (Core Loop · Build 2nd), `3` (Parallel / Stubbable)
+  /// - `badge`: Short mono badge
+  /// - `shortBadge`: Compact pill label for Left Rail
+  /// - `severity`: `'amber'` (1), `'emerald'` (2), `'neutral'` (3)
+  static ({
+    int tierRank,
+    String badge,
+    String shortBadge,
+    String severity,
+  }) classifyDependencyTier({
+    required String featureTitle,
+    required int beatIndex,
+    int featureIndexInBeat = 0,
+  }) {
+    final lower = featureTitle.toLowerCase();
+    final isStubbableKeyword = lower.contains('bonus') ||
+        lower.contains('medal') ||
+        lower.contains('summary') ||
+        lower.contains('tally') ||
+        lower.contains('codex') ||
+        lower.contains('cosmetic') ||
+        lower.contains('leaderboard') ||
+        lower.contains('shop') ||
+        lower.contains('menu') ||
+        lower.contains('loadout');
+
+    final isFoundationKeyword = lower.contains('movement') ||
+        lower.contains('control') ||
+        lower.contains('grapple') ||
+        lower.contains('dash') ||
+        lower.contains('jump') ||
+        lower.contains('camera') ||
+        lower.contains('physics') ||
+        lower.contains('aim') ||
+        lower.contains('locomotion');
+
+    if (isStubbableKeyword && beatIndex > 0) {
+      return (
+        tierRank: 3,
+        badge: '◌ PARALLEL / STUBBABLE',
+        shortBadge: '◌ STUBBABLE',
+        severity: 'neutral',
+      );
+    }
+
+    if (beatIndex == 0 || isFoundationKeyword) {
+      return (
+        tierRank: 1,
+        badge: '⚡ FOUNDATION · BUILD 1ST',
+        shortBadge: '⚡ BUILD 1ST',
+        severity: 'amber',
+      );
+    }
+
+    if (beatIndex <= 4 && featureIndexInBeat == 0) {
+      return (
+        tierRank: 2,
+        badge: '◈ CORE LOOP · BUILD 2ND',
+        shortBadge: '◈ BUILD 2ND',
+        severity: 'emerald',
+      );
+    }
+
+    return (
+      tierRank: 3,
+      badge: '◌ PARALLEL / STUBBABLE',
+      shortBadge: '◌ STUBBABLE',
+      severity: 'neutral',
+    );
+  }
 }

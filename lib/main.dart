@@ -468,6 +468,52 @@ class WorkbenchShell extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 5),
+                  Tooltip(
+                    message: 'Agent Command Palette & Tool History (1-Click Undo)',
+                    child: InkWell(
+                      key: const ValueKey('top_bar_agent_log_btn'),
+                      onTap: () => _showAgentCommandHistoryDialog(context),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: workbench.agentTraceHistory.isNotEmpty
+                              ? accentEmerald.withValues(alpha: 0.12)
+                              : bgSurface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: workbench.agentTraceHistory.isNotEmpty
+                                ? accentEmerald.withValues(alpha: 0.45)
+                                : borderColor,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.terminal_rounded,
+                              size: 11,
+                              color: workbench.agentTraceHistory.isNotEmpty
+                                  ? accentEmerald
+                                  : accentAmber,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'Agent (${workbench.agentTraceHistory.length})',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: workbench.agentTraceHistory.isNotEmpty
+                                    ? accentEmerald
+                                    : textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
                   InkWell(
                     key: const ValueKey('ai_settings_btn'),
                     onTap: () => _showAiSettingsDialog(context),
@@ -1491,5 +1537,294 @@ class WorkbenchShell extends StatelessWidget {
       case WorkbenchStage.releaseWorkbench:
         return ReleaseWorkbenchScreen(workbench: workbench);
     }
+  }
+
+  /// Option 4: Global Top-Bar Agent Command Palette & Chronological Tool History Drawer with 1-Click Undo.
+  void _showAgentCommandHistoryDialog(BuildContext context) {
+    final isDark = workbench.isDark;
+    final bgSurface = AppTheme.bgSurfaceFor(isDark);
+    final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
+    final borderSubtle = AppTheme.borderSubtleFor(isDark);
+    final borderBright = AppTheme.borderBrightFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final accentEmerald = AppTheme.accentGreenFor(isDark);
+    final accentAmber = AppTheme.accentAmberFor(isDark);
+    final cmdController = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final history = workbench.agentTraceHistory;
+            final canUndo = workbench.canUndoLastAgentAction;
+
+            Future<void> submitCommand() async {
+              final text = cmdController.text.trim();
+              if (text.isEmpty) return;
+              cmdController.clear();
+              await workbench.runGlobalAgentCommand(text);
+              if (ctx.mounted) {
+                setModalState(() {});
+              }
+            }
+
+            return AlertDialog(
+              key: const ValueKey('agent_command_history_dialog'),
+              backgroundColor: bgSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: borderBright),
+              ),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.terminal_rounded, size: 17, color: accentEmerald),
+                      const SizedBox(width: 8),
+                      Text(
+                        'AGENT COMMAND PALETTE & TOOL LOG (${history.length})',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const ValueKey('undo_last_agent_action_btn'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: canUndo ? accentAmber : textMuted,
+                          side: BorderSide(
+                            color: canUndo
+                                ? accentAmber.withValues(alpha: 0.5)
+                                : borderSubtle,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: canUndo
+                            ? () {
+                                workbench.undoLastAgentAction();
+                                setModalState(() {});
+                              }
+                            : null,
+                        icon: const Icon(Icons.undo_rounded, size: 13),
+                        label: Text(
+                          'Undo Last Agent Action',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => Navigator.of(ctx).pop(),
+                        child: Icon(Icons.close_rounded, size: 18, color: textMuted),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 680,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('global_agent_command_input'),
+                            controller: cmdController,
+                            style: GoogleFonts.inter(fontSize: 12.5, color: textPrimary),
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Run a global Agent command in active stage (e.g., "Add coyote time tuning", "Defer multiplayer")...',
+                              hintStyle: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: textMuted,
+                              ),
+                              filled: true,
+                              fillColor: bgRecessed,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 11,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: BorderSide(color: borderSubtle),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: BorderSide(color: borderSubtle),
+                              ),
+                            ),
+                            onSubmitted: (_) => submitCommand(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          key: const ValueKey('global_agent_command_send_btn'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accentEmerald,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          onPressed: submitCommand,
+                          child: Text(
+                            'Run Command →',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'CHRONOLOGICAL AGENT TOOL TRACE HISTORY',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                        color: textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 340),
+                      child: history.isEmpty
+                          ? Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: bgRecessed,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: borderSubtle),
+                              ),
+                              child: Text(
+                                'No Agent tool actions recorded yet in this session.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: textMuted,
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: history.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (_, idx) {
+                                final item = history[idx];
+                                return Container(
+                                  key: ValueKey('agent_history_item_$idx'),
+                                  padding: const EdgeInsets.all(11),
+                                  decoration: BoxDecoration(
+                                    color: bgRecessed,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: borderSubtle),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            item.agentRole.toUpperCase(),
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: accentEmerald,
+                                            ),
+                                          ),
+                                          Text(
+                                            '#${history.length - idx}',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        item.reasoning,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11.5,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                      if (item.toolCalls.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: [
+                                            for (final tc in item.toolCalls)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: bgSurface,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: borderSubtle,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '⚙ ${tc.toolName} → ${tc.summary}',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 9,
+                                                    color: textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }

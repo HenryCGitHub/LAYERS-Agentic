@@ -1533,6 +1533,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   ) {
     final isIncluded = feat.included;
     final isExpanded = _expandedFeatureIds.contains(feat.id);
+    final beatIdx = bp.beats.indexWhere((b) => b.id == beat.id);
+    final featIdxInBeat = beat.features.indexWhere((f) => f.id == feat.id);
+    final depTier = WorkspaceAgentOrchestrator.classifyDependencyTier(
+      featureTitle: feat.title,
+      beatIndex: beatIdx < 0 ? 0 : beatIdx,
+      featureIndexInBeat: featIdxInBeat < 0 ? 0 : featIdxInBeat,
+    );
+    final depColor = depTier.severity == 'emerald'
+        ? _accentEmerald
+        : (depTier.severity == 'amber' ? _accentAmber : _textSecondary);
 
     return Container(
       decoration: BoxDecoration(
@@ -1583,7 +1593,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Wrap(
-                          spacing: 8,
+                          spacing: 6,
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
@@ -1600,6 +1610,51 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                               ),
                             ),
                             _buildLifecycleBadge(feat, bp.releaseVersionTag),
+                            Container(
+                              key: ValueKey('stage2_dep_tier_${feat.id}'),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: depColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: depColor.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Text(
+                                depTier.shortBadge,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: depColor,
+                                ),
+                              ),
+                            ),
+                            if (feat.lifecycle == FeatureLifecycleStatus.upgrade)
+                              Container(
+                                key: ValueKey('stage2_upgrade_diff_${feat.id}'),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _accentEmerald.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: _accentEmerald.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  '${feat.originVersion} ✓ → +${feat.checkpoints.length} ${bp.releaseVersionTag} CPs',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: _accentEmerald,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                         const SizedBox(height: 3),

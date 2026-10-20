@@ -822,6 +822,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       );
     }
 
+    if (widget.workbench.jumpToFullReviewPending) {
+      widget.workbench.consumeJumpToFullReviewPending();
+      _currentStep = _sections.length;
+      for (int i = 0; i < _sections.length; i++) {
+        _visitedSteps.add(i);
+      }
+    }
+
     // Step 1B / 1C: Structure-First One-Section-at-a-Time Dynamic UI + Step 10 Full Review
     return Container(
       key: const ValueKey('concept_interview_card'),
@@ -1243,6 +1251,33 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                key: const ValueKey('import_existing_gdd_btn'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _accentAmber,
+                  backgroundColor: _accentAmber.withValues(alpha: 0.08),
+                  side: BorderSide(color: _accentAmber.withValues(alpha: 0.45)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: widget.workbench.isAgentBusy
+                    ? null
+                    : () => _showImportGddDialog(context),
+                icon: const Icon(Icons.description_outlined, size: 14),
+                label: Text(
+                  'Import GDD / Notes',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
               if (intake != null) ...[
                 const SizedBox(width: 10),
                 ElevatedButton(
@@ -1466,6 +1501,129 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  /// Option 5: Opens a dialog to paste an existing GDD, Notion note, or README document,
+  /// extracts all 9 Concept sections, and jumps straight to `Step 10 · Full Review`.
+  void _showImportGddDialog(BuildContext context) {
+    final gddController = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          key: const ValueKey('import_gdd_dialog'),
+          backgroundColor: _bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: _borderBright),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.description_outlined, size: 18, color: _accentAmber),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Import Existing GDD / Pitch Notes',
+                  style: AppTheme.displayFont(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 620,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Paste your unstructured GDD, Notion notes, or README below. The Agent will extract all 9 Concept sections (Goal, Game Spec, Tech Spec, Pillars, Trade-Offs, Core Loop, Out of Scope, Done When, Release Train) and jump straight to Step 10 · Full Review.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: _textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const ValueKey('import_gdd_text_field'),
+                  controller: gddController,
+                  maxLines: 9,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    height: 1.45,
+                    color: _textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText:
+                        '# Neon Grapple Arena\nGoal: Build a fast 3D grappling hook arena shooter in Godot 4.\nEngine: Godot 4 (3D)\nCore Loop: Grapple -> Shoot -> Bank Score -> Reset\nDone When: Playtester completes 3 consecutive arena waves without clipping.',
+                    hintStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 11.5,
+                      color: _textMuted,
+                    ),
+                    filled: true,
+                    fillColor: _bgRecessed,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderSubtle),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _borderSubtle),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: _accentAmber, width: 1.4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: _textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              key: const ValueKey('confirm_import_gdd_btn'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accentEmerald,
+                foregroundColor: Colors.black,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              onPressed: () async {
+                final raw = gddController.text.trim();
+                if (raw.isEmpty) return;
+                Navigator.of(ctx).pop();
+                await widget.workbench.importExistingGddAndJumpToReview(raw);
+              },
+              icon: const Icon(Icons.auto_awesome_rounded, size: 14),
+              label: Text(
+                'Extract 9-Section Blueprint & Jump to Review →',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

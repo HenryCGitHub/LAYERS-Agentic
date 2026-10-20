@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
+import 'package:layers_agentic/agents/workspace_agent_tools.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/tier_document.dart';
@@ -733,6 +734,80 @@ void main() {
           provider.lastAgentTrace?.agentRole,
           'Post-Release Retrospective & Carryover Agent',
         );
+      },
+    );
+
+    test(
+      'Options 3, 4, 5 & 7: GDD Ingestion & Jump to Review, Dependency Tier Classification, Global Agent Command Palette & 1-Click Undo',
+      () async {
+        final provider = WorkbenchProvider();
+
+        // Option 5: Import Existing GDD / Pitch Notes and jump straight to Step 10 Full Review
+        await provider.importExistingGddAndJumpToReview('''
+# Solar Skiff Salvage
+Goal: Build a fast 3D hover-skiff salvage and grapple loop in Unity 6.
+Engine: Unity 6 (C#)
+Done When: Playtester completes 3 consecutive salvage runs and docks without clipping.
+''');
+        expect(provider.conceptDraft, isNotNull);
+        expect(provider.conceptDraft!.title, 'Solar Skiff Salvage');
+        expect(
+          provider.conceptDraft!.goal,
+          contains('hover-skiff salvage and grapple loop'),
+        );
+        expect(provider.jumpToFullReviewPending, isTrue);
+        provider.consumeJumpToFullReviewPending();
+        expect(provider.jumpToFullReviewPending, isFalse);
+
+        // Option 7: Critical Path & Dependency Tier classification
+        final tier1 = WorkspaceAgentOrchestrator.classifyDependencyTier(
+          featureTitle: 'Player Movement & Camera Controls',
+          beatIndex: 0,
+        );
+        final tier2 = WorkspaceAgentOrchestrator.classifyDependencyTier(
+          featureTitle: 'Enemy Wave Spawner & Arena',
+          beatIndex: 1,
+        );
+        final tier3 = WorkspaceAgentOrchestrator.classifyDependencyTier(
+          featureTitle: 'Shop UI & Particle VFX Polish',
+          beatIndex: 2,
+        );
+        expect(tier1.tierRank, 1);
+        expect(tier1.shortBadge, '⚡ BUILD 1ST');
+        expect(tier2.tierRank, 2);
+        expect(tier2.shortBadge, '◈ BUILD 2ND');
+        expect(tier3.tierRank, 3);
+        expect(tier3.shortBadge, '◌ STUBBABLE');
+
+        // Option 4: Global Agent Command Palette & 1-Click Undo
+        await provider.openReleasePlanGate();
+        await provider.approveAndExecuteReleasePlan();
+        final firstBeat = provider.activeReleaseBeats.first;
+        final firstFeat = provider.featuresForBeat(firstBeat.id).first;
+        final beforeStates = FeatureStateNode.getStatesForDocument(firstFeat);
+        final initialTuningCount = beforeStates.first.tuningParams.length;
+        final historyBefore = provider.agentTraceHistory.length;
+
+        await provider.runGlobalAgentCommand(
+          'Add coyote time tuning',
+        );
+        expect(provider.agentTraceHistory.length, greaterThan(historyBefore));
+        expect(provider.canUndoLastAgentAction, isTrue);
+
+        final afterCommandStates =
+            FeatureStateNode.getStatesForDocument(firstFeat);
+        expect(
+          afterCommandStates.first.tuningParams.length,
+          greaterThan(initialTuningCount),
+        );
+
+        // 1-Click Undo restores exact pre-mutation checkpoint state
+        final undone = provider.undoLastAgentAction();
+        expect(undone, isTrue);
+        final restoredDoc = provider.documents[firstFeat.id]!;
+        final restoredStates =
+            FeatureStateNode.getStatesForDocument(restoredDoc);
+        expect(restoredStates.first.tuningParams.length, initialTuningCount);
       },
     );
   });

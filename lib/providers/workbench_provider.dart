@@ -723,6 +723,190 @@ class WorkbenchProvider extends ChangeNotifier {
   AgentRunTrace? _lastAgentTrace;
   AgentRunTrace? get lastAgentTrace => _lastAgentTrace;
 
+  final List<AgentRunTrace> _agentTraceHistory = [];
+  List<AgentRunTrace> get agentTraceHistory =>
+      List.unmodifiable(_agentTraceHistory);
+
+  final List<Map<String, dynamic>> _agentUndoStack = [];
+  bool get canUndoLastAgentAction => _agentUndoStack.isNotEmpty;
+
+  bool _jumpToFullReviewPending = false;
+  bool get jumpToFullReviewPending => _jumpToFullReviewPending;
+
+  void consumeJumpToFullReviewPending() {
+    _jumpToFullReviewPending = false;
+  }
+
+  void _recordAgentTrace(AgentRunTrace trace) {
+    _lastAgentTrace = trace;
+    _agentTraceHistory.insert(0, trace);
+    if (_agentTraceHistory.length > 25) {
+      _agentTraceHistory.removeLast();
+    }
+  }
+
+  void _pushAgentUndoSnapshot() {
+    final docSnapshots = <String, String>{};
+    for (final entry in documents.entries) {
+      docSnapshots[entry.key] = jsonEncode(entry.value.toJson());
+    }
+    _agentUndoStack.add({
+      'conceptJson':
+          _conceptDraft != null ? jsonEncode(_conceptDraft!.toJson()) : null,
+      'releaseBpJson': _releaseBlueprint != null
+          ? jsonEncode(_releaseBlueprint!.toJson())
+          : null,
+      'docs': docSnapshots,
+    });
+    if (_agentUndoStack.length > 15) {
+      _agentUndoStack.removeAt(0);
+    }
+  }
+
+  /// Option 4: 1-Click Undo / Revert of the most recent Agent tool mutation.
+  bool undoLastAgentAction() {
+    if (_agentUndoStack.isEmpty) return false;
+    final snap = _agentUndoStack.removeLast();
+    final rawConcept = snap['conceptJson'] as String?;
+    if (rawConcept != null) {
+      _conceptDraft = ProjectConceptBlueprint.fromJson(
+        jsonDecode(rawConcept) as Map<String, dynamic>,
+      );
+    }
+    final rawRelBp = snap['releaseBpJson'] as String?;
+    if (rawRelBp != null) {
+      _releaseBlueprint = ReleaseBlueprint.fromJson(
+        jsonDecode(rawRelBp) as Map<String, dynamic>,
+      );
+    }
+    final rawDocs = snap['docs'] as Map<String, String>?;
+    if (rawDocs != null) {
+      documents.clear();
+      for (final entry in rawDocs.entries) {
+        final d = TierDocument.fromJson(
+          jsonDecode(entry.value) as Map<String, dynamic>,
+        );
+        documents[entry.key] = d;
+        _persistDocument(d);
+      }
+    }
+    if (_agentTraceHistory.isNotEmpty) {
+      _agentTraceHistory.removeAt(0);
+    }
+    _lastAgentTrace =
+        _agentTraceHistory.isNotEmpty ? _agentTraceHistory.first : null;
+    _syncActiveProjectMetadata();
+    notifyListeners();
+    return true;
+  }
+
+  /// Option 5: Imports an unstructured GDD, Notion note, or README document on Stage 1A,
+  /// extracts all 9 Concept sections, and jumps straight to `Step 10 · Full Review`.
+  Future<void> importExistingGddAndJumpToReview(String rawGdd) async {
+    final clean = rawGdd.trim();
+    if (clean.isEmpty) return;
+
+    _pushAgentUndoSnapshot();
+    _isAgentBusy = true;
+    _agentProgressStep =
+        'Extracting 9-section Concept Blueprint from GDD ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+    notifyListeners();
+
+    try {
+      _conceptDraft = await ProjectConceptAgent.extractConceptFromGdd(
+        clean,
+        apiKey: _apiKey,
+        modelName: _conversationModel,
+        thinkingLevel: _thinkingLevel,
+      );
+      if (_conceptDraft != null) {
+        _commitConceptToVault(_conceptDraft!);
+        _jumpToFullReviewPending = true;
+        _recordAgentTrace(
+          AgentRunTrace(
+            agentRole: 'GDD Ingestion & Extraction Agent',
+            userGoal: 'Import Existing GDD / Notes (${clean.length} chars)',
+            reasoning:
+                'Parsed "${_conceptDraft!.title}" into all 9 Concept sections (${_conceptDraft!.coreLoopBeats.length} Beats, ${_conceptDraft!.designPillars.length} Pillars, ${_conceptDraft!.exclusions.length} Exclusions) and jumped to Step 10 Full Review.',
+            toolCalls: [
+              AgentToolCall(
+                toolName: 'extract_concept_from_gdd',
+                targetTitle: _conceptDraft!.title,
+                summary:
+                    'Populated Sections 01–09 and opened Step 10 · Full Review',
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
+  }
+
+  /// Option 4: Executes a natural-language command from the Global Top-Bar Agent Command Palette
+  /// in whichever stage (`Stage 1`, `Stage 2`, or `Stage 3`) is currently active.
+  Future<String> runGlobalAgentCommand(String command) async {
+    final clean = command.trim();
+    if (clean.isEmpty) return 'No command entered.';
+
+    if (_currentStage == WorkbenchStage.releaseWorkbench &&
+        selectedFeature != null) {
+      final feat = selectedFeature!;
+      final states = FeatureStateNode.getStatesForDocument(feat);
+      final trace = await runStage3AgentCoPilot(
+        featureDoc: feat,
+        states: states,
+        activeCheckpointIndex: 0,
+        directive: clean,
+      );
+      return trace.toolCalls.isNotEmpty
+          ? trace.toolCalls.first.summary
+          : trace.reasoning;
+    } else if (_currentStage == WorkbenchStage.releasePlanGate &&
+        _releaseBlueprint != null) {
+      _pushAgentUndoSnapshot();
+      await sendReleasePlanChatMessage(clean);
+      _recordAgentTrace(
+        AgentRunTrace(
+          agentRole: 'Stage 2 Release Planner Agent',
+          userGoal: clean,
+          reasoning:
+              'Applied global command "$clean" to ${_releaseBlueprint!.releaseTitle}.',
+          toolCalls: [
+            AgentToolCall(
+              toolName: 'refine_release_blueprint',
+              targetTitle: _releaseBlueprint!.releaseVersionTag,
+              summary: 'Refined Release Blueprint via Global Command Palette',
+            ),
+          ],
+        ),
+      );
+      return 'Updated ${_releaseBlueprint!.releaseTitle} ✓';
+    } else {
+      _pushAgentUndoSnapshot();
+      await sendConceptChatMessage(clean);
+      final title = _conceptDraft?.title ?? 'Project Concept';
+      _recordAgentTrace(
+        AgentRunTrace(
+          agentRole: 'Stage 1 Concept Co-Design Agent',
+          userGoal: clean,
+          reasoning: 'Applied global command "$clean" to $title.',
+          toolCalls: [
+            AgentToolCall(
+              toolName: 'update_concept_blueprint',
+              targetTitle: title,
+              summary: 'Updated Concept Blueprint via Global Command Palette',
+            ),
+          ],
+        ),
+      );
+      return 'Updated $title ✓';
+    }
+  }
+
   void clearLastAgentTrace() {
     _lastAgentTrace = null;
     notifyListeners();
@@ -763,6 +947,7 @@ class WorkbenchProvider extends ChangeNotifier {
     AgentIntervention intervention, {
     List<FeatureStateNode>? stage3States,
   }) async {
+    _pushAgentUndoSnapshot();
     final bp = _releaseBlueprint;
     final payload = intervention.payload;
 
@@ -778,7 +963,7 @@ class WorkbenchProvider extends ChangeNotifier {
               )
               .toList();
           _commitConceptToVault(_conceptDraft!);
-          _lastAgentTrace = AgentRunTrace(
+          _recordAgentTrace(AgentRunTrace(
             agentRole: 'Stage 1 Concept Critic',
             userGoal: intervention.title,
             reasoning: intervention.reason,
@@ -789,7 +974,7 @@ class WorkbenchProvider extends ChangeNotifier {
                 summary: 'Aligned Game Spec to Singleplayer to match Offline-Only Tech Spec',
               ),
             ],
-          );
+          ));
           notifyListeners();
         }
         return;
@@ -800,7 +985,7 @@ class WorkbenchProvider extends ChangeNotifier {
               .map((s) => s.replaceAll('2D', '3D'))
               .toList();
           _commitConceptToVault(_conceptDraft!);
-          _lastAgentTrace = AgentRunTrace(
+          _recordAgentTrace(AgentRunTrace(
             agentRole: 'Stage 1 Concept Critic',
             userGoal: intervention.title,
             reasoning: intervention.reason,
@@ -811,7 +996,7 @@ class WorkbenchProvider extends ChangeNotifier {
                 summary: 'Aligned Tech Spec renderer & engine pipeline to 3D',
               ),
             ],
-          );
+          ));
           notifyListeners();
         }
         return;
@@ -823,7 +1008,7 @@ class WorkbenchProvider extends ChangeNotifier {
             'Run Summary & Loop Reset: tally run rewards and reset cleanly to the starting stage in 1 key press',
           ];
           _commitConceptToVault(_conceptDraft!);
-          _lastAgentTrace = AgentRunTrace(
+          _recordAgentTrace(AgentRunTrace(
             agentRole: 'Stage 1 Concept Critic',
             userGoal: intervention.title,
             reasoning: intervention.reason,
@@ -834,7 +1019,7 @@ class WorkbenchProvider extends ChangeNotifier {
                 summary: 'Appended "Run Summary & Loop Reset" beat to close the core loop',
               ),
             ],
-          );
+          ));
           notifyListeners();
         }
         return;
@@ -850,7 +1035,7 @@ class WorkbenchProvider extends ChangeNotifier {
           }
           _conceptDraft!.exclusions = updated;
           _commitConceptToVault(_conceptDraft!);
-          _lastAgentTrace = AgentRunTrace(
+          _recordAgentTrace(AgentRunTrace(
             agentRole: 'Stage 1 Concept Critic',
             userGoal: intervention.title,
             reasoning: intervention.reason,
@@ -861,7 +1046,7 @@ class WorkbenchProvider extends ChangeNotifier {
                 summary: 'Added 2 explicit v0.1 Out-of-Scope guardrails',
               ),
             ],
-          );
+          ));
           notifyListeners();
         }
         return;
@@ -871,7 +1056,7 @@ class WorkbenchProvider extends ChangeNotifier {
         final featId = payload['featureId']?.toString() ?? '';
         final featTitle = payload['featureTitle']?.toString() ?? 'Feature';
         toggleProposedFeatureScope(beatId, featId, false);
-        _lastAgentTrace = AgentRunTrace(
+        _recordAgentTrace(AgentRunTrace(
           agentRole: 'Producer Scope Guard',
           userGoal: intervention.title,
           reasoning: intervention.reason,
@@ -882,7 +1067,7 @@ class WorkbenchProvider extends ChangeNotifier {
               summary: 'Deferred "$featTitle" to Out of Scope to protect ${bp?.releaseVersionTag ?? "v0.1"} boundaries',
             ),
           ],
-        );
+        ));
         notifyListeners();
         return;
 
@@ -904,7 +1089,7 @@ class WorkbenchProvider extends ChangeNotifier {
               }
             }
           }
-          _lastAgentTrace = AgentRunTrace(
+          _recordAgentTrace(AgentRunTrace(
             agentRole: 'Producer Scope Guard',
             userGoal: intervention.title,
             reasoning:
@@ -916,7 +1101,7 @@ class WorkbenchProvider extends ChangeNotifier {
                 summary: 'Capped "$featTitle" at 5h and focused on 2 core playable checkpoints',
               ),
             ],
-          );
+          ));
           _syncActiveProjectMetadata();
           notifyListeners();
         }
@@ -932,7 +1117,7 @@ class WorkbenchProvider extends ChangeNotifier {
               deferredTitles.add(candidate.title);
             }
           }
-          _lastAgentTrace = AgentRunTrace(
+          _recordAgentTrace(AgentRunTrace(
             agentRole: 'Producer Scope Guard',
             userGoal: intervention.title,
             reasoning:
@@ -945,7 +1130,7 @@ class WorkbenchProvider extends ChangeNotifier {
                   summary: 'Deferred "$t" to Out of Scope',
                 ),
             ],
-          );
+          ));
           _syncActiveProjectMetadata();
           notifyListeners();
         }
@@ -971,7 +1156,7 @@ class WorkbenchProvider extends ChangeNotifier {
             );
             stage3States.insert(cpIdx + 1, splitCp);
             updateFeatureStates(featId, stage3States);
-            _lastAgentTrace = AgentRunTrace(
+            _recordAgentTrace(AgentRunTrace(
               agentRole: 'Producer Scope Guard',
               userGoal: intervention.title,
               reasoning:
@@ -983,7 +1168,7 @@ class WorkbenchProvider extends ChangeNotifier {
                   summary: 'Moved ${overflowTasks.length} tasks into ${splitCp.name}',
                 ),
               ],
-            );
+            ));
           }
         }
         return;
@@ -1016,6 +1201,7 @@ class WorkbenchProvider extends ChangeNotifier {
     required int activeCheckpointIndex,
     required String directive,
   }) async {
+    _pushAgentUndoSnapshot();
     final engineHint = _conceptDraft?.techSpec.join(' ') ??
         activeProject?.sections['tech_spec'];
     final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
@@ -1040,7 +1226,7 @@ class WorkbenchProvider extends ChangeNotifier {
       thinkingLevel: _thinkingLevel,
     );
 
-    _lastAgentTrace = trace;
+    _recordAgentTrace(trace);
     notifyListeners();
     return trace;
   }
@@ -1051,6 +1237,7 @@ class WorkbenchProvider extends ChangeNotifier {
   void regenerateStage1SectionOptions(String optionKey) {
     final draft = _conceptDraft;
     if (draft == null) return;
+    _pushAgentUndoSnapshot();
     final offset = (_sectionOptionRefreshOffsets[optionKey] ?? 0) + 1;
     _sectionOptionRefreshOffsets[optionKey] = offset;
     final title = draft.title;
@@ -1129,7 +1316,7 @@ class WorkbenchProvider extends ChangeNotifier {
     ];
     draft.sectionOptions[optionKey] = rotated;
     _commitConceptToVault(draft);
-    _lastAgentTrace = AgentRunTrace(
+    _recordAgentTrace(AgentRunTrace(
       agentRole: 'Stage 1 Co-Design Agent',
       userGoal: 'Refresh options for $optionKey',
       reasoning:
@@ -1141,7 +1328,7 @@ class WorkbenchProvider extends ChangeNotifier {
           summary: 'Generated 3 fresh Option Playing Cards for $optionKey',
         ),
       ],
-    );
+    ));
     notifyListeners();
   }
 
@@ -1158,7 +1345,7 @@ class WorkbenchProvider extends ChangeNotifier {
       states: states,
       engineLabel: engineLabel,
     );
-    _lastAgentTrace = AgentRunTrace(
+    _recordAgentTrace(AgentRunTrace(
       agentRole: 'Engine Architect Agent',
       userGoal: 'Generate Starter Script for ${featureDoc.title}',
       reasoning:
@@ -1170,7 +1357,7 @@ class WorkbenchProvider extends ChangeNotifier {
           summary: 'Generated ${bundle.fileName} (${bundle.exportedVariables.length} tuning vars, ${states.length} checkpoints)',
         ),
       ],
-    );
+    ));
     notifyListeners();
     return bundle;
   }
@@ -1181,6 +1368,7 @@ class WorkbenchProvider extends ChangeNotifier {
     required List<FeatureStateNode> states,
     required int checkpointIndex,
   }) {
+    _pushAgentUndoSnapshot();
     final engineHint = _conceptDraft?.techSpec.join(' ') ??
         activeProject?.sections['tech_spec'];
     final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
@@ -1193,7 +1381,7 @@ class WorkbenchProvider extends ChangeNotifier {
         updateFeatureStates(featId, updatedStates);
       },
     );
-    _lastAgentTrace = result.trace;
+    _recordAgentTrace(result.trace);
     notifyListeners();
     return result;
   }
@@ -1555,7 +1743,7 @@ class WorkbenchProvider extends ChangeNotifier {
       final bp = _releaseBlueprint;
       if (bp != null) {
         final totalFeats = bp.totalIncludedFeatures;
-        _lastAgentTrace = AgentRunTrace(
+        _recordAgentTrace(AgentRunTrace(
           agentRole: '3-Agent Release Pipeline',
           userGoal: 'Plan ${bp.releaseTitle}',
           reasoning:
@@ -1577,7 +1765,7 @@ class WorkbenchProvider extends ChangeNotifier {
               summary: 'Injected 60/40 Checkpoints, numeric tuning variables, and [GUARD] rules',
             ),
           ],
-        );
+        ));
       }
       _currentStage = WorkbenchStage.releasePlanGate;
       _syncActiveProjectMetadata();
@@ -1722,6 +1910,7 @@ class WorkbenchProvider extends ChangeNotifier {
     final bp = _releaseBlueprint;
     final cleanTitle = rawTitle.trim();
     if (bp == null || cleanTitle.isEmpty) return;
+    _pushAgentUndoSnapshot();
 
     for (final beat in bp.beats) {
       if (beat.id == beatId) {
@@ -1772,7 +1961,7 @@ class WorkbenchProvider extends ChangeNotifier {
             ],
           ),
         );
-        _lastAgentTrace = AgentRunTrace(
+        _recordAgentTrace(AgentRunTrace(
           agentRole: 'Systems & Engine Architect',
           userGoal: 'Add Feature "$cleanTitle" to ${beat.title}',
           reasoning:
@@ -1784,7 +1973,7 @@ class WorkbenchProvider extends ChangeNotifier {
               summary: 'Added "$cleanTitle" (4h) with ${archetype.cp1Title} & ${archetype.cp2Title}',
             ),
           ],
-        );
+        ));
         _syncActiveProjectMetadata();
         notifyListeners();
         return;
@@ -1872,6 +2061,7 @@ class WorkbenchProvider extends ChangeNotifier {
         checkpointIndex >= states.length) {
       return -1;
     }
+    _pushAgentUndoSnapshot();
     final cpNode = states[checkpointIndex];
     final newTaskIndex = cpNode.checklist.length;
     final taskNum = newTaskIndex + 1;
@@ -1934,7 +2124,7 @@ class WorkbenchProvider extends ChangeNotifier {
       cpNode.edgeCases = [...cpNode.edgeCases, guardText];
     }
     final featTitle = documents[featureId]?.title ?? cpNode.cleanStageTitle;
-    _lastAgentTrace = AgentRunTrace(
+    _recordAgentTrace(AgentRunTrace(
       agentRole: 'Playtest Root-Cause Debugger',
       userGoal: 'Log Issue: $cleanIssue',
       reasoning:
@@ -1946,7 +2136,7 @@ class WorkbenchProvider extends ChangeNotifier {
           summary: 'Added [FIX] $cleanIssue (1h) + [PLAYTEST GUARD] boundary rule',
         ),
       ],
-    );
+    ));
     updateFeatureStates(featureId, states);
     return newTaskIndex;
   }
@@ -2211,7 +2401,7 @@ Return ONLY a JSON object with this exact schema:
         final carryoverNote = retro.carryoverFeatureTitles.isEmpty
             ? '100% of ${retro.totalCheckpoints} checkpoints verified'
             : 'Carried over ${retro.carryoverFeatureTitles.length} unfinished feature(s) (${retro.carryoverFeatureTitles.join(", ")}) as UPGRADING';
-        _lastAgentTrace = AgentRunTrace(
+        _recordAgentTrace(AgentRunTrace(
           agentRole: 'Post-Release Retrospective & Carryover Agent',
           userGoal: 'Evolve from ${retro.releaseTitle} to ${_releaseBlueprint!.releaseTitle}',
           reasoning:
@@ -2231,7 +2421,7 @@ Return ONLY a JSON object with this exact schema:
                     'Carried over ${retro.carryoverFeatureTitles.join(", ")} into ${_releaseBlueprint!.releaseVersionTag}',
               ),
           ],
-        );
+        ));
         notifyListeners();
       }
     }

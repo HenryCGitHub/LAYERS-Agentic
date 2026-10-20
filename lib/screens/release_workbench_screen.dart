@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../agents/workspace_agent_tools.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
@@ -37,6 +38,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   bool _hideUnassignedSpecShelf = false;
   bool _showCoPilotDrawer = true;
   bool _showPillarsReferenceDrawer = false;
+  String _selectedVersionFilter = 'ALL';
+  bool _criticalPathOnly = false;
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
 
   @override
@@ -221,9 +224,42 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       color: _accentAmber,
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      InkWell(
+                        key: const ValueKey('critical_path_filter_btn'),
+                        onTap: () {
+                          setState(() {
+                            _criticalPathOnly = !_criticalPathOnly;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _criticalPathOnly
+                                ? _accentEmerald.withValues(alpha: 0.14)
+                                : _bgSurface,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: _criticalPathOnly
+                                  ? _accentEmerald.withValues(alpha: 0.45)
+                                  : _borderSubtle,
+                            ),
+                          ),
+                          child: Text(
+                            '⚡ Crit: ${_criticalPathOnly ? "ON" : "OFF"}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              color: _criticalPathOnly ? _accentEmerald : _textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
                       InkWell(
                         key: const ValueKey('focus_mode_toggle_btn'),
                         onTap: () => widget.workbench.toggleFocusMode(),
@@ -251,7 +287,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
                       Text(
                         '$relProgress%',
                         style: GoogleFonts.jetBrainsMono(
@@ -482,8 +517,30 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 );
               },
             ),
-            for (final feat in widget.workbench.featuresForBeat(beats[bIdx].id))
-              _buildFeatureRailItem(feat, activeVer: activeVer),
+            for (int fIdx = 0;
+                fIdx < widget.workbench.featuresForBeat(beats[bIdx].id).length;
+                fIdx++)
+              Builder(
+                builder: (context) {
+                  final feat = widget.workbench
+                      .featuresForBeat(beats[bIdx].id)[fIdx];
+                  final depTier =
+                      WorkspaceAgentOrchestrator.classifyDependencyTier(
+                    featureTitle: feat.title,
+                    beatIndex: bIdx,
+                    featureIndexInBeat: fIdx,
+                  );
+                  if (_criticalPathOnly && depTier.tierRank > 2) {
+                    return const SizedBox.shrink();
+                  }
+                  return _buildFeatureRailItem(
+                    feat,
+                    activeVer: activeVer,
+                    beatIndex: bIdx,
+                    featureIndexInBeat: fIdx,
+                  );
+                },
+              ),
           ],
       ],
     );
@@ -508,13 +565,26 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
-  Widget _buildFeatureRailItem(TierDocument feat, {required String activeVer}) {
+  Widget _buildFeatureRailItem(
+    TierDocument feat, {
+    required String activeVer,
+    int beatIndex = 0,
+    int featureIndexInBeat = 0,
+  }) {
     final isSelected = widget.workbench.selectedFeatureId == feat.id;
     final progress = widget.workbench.getDocumentProgress(feat.id);
     final isDone = progress >= 100;
     final isFocus = widget.workbench.focusMode;
     final lifecycle = feat.sections['lifecycle'] ?? '';
     final originVer = feat.sections['originVersion'] ?? 'v0.1';
+    final depTier = WorkspaceAgentOrchestrator.classifyDependencyTier(
+      featureTitle: feat.title,
+      beatIndex: beatIndex,
+      featureIndexInBeat: featureIndexInBeat,
+    );
+    final depColor = depTier.severity == 'emerald'
+        ? _accentEmerald
+        : (depTier.severity == 'amber' ? _accentAmber : _textMuted);
 
     String? vBadge;
     Color vColor = _textMuted;
@@ -575,7 +645,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               ),
               if (vBadge != null) ...[
                 Container(
-                  margin: const EdgeInsets.only(right: 5),
+                  margin: const EdgeInsets.only(right: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: vColor.withValues(alpha: 0.12),
@@ -591,6 +661,27 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   ),
                 ),
               ],
+              Container(
+                key: ValueKey('stage3_dep_tier_${feat.id}'),
+                margin: const EdgeInsets.only(right: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: depColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: depColor.withValues(alpha: 0.35),
+                    width: 0.7,
+                  ),
+                ),
+                child: Text(
+                  depTier.shortBadge,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
+                    color: depColor,
+                  ),
+                ),
+              ),
               Text(
                 '$progress%',
                 style: GoogleFonts.jetBrainsMono(
@@ -737,15 +828,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
+        _buildVersionEvolutionTimelineBar(states),
+        const SizedBox(height: 10),
         for (int i = 0; i < states.length; i++)
-          _buildCheckpointCard(
-            feat,
-            states,
-            i,
-            activeFocusIndex: activeFocusIndex,
-            specBinding: specBinding,
-          ),
+          if (_selectedVersionFilter == 'ALL' ||
+              !states.any((s) => s.releaseVersion == _selectedVersionFilter) ||
+              states[i].releaseVersion == _selectedVersionFilter)
+            _buildCheckpointCard(
+              feat,
+              states,
+              i,
+              activeFocusIndex: activeFocusIndex,
+              specBinding: specBinding,
+            ),
       ],
     );
 
@@ -786,6 +882,149 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             ),
           ),
           bottomDock,
+        ],
+      ),
+    );
+  }
+
+  /// Option 3: Interactive Cross-Release Version Evolution Timeline Bar (`ALL VERSIONS` · `v0.1 ✓` · `v0.2 ●`).
+  Widget _buildVersionEvolutionTimelineBar(List<FeatureStateNode> states) {
+    final versions = <String>[];
+    for (final s in states) {
+      final ver = s.releaseVersion.trim().isNotEmpty ? s.releaseVersion.trim() : 'v0.1';
+      if (!versions.contains(ver)) {
+        versions.add(ver);
+      }
+    }
+    if (versions.isEmpty) {
+      versions.add('v0.1');
+    }
+
+    final effectiveFilter = (_selectedVersionFilter == 'ALL' ||
+            versions.contains(_selectedVersionFilter))
+        ? _selectedVersionFilter
+        : 'ALL';
+
+    return Container(
+      key: const ValueKey('version_timeline_bar'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: _bgSurface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: _borderSubtle),
+      ),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            'VERSION TIMELINE:',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+              color: _textMuted,
+            ),
+          ),
+          InkWell(
+            key: const ValueKey('version_filter_pill_ALL'),
+            onTap: () {
+              setState(() {
+                _selectedVersionFilter = 'ALL';
+              });
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: effectiveFilter == 'ALL'
+                    ? _accentAmber.withValues(alpha: 0.14)
+                    : _bgRecessed,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: effectiveFilter == 'ALL'
+                      ? _accentAmber.withValues(alpha: 0.5)
+                      : _borderSubtle,
+                ),
+              ),
+              child: Text(
+                'ALL VERSIONS (${states.length} CPs)',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: effectiveFilter == 'ALL'
+                      ? _accentAmber
+                      : _textSecondary,
+                ),
+              ),
+            ),
+          ),
+          for (int vIdx = 0; vIdx < versions.length; vIdx++) ...[
+            if (vIdx > 0)
+              Text(
+                '→',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  color: _textMuted,
+                ),
+              ),
+            Builder(
+              builder: (context) {
+                final ver = versions[vIdx];
+                final verStates = states
+                    .where((s) =>
+                        (s.releaseVersion.trim().isNotEmpty
+                            ? s.releaseVersion.trim()
+                            : 'v0.1') ==
+                        ver)
+                    .toList();
+                final doneCount =
+                    verStates.where((s) => s.isCompleted).length;
+                final allVerDone =
+                    verStates.isNotEmpty && doneCount == verStates.length;
+                final isSelected = effectiveFilter == ver;
+                final pillColor =
+                    allVerDone ? _accentEmerald : _accentAmber;
+
+                return InkWell(
+                  key: ValueKey('version_filter_pill_$ver'),
+                  onTap: () {
+                    setState(() {
+                      _selectedVersionFilter =
+                          _selectedVersionFilter == ver ? 'ALL' : ver;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? pillColor.withValues(alpha: 0.16)
+                          : _bgRecessed,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: isSelected
+                            ? pillColor.withValues(alpha: 0.55)
+                            : _borderSubtle,
+                      ),
+                    ),
+                    child: Text(
+                      '$ver ${allVerDone ? "✓" : "●"} ($doneCount/${verStates.length})',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: isSelected ? pillColor : _textSecondary,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );

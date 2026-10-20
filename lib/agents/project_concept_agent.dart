@@ -1411,4 +1411,66 @@ Return ONLY a JSON object using plain, literal game-dev language (zero corporate
       expansionCards: selectedCards,
     );
   }
+
+  /// Option 5: Extracts a complete 9-section `ProjectConceptBlueprint` from an unstructured
+  /// GDD, Notion note, or README document and marks it ready for `Step 10 · Full Review`.
+  static Future<ProjectConceptBlueprint> extractConceptFromGdd(
+    String rawGdd, {
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
+  }) async {
+    final cleanDoc = rawGdd.trim().isEmpty
+        ? 'High-speed grappling hook parkour roguelite'
+        : rawGdd.trim();
+
+    // Start from the base concept extraction (uses Gemini if key is present, or deterministic fallback)
+    final bp = await startConceptInterview(
+      cleanDoc,
+      apiKey: apiKey,
+      modelName: modelName,
+      thinkingLevel: thinkingLevel,
+    );
+
+    // Parse any explicit markdown headings / bullet lines in the pasted GDD so offline or hybrid imports preserve user lines!
+    final lines = cleanDoc
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+
+    for (final line in lines) {
+      final lower = line.toLowerCase();
+      if (line.startsWith('# ') && line.length > 2) {
+        final heading = line.substring(2).trim();
+        if (heading.isNotEmpty && heading.length <= 42) {
+          bp.title = heading;
+        }
+      } else if (lower.startsWith('title:')) {
+        final t = line.substring(6).trim();
+        if (t.isNotEmpty) bp.title = t;
+      } else if (lower.startsWith('goal:')) {
+        final g = line.substring(5).trim();
+        if (g.isNotEmpty) bp.goal = g;
+      } else if (lower.startsWith('done when:')) {
+        final d = line.substring(10).trim();
+        if (d.isNotEmpty) bp.doneWhen = d;
+      } else if (lower.startsWith('engine:') || lower.startsWith('tech:')) {
+        final val = line.split(':').sublist(1).join(':').trim();
+        if (val.isNotEmpty) {
+          bp.techSpec = val
+              .split(RegExp(r'[·,]'))
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      }
+    }
+
+    bp.isInterviewComplete = true;
+    bp.lastUpdatedFields = const [
+      'Extracted Full 9-Section Concept from Pasted GDD / Notes',
+    ];
+    return bp;
+  }
 }
