@@ -2,6 +2,67 @@ import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import 'gemini_agent_client.dart';
 
+/// A single AI-suggested mechanic or twist card on the New Project screen
+/// that the user can toggle on/off to fold into (or remove from) their Concept Summary.
+class SparkExpansionCard {
+  final String badge;
+  final String title;
+  final String description;
+  final String additionSummary;
+  final String accentType;
+  bool isSelected;
+
+  SparkExpansionCard({
+    required this.badge,
+    required this.title,
+    required this.description,
+    required this.additionSummary,
+    this.accentType = 'amber',
+    this.isSelected = false,
+  });
+}
+
+/// Holds the ingested AI summary of the user's raw game idea on the New Project screen,
+/// plus the 3 toggleable Concept Expansion Cards tailored to that idea.
+class SparkIdeaIntakeResult {
+  String rawIdea;
+  String workingTitle;
+  String baseSummary;
+  List<String> mechanics;
+  List<SparkExpansionCard> expansionCards;
+
+  SparkIdeaIntakeResult({
+    required this.rawIdea,
+    required this.workingTitle,
+    required this.baseSummary,
+    required this.mechanics,
+    required this.expansionCards,
+  });
+
+  /// Returns the effective summary including any selected Expansion Cards.
+  String get effectiveSummary {
+    final activeAdditions = expansionCards
+        .where((c) => c.isSelected)
+        .map((c) => c.additionSummary)
+        .toList();
+    if (activeAdditions.isEmpty) return baseSummary;
+    return '$baseSummary Included additions: ${activeAdditions.join(' · ')}.';
+  }
+
+  /// Returns the canonical prompt sent to `startConceptInterview` when the user
+  /// clicks `Start Concept Blueprint →`.
+  String get canonicalPrompt {
+    final activeAdditions = expansionCards
+        .where((c) => c.isSelected)
+        .map((c) => '${c.title} (${c.additionSummary})')
+        .toList();
+    if (activeAdditions.isEmpty) {
+      return '$rawIdea — $baseSummary';
+    }
+    return '$rawIdea — $baseSummary With added mechanics: ${activeAdditions.join('; ')}';
+  }
+}
+
 /// Stage 1 Agent: Turns a "Spark" idea into a Concept Blueprint and section-focused
 /// guidance, letting the Agent dynamically determine the exact number of Core Loop Beats,
 /// Design Pillars, Trade-Offs, and Exclusions needed for the concept.
@@ -974,5 +1035,380 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
         'Two-Step v0.1 → v0.2: v0.1 Player Movement & Controls → v0.2 Full $title Core Loop Arena',
       ],
     };
+  }
+
+  /// Ingests a raw game idea (or refines an existing ingested summary) on the New Project screen,
+  /// returning a concise plain-English summary + 3 toggleable Concept Expansion Cards tailored
+  /// to the user's idea.
+  static Future<SparkIdeaIntakeResult> ingestOrRefineSparkIdea({
+    required String userInput,
+    SparkIdeaIntakeResult? existingIntake,
+    int suggestionVariantOffset = 0,
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
+  }) async {
+    final cleanInput = userInput.trim();
+    final isRefinement = existingIntake != null && cleanInput.isNotEmpty;
+    final seedIdea = existingIntake != null
+        ? (cleanInput.isEmpty
+            ? existingIntake.rawIdea
+            : '${existingIntake.rawIdea} ($cleanInput)')
+        : (cleanInput.isEmpty
+            ? 'High-speed grappling hook parkour roguelite'
+            : cleanInput);
+    final fallbackTitle = _derivePunchyTitle(
+      existingIntake?.rawIdea ?? seedIdea,
+    );
+
+    if (GeminiAgentClient.hasKey(apiKey)) {
+      final prompt = '''
+You are an expert indie game design producer helping a developer shape their game idea before building the blueprint.
+${isRefinement ? 'Existing Working Title: "${existingIntake.workingTitle}"\nExisting Summary: "${existingIntake.baseSummary}"\nDeveloper Refinement Request: "$cleanInput"' : 'Developer Pitched Idea: "$seedIdea"'}
+
+Return ONLY a JSON object using plain, literal game-dev language (zero corporate buzzwords or archaic lore words):
+{
+  "workingTitle": "Short 2-3 word working title",
+  "baseSummary": "2 plain-English sentences summarizing the core gameplay premise, player controls/feel, and repeatable loop (incorporating any refinement request).",
+  "mechanics": [
+    "Short Mechanic Tag 1",
+    "Short Mechanic Tag 2",
+    "Short Mechanic Tag 3"
+  ],
+  "expansionCards": [
+    {
+      "badge": "01 · CORE MECHANIC TWIST",
+      "title": "Short 2-4 Word Mechanic Name",
+      "description": "1-2 plain sentences describing how this mechanic deepens primary player actions.",
+      "additionSummary": "1 concise clause summarizing this mechanic when toggled on"
+    },
+    {
+      "badge": "02 · RISK / REWARD HOOK",
+      "title": "Short 2-4 Word Hook Name",
+      "description": "1-2 plain sentences describing a tension or risk/reward trade-off inside the loop.",
+      "additionSummary": "1 concise clause summarizing this risk/reward hook when toggled on"
+    },
+    {
+      "badge": "03 · LOOP PAYOFF & UPGRADE",
+      "title": "Short 2-4 Word Payoff Name",
+      "description": "1-2 plain sentences describing a between-round upgrade or loop completion payoff.",
+      "additionSummary": "1 concise clause summarizing this payoff when toggled on"
+    }
+  ]
+}
+''';
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: apiKey,
+        preferredModel: modelName,
+        thinkingLevel: thinkingLevel,
+        temperature: 0.45,
+      );
+      if (json != null) {
+        final wTitle = (json['workingTitle'] ?? '').toString().trim();
+        final summary = (json['baseSummary'] ?? '').toString().trim();
+        final rawMechs = json['mechanics'];
+        final mechs = rawMechs is List
+            ? rawMechs
+                .map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList()
+            : <String>[];
+        final rawCards = json['expansionCards'];
+        final cards = <SparkExpansionCard>[];
+        if (rawCards is List) {
+          const accents = ['amber', 'emerald', 'neutral'];
+          for (int i = 0; i < rawCards.length && i < 3; i++) {
+            final item = rawCards[i];
+            if (item is Map) {
+              cards.add(
+                SparkExpansionCard(
+                  badge: (item['badge'] ?? '0${i + 1} · IDEA ADDITION')
+                      .toString()
+                      .trim(),
+                  title: (item['title'] ?? 'Gameplay Twist ${i + 1}')
+                      .toString()
+                      .trim(),
+                  description: (item['description'] ?? '').toString().trim(),
+                  additionSummary:
+                      (item['additionSummary'] ?? item['title'] ?? '')
+                          .toString()
+                          .trim(),
+                  accentType: accents[i % accents.length],
+                ),
+              );
+            }
+          }
+        }
+        if (summary.isNotEmpty && cards.length == 3) {
+          return SparkIdeaIntakeResult(
+            rawIdea: seedIdea,
+            workingTitle: wTitle.isNotEmpty ? wTitle : fallbackTitle,
+            baseSummary: summary,
+            mechanics: mechs.isNotEmpty
+                ? mechs
+                : _deterministicMechanicsForIdea(seedIdea),
+            expansionCards: cards,
+          );
+        }
+      }
+    }
+
+    return buildDeterministicSparkIntake(
+      rawIdea: existingIntake?.rawIdea ?? seedIdea,
+      refinementText: isRefinement ? cleanInput : null,
+      existingIntake: existingIntake,
+      suggestionVariantOffset: suggestionVariantOffset,
+    );
+  }
+
+  static List<String> _deterministicMechanicsForIdea(String idea) {
+    final lower = idea.toLowerCase();
+    if (lower.contains('grappl') || lower.contains('parkour') || lower.contains('swing')) {
+      return const [
+        'Momentum Grapple Swing',
+        'Mid-Air Dash Cancel',
+        'Fast Arena Reset',
+      ];
+    }
+    if (lower.contains('sub') || lower.contains('ocean') || lower.contains('sea') || lower.contains('salvage')) {
+      return const [
+        'Submarine Depth Navigation',
+        'Sonar & Salvage Pickup',
+        'Dock Hull Upgrades',
+      ];
+    }
+    if (lower.contains('katana') || lower.contains('deflect') || lower.contains('boss') || lower.contains('parry')) {
+      return const [
+        'Timed Parry & Deflect',
+        'Dash-Strike Counter',
+        'Multi-Phase Boss Telegraph',
+      ];
+    }
+    if (lower.contains('farm') || lower.contains('crop') || lower.contains('shop') || lower.contains('alchemy')) {
+      return const [
+        'Resource Gathering & Plots',
+        'Recipe Processing',
+        'Shop Customer Orders',
+      ];
+    }
+    return const [
+      'Responsive Core Controls',
+      'Escalating Round Objective',
+      'Between-Round Loadout Choice',
+    ];
+  }
+
+  static SparkIdeaIntakeResult buildDeterministicSparkIntake({
+    required String rawIdea,
+    String? refinementText,
+    SparkIdeaIntakeResult? existingIntake,
+    int suggestionVariantOffset = 0,
+  }) {
+    final cleanIdea = rawIdea.trim().isEmpty
+        ? 'High-speed grappling hook parkour roguelite'
+        : rawIdea.trim();
+    final title = existingIntake?.workingTitle ?? _derivePunchyTitle(cleanIdea);
+    final mechs = List<String>.from(
+      existingIntake?.mechanics ?? _deterministicMechanicsForIdea(cleanIdea),
+    );
+
+    String summary;
+    if (existingIntake != null &&
+        refinementText != null &&
+        refinementText.trim().isNotEmpty) {
+      final cleanRef = refinementText.trim();
+      summary =
+          '${existingIntake.baseSummary} Updated with your direction: $cleanRef.';
+      final shortTag = cleanRef.split(RegExp(r'\s+')).take(3).join(' ');
+      if (!mechs.contains(shortTag)) {
+        mechs.add(shortTag);
+      }
+    } else {
+      summary =
+          '$title centers on "$cleanIdea" — players execute responsive core controls, clear escalating round objectives with immediate visual/audio feedback, and reset or upgrade cleanly between runs.';
+    }
+
+    final lower = cleanIdea.toLowerCase();
+    final List<SparkExpansionCard> pool;
+    if (lower.contains('grappl') || lower.contains('parkour') || lower.contains('swing')) {
+      pool = [
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Grapple Reel-Slam & Ricochet',
+          description:
+              'Pull straight toward a hooked surface or enemy and trigger a high-speed ricochet launch on impact.',
+          additionSummary: 'Grapple reel-slam and wall ricochet launch',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Floor-Is-Hazard Speed Multiplier',
+          description:
+              'Staying airborne chains a velocity multiplier up to 3.0x, while touching the floor resets the combo meter.',
+          additionSummary: 'Airborne velocity combo multiplier with floor reset',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: 'Between-Room Hook Modifiers',
+          description:
+              'Pick 1 of 3 hook modifications (shock tether, dual-anchor, explosive detach) after clearing each arena.',
+          additionSummary: 'Between-room hook modifier draft',
+          accentType: 'neutral',
+        ),
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Throwable Anchor Pylon',
+          description:
+              'Toss a temporary mid-air anchor point into open space to swing across wide gaps with no walls.',
+          additionSummary: 'Throwable mid-air grapple anchor pylon',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Tether Overheat Boost',
+          description:
+              'Hold boost while swinging to double pull speed at the cost of overheating the winch for 2 seconds.',
+          additionSummary: 'Overheat winch boost trade-off',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: 'Time-Gate Shortcut Vaults',
+          description:
+              'Clear a room under the par timer to unlock a bonus vault exit with high-tier movement augments.',
+          additionSummary: 'Par-time shortcut vaults between arenas',
+          accentType: 'neutral',
+        ),
+      ];
+    } else if (lower.contains('sub') || lower.contains('ocean') || lower.contains('salvage')) {
+      pool = [
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Winch Tether & Heavy Tow',
+          description:
+              'Latch a physical winch cable onto sunken cargo or sea creatures, adjusting sub ballast to tow heavy loads.',
+          additionSummary: 'Physical winch tether and ballast tow physics',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Depth Pressure & Floodlight Drain',
+          description:
+              'Diving into deeper trenches yields rare salvage, but high pressure drains battery floodlights faster.',
+          additionSummary: 'Deep-trench hull pressure and battery drain trade-off',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: 'Drydock Sonar & Hull Bay',
+          description:
+              'Cash in photos and salvage at the surface dock to upgrade sonar pulse range, floodlights, and cargo bays.',
+          additionSummary: 'Surface drydock sonar and hull upgrade bay',
+          accentType: 'neutral',
+        ),
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Acoustic Decoy Beacon',
+          description:
+              'Deploy sound beacons that lure territorial trench creatures away from high-value wreck sites.',
+          additionSummary: 'Acoustic decoy beacons for stealth salvage',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Overweight Cargo Ballast',
+          description:
+              'Carrying extra salvage beyond capacity slows vertical ascent speed when returning to the surface.',
+          additionSummary: 'Overweight cargo ascent speed penalty',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: 'Marine Codex Bounties',
+          description:
+              'Complete photo sets of rare trench species to unlock specialized camera lenses and thrusters.',
+          additionSummary: 'Marine photo codex bounties and lens unlocks',
+          accentType: 'neutral',
+        ),
+      ];
+    } else {
+      pool = [
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Precision Timing Cancel & Boost',
+          description:
+              'Time your primary action on beat or impact to cancel recovery frames into an immediate speed or power burst.',
+          additionSummary: 'Precision timing cancel into speed/power burst',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Push-Your-Luck Streak Multiplier',
+          description:
+              'Bank your round rewards early for a safe payout, or risk an extra escalation wave for double rewards.',
+          additionSummary: 'Push-your-luck wave escalation vs safe bank choice',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: '3-Choice Loadout Draft Bench',
+          description:
+              'Between rounds, pick 1 of 3 tactile mechanic modifiers that noticeably alter how your primary tool behaves.',
+          additionSummary: 'Between-round 3-choice mechanic modifier draft',
+          accentType: 'neutral',
+        ),
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Interactive Arena Hazards',
+          description:
+              'Knock or redirect arena obstacles into targets to trigger chain-reaction clears.',
+          additionSummary: 'Redirectable arena hazards and chain reactions',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Overcharge Cooldown Gamble',
+          description:
+              'Overcharge your primary ability for 2x area effect, triggering a brief cooldown vent if it misses.',
+          additionSummary: 'Overcharge ability risk/reward cooldown vent',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: 'Instant Trial Target Range',
+          description:
+              'Test newly unlocked upgrades on a live dummy target right inside the prep zone before starting the next round.',
+          additionSummary: 'Interactive prep-zone target dummy test range',
+          accentType: 'neutral',
+        ),
+      ];
+    }
+
+    final startIdx = (suggestionVariantOffset * 3) % pool.length;
+    final selectedCards = <SparkExpansionCard>[
+      for (int i = 0; i < 3; i++) pool[(startIdx + i) % pool.length],
+    ];
+
+    // Preserve selection state if refreshing/refining
+    if (existingIntake != null) {
+      for (final card in selectedCards) {
+        final match = existingIntake.expansionCards
+            .where((c) => c.title == card.title)
+            .toList();
+        if (match.isNotEmpty) {
+          card.isSelected = match.first.isSelected;
+        }
+      }
+    }
+
+    return SparkIdeaIntakeResult(
+      rawIdea: cleanIdea,
+      workingTitle: title,
+      baseSummary: summary,
+      mechanics: mechs,
+      expansionCards: selectedCards,
+    );
   }
 }

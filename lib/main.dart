@@ -254,7 +254,7 @@ class WorkbenchShell extends StatelessWidget {
                             Icon(Icons.add_circle_outline_rounded, size: 13, color: accentEmerald),
                             const SizedBox(width: 8),
                             Text(
-                              '+ New Project Spark',
+                              '+ New Project',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -717,7 +717,7 @@ class WorkbenchShell extends StatelessWidget {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               child: Text(
-                                '+ New Spark',
+                                '+ New Project',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w700,

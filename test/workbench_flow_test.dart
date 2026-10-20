@@ -45,16 +45,48 @@ void main() {
         await tester.pumpWidget(LayersAgenticApp(provider: provider));
         await tester.pumpAndSettle();
 
-        // ── Stage 1A: The Spark (3 Side-by-Side Starter Concept Playing Cards) ──
+        // ── Stage 1A: New Project (Interactive AI Idea Intake & Concept Expansion Cards) ──
         expect(find.byKey(const ValueKey('connected_pipeline_track')), findsOneWidget);
-        expect(find.text('STEP 1A · THE SPARK'), findsOneWidget);
+        expect(find.text('STEP 1A · NEW PROJECT'), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_card_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_card_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_card_2')), findsOneWidget);
+        expect(find.byKey(const ValueKey('ingest_idea_summary_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('shuffle_spark_ideas_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('start_concept_interview_btn')), findsOneWidget);
 
-        // 1-Click Launch via Playing Card #1 ('Grapple Hook Parkour')
+        // Input a raw game idea and verify the Agent ingests & summarizes it back without auto-starting Stage 1B
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_input_field')),
+          'High-speed grappling hook parkour roguelite',
+        );
+        await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('agent_idea_summary_card')), findsOneWidget);
+        expect(find.text('STEP 1A · NEW PROJECT'), findsOneWidget);
+
+        // Use the same input field to refine the Agent's summary
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_input_field')),
+          'Add wall-run chains',
+        );
+        await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Add wall-run chains'), findsWidgets);
+
+        // Clicking a Concept Expansion Card toggles it on (adds to summary) without auto-launching Stage 1B,
+        // and clicking it a second time unselects it!
         await tester.tap(find.byKey(const ValueKey('spark_card_0')));
+        await tester.pumpAndSettle();
+        expect(find.text('STEP 1A · NEW PROJECT'), findsOneWidget);
+        expect(provider.sparkIntake!.expansionCards.first.isSelected, isTrue);
+
+        await tester.tap(find.byKey(const ValueKey('spark_card_0')));
+        await tester.pumpAndSettle();
+        expect(provider.sparkIntake!.expansionCards.first.isSelected, isFalse);
+
+        // Explicitly click "Start Concept Blueprint →" to accept and launch Stage 1B
+        await tester.tap(find.byKey(const ValueKey('start_concept_interview_btn')));
         await tester.pumpAndSettle();
 
         // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..09) ──
@@ -65,11 +97,21 @@ void main() {
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
         expect(find.byKey(const ValueKey('new_spark_reset_btn')), findsOneWidget);
+        expect(find.text('+ New Project'), findsOneWidget);
         expect(find.byKey(const ValueKey('agent_option_card_0_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('agent_option_card_0_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('agent_option_card_0_2')), findsOneWidget);
         expect(find.text('SECTION 01 / 09'), findsOneWidget);
         expect(find.text('Goal'), findsWidgets);
+
+        // Verify clicking a Stage 1B Option Card applies it, and clicking it again unselects it and restores the default Goal
+        final initialGoal = provider.conceptDraft!.goal;
+        await tester.tap(find.byKey(const ValueKey('agent_option_card_0_1')));
+        await tester.pumpAndSettle();
+        expect(provider.conceptDraft!.goal, isNot(equals(initialGoal)));
+        await tester.tap(find.byKey(const ValueKey('agent_option_card_0_1')));
+        await tester.pumpAndSettle();
+        expect(provider.conceptDraft!.goal, equals(initialGoal));
 
         // Step to Section 02 (Game Spec) and verify 2x2 KV grid labels
         await tester.tap(find.byKey(const ValueKey('next_section_btn')));

@@ -64,7 +64,7 @@ class AgentQuestion {
     this.isMultiSelect = false,
     String? selectedOption,
     this.customWriteIn = '',
-  }) : selectedOption = selectedOption ?? (options.isNotEmpty ? options.first : '');
+  }) : selectedOption = selectedOption ?? '';
 
   /// Effective user answer (prefers customWriteIn if non-empty).
   String get effectiveAnswer =>

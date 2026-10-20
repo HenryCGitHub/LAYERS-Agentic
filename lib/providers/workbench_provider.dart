@@ -240,7 +240,12 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Starts a brand-new Project at Stage 1A (`The Spark`) while keeping existing projects in the vault.
+  /// Pre-project AI Idea Intake & Summary state on the New Project screen (`Stage 1A`).
+  SparkIdeaIntakeResult? _sparkIntake;
+  SparkIdeaIntakeResult? get sparkIntake => _sparkIntake;
+  int _sparkSuggestionVariantOffset = 0;
+
+  /// Starts a brand-new Project at Stage 1A (`New Project`) while keeping existing projects in the vault.
   void createNewProject() {
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
@@ -248,7 +253,69 @@ class WorkbenchProvider extends ChangeNotifier {
     _selectedFeatureId = null;
     _conceptDraft = null;
     _releaseBlueprint = null;
+    _sparkIntake = null;
+    _sparkSuggestionVariantOffset = 0;
     _currentStage = WorkbenchStage.projectPitch;
+    notifyListeners();
+  }
+
+  /// Ingests a raw game idea (or refines the existing ingested summary) on the New Project screen
+  /// and populates the 3 Concept Expansion / Twist Cards below the input field.
+  Future<void> ingestOrRefineSparkIdea(String userInput) async {
+    final clean = userInput.trim();
+    if (clean.isEmpty && _sparkIntake == null) return;
+
+    _isAgentBusy = true;
+    _agentProgressStep =
+        'Ingesting & summarizing idea ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+    notifyListeners();
+
+    try {
+      _sparkIntake = await ProjectConceptAgent.ingestOrRefineSparkIdea(
+        userInput: clean,
+        existingIntake: _sparkIntake,
+        suggestionVariantOffset: _sparkSuggestionVariantOffset,
+        apiKey: _apiKey,
+        modelName: _conversationModel,
+        thinkingLevel: _thinkingLevel,
+      );
+    } finally {
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
+  }
+
+  /// Toggles one of the 3 Concept Expansion / Twist Cards on the New Project screen on or off,
+  /// folding that mechanic into (or removing it from) the Agent's Idea Summary without auto-launching Stage 1B.
+  void toggleSparkExpansionCard(int cardIndex) {
+    // If the user hasn't entered an idea yet, initialize a base intake so the expansion cards can be toggled
+    _sparkIntake ??= ProjectConceptAgent.buildDeterministicSparkIntake(
+      rawIdea: 'High-speed grappling hook parkour roguelite',
+      suggestionVariantOffset: _sparkSuggestionVariantOffset,
+    );
+    final cards = _sparkIntake!.expansionCards;
+    if (cardIndex < 0 || cardIndex >= cards.length) return;
+    cards[cardIndex].isSelected = !cards[cardIndex].isSelected;
+    notifyListeners();
+  }
+
+  /// Cycles the 3 Concept Expansion / Twist Cards on the New Project screen to fresh suggestions.
+  void shuffleSparkExpansionCards() {
+    _sparkSuggestionVariantOffset++;
+    if (_sparkIntake != null) {
+      _sparkIntake = ProjectConceptAgent.buildDeterministicSparkIntake(
+        rawIdea: _sparkIntake!.rawIdea,
+        existingIntake: _sparkIntake,
+        suggestionVariantOffset: _sparkSuggestionVariantOffset,
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Clears the current pre-project Idea Summary so the user can start fresh.
+  void clearSparkIdeaIntake() {
+    _sparkIntake = null;
     notifyListeners();
   }
 
@@ -738,8 +805,14 @@ class WorkbenchProvider extends ChangeNotifier {
     createNewProject();
   }
 
-  /// Step 1A -> 1B: User submits their 1-line Spark idea and starts the turn-by-turn Co-Design Chat.
-  Future<void> startConceptInterview(String sparkText) async {
+  /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 9-section Concept Blueprint.
+  Future<void> startConceptInterview([String sparkText = '']) async {
+    final cleanText = sparkText.trim();
+    final effectiveSpark = cleanText.isNotEmpty
+        ? cleanText
+        : (_sparkIntake?.canonicalPrompt ??
+            'High-speed grappling hook parkour roguelite');
+
     _isAgentBusy = true;
     _agentProgressStep =
         'Drafting initial Concept Blueprint ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
@@ -747,7 +820,7 @@ class WorkbenchProvider extends ChangeNotifier {
 
     try {
       _conceptDraft = await ProjectConceptAgent.startConceptInterview(
-        sparkText,
+        effectiveSpark,
         apiKey: _apiKey,
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
@@ -1012,13 +1085,35 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Selects a Stage 2 Release Question Playing Card option and live-syncs the Release Blueprint's
-  /// `doneWhen` and optional deferred feature scope immediately.
+  /// Selects or unselects a Stage 2 Release Question Playing Card option and live-syncs
+  /// the Release Blueprint's `doneWhen` and optional deferred feature scope immediately.
+  /// Clicking an already-selected option card unselects it and restores the initial default.
   void selectReleaseQuestionOption(String questionId, String optionText) {
     final bp = _releaseBlueprint;
     if (bp == null) return;
     for (final q in bp.questions) {
       if (q.id == questionId) {
+        final isUnselect = q.selectedOption == optionText;
+        if (isUnselect) {
+          q.selectedOption = '';
+          if (questionId.contains('feel') || q == bp.questions.first) {
+            final projTitle = activeProject?.title ?? bp.releaseTitle;
+            bp.doneWhen =
+                'A playtester can complete the full $projTitle core loop cycle and reset cleanly 3 times in a row.';
+          } else if (questionId.contains('scope')) {
+            for (final b in bp.beats) {
+              for (final f in b.features) {
+                if (!f.isSuperseded) {
+                  f.included = !f.title.toLowerCase().contains('bonus');
+                }
+              }
+            }
+          }
+          _syncActiveProjectMetadata();
+          notifyListeners();
+          return;
+        }
+
         q.selectedOption = optionText;
         final clean = optionText
             .replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '')

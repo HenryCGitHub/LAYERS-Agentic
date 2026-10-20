@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
@@ -42,9 +43,7 @@ class ProjectPitchScreen extends StatefulWidget {
 }
 
 class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
-  final TextEditingController _sparkController = TextEditingController(
-    text: 'High-speed grappling hook parkour roguelite',
-  );
+  final TextEditingController _sparkController = TextEditingController();
   final TextEditingController _agentPromptController = TextEditingController();
   final TextEditingController _inlineReviewPromptController =
       TextEditingController();
@@ -52,9 +51,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   /// Active step index: `0`..`8` for sections `01`..`09`, and `9` for `10 · Full Review`.
   int _currentStep = 0;
   final Set<int> _visitedSteps = {0};
-  final Map<int, int> _selectedOptionBySection = {
-    for (int i = 0; i < 9; i++) i: 0,
-  };
+  final Map<int, int?> _selectedOptionBySection = {};
+  final Map<int, dynamic> _initialSectionDefaults = {};
   final Map<int, String> _agentNotesBySection = {};
 
   /// Step 10 Full Review hover & inline contextual Agent drawer state.
@@ -283,6 +281,80 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     });
   }
 
+  void _captureSectionDefaultIfNeeded(
+    ProjectConceptBlueprint draft,
+    int sectionIdx,
+  ) {
+    if (_initialSectionDefaults.containsKey(sectionIdx)) return;
+    switch (sectionIdx) {
+      case 0:
+        _initialSectionDefaults[0] = draft.goal;
+        break;
+      case 1:
+        _initialSectionDefaults[1] = List<String>.from(draft.gameSpec);
+        break;
+      case 2:
+        _initialSectionDefaults[2] = List<String>.from(draft.techSpec);
+        break;
+      case 3:
+        _initialSectionDefaults[3] = List<String>.from(draft.designPillars);
+        break;
+      case 4:
+        _initialSectionDefaults[4] = List<String>.from(draft.tradeOffs);
+        break;
+      case 5:
+        _initialSectionDefaults[5] = List<String>.from(draft.coreLoopBeats);
+        break;
+      case 6:
+        _initialSectionDefaults[6] = List<String>.from(draft.exclusions);
+        break;
+      case 7:
+        _initialSectionDefaults[7] = draft.doneWhen;
+        break;
+      case 8:
+        _initialSectionDefaults[8] = List<String>.from(draft.releaseTrainTitles);
+        break;
+    }
+  }
+
+  void _restoreSectionDefault(ProjectConceptBlueprint draft, int sectionIdx) {
+    final saved = _initialSectionDefaults[sectionIdx];
+    if (saved == null) return;
+    widget.workbench.updateConceptDraft((d) {
+      switch (sectionIdx) {
+        case 0:
+          if (saved is String) d.goal = saved;
+          break;
+        case 1:
+          if (saved is List<String>) d.gameSpec = List<String>.from(saved);
+          break;
+        case 2:
+          if (saved is List<String>) d.techSpec = List<String>.from(saved);
+          break;
+        case 3:
+          if (saved is List<String>) d.designPillars = List<String>.from(saved);
+          break;
+        case 4:
+          if (saved is List<String>) d.tradeOffs = List<String>.from(saved);
+          break;
+        case 5:
+          if (saved is List<String>) d.coreLoopBeats = List<String>.from(saved);
+          break;
+        case 6:
+          if (saved is List<String>) d.exclusions = List<String>.from(saved);
+          break;
+        case 7:
+          if (saved is String) d.doneWhen = saved;
+          break;
+        case 8:
+          if (saved is List<String>) {
+            d.releaseTrainTitles = List<String>.from(saved);
+          }
+          break;
+      }
+    });
+  }
+
   Future<void> _selectSectionOption(
     ProjectConceptBlueprint draft,
     int sectionIdx,
@@ -292,6 +364,19 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     if (optIdx < 0 || optIdx >= opts.length) return;
     final optionText = opts[optIdx];
     final sec = _sections[sectionIdx];
+
+    // Clicking the already-selected Option Card unselects it and restores the initial generated default!
+    if (_selectedOptionBySection[sectionIdx] == optIdx) {
+      _restoreSectionDefault(draft, sectionIdx);
+      setState(() {
+        _selectedOptionBySection.remove(sectionIdx);
+        _agentNotesBySection[sectionIdx] =
+            'Unselected option — restored default ${sec.title}.';
+      });
+      return;
+    }
+
+    _captureSectionDefaultIfNeeded(draft, sectionIdx);
 
     setState(() {
       _selectedOptionBySection[sectionIdx] = optIdx;
@@ -765,67 +850,47 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
-  // ── Initial Spark Launcher (Before Concept Draft Exists) ────────────────────
+  // ── Initial New Project Idea Intake & Expansion Launcher (Before Concept Draft Exists) ──
   Widget _buildInitialSparkLauncher() {
-    const starterCards = <({
-      String badge,
-      String title,
-      String description,
-      String prompt,
-      String accentType,
-    })>[
-      (
-        badge: '01 · ROGUELITE ACTION',
-        title: 'Grapple Hook Parkour',
-        description:
-            'Chain high-speed momentum swings, mid-air dashes, and hazard rooms in a fast-resetting roguelite arena.',
-        prompt: 'High-speed grappling hook parkour roguelite',
-        accentType: 'amber',
-      ),
-      (
-        badge: '02 · COZY EXPLORATION',
-        title: 'Deep-Sea Sub & Photo',
-        description:
-            'Pilot a 2D salvage submarine through dark ocean trenches, photograph rare sea life, and upgrade your hull.',
-        prompt: 'Cozy 2D submarine salvage & deep-sea creature photography',
-        accentType: 'emerald',
-      ),
-      (
-        badge: '03 · BOSS-RUSH ARENA',
-        title: 'Katana Deflect Arena',
-        description:
-            'Parry bullet-hell volleys and dash-strike multi-phase cyber bosses in a tight top-down arena.',
-        prompt: 'Top-down cyberpunk katana deflection boss-rush arena',
-        accentType: 'neutral',
-      ),
-    ];
+    final intake = widget.workbench.sparkIntake;
+    final previewIntake = intake ??
+        ProjectConceptAgent.buildDeterministicSparkIntake(
+          rawIdea: _sparkController.text.trim().isNotEmpty
+              ? _sparkController.text.trim()
+              : 'High-speed grappling hook parkour roguelite',
+        );
+    final expansionCards = previewIntake.expansionCards;
 
-    Widget buildStarterPlayingCard(int index) {
-      final card = starterCards[index];
+    Future<void> submitIdeaToAgent() async {
+      final text = _sparkController.text.trim();
+      if (text.isEmpty && intake == null) return;
+      _sparkController.clear();
+      await widget.workbench.ingestOrRefineSparkIdea(text);
+    }
+
+    Widget buildExpansionPlayingCard(int index) {
+      final card = expansionCards[index];
+      final isSelected = card.isSelected;
       final Color badgeColor = card.accentType == 'amber'
           ? _accentAmber
           : (card.accentType == 'emerald' ? _accentEmerald : _textPrimary);
-      final isCurrentText = _sparkController.text.trim() == card.prompt;
 
       return Material(
-        color: isCurrentText ? _bgHover : _bgRecessed,
+        color: isSelected ? _bgHover : _bgRecessed,
         borderRadius: BorderRadius.circular(7),
         child: InkWell(
           key: ValueKey('spark_card_$index'),
           onTap: widget.workbench.isAgentBusy
               ? null
-              : () {
-                  _sparkController.text = card.prompt;
-                  widget.workbench.startConceptInterview(card.prompt);
-                },
+              : () => widget.workbench.toggleSparkExpansionCard(index),
           borderRadius: BorderRadius.circular(7),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(7),
               border: Border.all(
-                color: isCurrentText ? _accentAmber : _borderSubtle,
-                width: isCurrentText ? 1.5 : 1.0,
+                color: isSelected ? _accentEmerald : _borderSubtle,
+                width: isSelected ? 1.5 : 1.0,
               ),
             ),
             child: Column(
@@ -835,27 +900,44 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.13),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: badgeColor.withValues(alpha: 0.42),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: badgeColor.withValues(alpha: 0.13),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: badgeColor.withValues(alpha: 0.42),
+                              ),
+                            ),
+                            child: Text(
+                              card.badge,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3,
+                                color: badgeColor,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        card.badge,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                          color: badgeColor,
+                        const SizedBox(width: 6),
+                        Icon(
+                          isSelected
+                              ? Icons.check_circle_rounded
+                              : Icons.add_circle_outline_rounded,
+                          size: 16,
+                          color: isSelected ? _accentEmerald : _textMuted,
                         ),
-                      ),
+                      ],
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -891,20 +973,27 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Launch Concept',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: _accentAmber,
+                          Expanded(
+                            child: Text(
+                              isSelected
+                                  ? '✓ Added to Concept'
+                                  : '+ Add to Concept',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color:
+                                    isSelected ? _accentEmerald : _accentAmber,
+                              ),
                             ),
                           ),
                           Text(
-                            '→',
+                            isSelected ? '✓' : '+',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: _accentAmber,
+                              color: isSelected ? _accentEmerald : _accentAmber,
                             ),
                           ),
                         ],
@@ -939,7 +1028,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   border: Border.all(color: _borderBright),
                 ),
                 child: Text(
-                  'STEP 1A · THE SPARK',
+                  'STEP 1A · NEW PROJECT',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
@@ -950,7 +1039,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Pitch your game idea to build your Concept Blueprint',
+                  'Pitch your game idea to the Agent & shape your Concept Summary',
                   style: AppTheme.displayFont(
                     fontSize: 17.5,
                     fontWeight: FontWeight.w700,
@@ -962,10 +1051,148 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Type your own 1-sentence game idea below, or click any Starter Concept Card to launch its blueprint immediately.',
+            intake == null
+                ? 'Tell the Agent your game idea below so it can summarize the core loop back to you, or toggle any of the Concept Addition Cards below to fold mechanics into your concept before starting.'
+                : 'Review the Agent\'s ingested summary below. Use the same input field to ask for changes, or toggle the Concept Addition Cards on/off before clicking Start Concept Blueprint →.',
             style: GoogleFonts.inter(fontSize: 13, color: _textSecondary),
           ),
-          const SizedBox(height: 16),
+          if (intake != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              key: const ValueKey('agent_idea_summary_card'),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _bgRecessed,
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(
+                  color: _accentEmerald.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _accentEmerald.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _accentEmerald.withValues(alpha: 0.45),
+                              ),
+                            ),
+                            child: Text(
+                              'AGENT IDEA SUMMARY',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: _accentEmerald,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            intake.workingTitle,
+                            style: AppTheme.displayFont(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: _textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      InkWell(
+                        key: const ValueKey('clear_idea_summary_btn'),
+                        onTap: () => widget.workbench.clearSparkIdeaIntake(),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          child: Text(
+                            'Reset ×',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: _textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    intake.effectiveSummary,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: _textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final m in intake.mechanics)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _bgSurface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Text(
+                            '⚡ $m',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: _textSecondary,
+                            ),
+                          ),
+                        ),
+                      for (final added
+                          in intake.expansionCards.where((c) => c.isSelected))
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _accentEmerald.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: _accentEmerald.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          child: Text(
+                            '✓ + ${added.title}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: _accentEmerald,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
@@ -974,7 +1201,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   controller: _sparkController,
                   style: GoogleFonts.inter(fontSize: 14, color: _textPrimary),
                   decoration: InputDecoration(
-                    hintText: 'e.g., High-speed grappling hook parkour roguelite...',
+                    hintText: intake == null
+                        ? 'Pitch your game idea to the Agent (e.g., Cozy 2D submarine salvage & photo game)...'
+                        : 'Tell the Agent what to change or add to this summary...',
                     hintStyle: GoogleFonts.inter(fontSize: 13, color: _textMuted),
                     filled: true,
                     fillColor: _bgRecessed,
@@ -993,17 +1222,42 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       borderSide: BorderSide(color: _borderBright, width: 1.5),
                     ),
                   ),
-                  onSubmitted: (_) =>
-                      widget.workbench.startConceptInterview(_sparkController.text),
+                  onSubmitted: (_) => submitIdeaToAgent(),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
+              OutlinedButton(
+                key: const ValueKey('ingest_idea_summary_btn'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _textPrimary,
+                  backgroundColor: _bgRecessed,
+                  side: BorderSide(color: _borderBright),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed:
+                    widget.workbench.isAgentBusy ? null : submitIdeaToAgent,
+                child: Text(
+                  intake == null ? 'Summarize Idea' : 'Update Summary',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
               ElevatedButton(
                 key: const ValueKey('start_concept_interview_btn'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _focalAccent,
                   foregroundColor: _focalAccentFg,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -1011,8 +1265,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 ),
                 onPressed: widget.workbench.isAgentBusy
                     ? null
-                    : () =>
-                        widget.workbench.startConceptInterview(_sparkController.text),
+                    : () => widget.workbench.startConceptInterview(
+                          _sparkController.text,
+                        ),
                 child: Text(
                   widget.workbench.isAgentBusy
                       ? 'Drafting Blueprint...'
@@ -1030,7 +1285,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'OR PICK A STARTER CONCEPT CARD (1-CLICK LAUNCH)',
+                'IDEAS TO ADD TO YOUR CONCEPT (CLICK TO TOGGLE ON / OFF)',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
@@ -1038,11 +1293,28 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   color: _textSecondary,
                 ),
               ),
-              Text(
-                '3 ARCHETYPES',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  color: _textMuted,
+              InkWell(
+                key: const ValueKey('shuffle_spark_ideas_btn'),
+                onTap: () => widget.workbench.shuffleSparkExpansionCards(),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _bgRecessed,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderSubtle),
+                  ),
+                  child: Text(
+                    '↻ Refresh Suggestions',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _accentAmber,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1054,9 +1326,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (int i = 0; i < starterCards.length; i++) ...[
-                      buildStarterPlayingCard(i),
-                      if (i < starterCards.length - 1) const SizedBox(height: 10),
+                    for (int i = 0; i < expansionCards.length; i++) ...[
+                      buildExpansionPlayingCard(i),
+                      if (i < expansionCards.length - 1)
+                        const SizedBox(height: 10),
                     ],
                   ],
                 );
@@ -1065,9 +1338,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (int i = 0; i < starterCards.length; i++) ...[
-                      Expanded(child: buildStarterPlayingCard(i)),
-                      if (i < starterCards.length - 1) const SizedBox(width: 12),
+                    for (int i = 0; i < expansionCards.length; i++) ...[
+                      Expanded(child: buildExpansionPlayingCard(i)),
+                      if (i < expansionCards.length - 1)
+                        const SizedBox(width: 12),
                     ],
                   ],
                 ),
@@ -1224,7 +1498,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                 ),
                 child: Text(
-                  '✦ New Spark',
+                  '+ New Project',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
@@ -1444,7 +1718,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   // ── Steps `01`–`09`: De-Boxed Full-Width Single-Section Workspace ──────────
   Widget _buildFocusedSectionWorkspace(ProjectConceptBlueprint draft, int sectionIdx) {
     final sec = _sections[sectionIdx];
-    final selectedOpt = _selectedOptionBySection[sectionIdx] ?? 0;
+    final selectedOpt = _selectedOptionBySection[sectionIdx];
     final agentNote = _agentNotesBySection[sectionIdx];
 
     return Column(
