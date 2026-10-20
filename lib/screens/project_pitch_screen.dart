@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
@@ -853,13 +852,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   // ── Initial New Project Idea Intake & Expansion Launcher (Before Concept Draft Exists) ──
   Widget _buildInitialSparkLauncher() {
     final intake = widget.workbench.sparkIntake;
-    final previewIntake = intake ??
-        ProjectConceptAgent.buildDeterministicSparkIntake(
-          rawIdea: _sparkController.text.trim().isNotEmpty
-              ? _sparkController.text.trim()
-              : 'High-speed grappling hook parkour roguelite',
-        );
-    final expansionCards = previewIntake.expansionCards;
+    final expansionCards = intake?.expansionCards ?? const [];
 
     Future<void> submitIdeaToAgent() async {
       final text = _sparkController.text.trim();
@@ -1052,7 +1045,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           const SizedBox(height: 8),
           Text(
             intake == null
-                ? 'Tell the Agent your game idea below so it can summarize the core loop back to you, or toggle any of the Concept Addition Cards below to fold mechanics into your concept before starting.'
+                ? 'Tell the Agent your game idea below so it can summarize the core loop back to you and generate tailored Concept Addition Cards.'
                 : 'Review the Agent\'s ingested summary below. Use the same input field to ask for changes, or toggle the Concept Addition Cards on/off before clicking Start Concept Blueprint →.',
             style: GoogleFonts.inter(fontSize: 13, color: _textSecondary),
           ),
@@ -1250,104 +1243,110 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              ElevatedButton(
-                key: const ValueKey('start_concept_interview_btn'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _focalAccent,
-                  foregroundColor: _focalAccentFg,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
+              if (intake != null) ...[
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  key: const ValueKey('start_concept_interview_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _focalAccent,
+                    foregroundColor: _focalAccentFg,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 15,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    elevation: 0,
                   ),
-                  elevation: 0,
-                ),
-                onPressed: widget.workbench.isAgentBusy
-                    ? null
-                    : () => widget.workbench.startConceptInterview(
-                          _sparkController.text,
-                        ),
-                child: Text(
-                  widget.workbench.isAgentBusy
-                      ? 'Drafting Blueprint...'
-                      : 'Start Concept Blueprint →',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'IDEAS TO ADD TO YOUR CONCEPT (CLICK TO TOGGLE ON / OFF)',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                  color: _textSecondary,
-                ),
-              ),
-              InkWell(
-                key: const ValueKey('shuffle_spark_ideas_btn'),
-                onTap: () => widget.workbench.shuffleSparkExpansionCards(),
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _bgRecessed,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _borderSubtle),
-                  ),
+                  onPressed: widget.workbench.isAgentBusy
+                      ? null
+                      : () => widget.workbench.startConceptInterview(
+                            _sparkController.text,
+                          ),
                   child: Text(
-                    '↻ Refresh Suggestions',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
+                    widget.workbench.isAgentBusy
+                        ? 'Drafting Blueprint...'
+                        : 'Start Concept Blueprint →',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: _accentAmber,
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth < 660) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (int i = 0; i < expansionCards.length; i++) ...[
-                      buildExpansionPlayingCard(i),
-                      if (i < expansionCards.length - 1)
-                        const SizedBox(height: 10),
-                    ],
-                  ],
-                );
-              }
-              return IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (int i = 0; i < expansionCards.length; i++) ...[
-                      Expanded(child: buildExpansionPlayingCard(i)),
-                      if (i < expansionCards.length - 1)
-                        const SizedBox(width: 12),
-                    ],
-                  ],
+          if (intake != null) ...[
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'IDEAS TO ADD TO YOUR CONCEPT (CLICK TO TOGGLE ON / OFF)',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: _textSecondary,
+                  ),
                 ),
-              );
-            },
-          ),
+                InkWell(
+                  key: const ValueKey('shuffle_spark_ideas_btn'),
+                  onTap: () => widget.workbench.shuffleSparkExpansionCards(),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _bgRecessed,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: _borderSubtle),
+                    ),
+                    child: Text(
+                      '↻ Refresh Suggestions',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _accentAmber,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 660) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (int i = 0; i < expansionCards.length; i++) ...[
+                        buildExpansionPlayingCard(i),
+                        if (i < expansionCards.length - 1)
+                          const SizedBox(height: 10),
+                      ],
+                    ],
+                  );
+                }
+                return IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (int i = 0; i < expansionCards.length; i++) ...[
+                        Expanded(child: buildExpansionPlayingCard(i)),
+                        if (i < expansionCards.length - 1)
+                          const SizedBox(width: 12),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
           if (widget.workbench.savedProjects.isNotEmpty) ...[
             const SizedBox(height: 20),
             Container(

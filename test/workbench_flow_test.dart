@@ -48,14 +48,16 @@ void main() {
         // ── Stage 1A: New Project (Interactive AI Idea Intake & Concept Expansion Cards) ──
         expect(find.byKey(const ValueKey('connected_pipeline_track')), findsOneWidget);
         expect(find.text('STEP 1A · NEW PROJECT'), findsOneWidget);
-        expect(find.byKey(const ValueKey('spark_card_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('spark_card_1')), findsOneWidget);
-        expect(find.byKey(const ValueKey('spark_card_2')), findsOneWidget);
         expect(find.byKey(const ValueKey('ingest_idea_summary_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('shuffle_spark_ideas_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('start_concept_interview_btn')), findsOneWidget);
+        // Before entering an initial idea, the Agent summary and 3 expansion cards are hidden
+        expect(find.byKey(const ValueKey('agent_idea_summary_card')), findsNothing);
+        expect(find.byKey(const ValueKey('spark_card_0')), findsNothing);
+        expect(find.byKey(const ValueKey('spark_card_1')), findsNothing);
+        expect(find.byKey(const ValueKey('spark_card_2')), findsNothing);
+        expect(find.byKey(const ValueKey('shuffle_spark_ideas_btn')), findsNothing);
+        expect(find.byKey(const ValueKey('start_concept_interview_btn')), findsNothing);
 
-        // Input a raw game idea and verify the Agent ingests & summarizes it back without auto-starting Stage 1B
+        // Input a raw game idea and verify the Agent ingests & summarizes it back AND generates the 3 Concept Expansion Cards
         await tester.enterText(
           find.byKey(const ValueKey('spark_input_field')),
           'High-speed grappling hook parkour roguelite',
@@ -63,6 +65,11 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('agent_idea_summary_card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_card_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_card_1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_card_2')), findsOneWidget);
+        expect(find.byKey(const ValueKey('shuffle_spark_ideas_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('start_concept_interview_btn')), findsOneWidget);
         expect(find.text('STEP 1A · NEW PROJECT'), findsOneWidget);
 
         // Use the same input field to refine the Agent's summary
