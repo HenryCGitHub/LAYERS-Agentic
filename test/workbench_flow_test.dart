@@ -240,8 +240,46 @@ void main() {
         await tester.pumpAndSettle();
 
         // ── Stage 3: Active Release Workbench (Left Sidebar Outline View + Single-Feature Workspace) ──
-        expect(find.text('ACTIVE RELEASE'), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage3_view_mode_toggle_btn')), findsOneWidget);
+        expect(find.text('OUTLINE'), findsOneWidget);
+        final firstBeatId = provider.activeReleaseBeats.first.id;
+        expect(find.byKey(ValueKey('rail_beat_$firstBeatId')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
+        expect(find.byKey(const ValueKey('checkpoint_single_col_0')), findsOneWidget);
+        expect(find.textContaining('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
+
+        // The Pinned Active Step Window is always visible at the top of the work area in Single-Panel mode
+        final activeFeat0 = provider.selectedFeature!;
+        final cp0NodeId = provider.documents[activeFeat0.id]!.subtasks.first.id;
+        expect(find.byKey(ValueKey('pinned_active_step_window_$cp0NodeId')), findsOneWidget);
+        expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
+
+        // Verify clicking Feature 2 in the Left Outline and marking Step 1.1 done preserves focus on Feature 2
+        final allFeatsInOrder = <String>[
+          for (final b in provider.activeReleaseBeats)
+            for (final f in provider.featuresForBeat(b.id)) f.id,
+        ];
+        final secondFeatId = allFeatsInOrder[1];
+        await tester.tap(find.byKey(ValueKey('rail_feat_$secondFeatId')));
+        await tester.pumpAndSettle();
+        final secondFeat = provider.selectedFeature!;
+        expect(secondFeat.id, isNot(equals(activeFeat0.id)));
+        final secondCp0NodeId = provider.documents[secondFeat.id]!.subtasks.first.id;
+        await tester.tap(find.byKey(ValueKey('mark_active_step_done_btn_$secondCp0NodeId')));
+        await tester.pumpAndSettle();
+        expect(provider.selectedFeature!.id, equals(secondFeat.id));
+        // Uncheck Step 1.1 via the Left Outline step checkbox to restore clean state, then select Feature 1
+        await tester.tap(find.byKey(ValueKey('outline_step_chk_${secondCp0NodeId}_0_0')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey('rail_feat_${activeFeat0.id}')));
+        await tester.pumpAndSettle();
+        expect(provider.selectedFeature!.id, equals(activeFeat0.id));
+
+        // Switch from Single-Panel Flow to Split-Panel Studio via the release selector dropdown menu
+        await tester.tap(find.byKey(const ValueKey('release_selector_dropdown_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('Switch to Full Studio Split View'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_beat_context_banner')), findsOneWidget);
         expect(find.byKey(const ValueKey('toggle_beat_context_btn')), findsOneWidget);
         expect(find.text('BEAT GOAL'), findsNothing);
@@ -252,67 +290,14 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('toggle_beat_context_btn')));
         await tester.pumpAndSettle();
         expect(find.text('BEAT GOAL'), findsNothing);
-        final firstBeatId = provider.activeReleaseBeats.first.id;
-        expect(find.byKey(ValueKey('rail_beat_$firstBeatId')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_feature_dropdown_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_stepper_bar')), findsOneWidget);
-        expect(find.byKey(const ValueKey('checkpoint_single_col_0')), findsOneWidget);
-        expect(find.textContaining('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
-        // Option 1 + Option 4 Hybrid: Hero header has Prev/Next buttons + clickable feature dropdown
         expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
-        // The Pinned Active Step Window is always visible at the top of the work area above the task rows
-        final activeFeat0 = provider.selectedFeature!;
-        final cp0NodeId = provider.documents[activeFeat0.id]!.subtasks.first.id;
-        expect(find.byKey(ValueKey('pinned_active_step_window_$cp0NodeId')), findsOneWidget);
-        expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
-        expect(find.byKey(ValueKey('howto_substep_${cp0NodeId}_0_0')), findsOneWidget);
-        final inlineSubStepY = tester.getTopLeft(
-          find.byKey(ValueKey('howto_substep_${cp0NodeId}_0_0')),
-        ).dy;
-        final secondTaskRowY = tester.getTopLeft(
-          find.byKey(ValueKey('select_task_row_${cp0NodeId}_1')),
-        ).dy;
-        expect(inlineSubStepY, lessThan(secondTaskRowY));
         expect(find.byKey(const ValueKey('add_tuning_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('add_edge_guard_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('edit_playtest_btn_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('add_checkpoint_header_btn')), findsOneWidget);
-
-        // Verify clicking a How-To sub-step on Feature 2 preserves focus on Feature 2 (does NOT jump back to Feature 1)
-        await tester.tap(find.byKey(const ValueKey('next_feature_btn')));
-        await tester.pumpAndSettle();
-        final secondFeat = provider.selectedFeature!;
-        expect(secondFeat.id, isNot(equals(activeFeat0.id)));
-        final secondCp0NodeId = provider.documents[secondFeat.id]!.subtasks.first.id;
-        final secondFeatSubStepFinder = find.byKey(ValueKey('howto_substep_${secondCp0NodeId}_0_0'));
-        await tester.ensureVisible(secondFeatSubStepFinder);
-        await tester.pumpAndSettle();
-        await tester.tap(secondFeatSubStepFinder);
-        await tester.pumpAndSettle();
-        expect(provider.selectedFeature!.id, equals(secondFeat.id));
-        // First tap marked 1.1 done and auto-advanced spotlight to 1.2; select 1.1 then uncheck to restore clean state
-        await tester.tap(secondFeatSubStepFinder);
-        await tester.pumpAndSettle();
-        await tester.tap(secondFeatSubStepFinder);
-        await tester.pumpAndSettle();
-        final prevFeatBtn = find.byKey(const ValueKey('prev_feature_btn'));
-        await tester.ensureVisible(prevFeatBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(prevFeatBtn);
-        await tester.pumpAndSettle();
-        expect(provider.selectedFeature!.id, equals(activeFeat0.id));
-
-        // Switch from Single-Panel Flow to Split-Panel Studio via stage3_view_mode_toggle_btn
-        final viewModeToggleBtn = find.byKey(const ValueKey('stage3_view_mode_toggle_btn'));
-        await tester.ensureVisible(viewModeToggleBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(viewModeToggleBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
 
         // Verify Stage 3 Sticky Bottom Studio Dock & Toggleable 3 Co-Pilot Playing Cards Drawer
         expect(find.byKey(const ValueKey('workbench_sticky_bottom_dock')), findsOneWidget);
