@@ -28706,67 +28706,72 @@ q=r.length!==0?A.dV(r,0,A.fl(3,"count",t.S),A.M(r).c).e3(0):A.a(["Grid","Tile","
 if(!B.c.d2(q,new A.ant()))B.c.A(q,"Actor")
 o=A.M(q).i("G<1,e>")
 return new A.Xd(new A.G(q,new A.anu(),o).pi(0),new A.G(q,new A.anv(),o).U(0,"_"))},
-Rw(c0,c1,c2,c3,c4){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,b0,b1,b2,b3,b4,b5,b6,b7=c3+1,b8=B.b.dL(B.q.k(b7),2,"0"),b9=A.aLH(c2.b)
-A.b4Z(c2.b)
-s=A.b51(c2.b,c3)
-r=A.xd(c1)
-q=A.b52(b9,s,r)
-p=c0.r
-o=p.length!==0?B.c.gL(p).b:b9
-n=A.b4Y(o+" "+c0.b)
+Rw(c4,c5,c6,c7,c8){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,c0,c1=c7+1,c2=B.b.dL(B.q.k(c1),2,"0"),c3=A.aLH(c6.b)
+A.b4Z(c6.b)
+s=A.b51(c6.b,c7)
+r=A.xd(c5)
+q=A.b52(c3,s,r)
+p=c4.r
+o=p.length!==0?B.c.gL(p).b:c3
+n=A.b4Y(o+" "+c4.b)
 m=n.a
-p=c0.y
-l=p.length
-k=l!==0?p[B.q.bq(c3,l)]:"responseTime: 0.12 s"
-j=B.b.D(B.c.gL(k.split(":")))
-p=c0.z
-l=p.length
-i=l!==0?p[B.q.bq(c3,l)]:u.b4
-h=new A.any(r,c4,c3===0,b7,"A"+m,m,b9,j,k,i,"BP_"+m,n.b)
-p=c2.d
-if(p.length<6&&!B.c.d2(p,new A.anA())){g=c2.c
+l=n.b
+k="BP_"+m
+j="A"+m
+p=c4.y
+i=p.length
+h=i!==0?p[B.q.bq(c7,i)]:"responseTime: 0.12 s"
+g=B.b.D(B.c.gL(h.split(":")))
+p=c4.z
+i=p.length
+f=i!==0?p[B.q.bq(c7,i)]:u.b4
+e=new A.any(r,c8,c7===0,c1,j,m,c3,g,h,f,k,l)
+p=c6.d
+if(p.length<6&&!B.c.d2(p,new A.anA())){d=c6.c
 p=A.r(t.S,t.y)
-for(f=0;l=c2.d,f<l.length;++f)p.m(0,f,l[f].c)
-l=A.a([],t.F)
-for(e=0;e<6;++e)l.push(new A.anB(h,e,c2,p,g).$0())
-c2.d=l}d=A.b5_(c2.b)
-c=A.b4X(c2.d.length,d)
-b=new A.anz(b9,r,m,c0,j,k,i)
-a=A.a([],t.pF)
-for(p=""+b7,l="// Step "+p+".",a0="STEP "+p+".",f=0;a1=c2.d,f<a1.length;++f){a2=a1[f]
-a3=a2.y==="custom_snippet"
-a1=f<6
-a4=h.$1(a1?f:5)
-a5=b.$1(a1?f:5)
-a6=f<c.length?c[f]:20
-a7=A.b50(a6)
-a8=B.b.D(a2.b)
-if(a3)a9=B.b.az(a8.toUpperCase(),"STEP ")?a8:a0+(f+1)+" \xb7 "+a8.toUpperCase()
-else a9=a1?a4.a[5]:a0+(f+1)+" \xb7 "+a8.toUpperCase()
-if(a3){b0=a2.f
-b0=b0!=null&&B.b.D(b0).length!==0}else b0=!1
-if(b0){b0=a2.f
-b0.toString
-b1=B.b.D(b0)}else if(a1){b0=a4.a[2]
-b1=b0}else{b0=a2.f
-b0=b0!=null&&B.b.D(b0).length!==0?B.b.D(b0):'Implement and verify "'+a8+'" inside '+q+"."
-b1=b0}if(a3){b0=a2.x
-b0=b0!=null&&B.b.D(b0).length!==0}else b0=!1
-if(b0){b0=a2.x
-b0.toString
-b2=B.b.D(b0)}else if(a1){b0=a4.a[0]
-b2=b0}else{b0=a2.x
-if(b0!=null&&B.b.D(b0).length!==0)b0=B.b.D(b0)
-else{b0=""+(f+1)
-b0=l+b0+": "+a8+"\nexecute_step_"+p+"_"+b0+"("+j+")"}b2=b0}if(!a3&&a1)b3=a4.a[4]
-else{b0=A.aH("^STEP\\s+\\d+\\.\\d+\\s*\xb7\\s*",!1,!1,!1,!1)
-b3=A.um(a8,b0,"",0)}b0=a1?a4.a[6]:'Verify "'+b3+'" responds cleanly in the active viewport.'
-b4=a1?a4.a[3]:q
-a1=a1?a5.b:'Connects "'+b3+'" to "'+k+'" and "'+i+'".'
-b5=a5.a
-b6=a5.c
-if(f!==c2.d.length-1)B.b.l(a9.toUpperCase(),"GUARD")
-a.push(new A.xe(a2,a9,b3,b1,b0,b4,b2,a1,b5,b6,a6,a7))}return new A.Rv(b8,b9,q,r,a)},
+for(c=0;i=c6.d,c<i.length;++c)p.m(0,c,i[c].c)
+i=A.a([],t.F)
+for(b=0;b<6;++b)i.push(new A.anB(e,b,c6,p,d).$0())
+c6.d=i}a=A.b5_(c6.b)
+a0=A.b4X(c6.d.length,a)
+if(r==="UNREAL 5")a1=c8?j:k
+else a1=r==="UNITY C#"?m+".cs":l+".tscn"
+a2=new A.anz(e,a1,c4,r,m,h,g,f)
+a3=A.a([],t.pF)
+for(p=""+c1,i="// Step "+p+".",a4="STEP "+p+".",c=0;a5=c6.d,c<a5.length;++c){a6=a5[c]
+a7=a6.y==="custom_snippet"
+a5=c<6
+a8=e.$1(a5?c:5)
+a9=a2.$1(a5?c:5)
+b0=c<a0.length?a0[c]:20
+b1=A.b50(b0)
+b2=B.b.D(a6.b)
+if(a7)b3=B.b.az(b2.toUpperCase(),"STEP ")?b2:a4+(c+1)+" \xb7 "+b2.toUpperCase()
+else b3=a5?a8.a[5]:a4+(c+1)+" \xb7 "+b2.toUpperCase()
+if(a7){b4=a6.f
+b4=b4!=null&&B.b.D(b4).length!==0}else b4=!1
+if(b4){b4=a6.f
+b4.toString
+b5=B.b.D(b4)}else if(a5){b4=a8.a[2]
+b5=b4}else{b4=a6.f
+b4=b4!=null&&B.b.D(b4).length!==0?B.b.D(b4):'Implement and verify "'+b2+'" inside '+q+"."
+b5=b4}if(a7){b4=a6.x
+b4=b4!=null&&B.b.D(b4).length!==0}else b4=!1
+if(b4){b4=a6.x
+b4.toString
+b6=B.b.D(b4)}else if(a5){b4=a8.a[0]
+b6=b4}else{b4=a6.x
+if(b4!=null&&B.b.D(b4).length!==0)b4=B.b.D(b4)
+else{b4=""+(c+1)
+b4=i+b4+": "+b2+"\nexecute_step_"+p+"_"+b4+"("+g+")"}b6=b4}if(!a7&&a5)b7=a8.a[4]
+else{b4=A.aH("^STEP\\s+\\d+\\.\\d+\\s*\xb7\\s*",!1,!1,!1,!1)
+b7=A.um(b2,b4,"",0)}b4=a5?a8.a[6]:'Verify "'+b7+'" responds cleanly in the active viewport.'
+b8=a5?a8.a[3]:q
+a5=a5?a9.b:'Connects "'+b7+'" to "'+h+'" and "'+f+'".'
+b9=a9.a
+c0=a9.c
+if(c!==c6.d.length-1)B.b.l(b3.toUpperCase(),"GUARD")
+a3.push(new A.xe(a6,b3,b7,b5,b4,b8,b6,a5,b9,c0,b0,b1))}return new A.Rv(c2,c3,q,r,a3)},
 b53(a,b,a0,a1,a2){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c="custom_snippet"
 A.Rw(a,b,a0,a1,!1)
 s=a1+1
@@ -28903,14 +28908,15 @@ _.b=b
 _.c=c
 _.d=d
 _.e=e},
-anz:function anz(a,b,c,d,e,f,g){var _=this
+anz:function anz(a,b,c,d,e,f,g,h){var _=this
 _.a=a
 _.b=b
 _.c=c
 _.d=d
 _.e=e
 _.f=f
-_.r=g},
+_.r=g
+_.w=h},
 anC:function anC(){},
 anD:function anD(a){this.a=a},
 b1E(a){var s,r,q
@@ -93274,42 +93280,43 @@ if(s==null)s=r.e
 return A.ad(q,q,o,q,s,r.c.a+"_sub_"+(p+1),!0,m,n,q,!1)},
 $S:617}
 A.anz.prototype={
-$1(a){var s,r,q,p=this,o=t.s
-switch(a){case 0:s=p.a
-o=A.a(["Next: Attach Visual & Collision","Target: "+s],o)
-r=p.b
-if(r==="UNREAL 5")r="Choose Actor (AActor) as the parent class so you can attach components and place it in the level."
-else if(r==="UNITY C#"){r=p.c
-r='Make sure the file name "'+r+'.cs" matches the class name "'+r+'" so Unity can attach it.'}else r="Save the scene in res://scenes/ before attaching the script so node paths stay clean."
-return new A.ne(o,'Every step in this task builds inside this asset so "'+s+'" stays modular and reusable across the arena.',r)
-case 1:o=A.a(["Next: Place in Level Viewport","Trigger Sensor: HitBox / InteractBox"],o)
-s=p.b
-if(s==="UNREAL 5")s="Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably."
-else s=s==="UNITY C#"?'Check the "Is Trigger" box on BoxCollider so the player does not physically snag on the sensor.':"Assign a RectangleShape2D resource inside CollisionShape2D to clear the yellow scene warning icon."
-return new A.ne(o,'Gives "'+p.a+'" both its on-screen visual shape and the collision trigger sensor needed for Step 5 logic.',s)
-case 2:s=p.d
-r=s.gml()
-o=A.a(["Next: Expose "+p.e,"Playtest: "+s.gf1()],o)
-s=p.b
-if(s==="UNREAL 5")s="Click Compile & Save before dragging into the viewport so the new mesh and collision box appear."
-else s=s==="UNITY C#"?"Reset Transform Position to (0, 0, 0) in the Inspector so the object is not hidden off-camera.":"Use the Chain-Link icon (Ctrl+Shift+A) to instantiate the child scene rather than copying raw nodes."
-return new A.ne(o,'Spawns a live testable instance in the arena so you can verify "'+r+'" on screen.',s)
-case 3:s=p.f
-o=A.a(["Spec Param: "+s,"Next: Wire Step 5 Logic"],o)
-r=p.b
-if(r==="UNREAL 5")r="Click the Eye icon (Instance Editable) next to "+p.e+" so it appears in the Level Details panel."
-else{q=p.e
-r=r==="UNITY C#"?"Keep [SerializeField] above private float "+q+" so Unity serializes it in the Inspector.":"Save the script (Ctrl+S) after adding @export var "+q+" so the Inspector dock refreshes."}return new A.ne(o,'Exposes "'+s+'" directly in the Inspector so you can tune "'+p.a+'" feel live without recompiling.',r)
-case 4:s=p.e
-o=A.a(["Drives: "+p.f,"Next: Enforce Guard & Playtest"],o)
-r=p.b
-if(r==="UNREAL 5")r="Connect the white execution wire from the Branch (True) pin into your state update node."
-else r=r==="UNITY C#"?"Multiply by Time.fixedDeltaTime inside FixedUpdate() so speed stays identical at any frame rate.":"Multiply "+s+" by delta inside _physics_process(delta) for frame-rate independent motion."
-return new A.ne(o,'Connects player trigger input to "'+s+'" so "'+p.a+'" updates smoothly every physics frame.',r)
-default:s=p.r
-r=p.d
-q=r.gf1()
-return new A.ne(A.a(["Guard: "+s,"Goal: "+r.gf1()],o),'Enforces "'+s+'" and completes the playable verification for "'+q+'".',"Place the guard check at the very top of your function so blocked or cooldown inputs exit immediately ("+s+").")}},
+$1(a){var s,r,q,p,o=this,n=a+1,m=n<6?o.a.$1(n).a[4]:"Verify Checkpoint & Continue"
+n=o.b
+s=t.s
+switch(a){case 0:r=o.c.gf1()
+s=A.a(["Asset: "+n,"Next: "+m],s)
+q=o.d
+if(q==="UNREAL 5")q="Choose Actor (AActor) as the parent class so you can attach components and place "+n+" in the level."
+else if(q==="UNITY C#"){q=o.e
+q='Make sure the file name "'+q+'.cs" matches the class name "'+q+'" so Unity can attach it.'}else q="Save the scene in res://scenes/ before attaching the script so node paths stay clean."
+return new A.ne(s,"Every step in this task builds inside "+n+" so "+r+" stays modular and reusable across the level.",q)
+case 1:s=A.a(["Asset: "+n,"Next: "+m],s)
+r=o.d
+if(r==="UNREAL 5")r="Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably."
+else r=r==="UNITY C#"?'Check the "Is Trigger" box on BoxCollider so the player does not physically snag on the sensor.':"Assign a RectangleShape2D resource inside CollisionShape2D to clear the yellow scene warning icon."
+return new A.ne(s,"Gives "+n+" both its visible shape and the collision trigger sensor needed for Step 5 logic.",r)
+case 2:r=o.c.gml()
+s=A.a(["Instance: "+n,"Next: "+m],s)
+q=o.d
+if(q==="UNREAL 5")q="Click Compile & Save before dragging "+n+" into the viewport so the new mesh and collision box appear."
+else q=q==="UNITY C#"?"Reset Transform Position to (0, 0, 0) in the Inspector so "+o.e+" is not hidden off-camera.":"Use the Chain-Link icon (Ctrl+Shift+A) to instantiate "+n+" rather than copying raw nodes."
+return new A.ne(s,"Places a live "+n+' instance in the level so you can test "'+r+'" on screen.',q)
+case 3:r=o.f
+s=A.a(["Spec Param: "+r,"Next: "+m],s)
+q=o.d
+if(q==="UNREAL 5")q="Click the Eye icon (Instance Editable) next to "+o.r+" so it appears in the Level Details panel."
+else{p=o.r
+q=q==="UNITY C#"?"Keep [SerializeField] above private float "+p+" so Unity serializes it in the Inspector.":"Save the script (Ctrl+S) after adding @export var "+p+" so the Inspector dock refreshes."}return new A.ne(s,'Exposes "'+r+'" on '+n+" so you can tune feel live in the editor without recompiling.",q)
+case 4:r=o.r
+s=A.a(["Drives: "+o.f,"Next: "+m],s)
+q=o.d
+if(q==="UNREAL 5")q="Connect the white execution wire from the Branch (True) pin into your state update node."
+else q=q==="UNITY C#"?"Multiply by Time.fixedDeltaTime inside FixedUpdate() so speed stays identical at any frame rate.":"Multiply "+r+" by delta inside _physics_process(delta) for frame-rate independent motion."
+return new A.ne(s,"Connects player trigger input on "+n+' to "'+r+'" so state updates smoothly every frame.',q)
+default:r=o.w
+q=o.c
+p=q.gf1()
+return new A.ne(A.a(["Guard: "+r,"Goal: "+q.gf1()],s),'Enforces "'+r+'" on '+n+' and completes playable verification for "'+p+'".',"Place the guard check at the very top of your function so blocked or cooldown inputs exit immediately ("+r+").")}},
 $S:618}
 A.anC.prototype={
 $1(a){var s=a.b[0]
