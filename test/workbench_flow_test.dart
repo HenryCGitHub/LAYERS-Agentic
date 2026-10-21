@@ -359,21 +359,21 @@ void main() {
         // Verify Checkable How-To Sub-Steps on the Right Pane + Automatic Rollup to Parent Task
         final activeFeat = provider.selectedFeature!;
         final cp0Id = provider.documents[activeFeat.id]!.subtasks.first.id;
-        expect(find.textContaining('0/3 steps'), findsWidgets);
+        expect(find.textContaining('0/6 steps'), findsWidgets);
         final subStep0 = find.byKey(ValueKey('howto_substep_${cp0Id}_0_0'));
         await tester.ensureVisible(subStep0);
         await tester.pumpAndSettle();
         await tester.tap(subStep0);
         await tester.pumpAndSettle();
-        expect(find.textContaining('1/3 steps'), findsOneWidget);
+        expect(find.textContaining('1/6 steps'), findsOneWidget);
 
-        // Verify "+ Add How-To Sub-Step" appends a 4th checkable sub-step to Task 01
+        // Verify "+ Add How-To Sub-Step" appends a 7th checkable sub-step to Task 01
         final addSubStepBtn = find.byKey(const ValueKey('add_howto_substep_btn_0'));
         await tester.ensureVisible(addSubStepBtn);
         await tester.pumpAndSettle();
         await tester.tap(addSubStepBtn);
         await tester.pumpAndSettle();
-        expect(find.textContaining('1/4 steps'), findsOneWidget);
+        expect(find.textContaining('1/7 steps'), findsOneWidget);
 
         // Verify 1-Click "Copy 📋" on a How-To sub-step copies the code formula without toggling completion
         final copyCodeBtn = find.byKey(ValueKey('copy_howto_code_${cp0Id}_0_1'));
@@ -381,7 +381,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(copyCodeBtn);
         await tester.pumpAndSettle();
-        expect(find.textContaining('1/4 steps'), findsOneWidget);
+        expect(find.textContaining('1/7 steps'), findsOneWidget);
 
         // Verify Task-Scoped AI "✦ Tailor How-To" rewrites sub-steps with exact scene/node context
         final tailorBtn = find.byKey(ValueKey('tailor_howto_btn_${cp0Id}_0'));
@@ -407,14 +407,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsOneWidget);
 
-        // Verify inline "+ Add task step..." input appends a task to Checkpoint 1
+        // Verify inline "+ Add task step..." input appends a task to Checkpoint 1 (appears in both Outline & Canvas)
         final addInput = find.byKey(const ValueKey('add_checkpoint_task_input_0'));
         await tester.ensureVisible(addInput);
         await tester.pumpAndSettle();
         await tester.enterText(addInput, 'Verify grapple hook cooldown indicator');
         await tester.tap(find.byKey(const ValueKey('add_checkpoint_task_btn_0')));
         await tester.pumpAndSettle();
-        expect(find.text('Verify grapple hook cooldown indicator'), findsOneWidget);
+        expect(find.text('Verify grapple hook cooldown indicator'), findsWidgets);
 
         // Verify 1-Click "✓ Verify Checkpoint →" button completes Checkpoint 1
         final quickVerifyBtn = find.byKey(const ValueKey('quick_verify_checkpoint_btn_0'));
@@ -424,10 +424,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('VERIFIED ✓'), findsWidgets);
 
-        // Verify 1-Click Co-Pilot Playing Card #1 (+ Add Polish Checkpoint) appends a new checkpoint
+        // Verify 1-Click Co-Pilot Playing Card #1 (+ Add Polish Checkpoint) appends a new checkpoint (visible in both Outline & Canvas)
         await tester.tap(find.byKey(const ValueKey('copilot_card_add_checkpoint')));
         await tester.pumpAndSettle();
-        expect(find.text('Screen Feedback & Feel Pass'), findsOneWidget);
+        expect(find.text('Screen Feedback & Feel Pass'), findsWidgets);
 
         // Verify collapsing the Co-Pilot Playing Cards drawer frees vertical space
         await tester.tap(find.byKey(const ValueKey('toggle_copilot_drawer_btn')));
@@ -565,9 +565,10 @@ void main() {
           engineHint: 'Godot 4.3 GDScript 2D',
         );
         expect(godotBp.engineLabel, 'GODOT 4');
+        expect(godotBp.subSteps.length, 6);
         expect(godotBp.whereLocation, contains('_physics_process'));
-        expect(godotBp.subSteps[0].codeFormula, contains('Input.is_action_pressed'));
-        expect(godotBp.subSteps[1].codeFormula, contains('move_toward'));
+        expect(godotBp.subSteps[4].codeFormula, contains('Input.is_action_pressed'));
+        expect(godotBp.subSteps[4].codeFormula, contains('move_toward'));
 
         final unityTask = Subtask(
           id: 't_unity',
@@ -581,9 +582,10 @@ void main() {
           engineHint: 'Unity 6 C# URP',
         );
         expect(unityBp.engineLabel, 'UNITY C#');
+        expect(unityBp.subSteps.length, 6);
         expect(unityBp.whereLocation, contains('MonoBehaviour'));
-        expect(unityBp.subSteps[0].codeFormula, contains('Input.GetButton'));
-        expect(unityBp.subSteps[1].codeFormula, contains('Time.fixedDeltaTime'));
+        expect(unityBp.subSteps[4].codeFormula, contains('Input.GetButton'));
+        expect(unityBp.subSteps[4].codeFormula, contains('Time.fixedDeltaTime'));
 
         final unrealTask = Subtask(
           id: 't_unreal',
@@ -595,11 +597,26 @@ void main() {
           taskIndex: 1,
           checkpointNode: cp,
           engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+          unrealCppMode: false,
         );
         expect(unrealBp.engineLabel, 'UNREAL 5');
+        expect(unrealBp.subSteps.length, 6);
         expect(unrealBp.whereLocation, contains('ActorComponent'));
+        expect(unrealBp.subSteps[0].stepPath, contains('/Game/Blueprints/'));
         expect(unrealBp.subSteps[0].codeFormula, contains('EMechanicState::Active'));
-        expect(unrealBp.subSteps[1].codeFormula, contains('FMath::FInterpConstantTo'));
+        expect(unrealBp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
+
+        final unrealCpp = TaskHowToBlueprint.resolve(
+          parentTask: unrealTask,
+          taskIndex: 1,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+          unrealCppMode: true,
+        );
+        expect(unrealCpp.engineLabel, 'UNREAL 5');
+        expect(unrealCpp.whereLocation, contains('ActorComponent'));
+        expect(unrealCpp.subSteps[3].codeFormula, contains('UPROPERTY(EditAnywhere'));
+        expect(unrealCpp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
       },
     );
 
