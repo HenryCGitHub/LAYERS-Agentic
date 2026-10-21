@@ -1228,25 +1228,30 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                _isSinglePanelMode ? 36 : 24,
-                _isSinglePanelMode ? 28 : 20,
-                _isSinglePanelMode ? 36 : 24,
-                _isSinglePanelMode ? 32 : 24,
-              ),
-              child: Align(
-                alignment: _isSinglePanelMode
-                    ? Alignment.topLeft
-                    : Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: _isSinglePanelMode ? 1040 : 1160,
+            child: _isSinglePanelMode
+                ? LayoutBuilder(
+                    builder: (context, viewportConstraints) {
+                      return SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: viewportConstraints.maxHeight,
+                            minWidth: viewportConstraints.maxWidth,
+                          ),
+                          child: body,
+                        ),
+                      );
+                    },
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1160),
+                        child: body,
+                      ),
+                    ),
                   ),
-                  child: body,
-                ),
-              ),
-            ),
           ),
           bottomDock,
         ],
@@ -4141,486 +4146,584 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     final cpCodeLabel = 'CP ${(index + 1).toString().padLeft(2, '0')}';
 
+    // Determine "Next:" label for the bottom of the Left Instruction Pane
+    String nextUpLabel = 'Checkpoint Playtest Verification';
+    if (selectedHowTo != null) {
+      if (activeSubStepIdx + 1 < selectedHowTo.subSteps.length) {
+        final nextSub = selectedHowTo.subSteps[activeSubStepIdx + 1];
+        nextUpLabel =
+            '${selectedTaskIdx + 1}.${activeSubStepIdx + 2} ${nextSub.shortTitle}';
+      } else if (selectedTaskIdx + 1 < howToBlueprints.length) {
+        final nextTaskBp = howToBlueprints[selectedTaskIdx + 1];
+        nextUpLabel = 'Task ${nextTaskBp.numLabel}: ${nextTaskBp.cleanTitle}';
+      }
+    }
+
+    final pitfallOrGuardText = edgeItems.isNotEmpty
+        ? edgeItems.first
+        : (tuningItems.isNotEmpty
+            ? 'Tuning Target: ${tuningItems.join(' · ')}'
+            : 'Verify the parent class and component hierarchy match the spec before wiring logic in the next step.');
+
     final pinnedActiveStepWindow = (selectedParentTask != null &&
             selectedHowTo != null &&
             activeSubStep != null)
-        ? Column(
+        ? Container(
             key: ValueKey('pinned_active_step_window_${node.id}'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── Top Breadcrumb + Checkpoint Goal Line (Matches Mockup .canvas-header) ──
-              Container(
-                padding: const EdgeInsets.only(bottom: 16),
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: _borderSubtle)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          '${feat.title}   /   $cpCodeLabel: ${node.cleanStageTitle}   /   Task ${selectedHowTo.numLabel}: ${selectedHowTo.cleanTitle}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: _textSecondary,
-                          ),
-                        ),
-                        Offstage(
-                          offstage: true,
-                          child: Container(
-                            key: ValueKey('howto_engine_badge_${node.id}'),
-                            child: Text(selectedHowTo.engineLabel),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                    RichText(
-                      text: TextSpan(
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: _textSecondary,
-                          height: 1.4,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: 'Checkpoint Goal: ',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _textPrimary,
-                            ),
-                          ),
-                          TextSpan(text: node.playtestCondition),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Single Active Step Card (Matches Mockup .step-card) ──
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 26,
-                ),
-                decoration: BoxDecoration(
-                  color: _bgBase,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _borderBright,
-                    width: 1.0,
+            color: _bgSurface,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Option B: Full-Width Top Header Bar (.opt2-top) ──
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 18,
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // ── Step Card Top Bar (Matches Mockup .sc-top) ──
-                    Container(
-                      padding: const EdgeInsets.only(bottom: 18),
-                      margin: const EdgeInsets.only(bottom: 22),
-                      decoration: BoxDecoration(
-                        border: Border(bottom: BorderSide(color: _borderSubtle)),
-                      ),
-                      child: Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 12,
-                        runSpacing: 8,
+                  decoration: BoxDecoration(
+                    color: _bgBase,
+                    border: Border(bottom: BorderSide(color: _borderSubtle)),
+                  ),
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 16,
+                    runSpacing: 10,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Wrap(
-                            spacing: 10,
-                            runSpacing: 6,
+                            spacing: 6,
+                            runSpacing: 4,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                  vertical: 3.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: activeSubStep.subtask.completed
-                                      ? _accentEmerald
-                                      : _focalAccent,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'STEP ${selectedTaskIdx + 1}.${activeSubStepIdx + 1}',
+                              RichText(
+                                text: TextSpan(
                                   style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: activeSubStep.subtask.completed
-                                        ? _bgBase
-                                        : _focalAccentFg,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: _textSecondary,
                                   ),
-                                ),
-                              ),
-                              Text(
-                                activeSubStep.shortTitle,
-                                style: GoogleFonts.inter(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  color: _textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              // Unreal 5 Only: Blueprint | C++ Segmented Toggle
-                              if (selectedHowTo.engineLabel == 'UNREAL 5')
-                                Container(
-                                  key: ValueKey('unreal_mode_toggle_${node.id}'),
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    color: _bgBase,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: _borderBright),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      InkWell(
-                                        key: ValueKey('unreal_bp_btn_${node.id}'),
-                                        onTap: () {
-                                          setState(() {
-                                            _unrealCppMode = false;
-                                          });
-                                        },
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 11,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: !_unrealCppMode
-                                                ? _focalAccent
-                                                : Colors.transparent,
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            'Blueprint',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11,
-                                              fontWeight: !_unrealCppMode
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w600,
-                                              color: !_unrealCppMode
-                                                  ? _focalAccentFg
-                                                  : _textSecondary,
-                                            ),
-                                          ),
-                                        ),
+                                  children: [
+                                    TextSpan(
+                                      text:
+                                          '${feat.title}  /  $cpCodeLabel: ${node.cleanStageTitle}  /  ',
+                                    ),
+                                    TextSpan(
+                                      text:
+                                          'Task ${selectedHowTo.numLabel}: ${selectedHowTo.cleanTitle}',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: _textPrimary,
                                       ),
-                                      InkWell(
-                                        key: ValueKey('unreal_cpp_btn_${node.id}'),
-                                        onTap: () {
-                                          setState(() {
-                                            _unrealCppMode = true;
-                                          });
-                                        },
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 11,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: _unrealCppMode
-                                                ? _focalAccent
-                                                : Colors.transparent,
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            'C++',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11,
-                                              fontWeight: _unrealCppMode
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w600,
-                                              color: _unrealCppMode
-                                                  ? _focalAccentFg
-                                                  : _textSecondary,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              InkWell(
-                                key: ValueKey(
-                                  'toggle_explain_step_btn_${node.id}',
-                                ),
-                                onTap: () {
-                                  setState(() {
-                                    _explainStepOpen = !_explainStepOpen;
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(5),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _explainStepOpen
-                                        ? _bgHover
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(
-                                      color: _explainStepOpen
-                                          ? _textPrimary
-                                          : _borderSubtle,
                                     ),
-                                  ),
-                                  child: Text(
-                                    '? Explain',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _explainStepOpen
-                                          ? _textPrimary
-                                          : _textSecondary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              InkWell(
-                                key: ValueKey(
-                                  'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                                ),
-                                onTap: () => copySubStepCodeFormula(
-                                  selectedTaskIdx,
-                                  activeSubStepIdx,
-                                  activeSubStep.codeFormula,
-                                ),
-                                borderRadius: BorderRadius.circular(5),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(color: _borderSubtle),
-                                  ),
-                                  child: Text(
-                                    'Copy',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _textSecondary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              if (activeSubStepIdx != 1)
-                                Offstage(
-                                  offstage: true,
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
-                                    ),
-                                    onTap: () => copySubStepCodeFormula(
-                                      selectedTaskIdx,
-                                      1,
-                                      selectedHowTo.subSteps.length > 1
-                                          ? selectedHowTo.subSteps[1].codeFormula
-                                          : activeSubStep.codeFormula,
-                                    ),
-                                    child: const SizedBox.shrink(),
-                                  ),
-                                ),
-                              InkWell(
-                                key: ValueKey(
-                                  'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                                ),
-                                onTap: () => promptEditHowToSubStepDialog(
-                                  selectedTaskIdx,
-                                  activeSubStepIdx,
-                                ),
-                                borderRadius: BorderRadius.circular(5),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(color: _borderSubtle),
-                                  ),
-                                  child: Text(
-                                    'Edit',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: _textSecondary,
-                                    ),
-                                  ),
+                                  ],
                                 ),
                               ),
                               Offstage(
-                                offstage: _isSinglePanelMode,
-                                child: InkWell(
-                                  key: ValueKey(
-                                    'tailor_howto_btn_${node.id}_$selectedTaskIdx',
-                                  ),
-                                  onTap: () =>
-                                      promptTailorHowToDialog(selectedTaskIdx),
-                                  borderRadius: BorderRadius.circular(5),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(5),
-                                      border: Border.all(color: _borderSubtle),
-                                    ),
-                                    child: Text(
-                                      '✦ Tailor',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: _textSecondary,
-                                      ),
-                                    ),
-                                  ),
+                                offstage: true,
+                                child: Container(
+                                  key: ValueKey('howto_engine_badge_${node.id}'),
+                                  child: Text(selectedHowTo.engineLabel),
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-
-                    // ── 2-Column Step Body (Matches Mockup .sc-two-col) ──
-                    LayoutBuilder(
-                      builder: (context, stepConstraints) {
-                        final useTwoCol = stepConstraints.maxWidth >= 520;
-                        final leftCol = Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              activeSubStep.instruction,
+                          const SizedBox(height: 5),
+                          RichText(
+                            text: TextSpan(
                               style: GoogleFonts.inter(
-                                fontSize: 15,
-                                height: 1.65,
-                                color: _textPrimary,
+                                fontSize: 13,
+                                color: _textSecondary,
+                                height: 1.4,
                               ),
-                            ),
-                            const SizedBox(height: 18),
-                            // ✓ WHAT YOU SHOULD SEE Callout Box (2.5px Emerald Left Border)
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _bgSurface,
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border(
-                                  left: BorderSide(
-                                    color: _accentEmerald,
-                                    width: 2.5,
+                              children: [
+                                TextSpan(
+                                  text: 'Checkpoint Goal: ',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textPrimary,
                                   ),
                                 ),
+                                TextSpan(text: node.playtestCondition),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Right-aligned Action Controls in Top Bar
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          // Unreal 5 Only: Blueprint | C++ Segmented Toggle
+                          if (selectedHowTo.engineLabel == 'UNREAL 5')
+                            Container(
+                              key: ValueKey('unreal_mode_toggle_${node.id}'),
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: _bgRecessed,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: _borderBright),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    '✓ WHAT YOU SHOULD SEE',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.4,
-                                      color: _accentEmerald,
+                                  InkWell(
+                                    key: ValueKey('unreal_bp_btn_${node.id}'),
+                                    onTap: () {
+                                      setState(() {
+                                        _unrealCppMode = false;
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 11,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: !_unrealCppMode
+                                            ? _focalAccent
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Blueprint',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11,
+                                          fontWeight: !_unrealCppMode
+                                              ? FontWeight.w700
+                                              : FontWeight.w600,
+                                          color: !_unrealCppMode
+                                              ? _focalAccentFg
+                                              : _textSecondary,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    activeSubStep.verifyResult,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      height: 1.45,
-                                      color: _textSecondary,
+                                  InkWell(
+                                    key: ValueKey('unreal_cpp_btn_${node.id}'),
+                                    onTap: () {
+                                      setState(() {
+                                        _unrealCppMode = true;
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 11,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _unrealCppMode
+                                            ? _focalAccent
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'C++',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11,
+                                          fontWeight: _unrealCppMode
+                                              ? FontWeight.w700
+                                              : FontWeight.w600,
+                                          color: _unrealCppMode
+                                              ? _focalAccentFg
+                                              : _textSecondary,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 18),
-                            ElevatedButton(
-                              key: ValueKey(
-                                'mark_active_step_done_btn_${node.id}',
+                          InkWell(
+                            key: ValueKey('toggle_explain_step_btn_${node.id}'),
+                            onTap: () {
+                              setState(() {
+                                _explainStepOpen = !_explainStepOpen;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
                               ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _focalAccent,
-                                foregroundColor: _focalAccentFg,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 12,
+                              decoration: BoxDecoration(
+                                color: _explainStepOpen
+                                    ? _bgHover
+                                    : _bgSurface,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: _explainStepOpen
+                                      ? _textPrimary
+                                      : _borderSubtle,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
-                              onPressed: () => markActiveStepDoneAndAdvance(
-                                selectedTaskIdx,
-                                activeSubStepIdx,
                               ),
                               child: Text(
-                                activeSubStep.subtask.completed
-                                    ? '✓ Completed — Next Step →'
-                                    : '✓ Mark Step ${selectedTaskIdx + 1}.${activeSubStepIdx + 1} Done & Next →',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
+                                '? Explain',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: _explainStepOpen
+                                      ? _textPrimary
+                                      : _textSecondary,
                                 ),
                               ),
                             ),
-                          ],
-                        );
-
-                        final rightCol = Container(
-                          decoration: BoxDecoration(
-                            color: _bgSurface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: _borderSubtle),
                           ),
-                          child: Column(
+                          InkWell(
+                            key: ValueKey(
+                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                            ),
+                            onTap: () => copySubStepCodeFormula(
+                              selectedTaskIdx,
+                              activeSubStepIdx,
+                              activeSubStep.codeFormula,
+                            ),
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgSurface,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                'Copy',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (activeSubStepIdx != 1)
+                            Offstage(
+                              offstage: true,
+                              child: InkWell(
+                                key: ValueKey(
+                                  'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
+                                ),
+                                onTap: () => copySubStepCodeFormula(
+                                  selectedTaskIdx,
+                                  1,
+                                  selectedHowTo.subSteps.length > 1
+                                      ? selectedHowTo.subSteps[1].codeFormula
+                                      : activeSubStep.codeFormula,
+                                ),
+                                child: const SizedBox.shrink(),
+                              ),
+                            ),
+                          InkWell(
+                            key: ValueKey(
+                              'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                            ),
+                            onTap: () => promptEditHowToSubStepDialog(
+                              selectedTaskIdx,
+                              activeSubStepIdx,
+                            ),
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _bgSurface,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: _borderSubtle),
+                              ),
+                              child: Text(
+                                'Edit',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Offstage(
+                            offstage: _isSinglePanelMode,
+                            child: InkWell(
+                              key: ValueKey(
+                                'tailor_howto_btn_${node.id}_$selectedTaskIdx',
+                              ),
+                              onTap: () =>
+                                  promptTailorHowToDialog(selectedTaskIdx),
+                              borderRadius: BorderRadius.circular(5),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(color: _borderSubtle),
+                                ),
+                                child: Text(
+                                  '✦ Tailor',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Option B: Full-Canvas 2-Pane Split (.opt2-split) ──
+                LayoutBuilder(
+                  builder: (context, splitConstraints) {
+                    final useTwoCol = splitConstraints.maxWidth >= 680;
+                    final totalSubSteps = selectedHowTo.subSteps.length;
+
+                    // Left Full-Height Instruction Pane (.opt2-left)
+                    final leftPane = Container(
+                      padding: const EdgeInsets.fromLTRB(32, 28, 32, 24),
+                      decoration: BoxDecoration(
+                        color: _bgSurface,
+                        border: useTwoCol
+                            ? Border(right: BorderSide(color: _borderSubtle))
+                            : Border(bottom: BorderSide(color: _borderSubtle)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // STEP X.Y OF X.Z Badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _accentEmerald,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'STEP ${selectedTaskIdx + 1}.${activeSubStepIdx + 1} OF ${selectedTaskIdx + 1}.$totalSubSteps',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF052E16),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              // Large 22px Hero Step Title
+                              Text(
+                                activeSubStep.shortTitle,
+                                style: GoogleFonts.inter(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.3,
+                                  color: _textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              // Clear 15.5px Instruction Paragraph
+                              Text(
+                                activeSubStep.instruction,
+                                style: GoogleFonts.inter(
+                                  fontSize: 15.5,
+                                  height: 1.7,
+                                  color: _textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+                              // ✓ WHAT YOU SHOULD SEE Callout Box
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _accentEmerald.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: _accentEmerald.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '✓ WHAT YOU SHOULD SEE',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.4,
+                                        color: _accentEmerald,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      activeSubStep.verifyResult,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        height: 1.5,
+                                        color: const Color(0xFFD1FAE5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (activeSubStep.explainConcept.isNotEmpty) ...[
+                                const SizedBox(height: 18),
+                                // 💡 WHY THIS MATTERS Card
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _bgBase,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: _explainStepOpen
+                                          ? _borderBright
+                                          : _borderSubtle,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '💡 WHY THIS MATTERS',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
+                                          color: _textMuted,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        activeSubStep.explainConcept,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          height: 1.55,
+                                          color: _textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 28),
+                          // Bottom Action Bar inside Left Pane (Next: 1.2 ... + CTA Button)
+                          Container(
+                            padding: const EdgeInsets.only(top: 18),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                top: BorderSide(color: _borderSubtle),
+                              ),
+                            ),
+                            child: Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 12,
+                              runSpacing: 10,
+                              children: [
+                                RichText(
+                                  text: TextSpan(
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: _textSecondary,
+                                    ),
+                                    children: [
+                                      const TextSpan(text: 'Next: '),
+                                      TextSpan(
+                                        text: nextUpLabel,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: _textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  key: ValueKey(
+                                    'mark_active_step_done_btn_${node.id}',
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _focalAccent,
+                                    foregroundColor: _focalAccentFg,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(7),
+                                    ),
+                                  ),
+                                  onPressed: () => markActiveStepDoneAndAdvance(
+                                    selectedTaskIdx,
+                                    activeSubStepIdx,
+                                  ),
+                                  child: Text(
+                                    activeSubStep.subtask.completed
+                                        ? '✓ Completed — Next Step →'
+                                        : '✓ Mark Step ${selectedTaskIdx + 1}.${activeSubStepIdx + 1} Done & Next →',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    // Right Full-Height Code / Blueprint Reference Pane (.opt2-right)
+                    final rightPane = Container(
+                      color: _bgRecessed,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
+                                  horizontal: 22,
+                                  vertical: 12,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _bgHover,
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(7),
-                                  ),
+                                  color: _bgBase,
                                   border: Border(
                                     bottom: BorderSide(color: _borderSubtle),
                                   ),
@@ -4635,89 +4738,91 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(24),
                                 child: Text(
                                   activeSubStep.codeFormula,
                                   style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 12,
-                                    height: 1.6,
-                                    color: _textPrimary,
+                                    fontSize: 13,
+                                    height: 1.65,
+                                    color: const Color(0xFFD1D5DB),
                                   ),
                                 ),
                               ),
-                              if (_explainStepOpen &&
-                                  activeSubStep.explainConcept.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _bgHover,
-                                    border: Border(
-                                      top: BorderSide(color: _borderSubtle),
-                                    ),
-                                  ),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        height: 1.5,
-                                        color: _textSecondary,
-                                      ),
-                                      children: [
-                                        TextSpan(
-                                          text: '💡 Concept: ',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: _textPrimary,
-                                          ),
-                                        ),
-                                        TextSpan(
-                                          text: activeSubStep.explainConcept,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
                             ],
                           ),
-                        );
+                          // Bottom Pitfall / Guard Footer Bar
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 22,
+                              vertical: 16,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _bgBase,
+                              border: Border(
+                                top: BorderSide(color: _borderSubtle),
+                              ),
+                            ),
+                            child: RichText(
+                              text: TextSpan(
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  height: 1.5,
+                                  color: _textSecondary,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: '⚠️ Common Pitfall: ',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textPrimary,
+                                    ),
+                                  ),
+                                  TextSpan(text: pitfallOrGuardText),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
 
-                        if (useTwoCol) {
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    if (useTwoCol) {
+                      return ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 540),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(flex: 48, child: leftCol),
-                              const SizedBox(width: 28),
-                              Expanded(flex: 52, child: rightCol),
+                              Expanded(flex: 48, child: leftPane),
+                              Expanded(flex: 52, child: rightPane),
                             ],
-                          );
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            leftCol,
-                            const SizedBox(height: 16),
-                            rightCol,
-                          ],
-                        );
-                      },
-                    ),
-
-                    // Keep Step Pills & Tuning/Guard Pills Offstage in Single-Panel Mode (Visible in Split Studio Mode)
-                    Offstage(
-                      offstage: _isSinglePanelMode,
-                      child: Container(
-                        margin: const EdgeInsets.only(top: 18),
-                        padding: const EdgeInsets.only(top: 12),
-                        decoration: BoxDecoration(
-                          border: Border(top: BorderSide(color: _borderSubtle)),
+                          ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        leftPane,
+                        rightPane,
+                      ],
+                    );
+                  },
+                ),
+
+                // Keep Step Pills & Tuning/Guard Pills Offstage in Single-Panel Mode (Visible in Split Studio Mode)
+                Offstage(
+                  offstage: _isSinglePanelMode,
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 18),
+                    padding: const EdgeInsets.only(top: 12),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: _borderSubtle)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                             Wrap(
                               spacing: 6,
                               runSpacing: 6,
@@ -4815,9 +4920,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     ),
                   ],
                 ),
-              ),
-            ],
-          )
+              )
         : const SizedBox.shrink();
 
     final selectedTaskHowToSection = (selectedParentTask != null &&
