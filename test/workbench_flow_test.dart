@@ -262,13 +262,12 @@ void main() {
         // Option 1 + Option 4 Hybrid: Hero header has Prev/Next buttons + clickable feature dropdown
         expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
-        // Tasks start as clean 1-line cards in Single-Panel mode; tapping Task 01 expands its How-To sub-steps inline above Task 02
+        // The Pinned Active Step Window is always visible at the top of the work area above the task rows
         final activeFeat0 = provider.selectedFeature!;
         final cp0NodeId = provider.documents[activeFeat0.id]!.subtasks.first.id;
-        expect(find.byKey(ValueKey('howto_substep_${cp0NodeId}_0_0')), findsNothing);
-        await tester.tap(find.byKey(ValueKey('select_task_row_${cp0NodeId}_0')));
-        await tester.pumpAndSettle();
+        expect(find.byKey(ValueKey('pinned_active_step_window_$cp0NodeId')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
+        expect(find.byKey(ValueKey('howto_substep_${cp0NodeId}_0_0')), findsOneWidget);
         final inlineSubStepY = tester.getTopLeft(
           find.byKey(ValueKey('howto_substep_${cp0NodeId}_0_0')),
         ).dy;
@@ -287,15 +286,15 @@ void main() {
         final secondFeat = provider.selectedFeature!;
         expect(secondFeat.id, isNot(equals(activeFeat0.id)));
         final secondCp0NodeId = provider.documents[secondFeat.id]!.subtasks.first.id;
-        await tester.tap(find.byKey(ValueKey('select_task_row_${secondCp0NodeId}_0')));
-        await tester.pumpAndSettle();
         final secondFeatSubStepFinder = find.byKey(ValueKey('howto_substep_${secondCp0NodeId}_0_0'));
         await tester.ensureVisible(secondFeatSubStepFinder);
         await tester.pumpAndSettle();
         await tester.tap(secondFeatSubStepFinder);
         await tester.pumpAndSettle();
         expect(provider.selectedFeature!.id, equals(secondFeat.id));
-        // Uncheck the sub-step to restore clean state, then navigate back to Feature 1
+        // First tap marked 1.1 done and auto-advanced spotlight to 1.2; select 1.1 then uncheck to restore clean state
+        await tester.tap(secondFeatSubStepFinder);
+        await tester.pumpAndSettle();
         await tester.tap(secondFeatSubStepFinder);
         await tester.pumpAndSettle();
         final prevFeatBtn = find.byKey(const ValueKey('prev_feature_btn'));
