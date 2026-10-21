@@ -2409,22 +2409,32 @@ class TaskHowToBlueprint {
       totalTaskMinutes,
     );
 
+    final targetAssetName = engineLabel == 'UNREAL 5'
+        ? (unrealCppMode ? cppClass : bpAsset)
+        : (engineLabel == 'UNITY C#'
+            ? '$pascalAsset.cs'
+            : '$snakeAsset.tscn');
+
     ({
       String explain,
       List<String> chips,
       String pitfall,
     }) buildProjectSpecContext(int stepIdx) {
+      final nextStepTitle = stepIdx + 1 < 6
+          ? buildAtomicStepSpec(stepIdx + 1).shortTitle
+          : 'Verify Checkpoint & Continue';
+
       switch (stepIdx) {
         case 0:
           return (
             explain:
-                'Every step in this task builds inside this asset so "$cleanTitle" stays modular and reusable across the arena.',
+                'Every step in this task builds inside $targetAssetName so ${checkpointNode.cleanStageTitle} stays modular and reusable across the level.',
             chips: <String>[
-              'Next: Attach Visual & Collision',
-              'Target: $cleanTitle',
+              'Asset: $targetAssetName',
+              'Next: $nextStepTitle',
             ],
             pitfall: engineLabel == 'UNREAL 5'
-                ? 'Choose Actor (AActor) as the parent class so you can attach components and place it in the level.'
+                ? 'Choose Actor (AActor) as the parent class so you can attach components and place $targetAssetName in the level.'
                 : (engineLabel == 'UNITY C#'
                     ? 'Make sure the file name "$pascalAsset.cs" matches the class name "$pascalAsset" so Unity can attach it.'
                     : 'Save the scene in res://scenes/ before attaching the script so node paths stay clean.'),
@@ -2432,10 +2442,10 @@ class TaskHowToBlueprint {
         case 1:
           return (
             explain:
-                'Gives "$cleanTitle" both its on-screen visual shape and the collision trigger sensor needed for Step 5 logic.',
+                'Gives $targetAssetName both its visible shape and the collision trigger sensor needed for Step 5 logic.',
             chips: <String>[
-              'Next: Place in Level Viewport',
-              'Trigger Sensor: HitBox / InteractBox',
+              'Asset: $targetAssetName',
+              'Next: $nextStepTitle',
             ],
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably.'
@@ -2446,24 +2456,24 @@ class TaskHowToBlueprint {
         case 2:
           return (
             explain:
-                'Spawns a live testable instance in the arena so you can verify "${checkpointNode.playtestCondition}" on screen.',
+                'Places a live $targetAssetName instance in the level so you can test "${checkpointNode.playtestCondition}" on screen.',
             chips: <String>[
-              'Next: Expose $primaryVarName',
-              'Playtest: ${checkpointNode.cleanStageTitle}',
+              'Instance: $targetAssetName',
+              'Next: $nextStepTitle',
             ],
             pitfall: engineLabel == 'UNREAL 5'
-                ? 'Click Compile & Save before dragging into the viewport so the new mesh and collision box appear.'
+                ? 'Click Compile & Save before dragging $targetAssetName into the viewport so the new mesh and collision box appear.'
                 : (engineLabel == 'UNITY C#'
-                    ? 'Reset Transform Position to (0, 0, 0) in the Inspector so the object is not hidden off-camera.'
-                    : 'Use the Chain-Link icon (Ctrl+Shift+A) to instantiate the child scene rather than copying raw nodes.'),
+                    ? 'Reset Transform Position to (0, 0, 0) in the Inspector so $pascalAsset is not hidden off-camera.'
+                    : 'Use the Chain-Link icon (Ctrl+Shift+A) to instantiate $targetAssetName rather than copying raw nodes.'),
           );
         case 3:
           return (
             explain:
-                'Exposes "$primaryVar" directly in the Inspector so you can tune "$cleanTitle" feel live without recompiling.',
+                'Exposes "$primaryVar" on $targetAssetName so you can tune feel live in the editor without recompiling.',
             chips: <String>[
               'Spec Param: $primaryVar',
-              'Next: Wire Step 5 Logic',
+              'Next: $nextStepTitle',
             ],
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Click the Eye icon (Instance Editable) next to $primaryVarName so it appears in the Level Details panel.'
@@ -2474,10 +2484,10 @@ class TaskHowToBlueprint {
         case 4:
           return (
             explain:
-                'Connects player trigger input to "$primaryVarName" so "$cleanTitle" updates smoothly every physics frame.',
+                'Connects player trigger input on $targetAssetName to "$primaryVarName" so state updates smoothly every frame.',
             chips: <String>[
               'Drives: $primaryVar',
-              'Next: Enforce Guard & Playtest',
+              'Next: $nextStepTitle',
             ],
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Connect the white execution wire from the Branch (True) pin into your state update node.'
@@ -2488,7 +2498,7 @@ class TaskHowToBlueprint {
         default:
           return (
             explain:
-                'Enforces "$primaryGuard" and completes the playable verification for "${checkpointNode.cleanStageTitle}".',
+                'Enforces "$primaryGuard" on $targetAssetName and completes playable verification for "${checkpointNode.cleanStageTitle}".',
             chips: <String>[
               'Guard: $primaryGuard',
               'Goal: ${checkpointNode.cleanStageTitle}',

@@ -627,6 +627,8 @@ void main() {
         expect(unrealBp.whereLocation, contains('ActorComponent'));
         expect(unrealBp.subSteps[0].stepPath, contains('/Game/Blueprints/'));
         expect(unrealBp.subSteps[0].codeFormula, contains('EMechanicState::Active'));
+        expect(unrealBp.subSteps[0].explainConcept, contains('BP_'));
+        expect(unrealBp.subSteps[0].specChips, contains('Next: ${unrealBp.subSteps[1].shortTitle}'));
         expect(unrealBp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
 
         final unrealCpp = TaskHowToBlueprint.resolve(
@@ -638,6 +640,7 @@ void main() {
         );
         expect(unrealCpp.engineLabel, 'UNREAL 5');
         expect(unrealCpp.whereLocation, contains('ActorComponent'));
+        expect(unrealCpp.subSteps[0].explainConcept, contains('AWasdMovementDashActor'));
         expect(unrealCpp.subSteps[3].codeFormula, contains('UPROPERTY(EditAnywhere'));
         expect(unrealCpp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
       },
