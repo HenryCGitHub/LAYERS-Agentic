@@ -48,7 +48,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   final Map<String, int> _selectedSubStepIndexByTask = {};
   final Set<String> _expandedHowToTaskKeys = {};
   bool _unrealCppMode = false;
-  bool _explainStepOpen = false;
 
   @override
   void dispose() {
@@ -226,199 +225,247 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
+  String? get _engineHint =>
+      widget.workbench.conceptDraft?.techSpec.join(' ') ??
+      widget.workbench.activeProject?.sections['tech_spec'];
+
+  int _computeCheckpointRemainingMinutes(FeatureStateNode cpNode) {
+    final hint = _engineHint;
+    int rem = 0;
+    for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+      final bp = TaskHowToBlueprint.resolve(
+        parentTask: cpNode.checklist[tIdx],
+        taskIndex: tIdx,
+        checkpointNode: cpNode,
+        engineHint: hint,
+        unrealCppMode: _unrealCppMode,
+      );
+      rem += bp.remainingTaskMinutes;
+    }
+    return rem;
+  }
+
+  int _computeFeatureRemainingMinutes(TierDocument feat) {
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    int rem = 0;
+    for (final cp in states) {
+      rem += _computeCheckpointRemainingMinutes(cp);
+    }
+    return rem;
+  }
+
+  int _computeReleaseRemainingMinutes(List<TierDocument> beats) {
+    int rem = 0;
+    for (final beat in beats) {
+      for (final feat in widget.workbench.featuresForBeat(beat.id)) {
+        rem += _computeFeatureRemainingMinutes(feat);
+      }
+    }
+    return rem;
+  }
+
   Widget _buildLeftBeatFeatureRail(TierDocument rel, {bool shrinkWrap = false}) {
     final beats = widget.workbench.activeReleaseBeats;
     final relProgress = widget.workbench.getDocumentProgress(rel.id);
     final releases = widget.workbench.projectReleases;
     final archivedFeats = widget.workbench.supersededFeatures;
     final activeVer = rel.sections['versionTag'] ?? 'v0.1';
+    final releaseRemMins = _computeReleaseRemainingMinutes(beats);
+    final releaseRemHoursStr =
+        TaskHowToBlueprint.formatRemainingHoursShort(releaseRemMins);
+    final isReleaseDone = relProgress >= 100 || releaseRemMins <= 0;
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: shrinkWrap ? MainAxisSize.min : MainAxisSize.max,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
             color: _bgBase,
             border: Border(bottom: BorderSide(color: _borderSubtle)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Stack(
             children: [
               Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'OUTLINE',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                      color: _textSecondary,
-                    ),
-                  ),
-                  Offstage(
-                    offstage: true,
-                    child: Text('ACTIVE RELEASE'),
-                  ),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Compact Release Selector Dropdown Pill (matches mockup "v0.1 Prototype ▾")
-                  PopupMenuButton<String>(
-                    key: const ValueKey('release_selector_dropdown_btn'),
-                    color: _bgSurface,
-                    tooltip: 'Switch Release View or Evolve Scope',
-                    onSelected: (value) {
-                      if (value == '__evolve__') {
-                        widget.workbench.advanceToNextRelease();
-                      } else if (value == '__replan__') {
-                        widget.workbench.openReleasePlanGate(releaseId: rel.id);
-                      } else if (value == '__toggle_view__') {
-                        setState(() {
-                          _isSinglePanelMode = !_isSinglePanelMode;
-                        });
-                      } else if (value.startsWith('rel:')) {
-                        final targetId = value.substring(4);
-                        widget.workbench.openReleasePlanGate(releaseId: targetId);
-                      } else {
-                        widget.workbench.setReleaseViewFilter(value);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem<String>(
-                        value: 'active',
-                        child: Text(
-                          '● Active: ${rel.title} ($relProgress%)',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _textPrimary,
-                          ),
-                        ),
-                      ),
-                      PopupMenuItem<String>(
-                        value: 'all',
-                        child: Text(
-                          '🌳 All Live Game Features ($activeVer)',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: _textPrimary,
-                          ),
-                        ),
-                      ),
-                      if (archivedFeats.isNotEmpty)
+                  // Left: Release Selector Dropdown Pill ("v0.1 Prototype ▾")
+                  Flexible(
+                    child: PopupMenuButton<String>(
+                      key: const ValueKey('release_selector_dropdown_btn'),
+                      color: _bgSurface,
+                      tooltip: 'Switch Release View or Evolve Scope',
+                      onSelected: (value) {
+                        if (value == '__evolve__') {
+                          widget.workbench.advanceToNextRelease();
+                        } else if (value == '__replan__') {
+                          widget.workbench.openReleasePlanGate(releaseId: rel.id);
+                        } else if (value == '__toggle_view__') {
+                          setState(() {
+                            _isSinglePanelMode = !_isSinglePanelMode;
+                          });
+                        } else if (value.startsWith('rel:')) {
+                          final targetId = value.substring(4);
+                          widget.workbench.openReleasePlanGate(releaseId: targetId);
+                        } else {
+                          widget.workbench.setReleaseViewFilter(value);
+                        }
+                      },
+                      itemBuilder: (context) => [
                         PopupMenuItem<String>(
-                          value: 'archived',
+                          value: 'active',
                           child: Text(
-                            '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
+                            '● Active: ${rel.title} ($relProgress%)',
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: _textSecondary,
+                              fontWeight: FontWeight.w700,
+                              color: _textPrimary,
                             ),
                           ),
                         ),
-                      const PopupMenuDivider(),
-                      for (final r in releases)
                         PopupMenuItem<String>(
-                          value: 'rel:${r.id}',
+                          value: 'all',
                           child: Text(
-                            '${r.id == rel.id ? "▸ " : "  "}${r.title}',
+                            '🌳 All Live Game Features ($activeVer)',
                             style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              fontWeight:
-                                  r.id == rel.id ? FontWeight.w700 : FontWeight.w500,
+                              fontSize: 12,
                               color: _textPrimary,
                             ),
                           ),
                         ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem<String>(
-                        value: '__toggle_view__',
-                        child: Text(
-                          _isSinglePanelMode
-                              ? '◫ Switch to Full Studio Split View'
-                              : '▯ Switch to Clean Single-Step View',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: _textPrimary,
+                        if (archivedFeats.isNotEmpty)
+                          PopupMenuItem<String>(
+                            value: 'archived',
+                            child: Text(
+                              '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: _textSecondary,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      PopupMenuItem<String>(
-                        value: '__replan__',
-                        child: Text(
-                          '✎ Edit ${rel.title} Scope in Plan Gate',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: _textPrimary,
+                        const PopupMenuDivider(),
+                        for (final r in releases)
+                          PopupMenuItem<String>(
+                            value: 'rel:${r.id}',
+                            child: Text(
+                              '${r.id == rel.id ? "▸ " : "  "}${r.title}',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight:
+                                    r.id == rel.id ? FontWeight.w700 : FontWeight.w500,
+                                color: _textPrimary,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      PopupMenuItem<String>(
-                        value: '__evolve__',
-                        child: Text(
-                          '+ Evolve to Next Release Milestone ✦',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _accentEmerald,
-                          ),
-                        ),
-                      ),
-                    ],
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _bgSurface,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: _borderSubtle),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '$activeVer ${rel.releaseScope.label} ▾',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
+                        const PopupMenuDivider(),
+                        PopupMenuItem<String>(
+                          value: '__toggle_view__',
+                          child: Text(
+                            _isSinglePanelMode
+                                ? '◫ Switch to Full Studio Split View'
+                                : '▯ Switch to Clean Single-Step View',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
                               color: _textPrimary,
                             ),
                           ),
-                        ],
+                        ),
+                        PopupMenuItem<String>(
+                          value: '__replan__',
+                          child: Text(
+                            '✎ Edit ${rel.title} Scope in Plan Gate',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: _textPrimary,
+                            ),
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: '__evolve__',
+                          child: Text(
+                            '+ Evolve to Next Release Milestone ✦',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _accentEmerald,
+                            ),
+                          ),
+                        ),
+                      ],
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _bgSurface,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: _borderSubtle),
+                        ),
+                        child: Text(
+                          '$activeVer ${rel.releaseScope.label} ▾',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: _textPrimary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  Offstage(
-                    offstage: true,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  const SizedBox(width: 8),
+                  // Right: Simple Number-Only Live Rollup ("12h Left #%"), no tile, no progress bar
+                  RichText(
+                    key: const ValueKey('outline_release_eta_summary'),
+                    text: TextSpan(
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: isReleaseDone ? _accentEmerald : _textPrimary,
+                      ),
                       children: [
-                        _buildViewModeTogglePill(),
-                        InkWell(
-                          key: const ValueKey('critical_path_filter_btn'),
-                          onTap: () {
-                            setState(() {
-                              _criticalPathOnly = !_criticalPathOnly;
-                            });
-                          },
-                          child: const SizedBox.shrink(),
-                        ),
-                        InkWell(
-                          key: const ValueKey('focus_mode_toggle_btn'),
-                          onTap: () => widget.workbench.toggleFocusMode(),
-                          child: const SizedBox.shrink(),
+                        TextSpan(text: '$releaseRemHoursStr Left '),
+                        TextSpan(
+                          text: '$relProgress%',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: isReleaseDone ? _accentEmerald : _textSecondary,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
+              ),
+              Offstage(
+                offstage: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('OUTLINE'),
+                    const Text('ACTIVE RELEASE'),
+                    _buildViewModeTogglePill(),
+                    InkWell(
+                      key: const ValueKey('critical_path_filter_btn'),
+                      onTap: () {
+                        setState(() {
+                          _criticalPathOnly = !_criticalPathOnly;
+                        });
+                      },
+                      child: const SizedBox.shrink(),
+                    ),
+                    InkWell(
+                      key: const ValueKey('focus_mode_toggle_btn'),
+                      onTap: () => widget.workbench.toggleFocusMode(),
+                      child: const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -484,8 +531,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.8,
                             color: allBeatDone
-                                ? _accentEmerald
+                                ? _textMuted.withValues(alpha: 0.45)
                                 : (isBeatActive ? _textSecondary : _textMuted),
+                            decoration: allBeatDone
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -551,7 +601,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   }) {
     final isSelected = widget.workbench.selectedFeatureId == feat.id;
     final progress = widget.workbench.getDocumentProgress(feat.id);
-    final isDone = progress >= 100;
+    final featRemMins = _computeFeatureRemainingMinutes(feat);
+    final featRemLabel =
+        TaskHowToBlueprint.formatRemainingHoursShort(featRemMins);
+    final isDone = progress >= 100 || featRemMins <= 0;
     final isFocus = widget.workbench.focusMode;
     final depTier = WorkspaceAgentOrchestrator.classifyDependencyTier(
       featureTitle: feat.title,
@@ -591,7 +644,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: isSelected ? _textSecondary : _textMuted,
+                        color: isDone
+                            ? _textMuted.withValues(alpha: 0.45)
+                            : (isSelected ? _textSecondary : _textMuted),
                       ),
                     ),
                   ),
@@ -603,11 +658,28 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         fontSize: 13,
                         fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                         color: isDone
-                            ? _accentEmerald
+                            ? _textMuted.withValues(alpha: 0.45)
                             : (isSelected ? _textPrimary : _textSecondary),
+                        decoration: isDone
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    featRemLabel,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: isDone
+                          ? _textMuted.withValues(alpha: 0.45)
+                          : _textMuted,
+                      decoration: isDone
+                          ? TextDecoration.lineThrough
+                          : TextDecoration.none,
                     ),
                   ),
                   Offstage(
@@ -627,7 +699,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     );
   }
 
-  /// Renders the flat, borderless indented tree of Checkpoints -> Tasks -> Sub-Steps (1.1–1.6)
+  /// Renders the flat, borderless indented tree of Checkpoints -> Tasks -> Sub-Steps
   /// directly under the selected Feature in the Left Outline Sidebar.
   Widget _buildOutlineFeatureChildrenTree(TierDocument feat) {
     final states = FeatureStateNode.getStatesForDocument(feat);
@@ -648,8 +720,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         ? _manualCheckpointFocusIndex!
         : activeCpIdx;
 
-    final engineHint = widget.workbench.conceptDraft?.techSpec.join(' ') ??
-        widget.workbench.activeProject?.sections['tech_spec'];
+    final engineHint = _engineHint;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(26, 2, 8, 6),
@@ -664,8 +735,15 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             Builder(
               builder: (context) {
                 final cpNode = states[cpIdx];
+                final cpDone = cpNode.isCompleted &&
+                    !_awaitingPlaytestVerification.contains(cpNode.id);
                 final isCpActive = cpIdx == effectiveCpIdx;
-                final cpCode = 'CP ${(cpIdx + 1).toString().padLeft(2, '0')}';
+                // Auto-collapse completed Checkpoints (#4) unless explicitly expanded by user
+                final isCpExpanded =
+                    (isCpActive && !cpDone) || _expandedDoneCheckpoints.contains(cpNode.id);
+                final cpRemMins = _computeCheckpointRemainingMinutes(cpNode);
+                final cpRemLabel =
+                    TaskHowToBlueprint.formatRemainingHoursShort(cpRemMins);
 
                 int activeTaskIdx = _selectedTaskIndexByCheckpoint[cpNode.id] ??
                     cpNode.checklist.indexWhere((t) => !t.completed);
@@ -681,7 +759,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       onTap: () {
                         setState(() {
                           _manualCheckpointFocusIndex = cpIdx;
-                          _explainStepOpen = false;
+                          if (cpDone) {
+                            if (_expandedDoneCheckpoints.contains(cpNode.id)) {
+                              _expandedDoneCheckpoints.remove(cpNode.id);
+                            } else {
+                              _expandedDoneCheckpoints.add(cpNode.id);
+                            }
+                          }
                         });
                       },
                       borderRadius: BorderRadius.circular(5),
@@ -693,21 +777,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         child: Row(
                           children: [
                             Text(
-                              isCpActive ? '▾' : '▸',
+                              isCpExpanded ? '▾' : '▸',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9.5,
-                                color: isCpActive ? _textPrimary : _textMuted,
-                              ),
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              cpCode,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: cpNode.isCompleted
-                                    ? _accentEmerald
-                                    : _textMuted,
+                                color: cpDone
+                                    ? _textMuted.withValues(alpha: 0.45)
+                                    : (isCpActive ? _textPrimary : _textMuted),
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -715,23 +790,42 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               child: Text(
                                 cpNode.cleanStageTitle,
                                 style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  fontWeight: isCpActive
+                                  fontSize: 12,
+                                  fontWeight: isCpActive && !cpDone
                                       ? FontWeight.w600
                                       : FontWeight.w500,
-                                  color: isCpActive
-                                      ? _textPrimary
-                                      : _textSecondary,
+                                  color: cpDone
+                                      ? _textMuted.withValues(alpha: 0.45)
+                                      : (isCpActive
+                                          ? _textPrimary
+                                          : _textSecondary),
+                                  decoration: cpDone
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              cpRemLabel,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w500,
+                                color: cpDone
+                                    ? _textMuted.withValues(alpha: 0.45)
+                                    : _textMuted,
+                                decoration: cpDone
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                    if (isCpActive && cpNode.checklist.isNotEmpty)
+                    if (isCpExpanded && cpNode.checklist.isNotEmpty)
                       Container(
                         margin: const EdgeInsets.only(left: 10),
                         padding: const EdgeInsets.only(left: 8),
@@ -754,6 +848,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                     checkpointNode: cpNode,
                                     engineHint: engineHint,
                                     unrealCppMode: _unrealCppMode,
+                                  );
+                                  final taskRemLabel = TaskHowToBlueprint
+                                      .formatRemainingHoursShort(
+                                    bp.remainingTaskMinutes,
                                   );
                                   final taskKey = '${cpNode.id}_$tIdx';
                                   int activeSubIdx =
@@ -781,7 +879,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                             _expandedHowToTaskKeys
                                               ..clear()
                                               ..add(taskKey);
-                                            _explainStepOpen = false;
                                           });
                                         },
                                         borderRadius: BorderRadius.circular(5),
@@ -792,29 +889,34 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                           ),
                                           child: Row(
                                             children: [
-                                              Icon(
-                                                task.completed
-                                                    ? Icons.check_box_rounded
-                                                    : Icons
-                                                        .check_box_outline_blank_rounded,
-                                                size: 13,
-                                                color: task.completed
-                                                    ? _accentEmerald
-                                                    : (isTaskActive
-                                                        ? _textPrimary
-                                                        : _textMuted),
+                                              Text(
+                                                isTaskActive ? '▾' : '▸',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9,
+                                                  color: task.completed
+                                                      ? _textMuted.withValues(
+                                                          alpha: 0.45,
+                                                        )
+                                                      : (isTaskActive
+                                                          ? _textPrimary
+                                                          : _textMuted),
+                                                ),
                                               ),
-                                              const SizedBox(width: 6),
+                                              const SizedBox(width: 5),
                                               Expanded(
                                                 child: Text(
                                                   bp.cleanTitle,
                                                   style: GoogleFonts.inter(
                                                     fontSize: 11.5,
-                                                    fontWeight: isTaskActive
+                                                    fontWeight: isTaskActive &&
+                                                            !task.completed
                                                         ? FontWeight.w600
                                                         : FontWeight.w400,
                                                     color: task.completed
-                                                        ? _textMuted
+                                                        ? _textMuted.withValues(
+                                                            alpha: 0.45,
+                                                          )
                                                         : (isTaskActive
                                                             ? _textPrimary
                                                             : _textSecondary),
@@ -828,15 +930,22 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                       TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                              const SizedBox(width: 4),
+                                              const SizedBox(width: 6),
                                               Text(
-                                                '${task.completedChildrenCount}/${task.totalChildrenCount}',
+                                                taskRemLabel,
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 9.5,
+                                                  fontWeight: FontWeight.w500,
                                                   color: task.completed
-                                                      ? _accentEmerald
+                                                      ? _textMuted.withValues(
+                                                          alpha: 0.45,
+                                                        )
                                                       : _textMuted,
+                                                  decoration: task.completed
+                                                      ? TextDecoration
+                                                          .lineThrough
+                                                      : TextDecoration.none,
                                                 ),
                                               ),
                                             ],
@@ -883,8 +992,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                           _expandedHowToTaskKeys
                                                             ..clear()
                                                             ..add(taskKey);
-                                                          _explainStepOpen =
-                                                              false;
                                                         });
                                                       },
                                                       borderRadius:
@@ -895,8 +1002,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                         padding:
                                                             const EdgeInsets
                                                                 .symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 4,
+                                                          horizontal: 8,
+                                                          vertical: 4.5,
                                                         ),
                                                         decoration: BoxDecoration(
                                                           color: isStepActive
@@ -909,64 +1016,37 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                         ),
                                                         child: Row(
                                                           children: [
-                                                            InkWell(
-                                                              key: ValueKey(
-                                                                'outline_step_chk_${cpNode.id}_${tIdx}_$sIdx',
+                                                            Offstage(
+                                                              offstage: true,
+                                                              child: InkWell(
+                                                                key: ValueKey(
+                                                                  'outline_step_chk_${cpNode.id}_${tIdx}_$sIdx',
+                                                                ),
+                                                                onTap: () {
+                                                                  setState(() {
+                                                                    step.subtask
+                                                                            .completed =
+                                                                        !step
+                                                                            .subtask
+                                                                            .completed;
+                                                                    task.completed = task
+                                                                            .children
+                                                                            .isNotEmpty &&
+                                                                        task.children
+                                                                            .every(
+                                                                          (c) => c
+                                                                              .completed,
+                                                                        );
+                                                                  });
+                                                                  widget.workbench
+                                                                      .updateFeatureStates(
+                                                                    feat.id,
+                                                                    states,
+                                                                  );
+                                                                },
+                                                                child: const SizedBox
+                                                                    .shrink(),
                                                               ),
-                                                              onTap: () {
-                                                                setState(() {
-                                                                  step.subtask
-                                                                          .completed =
-                                                                      !step
-                                                                          .subtask
-                                                                          .completed;
-                                                                  task.completed = task
-                                                                          .children
-                                                                          .isNotEmpty &&
-                                                                      task.children
-                                                                          .every(
-                                                                        (c) => c
-                                                                            .completed,
-                                                                      );
-                                                                });
-                                                                widget.workbench
-                                                                    .updateFeatureStates(
-                                                                  feat.id,
-                                                                  states,
-                                                                );
-                                                              },
-                                                              child: Icon(
-                                                                stepDone
-                                                                    ? Icons
-                                                                        .check_box_rounded
-                                                                    : Icons
-                                                                        .check_box_outline_blank_rounded,
-                                                                size: 12.5,
-                                                                color: stepDone
-                                                                    ? _accentEmerald
-                                                                    : (isStepActive
-                                                                        ? _textPrimary
-                                                                        : _textMuted),
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 6,
-                                                            ),
-                                                            Text(
-                                                              '${tIdx + 1}.${sIdx + 1}',
-                                                              style: GoogleFonts
-                                                                  .jetBrainsMono(
-                                                                fontSize: 9.5,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                color: isStepActive
-                                                                    ? _textPrimary
-                                                                    : _textMuted,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 6,
                                                             ),
                                                             Expanded(
                                                               child: Text(
@@ -979,14 +1059,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                                 style:
                                                                     GoogleFonts
                                                                         .inter(
-                                                                  fontSize: 11,
-                                                                  fontWeight: isStepActive
+                                                                  fontSize: 11.5,
+                                                                  fontWeight: isStepActive &&
+                                                                          !stepDone
                                                                       ? FontWeight
                                                                           .w600
                                                                       : FontWeight
                                                                           .w400,
                                                                   color: stepDone
                                                                       ? _textMuted
+                                                                          .withValues(
+                                                                          alpha:
+                                                                              0.45,
+                                                                        )
                                                                       : (isStepActive
                                                                           ? _textPrimary
                                                                           : _textSecondary),
@@ -4069,22 +4154,63 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       final nextIncompleteStepIdx = nextStepAfterCurrent != -1
           ? nextStepAfterCurrent
           : parentTask.children.indexWhere((c) => !c.completed);
-      setState(() {
-        if (nextIncompleteStepIdx != -1) {
+      if (nextIncompleteStepIdx != -1) {
+        setState(() {
           _selectedTaskIndexByCheckpoint[node.id] = pIdx;
           _selectedSubStepIndexByTask['${node.id}_$pIdx'] =
               nextIncompleteStepIdx;
+        });
+        return;
+      }
+
+      // Current task is 100% done! Check if another task in this Checkpoint is incomplete
+      final nextTaskIdx = node.checklist.indexWhere((t) => !t.completed);
+      if (nextTaskIdx != -1) {
+        setState(() {
+          _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
+          _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
+        });
+        return;
+      }
+
+      // All tasks & steps in this Checkpoint are 100% done! Verify Checkpoint & Continue -> (#2)
+      for (final task in node.checklist) {
+        task.completed = true;
+        for (final child in task.children) {
+          child.completed = true;
+        }
+      }
+      setState(() {
+        _awaitingPlaytestVerification.remove(node.id);
+        _expandedDoneCheckpoints.remove(node.id);
+        // Advance to next incomplete Checkpoint in this Feature if available
+        final nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+        if (nextCpIdx != -1) {
+          _manualCheckpointFocusIndex = nextCpIdx;
+          final nextCp = states[nextCpIdx];
+          _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
+          _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
         } else {
-          // Current task is 100% done! Advance to the next incomplete task if available
-          final nextTaskIdx = node.checklist.indexWhere((t) => !t.completed);
-          if (nextTaskIdx != -1) {
-            _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
-            _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
-          } else if (sIdx + 1 < parentTask.children.length) {
-            _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx + 1;
-          }
+          _manualCheckpointFocusIndex = null;
         }
       });
+      widget.workbench.updateFeatureStates(feat.id, states);
+
+      // If all Checkpoints in this Feature are now complete, advance to the next incomplete Feature
+      if (states.every((s) => s.isCompleted)) {
+        final allFeats = <TierDocument>[
+          for (final b in widget.workbench.activeReleaseBeats)
+            ...widget.workbench.featuresForBeat(b.id),
+        ];
+        final nextFeat = allFeats.where(
+          (f) =>
+              f.id != feat.id &&
+              widget.workbench.getDocumentProgress(f.id) < 100,
+        );
+        if (nextFeat.isNotEmpty) {
+          widget.workbench.selectFeature(nextFeat.first.id);
+        }
+      }
     }
 
     void quickVerifyEntireCheckpoint() {
@@ -4101,26 +4227,41 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       widget.workbench.updateFeatureStates(feat.id, states);
     }
 
-    final cpCodeLabel = 'CP ${(index + 1).toString().padLeft(2, '0')}';
+    // Determine whether this is the final remaining step of the entire Checkpoint (#2)
+    final isFinalCheckpointStep = node.isCompleted ||
+        (selectedParentTask != null &&
+            node.checklist.every(
+              (t) =>
+                  t.id == selectedParentTask.id || t.completed,
+            ) &&
+            selectedParentTask.children
+                .where((c) => !c.completed)
+                .length <=
+                (activeSubStep != null && !activeSubStep.subtask.completed
+                    ? 1
+                    : 0) &&
+            activeSubStepIdx == (selectedHowTo?.subSteps.length ?? 1) - 1);
 
-    // Determine "Next:" label for the bottom of the Left Instruction Pane
-    String nextUpLabel = 'Checkpoint Playtest Verification';
-    if (selectedHowTo != null) {
+    // Determine pure-title "Next:" label for the bottom of the Left Instruction Pane
+    String nextUpLabel = 'Verify Checkpoint & Continue';
+    if (selectedHowTo != null && !isFinalCheckpointStep) {
       if (activeSubStepIdx + 1 < selectedHowTo.subSteps.length) {
         final nextSub = selectedHowTo.subSteps[activeSubStepIdx + 1];
-        nextUpLabel =
-            '${selectedTaskIdx + 1}.${activeSubStepIdx + 2} ${nextSub.shortTitle}';
+        nextUpLabel = nextSub.shortTitle;
       } else if (selectedTaskIdx + 1 < howToBlueprints.length) {
         final nextTaskBp = howToBlueprints[selectedTaskIdx + 1];
-        nextUpLabel = 'Task ${nextTaskBp.numLabel}: ${nextTaskBp.cleanTitle}';
+        nextUpLabel = nextTaskBp.cleanTitle;
       }
     }
 
-    final pitfallOrGuardText = edgeItems.isNotEmpty
-        ? edgeItems.first
-        : (tuningItems.isNotEmpty
-            ? 'Tuning Target: ${tuningItems.join(' · ')}'
-            : 'Verify the parent class and component hierarchy match the spec before wiring logic in the next step.');
+    final pitfallOrGuardText =
+        (activeSubStep != null && activeSubStep.quickFixPitfall.isNotEmpty)
+            ? activeSubStep.quickFixPitfall
+            : (edgeItems.isNotEmpty
+                ? edgeItems.first
+                : (tuningItems.isNotEmpty
+                    ? 'Tuning Target: ${tuningItems.join(' · ')}'
+                    : 'Verify the parent class and component hierarchy match the spec before wiring logic in the next step.'));
 
     final pinnedActiveStepWindow = (selectedParentTask != null &&
             selectedHowTo != null &&
@@ -4135,7 +4276,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 28,
-                    vertical: 18,
+                    vertical: 16,
                   ),
                   decoration: BoxDecoration(
                     color: _bgBase,
@@ -4165,11 +4306,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   children: [
                                     TextSpan(
                                       text:
-                                          '${feat.title}  /  $cpCodeLabel: ${node.cleanStageTitle}  /  ',
+                                          '${feat.title}  /  ${node.cleanStageTitle}  /  ',
                                     ),
                                     TextSpan(
-                                      text:
-                                          'Task ${selectedHowTo.numLabel}: ${selectedHowTo.cleanTitle}',
+                                      text: selectedHowTo.cleanTitle,
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.w700,
@@ -4211,7 +4351,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           ),
                         ],
                       ),
-                      // Right-aligned Action Controls in Top Bar
+                      // Right-aligned Action Controls in Top Bar (Unreal Blueprint | C++ toggle + Tailor)
                       Wrap(
                         spacing: 8,
                         runSpacing: 6,
@@ -4299,118 +4439,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 ],
                               ),
                             ),
-                          InkWell(
-                            key: ValueKey('toggle_explain_step_btn_${node.id}'),
-                            onTap: () {
-                              setState(() {
-                                _explainStepOpen = !_explainStepOpen;
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _explainStepOpen
-                                    ? _bgHover
-                                    : _bgSurface,
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: _explainStepOpen
-                                      ? _textPrimary
-                                      : _borderSubtle,
-                                ),
-                              ),
-                              child: Text(
-                                '? Explain',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: _explainStepOpen
-                                      ? _textPrimary
-                                      : _textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          InkWell(
-                            key: ValueKey(
-                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                            ),
-                            onTap: () => copySubStepCodeFormula(
-                              selectedTaskIdx,
-                              activeSubStepIdx,
-                              activeSubStep.codeFormula,
-                            ),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _bgSurface,
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: _borderSubtle),
-                              ),
-                              child: Text(
-                                'Copy',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: _textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (activeSubStepIdx != 1)
-                            Offstage(
-                              offstage: true,
-                              child: InkWell(
-                                key: ValueKey(
-                                  'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
-                                ),
-                                onTap: () => copySubStepCodeFormula(
-                                  selectedTaskIdx,
-                                  1,
-                                  selectedHowTo.subSteps.length > 1
-                                      ? selectedHowTo.subSteps[1].codeFormula
-                                      : activeSubStep.codeFormula,
-                                ),
-                                child: const SizedBox.shrink(),
-                              ),
-                            ),
-                          InkWell(
-                            key: ValueKey(
-                              'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                            ),
-                            onTap: () => promptEditHowToSubStepDialog(
-                              selectedTaskIdx,
-                              activeSubStepIdx,
-                            ),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _bgSurface,
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: _borderSubtle),
-                              ),
-                              child: Text(
-                                'Edit',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: _textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
                           Offstage(
                             offstage: _isSinglePanelMode,
                             child: InkWell(
@@ -4469,7 +4497,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // STEP X.Y OF X.Z Badge (Neutral when unchecked, Emerald when checked)
+                              // STEP X OF Y · ~Zm Badge (Step-only realistic weighted ETA)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 9,
@@ -4482,7 +4510,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  'STEP ${selectedTaskIdx + 1}.${activeSubStepIdx + 1} OF ${selectedTaskIdx + 1}.$totalSubSteps',
+                                  'STEP ${activeSubStepIdx + 1} OF $totalSubSteps · ~${activeSubStep.etaLabel}',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w800,
@@ -4514,7 +4542,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 ),
                               ),
                               const SizedBox(height: 22),
-                              // ✓ WHAT YOU SHOULD SEE Callout Box
+                              // ✓ VERIFY BEFORE CHECKING [✓] Callout Box
                               Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.symmetric(
@@ -4532,7 +4560,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '✓ WHAT YOU SHOULD SEE',
+                                      '✓ VERIFY BEFORE CHECKING [✓]',
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.w800,
@@ -4554,27 +4582,27 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               ),
                               if (activeSubStep.explainConcept.isNotEmpty) ...[
                                 const SizedBox(height: 18),
-                                // 💡 WHY THIS MATTERS Card
+                                // 🎯 CONNECTS TO YOUR SPEC & NEXT STEP Left-Bordered Note + Chips
                                 Container(
                                   width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 14,
+                                  padding: const EdgeInsets.only(
+                                    left: 14,
+                                    top: 2,
+                                    bottom: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: _bgBase,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: _explainStepOpen
-                                          ? _borderBright
-                                          : _borderSubtle,
+                                    border: Border(
+                                      left: BorderSide(
+                                        color: _borderBright,
+                                        width: 2,
+                                      ),
                                     ),
                                   ),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        '💡 WHY THIS MATTERS',
+                                        '🎯 CONNECTS TO YOUR SPEC & NEXT STEP',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w800,
@@ -4582,7 +4610,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                           color: _textMuted,
                                         ),
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 5),
                                       Text(
                                         activeSubStep.explainConcept,
                                         style: GoogleFonts.inter(
@@ -4591,6 +4619,40 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                           color: _textSecondary,
                                         ),
                                       ),
+                                      if (activeSubStep.specChips.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: [
+                                            for (final chip
+                                                in activeSubStep.specChips)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 7,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: _bgBase,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: _borderSubtle,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  chip,
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10.5,
+                                                    color: _textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -4598,7 +4660,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             ],
                           ),
                           const SizedBox(height: 20),
-                          // Bottom Action Bar inside Left Pane (Next: 1.2 ... | [✓] Checkmark Box + Gated Next → Button)
+                          // Bottom Action Bar inside Left Pane (Next: ... | [✓] Checkmark Box + Gated Next / Verify Checkpoint Button)
                           Container(
                             padding: const EdgeInsets.only(top: 16),
                             decoration: BoxDecoration(
@@ -4682,7 +4744,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    // Gated Next → Button (Only unlocks when step is checked off)
+                                    // Gated Next → Button (Morphs into Emerald "Verify Checkpoint & Continue →" on final step #2)
                                     InkWell(
                                       key: ValueKey(
                                         'next_active_step_btn_${node.id}',
@@ -4702,25 +4764,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
                                           color: activeSubStep.subtask.completed
-                                              ? _focalAccent
+                                              ? (isFinalCheckpointStep
+                                                  ? _accentEmerald
+                                                  : _focalAccent)
                                               : _bgBase.withValues(alpha: 0.55),
                                           borderRadius:
                                               BorderRadius.circular(7),
                                           border: Border.all(
                                             color:
                                                 activeSubStep.subtask.completed
-                                                    ? _focalAccent
+                                                    ? (isFinalCheckpointStep
+                                                        ? _accentEmerald
+                                                        : _focalAccent)
                                                     : _borderSubtle,
                                           ),
                                         ),
                                         child: Text(
-                                          'Next →',
+                                          isFinalCheckpointStep
+                                              ? 'Verify Checkpoint & Continue →'
+                                              : 'Next →',
                                           style: GoogleFonts.inter(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w700,
                                             color:
                                                 activeSubStep.subtask.completed
-                                                    ? _focalAccentFg
+                                                    ? (isFinalCheckpointStep
+                                                        ? const Color(0xFF052E16)
+                                                        : _focalAccentFg)
                                                     : _textMuted.withValues(
                                                         alpha: 0.45,
                                                       ),
@@ -4750,7 +4820,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 22,
-                                  vertical: 12,
+                                  vertical: 10,
                                 ),
                                 decoration: BoxDecoration(
                                   color: _bgBase,
@@ -4758,13 +4828,118 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                     bottom: BorderSide(color: _borderSubtle),
                                   ),
                                 ),
-                                child: Text(
-                                  '📍 ${activeSubStep.stepPath.isNotEmpty ? activeSubStep.stepPath : selectedHowTo.whereLocation}',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w500,
-                                    color: _textSecondary,
-                                  ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '📍 ${activeSubStep.stepPath.isNotEmpty ? activeSubStep.stepPath : selectedHowTo.whereLocation}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w500,
+                                          color: _textSecondary,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        InkWell(
+                                          key: ValueKey(
+                                            'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                                          ),
+                                          onTap: () => copySubStepCodeFormula(
+                                            selectedTaskIdx,
+                                            activeSubStepIdx,
+                                            activeSubStep.codeFormula,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: _bgSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: _borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Copy',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: _textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        if (activeSubStepIdx != 1)
+                                          Offstage(
+                                            offstage: true,
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
+                                              ),
+                                              onTap: () =>
+                                                  copySubStepCodeFormula(
+                                                selectedTaskIdx,
+                                                1,
+                                                selectedHowTo.subSteps.length >
+                                                        1
+                                                    ? selectedHowTo
+                                                        .subSteps[1].codeFormula
+                                                    : activeSubStep.codeFormula,
+                                              ),
+                                              child: const SizedBox.shrink(),
+                                            ),
+                                          ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          key: ValueKey(
+                                            'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                                          ),
+                                          onTap: () =>
+                                              promptEditHowToSubStepDialog(
+                                            selectedTaskIdx,
+                                            activeSubStepIdx,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: _bgSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: _borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Edit',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: _textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                               Padding(
@@ -4780,7 +4955,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               ),
                             ],
                           ),
-                          // Bottom Pitfall / Guard Footer Bar
+                          // Bottom Step-Specific Quick Fix / Pitfall Footer Bar (#1)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 22,
@@ -4801,7 +4976,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 ),
                                 children: [
                                   TextSpan(
-                                    text: '⚠️ Common Pitfall: ',
+                                    text: '🔧 Quick Fix / Pitfall: ',
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
@@ -4882,7 +5057,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                             setState(() {
                                               _selectedSubStepIndexByTask[
                                                   selectedTaskKey] = subIdx;
-                                              _explainStepOpen = false;
                                             });
                                           }
                                         },
@@ -5297,7 +5471,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                     _expandedHowToTaskKeys
                                       ..clear()
                                       ..add(taskKey);
-                                    _explainStepOpen = false;
                                   });
                                 },
                                 borderRadius: BorderRadius.circular(5),

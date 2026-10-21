@@ -1249,10 +1249,14 @@ class TaskHowToSubStep {
   final String stepNumberLabel; // e.g., "STEP 1.1 · CREATE ASSET FILE"
   final String shortTitle;      // e.g., "Create BP_GridTileActor"
   final String instruction;     // Concrete implementation instruction
-  final String verifyResult;    // "✓ What you should see" visual check
+  final String verifyResult;    // "✓ VERIFY BEFORE CHECKING [✓]" visual check
   final String stepPath;        // e.g., "Content Browser → /Game/Blueprints"
   final String codeFormula;     // Short code / formula / hierarchy snippet
-  final String explainConcept;  // Plain-English beginner glossary explanation
+  final String explainConcept;  // Project-connected "🎯 Connects to your Spec & Next Step" note
+  final List<String> specChips; // Spec connection chips (e.g. ["Next: ...", "Spec: ..."])
+  final String quickFixPitfall; // Step-specific "🔧 Quick Fix / Common Pitfall" for the right footer
+  final int estimatedMinutes;   // Weighted minutes for this specific step (e.g., 15, 25, 65, 35)
+  final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m", "1.1h")
   final bool isGuardStep;
 
   const TaskHowToSubStep({
@@ -1264,6 +1268,10 @@ class TaskHowToSubStep {
     this.stepPath = '',
     required this.codeFormula,
     this.explainConcept = '',
+    this.specChips = const [],
+    this.quickFixPitfall = '',
+    this.estimatedMinutes = 15,
+    this.etaLabel = '15m',
     this.isGuardStep = false,
   });
 }
@@ -1732,8 +1740,84 @@ class TaskHowToBlueprint {
     if (m != null && m.group(1) != null) {
       return m.group(1)!.replaceAll(' ', '');
     }
-    return '1h';
+    return '3h';
   }
+
+  /// Base effort weights (in minutes) across the 6 standard steps of a 3.0h (180m) task:
+  /// Step 1: 15m (Create / Open Asset)
+  /// Step 2: 25m (Add Components / Hierarchy)
+  /// Step 3: 15m (Place in Scene / Level)
+  /// Step 4: 25m (Expose Tuning Variables)
+  /// Step 5: 65m (Write Core Logic — ~1.1h)
+  /// Step 6: 35m (Add Guard & Playtest)
+  static const List<int> baseStepWeights180 = <int>[15, 25, 15, 25, 65, 35];
+
+  static int extractTaskTotalMinutes(String rawText) {
+    final m = _trailingDurationRe.firstMatch(rawText);
+    if (m != null && m.group(1) != null) {
+      final parsed = DurationHelper.parseToMinutes(m.group(1)!);
+      if (parsed > 0) return parsed;
+    }
+    return 180; // Default 3h = 180m
+  }
+
+  static List<int> computeWeightedStepMinutes(int totalSteps, int totalTaskMinutes) {
+    if (totalSteps <= 0) return const <int>[];
+    final safeTotal = totalTaskMinutes > 0 ? totalTaskMinutes : 180;
+    if (totalSteps == 6 && safeTotal == 180) {
+      return baseStepWeights180;
+    }
+    final rawWeights = List<int>.generate(
+      totalSteps,
+      (idx) => idx < baseStepWeights180.length ? baseStepWeights180[idx] : 20,
+    );
+    final weightSum = rawWeights.fold<int>(0, (sum, w) => sum + w);
+    if (weightSum <= 0) {
+      final each = (safeTotal / totalSteps).round();
+      return List<int>.filled(totalSteps, each > 0 ? each : 5);
+    }
+    final scaled = <int>[];
+    int allocated = 0;
+    for (int i = 0; i < totalSteps; i++) {
+      if (i == totalSteps - 1) {
+        final rem = safeTotal - allocated;
+        scaled.add(rem > 0 ? rem : 5);
+      } else {
+        final mins = ((rawWeights[i] / weightSum) * safeTotal).round();
+        final clamped = mins > 0 ? mins : 5;
+        scaled.add(clamped);
+        allocated += clamped;
+      }
+    }
+    return scaled;
+  }
+
+  static String formatStepEtaLabel(int minutes) {
+    if (minutes <= 0) return '0m';
+    if (minutes < 60) return '${minutes}m';
+    final hours = minutes / 60.0;
+    if ((hours - hours.roundToDouble()).abs() < 0.05) {
+      return '${hours.round()}h';
+    }
+    return '${hours.toStringAsFixed(1)}h';
+  }
+
+  static String formatRemainingHoursShort(int minutes) {
+    if (minutes <= 0) return '0h';
+    final hours = minutes / 60.0;
+    if ((hours - hours.roundToDouble()).abs() < 0.05) {
+      return '${hours.round()}h';
+    }
+    return '${hours.toStringAsFixed(1)}h';
+  }
+
+  int get totalTaskMinutes =>
+      subSteps.fold<int>(0, (sum, s) => sum + s.estimatedMinutes);
+
+  int get remainingTaskMinutes => subSteps.fold<int>(
+        0,
+        (sum, s) => sum + (s.subtask.completed ? 0 : s.estimatedMinutes),
+      );
 
   static String inferLayerTag(String rawText, int taskIdx) {
     final lower = rawText.toLowerCase();
@@ -2319,11 +2403,110 @@ class TaskHowToBlueprint {
       ];
     }
 
+    final totalTaskMinutes = extractTaskTotalMinutes(parentTask.text);
+    final stepMinutesList = computeWeightedStepMinutes(
+      parentTask.children.length,
+      totalTaskMinutes,
+    );
+
+    ({
+      String explain,
+      List<String> chips,
+      String pitfall,
+    }) buildProjectSpecContext(int stepIdx) {
+      switch (stepIdx) {
+        case 0:
+          return (
+            explain:
+                'Every step in this task builds inside this asset so "$cleanTitle" stays modular and reusable across the arena.',
+            chips: <String>[
+              'Next: Attach Visual & Collision',
+              'Target: $cleanTitle',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Choose Actor (AActor) as the parent class so you can attach components and place it in the level.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Make sure the file name "$pascalAsset.cs" matches the class name "$pascalAsset" so Unity can attach it.'
+                    : 'Save the scene in res://scenes/ before attaching the script so node paths stay clean.'),
+          );
+        case 1:
+          return (
+            explain:
+                'Gives "$cleanTitle" both its on-screen visual shape and the collision trigger sensor needed for Step 5 logic.',
+            chips: <String>[
+              'Next: Place in Level Viewport',
+              'Trigger Sensor: HitBox / InteractBox',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Check the "Is Trigger" box on BoxCollider so the player does not physically snag on the sensor.'
+                    : 'Assign a RectangleShape2D resource inside CollisionShape2D to clear the yellow scene warning icon.'),
+          );
+        case 2:
+          return (
+            explain:
+                'Spawns a live testable instance in the arena so you can verify "${checkpointNode.playtestCondition}" on screen.',
+            chips: <String>[
+              'Next: Expose $primaryVarName',
+              'Playtest: ${checkpointNode.cleanStageTitle}',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Click Compile & Save before dragging into the viewport so the new mesh and collision box appear.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Reset Transform Position to (0, 0, 0) in the Inspector so the object is not hidden off-camera.'
+                    : 'Use the Chain-Link icon (Ctrl+Shift+A) to instantiate the child scene rather than copying raw nodes.'),
+          );
+        case 3:
+          return (
+            explain:
+                'Exposes "$primaryVar" directly in the Inspector so you can tune "$cleanTitle" feel live without recompiling.',
+            chips: <String>[
+              'Spec Param: $primaryVar',
+              'Next: Wire Step 5 Logic',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Click the Eye icon (Instance Editable) next to $primaryVarName so it appears in the Level Details panel.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Keep [SerializeField] above private float $primaryVarName so Unity serializes it in the Inspector.'
+                    : 'Save the script (Ctrl+S) after adding @export var $primaryVarName so the Inspector dock refreshes.'),
+          );
+        case 4:
+          return (
+            explain:
+                'Connects player trigger input to "$primaryVarName" so "$cleanTitle" updates smoothly every physics frame.',
+            chips: <String>[
+              'Drives: $primaryVar',
+              'Next: Enforce Guard & Playtest',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Connect the white execution wire from the Branch (True) pin into your state update node.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Multiply by Time.fixedDeltaTime inside FixedUpdate() so speed stays identical at any frame rate.'
+                    : 'Multiply $primaryVarName by delta inside _physics_process(delta) for frame-rate independent motion.'),
+          );
+        default:
+          return (
+            explain:
+                'Enforces "$primaryGuard" and completes the playable verification for "${checkpointNode.cleanStageTitle}".',
+            chips: <String>[
+              'Guard: $primaryGuard',
+              'Goal: ${checkpointNode.cleanStageTitle}',
+            ],
+            pitfall:
+                'Place the guard check at the very top of your function so blocked or cooldown inputs exit immediately ($primaryGuard).',
+          );
+      }
+    }
+
     final resolvedSubs = <TaskHowToSubStep>[];
     for (int i = 0; i < parentTask.children.length; i++) {
       final child = parentTask.children[i];
       final isCustomSnippet = child.codeTargetFile == 'custom_snippet';
       final spec = buildAtomicStepSpec(i < 6 ? i : 5);
+      final projCtx = buildProjectSpecContext(i < 6 ? i : 5);
+      final stepMins = i < stepMinutesList.length ? stepMinutesList[i] : 20;
+      final stepEta = formatStepEtaLabel(stepMins);
       final rawLabel = child.text.trim();
       final stepLabel = isCustomSnippet
           ? (rawLabel.toUpperCase().startsWith('STEP ')
@@ -2369,8 +2552,12 @@ class TaskHowToBlueprint {
           stepPath: i < 6 ? spec.path : whereLocation,
           codeFormula: code,
           explainConcept: i < 6
-              ? spec.explain
-              : 'Custom verification step added to this task.',
+              ? projCtx.explain
+              : 'Connects "$shortTitle" to "$primaryVar" and "$primaryGuard".',
+          specChips: projCtx.chips,
+          quickFixPitfall: projCtx.pitfall,
+          estimatedMinutes: stepMins,
+          etaLabel: stepEta,
           isGuardStep: i == parentTask.children.length - 1 ||
               stepLabel.toUpperCase().contains('GUARD'),
         ),

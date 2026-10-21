@@ -240,7 +240,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // ── Stage 3: Active Release Workbench (Left Sidebar Outline View + Single-Feature Workspace) ──
-        expect(find.text('OUTLINE'), findsOneWidget);
+        expect(find.text('OUTLINE', skipOffstage: false), findsOneWidget);
+        expect(find.byKey(const ValueKey('outline_release_eta_summary')), findsOneWidget);
         final firstBeatId = provider.activeReleaseBeats.first.id;
         expect(find.byKey(ValueKey('rail_beat_$firstBeatId')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
@@ -264,14 +265,19 @@ void main() {
         final secondFeat = provider.selectedFeature!;
         expect(secondFeat.id, isNot(equals(activeFeat0.id)));
         final secondCp0NodeId = provider.documents[secondFeat.id]!.subtasks.first.id;
-        // Verify Next → starts locked (onTap == null) while Step 1.1 is unchecked
+        // Verify Single-Row Outliner Header live Release ETA summary ("12h Left #%")
+        expect(find.byKey(const ValueKey('outline_release_eta_summary')), findsOneWidget);
+
+        // Verify Next → starts locked (onTap == null) while Step 1 is unchecked
         final nextBtnBefore = tester.widget<InkWell>(
           find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
         );
         expect(nextBtnBefore.onTap, isNull);
-        expect(find.textContaining('STEP 1.1 OF'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
+        expect(find.text('✓ VERIFY BEFORE CHECKING [✓]'), findsOneWidget);
+        expect(find.text('🎯 CONNECTS TO YOUR SPEC & NEXT STEP'), findsOneWidget);
 
-        // Tap the simple square Checkmark Box [✓] to mark Step 1.1 done in place and unlock Next →
+        // Tap the simple square Checkmark Box [✓] to mark Step 1 done in place and unlock Next →
         final markDoneFinder = find.byKey(
           ValueKey('mark_active_step_done_btn_$secondCp0NodeId'),
         );
@@ -280,13 +286,13 @@ void main() {
         await tester.tap(markDoneFinder);
         await tester.pumpAndSettle();
         expect(provider.selectedFeature!.id, equals(secondFeat.id));
-        expect(find.textContaining('STEP 1.1 OF'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
         final nextBtnAfter = tester.widget<InkWell>(
           find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
         );
         expect(nextBtnAfter.onTap, isNotNull);
 
-        // Tap Next → to advance to Step 1.2
+        // Tap Next → to advance to Step 2
         final nextBtnFinder = find.byKey(
           ValueKey('next_active_step_btn_$secondCp0NodeId'),
         );
@@ -294,10 +300,14 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(nextBtnFinder);
         await tester.pumpAndSettle();
-        expect(find.textContaining('STEP 1.2 OF'), findsOneWidget);
+        expect(find.textContaining('STEP 2 OF 6 · ~'), findsOneWidget);
 
-        // Uncheck Step 1.1 via the Left Outline step checkbox to restore clean state, then select Feature 1
-        await tester.tap(find.byKey(ValueKey('outline_step_chk_${secondCp0NodeId}_0_0')));
+        // Tap Step 1 in the Left Outline and uncheck it via the workspace Checkmark Box [✓] to restore clean state, then select Feature 1
+        await tester.tap(find.byKey(ValueKey('outline_step_${secondCp0NodeId}_0_0')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(markDoneFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(markDoneFinder);
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(ValueKey('rail_feat_${activeFeat0.id}')));
         await tester.pumpAndSettle();
