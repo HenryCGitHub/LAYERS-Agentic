@@ -264,9 +264,38 @@ void main() {
         final secondFeat = provider.selectedFeature!;
         expect(secondFeat.id, isNot(equals(activeFeat0.id)));
         final secondCp0NodeId = provider.documents[secondFeat.id]!.subtasks.first.id;
-        await tester.tap(find.byKey(ValueKey('mark_active_step_done_btn_$secondCp0NodeId')));
+        // Verify Next → starts locked (onTap == null) while Step 1.1 is unchecked
+        final nextBtnBefore = tester.widget<InkWell>(
+          find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
+        );
+        expect(nextBtnBefore.onTap, isNull);
+        expect(find.textContaining('STEP 1.1 OF'), findsOneWidget);
+
+        // Tap the simple square Checkmark Box [✓] to mark Step 1.1 done in place and unlock Next →
+        final markDoneFinder = find.byKey(
+          ValueKey('mark_active_step_done_btn_$secondCp0NodeId'),
+        );
+        await tester.ensureVisible(markDoneFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(markDoneFinder);
         await tester.pumpAndSettle();
         expect(provider.selectedFeature!.id, equals(secondFeat.id));
+        expect(find.textContaining('STEP 1.1 OF'), findsOneWidget);
+        final nextBtnAfter = tester.widget<InkWell>(
+          find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
+        );
+        expect(nextBtnAfter.onTap, isNotNull);
+
+        // Tap Next → to advance to Step 1.2
+        final nextBtnFinder = find.byKey(
+          ValueKey('next_active_step_btn_$secondCp0NodeId'),
+        );
+        await tester.ensureVisible(nextBtnFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(nextBtnFinder);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('STEP 1.2 OF'), findsOneWidget);
+
         // Uncheck Step 1.1 via the Left Outline step checkbox to restore clean state, then select Feature 1
         await tester.tap(find.byKey(ValueKey('outline_step_chk_${secondCp0NodeId}_0_0')));
         await tester.pumpAndSettle();
@@ -360,7 +389,7 @@ void main() {
         expect(find.textContaining('1/7 steps'), findsOneWidget);
 
         // Verify 1-Click "Copy 📋" on a How-To sub-step copies the code formula without toggling completion
-        final copyCodeBtn = find.byKey(ValueKey('copy_howto_code_${cp0Id}_0_1'));
+        final copyCodeBtn = find.byKey(ValueKey('copy_howto_code_${cp0Id}_0_0'));
         await tester.ensureVisible(copyCodeBtn);
         await tester.pumpAndSettle();
         await tester.tap(copyCodeBtn);

@@ -928,23 +928,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                                         (c) => c
                                                                             .completed,
                                                                       );
-                                                                  if (step
-                                                                          .subtask
-                                                                          .completed &&
-                                                                      isStepActive) {
-                                                                    final nextInc = task
-                                                                        .children
-                                                                        .indexWhere(
-                                                                      (c) => !c
-                                                                          .completed,
-                                                                    );
-                                                                    if (nextInc !=
-                                                                        -1) {
-                                                                      _selectedSubStepIndexByTask[
-                                                                              taskKey] =
-                                                                          nextInc;
-                                                                    }
-                                                                  }
                                                                 });
                                                                 widget.workbench
                                                                     .updateFeatureStates(
@@ -4061,23 +4044,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       final nowDone = node.isCompleted;
       setState(() {
         _selectedTaskIndexByCheckpoint[node.id] = pIdx;
-        if (nextCompleted) {
-          int nextInc = -1;
-          for (int i = sIdx + 1; i < parentTask.children.length; i++) {
-            if (!parentTask.children[i].completed) {
-              nextInc = i;
-              break;
-            }
-          }
-          if (nextInc == -1) {
-            nextInc = parentTask.children.indexWhere((c) => !c.completed);
-          }
-          if (nextInc != -1) {
-            _selectedSubStepIndexByTask['${node.id}_$pIdx'] = nextInc;
-          }
-        } else {
-          _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
-        }
+        _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
         if (!wasDone && nowDone) {
           _awaitingPlaytestVerification.add(node.id);
         } else if (!nowDone) {
@@ -4087,15 +4054,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       widget.workbench.updateFeatureStates(feat.id, states);
     }
 
-    void markActiveStepDoneAndAdvance(int pIdx, int sIdx) {
+    void advanceToNextStep(int pIdx, int sIdx) {
       if (pIdx < 0 || pIdx >= node.checklist.length) return;
       final parentTask = node.checklist[pIdx];
       if (sIdx < 0 || sIdx >= parentTask.children.length) return;
-      final wasDone = node.isCompleted;
-      parentTask.children[sIdx].completed = true;
-      parentTask.completed =
-          parentTask.children.isNotEmpty && parentTask.children.every((c) => c.completed);
-      final nowDone = node.isCompleted;
+      if (!parentTask.children[sIdx].completed) return;
       int nextStepAfterCurrent = -1;
       for (int i = sIdx + 1; i < parentTask.children.length; i++) {
         if (!parentTask.children[i].completed) {
@@ -4121,13 +4084,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx + 1;
           }
         }
-        if (!wasDone && nowDone) {
-          _awaitingPlaytestVerification.add(node.id);
-        } else if (!nowDone) {
-          _awaitingPlaytestVerification.remove(node.id);
-        }
       });
-      widget.workbench.updateFeatureStates(feat.id, states);
     }
 
     void quickVerifyEntireCheckpoint() {
@@ -4512,14 +4469,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // STEP X.Y OF X.Z Badge
+                              // STEP X.Y OF X.Z Badge (Neutral when unchecked, Emerald when checked)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 9,
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _accentEmerald,
+                                  color: activeSubStep.subtask.completed
+                                      ? _accentEmerald
+                                      : _bgHover,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -4527,7 +4486,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF052E16),
+                                    color: activeSubStep.subtask.completed
+                                        ? const Color(0xFF052E16)
+                                        : _textSecondary,
                                   ),
                                 ),
                               ),
@@ -4636,10 +4597,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               ],
                             ],
                           ),
-                          const SizedBox(height: 28),
-                          // Bottom Action Bar inside Left Pane (Next: 1.2 ... + CTA Button)
+                          const SizedBox(height: 20),
+                          // Bottom Action Bar inside Left Pane (Next: 1.2 ... | [✓] Checkmark Box + Gated Next → Button)
                           Container(
-                            padding: const EdgeInsets.only(top: 18),
+                            padding: const EdgeInsets.only(top: 16),
                             decoration: BoxDecoration(
                               border: Border(
                                 top: BorderSide(color: _borderSubtle),
@@ -4670,35 +4631,104 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                     ],
                                   ),
                                 ),
-                                ElevatedButton(
-                                  key: ValueKey(
-                                    'mark_active_step_done_btn_${node.id}',
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _focalAccent,
-                                    foregroundColor: _focalAccentFg,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 18,
-                                      vertical: 12,
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Simple Square Checkmark Box [✓]
+                                    Tooltip(
+                                      message: activeSubStep.subtask.completed
+                                          ? 'Step Done (Click to uncheck)'
+                                          : 'Mark Step Done to unlock Next →',
+                                      child: InkWell(
+                                        key: ValueKey(
+                                          'mark_active_step_done_btn_${node.id}',
+                                        ),
+                                        onTap: () =>
+                                            toggleHowToSubStepCompletion(
+                                          selectedTaskIdx,
+                                          activeSubStepIdx,
+                                        ),
+                                        borderRadius: BorderRadius.circular(7),
+                                        child: Container(
+                                          width: 38,
+                                          height: 38,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color:
+                                                activeSubStep.subtask.completed
+                                                    ? _accentEmerald
+                                                    : _bgBase,
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: activeSubStep
+                                                      .subtask.completed
+                                                  ? _accentEmerald
+                                                  : _borderBright,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            Icons.check_rounded,
+                                            size: 19,
+                                            color:
+                                                activeSubStep.subtask.completed
+                                                    ? const Color(0xFF052E16)
+                                                    : _textMuted.withValues(
+                                                        alpha: 0.35,
+                                                      ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    shape: RoundedRectangleBorder(
+                                    const SizedBox(width: 10),
+                                    // Gated Next → Button (Only unlocks when step is checked off)
+                                    InkWell(
+                                      key: ValueKey(
+                                        'next_active_step_btn_${node.id}',
+                                      ),
+                                      onTap: activeSubStep.subtask.completed
+                                          ? () => advanceToNextStep(
+                                                selectedTaskIdx,
+                                                activeSubStepIdx,
+                                              )
+                                          : null,
                                       borderRadius: BorderRadius.circular(7),
+                                      child: Container(
+                                        height: 38,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 18,
+                                        ),
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: activeSubStep.subtask.completed
+                                              ? _focalAccent
+                                              : _bgBase.withValues(alpha: 0.55),
+                                          borderRadius:
+                                              BorderRadius.circular(7),
+                                          border: Border.all(
+                                            color:
+                                                activeSubStep.subtask.completed
+                                                    ? _focalAccent
+                                                    : _borderSubtle,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Next →',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color:
+                                                activeSubStep.subtask.completed
+                                                    ? _focalAccentFg
+                                                    : _textMuted.withValues(
+                                                        alpha: 0.45,
+                                                      ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  onPressed: () => markActiveStepDoneAndAdvance(
-                                    selectedTaskIdx,
-                                    activeSubStepIdx,
-                                  ),
-                                  child: Text(
-                                    activeSubStep.subtask.completed
-                                        ? '✓ Completed — Next Step →'
-                                        : '✓ Mark Step ${selectedTaskIdx + 1}.${activeSubStepIdx + 1} Done & Next →',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -4789,7 +4819,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
                     if (useTwoCol) {
                       return ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 540),
+                        constraints: const BoxConstraints(minHeight: 420),
                         child: IntrinsicHeight(
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
