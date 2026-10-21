@@ -119,7 +119,6 @@ class WorkbenchShell extends StatelessWidget {
     final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final accentAmber = AppTheme.accentAmberFor(isDark);
-    final accentCyan = AppTheme.accentCyanFor(isDark);
     final accentEmerald = AppTheme.accentGreenFor(isDark);
 
     final draft = workbench.conceptDraft;
@@ -266,7 +265,7 @@ class WorkbenchShell extends StatelessWidget {
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: -0.2,
-                                color: accentAmber,
+                                color: textPrimary,
                               ),
                             )
                           else
@@ -307,11 +306,14 @@ class WorkbenchShell extends StatelessWidget {
                       stage: WorkbenchStage.projectPitch,
                       activeStage: workbench.currentStage,
                       isCompleted: bp != null || allFeats.isNotEmpty,
-                      color: accentAmber,
+                      activeDotColor: accentAmber,
+                      completedColor: accentEmerald,
                       textPrimary: textPrimary,
                       textSecondary: textSecondary,
                       textMuted: textMuted,
                       bgActive: AppTheme.bgSurfaceHoverFor(isDark),
+                      bgRecessed: AppTheme.bgSurfaceRecessedFor(isDark),
+                      borderSubtle: AppTheme.borderSubtleFor(isDark),
                       borderBright: AppTheme.borderBrightFor(isDark),
                       onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
                     ),
@@ -331,11 +333,14 @@ class WorkbenchShell extends StatelessWidget {
                       stage: WorkbenchStage.releasePlanGate,
                       activeStage: workbench.currentStage,
                       isCompleted: allFeats.isNotEmpty,
-                      color: accentCyan,
+                      activeDotColor: accentAmber,
+                      completedColor: accentEmerald,
                       textPrimary: textPrimary,
                       textSecondary: textSecondary,
                       textMuted: textMuted,
                       bgActive: AppTheme.bgSurfaceHoverFor(isDark),
+                      bgRecessed: AppTheme.bgSurfaceRecessedFor(isDark),
+                      borderSubtle: AppTheme.borderSubtleFor(isDark),
                       borderBright: AppTheme.borderBrightFor(isDark),
                       onTap: workbench.releaseBlueprint != null
                           ? () => workbench.setStage(WorkbenchStage.releasePlanGate)
@@ -357,11 +362,14 @@ class WorkbenchShell extends StatelessWidget {
                       stage: WorkbenchStage.releaseWorkbench,
                       activeStage: workbench.currentStage,
                       isCompleted: workbench.isActiveReleaseComplete,
-                      color: accentEmerald,
+                      activeDotColor: accentAmber,
+                      completedColor: accentEmerald,
                       textPrimary: textPrimary,
                       textSecondary: textSecondary,
                       textMuted: textMuted,
                       bgActive: AppTheme.bgSurfaceHoverFor(isDark),
+                      bgRecessed: AppTheme.bgSurfaceRecessedFor(isDark),
+                      borderSubtle: AppTheme.borderSubtleFor(isDark),
                       borderBright: AppTheme.borderBrightFor(isDark),
                       onTap: workbench.activeReleaseBeats.isNotEmpty
                           ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
@@ -382,13 +390,11 @@ class WorkbenchShell extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
                         decoration: BoxDecoration(
-                          color: workbench.agentTraceHistory.isNotEmpty
-                              ? accentEmerald.withValues(alpha: 0.12)
-                              : bgSurface,
+                          color: bgSurface,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: workbench.agentTraceHistory.isNotEmpty
-                                ? accentEmerald.withValues(alpha: 0.45)
+                                ? AppTheme.borderBrightFor(isDark)
                                 : borderColor,
                           ),
                         ),
@@ -400,7 +406,7 @@ class WorkbenchShell extends StatelessWidget {
                               size: 11,
                               color: workbench.agentTraceHistory.isNotEmpty
                                   ? accentEmerald
-                                  : accentAmber,
+                                  : textSecondary,
                             ),
                             const SizedBox(width: 4),
                             Text(
@@ -409,7 +415,7 @@ class WorkbenchShell extends StatelessWidget {
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
                                 color: workbench.agentTraceHistory.isNotEmpty
-                                    ? accentEmerald
+                                    ? textPrimary
                                     : textSecondary,
                               ),
                             ),
@@ -442,7 +448,7 @@ class WorkbenchShell extends StatelessWidget {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.copy_rounded, size: 11, color: accentAmber),
+                                    Icon(Icons.copy_rounded, size: 11, color: textSecondary),
                                     const SizedBox(width: 3),
                                     Text(
                                       'Export',
@@ -474,7 +480,7 @@ class WorkbenchShell extends StatelessWidget {
                                     ? Icons.cloud_done_rounded
                                     : Icons.cloud_upload_outlined,
                                 size: 13,
-                                color: workbench.isCloudSynced ? accentEmerald : accentCyan,
+                                color: workbench.isCloudSynced ? accentEmerald : textSecondary,
                               ),
                             ),
                           ),
@@ -550,7 +556,8 @@ class WorkbenchShell extends StatelessWidget {
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
-    final accentCyan = AppTheme.accentCyanFor(isDark);
+    final focalAccent = AppTheme.focalAccentFor(isDark);
+    final focalAccentFg = AppTheme.focalAccentFgFor(isDark);
     final accentEmerald = AppTheme.accentGreenFor(isDark);
     final accentAmber = AppTheme.accentAmberFor(isDark);
 
@@ -580,7 +587,7 @@ class WorkbenchShell extends StatelessWidget {
                       Icon(
                         isSynced ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
                         size: 18,
-                        color: isSynced ? accentEmerald : accentCyan,
+                        color: isSynced ? accentEmerald : textSecondary,
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -610,14 +617,14 @@ class WorkbenchShell extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.sync_rounded, size: 12, color: accentCyan),
+                          Icon(Icons.sync_rounded, size: 12, color: textSecondary),
                           const SizedBox(width: 4),
                           Text(
                             'Sync Now',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w700,
-                              color: accentCyan,
+                              color: textPrimary,
                             ),
                           ),
                         ],
@@ -846,7 +853,7 @@ class WorkbenchShell extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(4),
                                     child: Padding(
                                       padding: const EdgeInsets.all(4),
-                                      child: Icon(Icons.copy_all_rounded, size: 13, color: accentCyan),
+                                      child: Icon(Icons.copy_all_rounded, size: 13, color: textSecondary),
                                     ),
                                   ),
                                 ),
@@ -929,7 +936,7 @@ class WorkbenchShell extends StatelessWidget {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w700,
-                                    color: accentAmber,
+                                    color: textPrimary,
                                   ),
                                 ),
                               ),
@@ -938,8 +945,8 @@ class WorkbenchShell extends StatelessWidget {
                             ElevatedButton(
                               key: const ValueKey('invite_collaborator_btn'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: accentEmerald,
-                                foregroundColor: Colors.black,
+                                backgroundColor: focalAccent,
+                                foregroundColor: focalAccentFg,
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 minimumSize: Size.zero,
@@ -1022,8 +1029,8 @@ class WorkbenchShell extends StatelessWidget {
                   ElevatedButton.icon(
                     key: const ValueKey('google_sign_in_modal_btn'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: accentCyan,
-                      foregroundColor: Colors.black,
+                      backgroundColor: focalAccent,
+                      foregroundColor: focalAccentFg,
                       elevation: 0,
                     ),
                     onPressed: () async {
@@ -1412,15 +1419,19 @@ class WorkbenchShell extends StatelessWidget {
     required WorkbenchStage stage,
     required WorkbenchStage activeStage,
     required bool isCompleted,
-    required Color color,
+    required Color activeDotColor,
+    required Color completedColor,
     required Color textPrimary,
     required Color textSecondary,
     required Color textMuted,
     required Color bgActive,
+    required Color bgRecessed,
+    required Color borderSubtle,
     required Color borderBright,
     VoidCallback? onTap,
   }) {
     final isActive = stage == activeStage;
+    final isCheckBadge = badge == '✓';
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(5),
@@ -1443,9 +1454,9 @@ class WorkbenchShell extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isActive
-                    ? color
+                    ? activeDotColor
                     : (isCompleted
-                        ? color.withValues(alpha: 0.7)
+                        ? completedColor
                         : textMuted.withValues(alpha: 0.35)),
               ),
             ),
@@ -1466,15 +1477,23 @@ class WorkbenchShell extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
+                  color: isCheckBadge
+                      ? completedColor.withValues(alpha: 0.14)
+                      : bgRecessed,
                   borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: isCheckBadge
+                        ? completedColor.withValues(alpha: 0.4)
+                        : borderSubtle,
+                    width: 0.8,
+                  ),
                 ),
                 child: Text(
                   badge,
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 8.5,
                     fontWeight: FontWeight.w700,
-                    color: color,
+                    color: isCheckBadge ? completedColor : textSecondary,
                   ),
                 ),
               ),

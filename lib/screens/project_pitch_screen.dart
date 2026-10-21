@@ -1024,9 +1024,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     Widget buildExpansionPlayingCard(int index) {
       final card = expansionCards[index];
       final isSelected = card.isSelected;
-      final Color badgeColor = card.accentType == 'amber'
-          ? _accentAmber
-          : (card.accentType == 'emerald' ? _accentEmerald : _textPrimary);
 
       return Material(
         color: isSelected ? _bgHover : _bgRecessed,
@@ -1063,10 +1060,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               vertical: 2.5,
                             ),
                             decoration: BoxDecoration(
-                              color: badgeColor.withValues(alpha: 0.13),
+                              color: _bgSurface,
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: badgeColor.withValues(alpha: 0.42),
+                                color: _borderSubtle,
                               ),
                             ),
                             child: Text(
@@ -1077,7 +1074,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 0.3,
-                                color: badgeColor,
+                                color: _textSecondary,
                               ),
                             ),
                           ),
@@ -1137,7 +1134,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color:
-                                    isSelected ? _accentEmerald : _accentAmber,
+                                    isSelected ? _accentEmerald : _textSecondary,
                               ),
                             ),
                           ),
@@ -1146,7 +1143,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: isSelected ? _accentEmerald : _accentAmber,
+                              color: isSelected ? _accentEmerald : _textSecondary,
                             ),
                           ),
                         ],
@@ -1218,7 +1215,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 color: _bgRecessed,
                 borderRadius: BorderRadius.circular(7),
                 border: Border.all(
-                  color: _accentEmerald.withValues(alpha: 0.45),
+                  color: _borderBright,
                 ),
               ),
               child: Column(
@@ -1235,19 +1232,33 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: _accentEmerald.withValues(alpha: 0.14),
+                              color: _bgSurface,
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: _accentEmerald.withValues(alpha: 0.45),
+                                color: _borderBright,
                               ),
                             ),
-                            child: Text(
-                              'AGENT IDEA SUMMARY',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: _accentEmerald,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _accentEmerald,
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'AGENT IDEA SUMMARY',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: _textPrimary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1407,9 +1418,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               OutlinedButton.icon(
                 key: const ValueKey('import_existing_gdd_btn'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: _accentAmber,
-                  backgroundColor: _accentAmber.withValues(alpha: 0.08),
-                  side: BorderSide(color: _accentAmber.withValues(alpha: 0.45)),
+                  foregroundColor: _textPrimary,
+                  backgroundColor: _bgRecessed,
+                  side: BorderSide(color: _borderBright),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 15,
@@ -1421,7 +1432,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 onPressed: widget.workbench.isAgentBusy
                     ? null
                     : () => _showImportGddDialog(context),
-                icon: const Icon(Icons.description_outlined, size: 14),
+                icon: Icon(Icons.description_outlined, size: 14, color: _textSecondary),
                 label: Text(
                   'Import GDD / Notes',
                   style: GoogleFonts.inter(
@@ -1497,7 +1508,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
-                        color: _accentAmber,
+                        color: _textSecondary,
                       ),
                     ),
                   ),
@@ -1556,7 +1567,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                           fontSize: 9.5,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.4,
-                          color: _accentEmerald,
+                          color: _textSecondary,
                         ),
                       ),
                       Text(
@@ -1593,7 +1604,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                     Icon(
                                       Icons.folder_open_rounded,
                                       size: 13,
-                                      color: _accentAmber,
+                                      color: _textSecondary,
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
@@ -2326,10 +2337,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: _accentEmerald.withValues(alpha: 0.14),
+                              color: _bgSurface,
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: _accentEmerald.withValues(alpha: 0.45),
+                                color: _borderSubtle,
                               ),
                             ),
                             child: Text(
@@ -2337,7 +2348,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
-                                color: _accentEmerald,
+                                color: _textSecondary,
                               ),
                             ),
                           ),
@@ -2370,7 +2381,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w700,
-                                color: _accentAmber,
+                                color: _textSecondary,
                               ),
                             ),
                           ),
@@ -2777,10 +2788,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _accentEmerald.withValues(alpha: 0.14),
+                                  color: _bgRecessed,
                                   borderRadius: BorderRadius.circular(3),
                                   border: Border.all(
-                                    color: _accentEmerald.withValues(alpha: 0.42),
+                                    color: _borderBright,
                                   ),
                                 ),
                                 child: Text(
@@ -2788,7 +2799,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 8.5,
                                     fontWeight: FontWeight.w700,
-                                    color: _accentEmerald,
+                                    color: _textPrimary,
                                   ),
                                 ),
                               )
@@ -2879,10 +2890,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _accentEmerald.withValues(alpha: 0.14),
+                                  color: _bgRecessed,
                                   borderRadius: BorderRadius.circular(3),
                                   border: Border.all(
-                                    color: _accentEmerald.withValues(alpha: 0.42),
+                                    color: _borderBright,
                                   ),
                                 ),
                                 child: Text(
@@ -2890,7 +2901,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 8.5,
                                     fontWeight: FontWeight.w700,
-                                    color: _accentEmerald,
+                                    color: _textPrimary,
                                   ),
                                 ),
                               )
@@ -2985,7 +2996,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: isSelected ? _accentEmerald : _accentAmber,
+                                color: isSelected ? _accentEmerald : _textSecondary,
                               ),
                             ),
                           ),
@@ -2994,7 +3005,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: isSelected ? _accentEmerald : _accentAmber,
+                              color: isSelected ? _accentEmerald : _textSecondary,
                             ),
                           ),
                         ],
@@ -3642,8 +3653,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     void Function(int index)? onDeleteItem,
     VoidCallback? onAddItem,
   }) {
-    final badgeAccent = isCoreLoop ? _accentEmerald : _borderBright;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -3674,14 +3683,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 2.5),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: isCoreLoop
-                            ? _accentEmerald.withValues(alpha: 0.12)
-                            : _bgSurface,
+                        color: _bgSurface,
                         borderRadius: BorderRadius.circular(3),
                         border: Border.all(
-                          color: isCoreLoop
-                              ? badgeAccent.withValues(alpha: 0.45)
-                              : _borderBright,
+                          color: _borderBright,
                         ),
                       ),
                       child: Text(
@@ -3689,7 +3694,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: isCoreLoop ? _accentEmerald : _textSecondary,
+                          color: isCoreLoop ? _textPrimary : _textSecondary,
                         ),
                       ),
                     ),
@@ -3728,7 +3733,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   Container(
                     width: 2,
                     height: 8,
-                    color: _accentEmerald.withValues(alpha: 0.45),
+                    color: _borderBright,
                   ),
                 ],
               )
@@ -3742,7 +3747,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               Container(
                 width: 2,
                 height: 8,
-                color: _accentEmerald.withValues(alpha: 0.45),
+                color: _borderBright,
               ),
             ],
           ),
@@ -3751,10 +3756,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: _accentEmerald.withValues(alpha: 0.10),
+                color: _bgSurface,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                  color: _accentEmerald.withValues(alpha: 0.35),
+                  color: _borderBright,
                 ),
               ),
               child: Text(
@@ -3762,7 +3767,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: _accentEmerald,
+                  color: _textSecondary,
                 ),
               ),
             ),

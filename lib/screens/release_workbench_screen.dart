@@ -206,14 +206,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: _isSinglePanelMode
-              ? _accentEmerald.withValues(alpha: 0.14)
-              : _bgSurface,
+          color: _bgSurface,
           borderRadius: BorderRadius.circular(5),
           border: Border.all(
-            color: _isSinglePanelMode
-                ? _accentEmerald.withValues(alpha: 0.45)
-                : _borderSubtle,
+            color: _isSinglePanelMode ? _borderBright : _borderSubtle,
           ),
         ),
         child: Text(
@@ -221,7 +217,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           style: GoogleFonts.jetBrainsMono(
             fontSize: 8.5,
             fontWeight: FontWeight.w800,
-            color: _isSinglePanelMode ? _accentEmerald : _accentAmber,
+            color: _isSinglePanelMode ? _textPrimary : _textSecondary,
           ),
         ),
       ),
@@ -261,7 +257,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       fontSize: 9.5,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.8,
-                      color: _accentAmber,
+                      color: _textSecondary,
                     ),
                   ),
                   Wrap(
@@ -281,13 +277,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _criticalPathOnly
-                                ? _accentEmerald.withValues(alpha: 0.14)
-                                : _bgSurface,
+                            color: _bgSurface,
                             borderRadius: BorderRadius.circular(5),
                             border: Border.all(
                               color: _criticalPathOnly
-                                  ? _accentEmerald.withValues(alpha: 0.45)
+                                  ? _borderBright
                                   : _borderSubtle,
                             ),
                           ),
@@ -296,7 +290,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 8.5,
                               fontWeight: FontWeight.w800,
-                              color: _criticalPathOnly ? _accentEmerald : _textMuted,
+                              color: _criticalPathOnly ? _textPrimary : _textMuted,
                             ),
                           ),
                         ),
@@ -308,13 +302,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: isFocus
-                                ? _accentAmber.withValues(alpha: 0.14)
-                                : _bgSurface,
+                            color: _bgSurface,
                             borderRadius: BorderRadius.circular(5),
                             border: Border.all(
                               color: isFocus
-                                  ? _accentAmber.withValues(alpha: 0.45)
+                                  ? _borderBright
                                   : _borderSubtle,
                             ),
                           ),
@@ -323,7 +315,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 8.5,
                               fontWeight: FontWeight.w800,
-                              color: isFocus ? _accentAmber : _textMuted,
+                              color: isFocus ? _textPrimary : _textMuted,
                             ),
                           ),
                         ),
@@ -335,7 +327,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           fontWeight: FontWeight.w800,
                           color: relProgress >= 100
                               ? _accentEmerald
-                              : _accentAmber,
+                              : _textPrimary,
                         ),
                       ),
                     ],
@@ -411,7 +403,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     value: '__replan__',
                     child: Text(
                       '✎ Edit ${rel.title} Scope in Plan Gate',
-                      style: GoogleFonts.inter(fontSize: 12, color: _accentAmber),
+                      style: GoogleFonts.inter(fontSize: 12, color: _textPrimary),
                     ),
                   ),
                   PopupMenuItem<String>(
@@ -469,9 +461,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   child: FractionallySizedBox(
                     widthFactor: (relProgress / 100.0).clamp(0.0, 1.0),
                     child: Container(
-                      color: relProgress >= 100
-                          ? _accentEmerald
-                          : _accentAmber,
+                      color: _accentEmerald,
                     ),
                   ),
                 ),
@@ -678,9 +668,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       beatIndex: beatIndex,
       featureIndexInBeat: featureIndexInBeat,
     );
-    final depColor = depTier.severity == 'emerald'
-        ? _accentEmerald
-        : (depTier.severity == 'amber' ? _accentAmber : _textMuted);
 
     String? vBadge;
     Color vColor = _textMuted;
@@ -695,7 +682,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       vColor = _textMuted;
     } else if (activeVer != 'v0.1') {
       vBadge = 'NEW $activeVer';
-      vColor = _accentEmerald;
+      vColor = _textSecondary;
     }
 
     final shouldDim = isFocus && !isSelected;
@@ -728,7 +715,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 height: 18,
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? _focalAccent
+                      ? _accentAmber
                       : (isDone ? _accentEmerald : _borderSubtle),
                   borderRadius: BorderRadius.circular(2),
                 ),
@@ -776,8 +763,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   margin: const EdgeInsets.only(right: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
-                    color: vColor.withValues(alpha: 0.12),
+                    color: _bgSurface,
                     borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _borderSubtle, width: 0.7),
                   ),
                   child: Text(
                     vBadge,
@@ -794,10 +782,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 margin: const EdgeInsets.only(right: 5),
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
-                  color: depColor.withValues(alpha: 0.12),
+                  color: _bgSurface,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: depColor.withValues(alpha: 0.35),
+                    color: _borderSubtle,
                     width: 0.7,
                   ),
                 ),
@@ -805,8 +793,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   depTier.shortBadge,
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 8,
-                    fontWeight: FontWeight.w800,
-                    color: depColor,
+                    fontWeight: FontWeight.w700,
+                    color: _textMuted,
                   ),
                 ),
               ),
@@ -1049,10 +1037,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       vertical: 2.5,
                     ),
                     decoration: BoxDecoration(
-                      color: _accentEmerald.withValues(alpha: 0.12),
+                      color: allBeatDone
+                          ? _accentEmerald.withValues(alpha: 0.12)
+                          : _bgRecessed,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: _accentEmerald.withValues(alpha: 0.4),
+                        color: allBeatDone
+                            ? _accentEmerald.withValues(alpha: 0.4)
+                            : _borderBright,
                       ),
                     ),
                     child: Text(
@@ -1060,7 +1052,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w800,
-                        color: _accentEmerald,
+                        color: allBeatDone ? _accentEmerald : _textPrimary,
                       ),
                     ),
                   ),
@@ -1395,7 +1387,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
                       fontWeight: FontWeight.w700,
-                      color: _accentAmber,
+                      color: _textSecondary,
                     ),
                   ),
                 ),
@@ -1459,12 +1451,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
                 color: effectiveFilter == 'ALL'
-                    ? _accentAmber.withValues(alpha: 0.14)
+                    ? _bgHover
                     : _bgRecessed,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                   color: effectiveFilter == 'ALL'
-                      ? _accentAmber.withValues(alpha: 0.5)
+                      ? _borderBright
                       : _borderSubtle,
                 ),
               ),
@@ -1474,7 +1466,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   fontSize: 9,
                   fontWeight: FontWeight.w800,
                   color: effectiveFilter == 'ALL'
-                      ? _accentAmber
+                      ? _textPrimary
                       : _textSecondary,
                 ),
               ),
@@ -1504,8 +1496,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 final allVerDone =
                     verStates.isNotEmpty && doneCount == verStates.length;
                 final isSelected = effectiveFilter == ver;
-                final pillColor =
-                    allVerDone ? _accentEmerald : _accentAmber;
 
                 return InkWell(
                   key: ValueKey('version_filter_pill_$ver'),
@@ -1523,13 +1513,15 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? pillColor.withValues(alpha: 0.16)
+                          ? _bgHover
                           : _bgRecessed,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
                         color: isSelected
-                            ? pillColor.withValues(alpha: 0.55)
-                            : _borderSubtle,
+                            ? _borderBright
+                            : (allVerDone
+                                ? _accentEmerald.withValues(alpha: 0.45)
+                                : _borderSubtle),
                       ),
                     ),
                     child: Text(
@@ -1537,7 +1529,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9,
                         fontWeight: FontWeight.w800,
-                        color: isSelected ? pillColor : _textSecondary,
+                        color: allVerDone
+                            ? _accentEmerald
+                            : (isSelected ? _textPrimary : _textSecondary),
                       ),
                     ),
                   ),
@@ -2104,7 +2098,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       decoration: BoxDecoration(
         color: _bgSurface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _accentAmber.withValues(alpha: 0.45)),
+        border: Border.all(color: _borderBright),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2118,7 +2112,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   fontSize: 9.5,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.4,
-                  color: _accentAmber,
+                  color: _textPrimary,
                 ),
               ),
               InkWell(
@@ -2128,7 +2122,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 9.5,
                     fontWeight: FontWeight.w700,
-                    color: _accentEmerald,
+                    color: _textSecondary,
                   ),
                 ),
               ),
@@ -2141,21 +2135,21 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               children: [
                 buildColumn(
                   badge: '04 · DESIGN PILLARS (PLAYER FEEL)',
-                  badgeColor: _accentAmber,
+                  badgeColor: _textPrimary,
                   items: pillars,
                   emptyHint: 'No Design Pillars defined yet.',
                 ),
                 const SizedBox(width: 8),
                 buildColumn(
                   badge: '05 · TRADE-OFFS (X OVER Y)',
-                  badgeColor: _accentEmerald,
+                  badgeColor: _textPrimary,
                   items: tradeOffs,
                   emptyHint: 'No Trade-Off rules defined yet.',
                 ),
                 const SizedBox(width: 8),
                 buildColumn(
                   badge: '02–03 · GAME & TECH SPEC',
-                  badgeColor: AppTheme.accentCyanFor(_isDark),
+                  badgeColor: _textPrimary,
                   items: [...gameSpec.take(2), ...techSpec.take(2)],
                   emptyHint: 'No Game/Tech Spec defined yet.',
                 ),
@@ -2212,9 +2206,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       beatIndex: activeBeatIdx,
       featureIndexInBeat: activeFeatIdxInBeat,
     );
-    final activeDepColor = activeDepTier.severity == 'emerald'
-        ? _accentEmerald
-        : (activeDepTier.severity == 'amber' ? _accentAmber : _textMuted);
     final featCode = 'FEAT·${(currentFeatIdx + 1).toString().padLeft(2, '0')}';
 
     Widget tag(String text, Color color, {double? width}) => Container(
@@ -2348,18 +2339,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       vertical: 2.5,
                     ),
                     decoration: BoxDecoration(
-                      color: activeDepColor.withValues(alpha: 0.12),
+                      color: _bgRecessed,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: activeDepColor.withValues(alpha: 0.35),
+                        color: _borderSubtle,
                       ),
                     ),
                     child: Text(
                       activeDepTier.shortBadge,
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        color: activeDepColor,
+                        fontWeight: FontWeight.w700,
+                        color: _textSecondary,
                       ),
                     ),
                   ),
@@ -2406,7 +2397,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         color: _bgRecessed,
                         borderRadius: BorderRadius.circular(5),
                         border: Border.all(
-                          color: _accentEmerald.withValues(alpha: 0.45),
+                          color: _borderSubtle,
                         ),
                       ),
                       child: Text(
@@ -2414,7 +2405,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w800,
-                          color: _accentEmerald,
+                          color: _textSecondary,
                         ),
                       ),
                     ),
@@ -2507,7 +2498,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           color: _bgRecessed,
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: _accentAmber.withValues(alpha: 0.35),
+                            color: _borderSubtle,
                           ),
                         ),
                         child: Text(
@@ -2515,7 +2506,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w700,
-                            color: _accentAmber,
+                            color: _textSecondary,
                           ),
                         ),
                       ),
@@ -3758,20 +3749,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       );
     }
 
-    Color layerBadgeColor(String layerTag) {
-      switch (layerTag) {
-        case 'INPUT':
-          return AppTheme.accentCyanFor(_isDark);
-        case 'PHYSICS':
-          return _accentAmber;
-        case 'FEEL':
-        case 'UI / HUD':
-          return _accentEmerald;
-        default:
-          return _textSecondary;
-      }
-    }
-
     void toggleParentTaskCompletion(int tIdx) {
       final wasDone = node.isCompleted;
       final task = node.checklist[tIdx];
@@ -3865,10 +3842,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: _accentAmber.withValues(alpha: 0.14),
+                                color: _bgSurface,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                  color: _accentAmber.withValues(alpha: 0.35),
+                                  color: _borderBright,
                                 ),
                               ),
                               child: Text(
@@ -3876,7 +3853,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,
-                                  color: _accentAmber,
+                                  color: _textPrimary,
                                 ),
                               ),
                             ),
@@ -3887,10 +3864,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: _accentEmerald.withValues(alpha: 0.14),
+                                color: _bgSurface,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                  color: _accentEmerald.withValues(alpha: 0.35),
+                                  color: _borderSubtle,
                                 ),
                               ),
                               child: Text(
@@ -3898,7 +3875,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 8.5,
                                   fontWeight: FontWeight.w800,
-                                  color: _accentEmerald,
+                                  color: _textSecondary,
                                 ),
                               ),
                             ),
@@ -3918,7 +3895,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   color: _bgSurface,
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
-                                    color: _accentAmber.withValues(alpha: 0.45),
+                                    color: _borderSubtle,
                                   ),
                                 ),
                                 child: Text(
@@ -3926,7 +3903,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 8.5,
                                     fontWeight: FontWeight.w800,
-                                    color: _accentAmber,
+                                    color: _textSecondary,
                                   ),
                                 ),
                               ),
@@ -3950,14 +3927,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: _showCodeFormulasInSinglePanel
-                                        ? AppTheme.accentCyanFor(_isDark)
-                                            .withValues(alpha: 0.14)
+                                        ? _bgHover
                                         : _bgSurface,
                                     borderRadius: BorderRadius.circular(4),
                                     border: Border.all(
                                       color: _showCodeFormulasInSinglePanel
-                                          ? AppTheme.accentCyanFor(_isDark)
-                                              .withValues(alpha: 0.45)
+                                          ? _borderBright
                                           : _borderSubtle,
                                     ),
                                   ),
@@ -3967,7 +3942,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                       fontSize: 8.5,
                                       fontWeight: FontWeight.w800,
                                       color: _showCodeFormulasInSinglePanel
-                                          ? AppTheme.accentCyanFor(_isDark)
+                                          ? _textPrimary
                                           : _textSecondary,
                                     ),
                                   ),
@@ -3990,7 +3965,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 9,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.accentCyanFor(_isDark),
+                              color: _textSecondary,
                             ),
                           ),
                         ),
@@ -4012,6 +3987,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               ),
               const SizedBox(height: 8),
               // Checkable Step-by-Step How-To Sub-Steps (Step X.1, X.2, X.3+)
+              // In Single-Panel mode, each sub-step is rendered as a 2-Column Row:
+              // Left Column (Step Action) | Right Column (Step Metadata directly next to said step)
               for (int subIdx = 0;
                   subIdx < selectedHowTo.subSteps.length;
                   subIdx++)
@@ -4022,91 +3999,397 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     final isCoreStep = subIdx == 1;
                     final isGuardStep = subStep.isGuardStep;
 
-                    // Auto-collapse completed How-To sub-steps in Single-Panel Mode so the active sub-step stays front and center
-                    if (_isSinglePanelMode && subDone) {
-                      return InkWell(
-                        key: ValueKey(
-                          'howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
-                        ),
-                        onTap: () => toggleHowToSubStepCompletion(
-                          selectedTaskIdx,
-                          subIdx,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 5,
+                    if (_isSinglePanelMode) {
+                      return Container(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: _borderSubtle.withValues(alpha: 0.7),
+                            ),
                           ),
+                        ),
+                        child: IntrinsicHeight(
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Icon(
-                                Icons.check_box_rounded,
-                                size: 14,
-                                color: _accentEmerald,
-                              ),
-                              const SizedBox(width: 7),
+                              // Left Column: Sub-Step Action (Checkbox + Step Number + Instruction)
                               Expanded(
-                                child: Text(
-                                  '${subStep.stepNumberLabel} — ${subStep.instruction}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _accentEmerald,
-                                    decoration: TextDecoration.lineThrough,
+                                flex: 56,
+                                child: InkWell(
+                                  key: ValueKey(
+                                    'howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
                                   ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              InkWell(
-                                key: ValueKey(
-                                  'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
-                                ),
-                                onTap: () => copySubStepCodeFormula(
-                                  selectedTaskIdx,
-                                  subIdx,
-                                  subStep.codeFormula,
-                                ),
-                                borderRadius: BorderRadius.circular(3),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 1,
+                                  onTap: () => toggleHowToSubStepCompletion(
+                                    selectedTaskIdx,
+                                    subIdx,
                                   ),
-                                  child: Text(
-                                    'Copy 📋',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 8.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: _textSecondary,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      6,
+                                      8,
+                                      10,
+                                      8,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 1),
+                                          child: Icon(
+                                            subDone
+                                                ? Icons.check_box_rounded
+                                                : Icons
+                                                    .check_box_outline_blank_rounded,
+                                            size: 15,
+                                            color: subDone
+                                                ? _accentEmerald
+                                                : _textSecondary,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                subStep.stepNumberLabel,
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 0.3,
+                                                  color: subDone
+                                                      ? _accentEmerald
+                                                      : _textPrimary,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                subStep.instruction,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  height: 1.38,
+                                                  color: subDone
+                                                      ? _textMuted
+                                                      : _textPrimary,
+                                                  decoration: subDone
+                                                      ? TextDecoration
+                                                          .lineThrough
+                                                      : TextDecoration.none,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              InkWell(
-                                key: ValueKey(
-                                  'edit_howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
-                                ),
-                                onTap: () => promptEditHowToSubStepDialog(
-                                  selectedTaskIdx,
-                                  subIdx,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
+                              // Vertical Column Divider
+                              Container(
+                                width: 1,
+                                color: _borderSubtle,
+                              ),
+                              // Right Column: Metadata directly next to this Sub-Step (Code, Tuning, Guards, Copy, Edit)
+                              Expanded(
+                                flex: 44,
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 1,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    8,
+                                    6,
+                                    8,
                                   ),
-                                  child: Text(
-                                    'Edit ✎',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 8.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: _textMuted,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      if (subIdx == 0 ||
+                                          _showCodeFormulasInSinglePanel) ...[
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _bgSurface,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                              color: _borderSubtle,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            subStep.codeFormula,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              height: 1.35,
+                                              color: subDone
+                                                  ? _textMuted
+                                                  : _textSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5),
+                                      ],
+                                      if (isCoreStep) ...[
+                                        Wrap(
+                                          spacing: 5,
+                                          runSpacing: 4,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            for (int tuneIdx = 0;
+                                                tuneIdx < tuningItems.length;
+                                                tuneIdx++)
+                                              InkWell(
+                                                key: ValueKey(
+                                                  'tuning_pill_${index}_$tuneIdx',
+                                                ),
+                                                onTap: () => promptTuningDialog(
+                                                  editIdx: tuneIdx,
+                                                  currentVal:
+                                                      tuningItems[tuneIdx],
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2.5,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: _bgSurface,
+                                                    borderRadius:
+                                                        BorderRadius.circular(4),
+                                                    border: Border.all(
+                                                      color: _borderSubtle,
+                                                      width: 0.8,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    '⚙ ${tuningItems[tuneIdx]} ✎',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 9.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: _textPrimary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            InkWell(
+                                              key: ValueKey(
+                                                'add_tuning_btn_$index',
+                                              ),
+                                              onTap: () => promptTuningDialog(),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2.5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: _bgSurface,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: _borderSubtle,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '+ Tune',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: _textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 5),
+                                      ],
+                                      if (isGuardStep) ...[
+                                        Wrap(
+                                          spacing: 5,
+                                          runSpacing: 4,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            for (int edgeIdx = 0;
+                                                edgeIdx < edgeItems.length;
+                                                edgeIdx++)
+                                              InkWell(
+                                                key: ValueKey(
+                                                  'edge_pill_${index}_$edgeIdx',
+                                                ),
+                                                onTap: () =>
+                                                    promptEdgeCaseDialog(
+                                                  editIdx: edgeIdx,
+                                                  currentVal:
+                                                      edgeItems[edgeIdx],
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2.5,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: _bgSurface,
+                                                    borderRadius:
+                                                        BorderRadius.circular(4),
+                                                    border: Border.all(
+                                                      color: _borderSubtle,
+                                                      width: 0.8,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    '🛡 ${edgeItems[edgeIdx]} ✎',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: _textPrimary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            InkWell(
+                                              key: ValueKey(
+                                                'add_edge_guard_btn_$index',
+                                              ),
+                                              onTap: () =>
+                                                  promptEdgeCaseDialog(),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2.5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: _bgSurface,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: _borderSubtle,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '+ Edge Guard',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: _textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 5),
+                                      ],
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          InkWell(
+                                            key: ValueKey(
+                                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
+                                            ),
+                                            onTap: () => copySubStepCodeFormula(
+                                              selectedTaskIdx,
+                                              subIdx,
+                                              subStep.codeFormula,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: _bgSurface,
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                                border: Border.all(
+                                                  color: _borderSubtle,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'Copy 📋',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _textSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          InkWell(
+                                            key: ValueKey(
+                                              'edit_howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
+                                            ),
+                                            onTap: () =>
+                                                promptEditHowToSubStepDialog(
+                                              selectedTaskIdx,
+                                              subIdx,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: _bgSurface,
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                                border: Border.all(
+                                                  color: _borderSubtle,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'Edit ✎',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -4118,27 +4401,17 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 7),
-                      decoration: _isSinglePanelMode
-                          ? BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: _borderSubtle.withValues(alpha: 0.7),
-                                ),
-                              ),
-                            )
-                          : BoxDecoration(
-                              color: subDone
-                                  ? _accentEmerald.withValues(alpha: 0.05)
-                                  : _bgSurface,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: subDone
-                                    ? _accentEmerald.withValues(alpha: 0.35)
-                                    : (isGuardStep
-                                        ? _accentCrimson.withValues(alpha: 0.28)
-                                        : _borderSubtle),
-                              ),
-                            ),
+                      decoration: BoxDecoration(
+                        color: subDone
+                            ? _accentEmerald.withValues(alpha: 0.05)
+                            : _bgSurface,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: subDone
+                              ? _accentEmerald.withValues(alpha: 0.35)
+                              : _borderSubtle,
+                        ),
+                      ),
                       child: InkWell(
                         key: ValueKey(
                           'howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
@@ -4149,12 +4422,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ),
                         borderRadius: BorderRadius.circular(4),
                         child: Padding(
-                          padding: _isSinglePanelMode
-                              ? const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 7,
-                                )
-                              : const EdgeInsets.all(9),
+                          padding: const EdgeInsets.all(9),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -4167,9 +4435,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   size: 15,
                                   color: subDone
                                       ? _accentEmerald
-                                      : (isGuardStep
-                                          ? _accentCrimson
-                                          : _accentAmber),
+                                      : _textSecondary,
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -4190,44 +4456,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                               letterSpacing: 0.3,
                                               color: subDone
                                                   ? _accentEmerald
-                                                  : (isGuardStep
-                                                      ? _accentCrimson
-                                                      : _accentAmber),
+                                                  : _textPrimary,
                                             ),
                                           ),
                                         ),
-                                        if (_isSinglePanelMode &&
-                                            !_showCodeFormulasInSinglePanel) ...[
-                                          InkWell(
-                                            key: ValueKey(
-                                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
-                                            ),
-                                            onTap: () => copySubStepCodeFormula(
-                                              selectedTaskIdx,
-                                              subIdx,
-                                              subStep.codeFormula,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 5,
-                                                vertical: 1.5,
-                                              ),
-                                              child: Text(
-                                                'Copy 📋',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 8.5,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _textSecondary,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                        ],
                                         InkWell(
                                           key: ValueKey(
                                             'edit_howto_substep_${node.id}_${selectedTaskIdx}_$subIdx',
@@ -4269,83 +4501,78 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                             : TextDecoration.none,
                                       ),
                                     ),
-                                    if (!_isSinglePanelMode ||
-                                        _showCodeFormulasInSinglePanel) ...[
-                                      const SizedBox(height: 5),
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _bgRecessed,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border:
-                                              Border.all(color: _borderSubtle),
-                                        ),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
+                                    const SizedBox(height: 5),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _bgRecessed,
+                                        borderRadius:
+                                            BorderRadius.circular(4),
+                                        border:
+                                            Border.all(color: _borderSubtle),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              subStep.codeFormula,
+                                              style:
+                                                  GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                height: 1.35,
+                                                color: subDone
+                                                    ? _textMuted
+                                                    : _textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          InkWell(
+                                            key: ValueKey(
+                                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
+                                            ),
+                                            onTap: () =>
+                                                copySubStepCodeFormula(
+                                              selectedTaskIdx,
+                                              subIdx,
+                                              subStep.codeFormula,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 5,
+                                                vertical: 1.5,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: _bgSurface,
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                                border: Border.all(
+                                                  color: _borderSubtle,
+                                                ),
+                                              ),
                                               child: Text(
-                                                subStep.codeFormula,
+                                                'Copy 📋',
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10,
-                                                  height: 1.35,
-                                                  color: subDone
-                                                      ? _textMuted
-                                                      : AppTheme.accentCyanFor(
-                                                          _isDark,
-                                                        ),
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _textSecondary,
                                                 ),
                                               ),
                                             ),
-                                            const SizedBox(width: 6),
-                                            InkWell(
-                                              key: ValueKey(
-                                                'copy_howto_code_${node.id}_${selectedTaskIdx}_$subIdx',
-                                              ),
-                                              onTap: () =>
-                                                  copySubStepCodeFormula(
-                                                selectedTaskIdx,
-                                                subIdx,
-                                                subStep.codeFormula,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(3),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 5,
-                                                  vertical: 1.5,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: _bgSurface,
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                  border: Border.all(
-                                                    color: _borderSubtle,
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  'Copy 📋',
-                                                  style:
-                                                      GoogleFonts.jetBrainsMono(
-                                                    fontSize: 8.5,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: _textSecondary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
                                     if (isCoreStep) ...[
                                       const SizedBox(height: 6),
                                       Wrap(
@@ -4375,17 +4602,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                   vertical: 2.5,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color:
-                                                      _accentAmber.withValues(
-                                                    alpha: 0.12,
-                                                  ),
+                                                  color: _bgRecessed,
                                                   borderRadius:
                                                       BorderRadius.circular(4),
                                                   border: Border.all(
-                                                    color:
-                                                        _accentAmber.withValues(
-                                                      alpha: 0.28,
-                                                    ),
+                                                    color: _borderSubtle,
                                                     width: 0.8,
                                                   ),
                                                 ),
@@ -4426,7 +4647,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.w700,
-                                                  color: _accentAmber,
+                                                  color: _textSecondary,
                                                 ),
                                               ),
                                             ),
@@ -4462,17 +4683,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                   vertical: 2.5,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: _accentCrimson
-                                                      .withValues(
-                                                    alpha: 0.12,
-                                                  ),
+                                                  color: _bgRecessed,
                                                   borderRadius:
                                                       BorderRadius.circular(4),
                                                   border: Border.all(
-                                                    color: _accentCrimson
-                                                        .withValues(
-                                                      alpha: 0.28,
-                                                    ),
+                                                    color: _borderSubtle,
                                                     width: 0.8,
                                                   ),
                                                 ),
@@ -4512,7 +4727,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.w700,
-                                                  color: _accentCrimson,
+                                                  color: _textSecondary,
                                                 ),
                                               ),
                                             ),
@@ -4530,6 +4745,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     );
                   },
                 ),
+              const SizedBox(height: 6),
               Align(
                 alignment: Alignment.centerLeft,
                 child: InkWell(
@@ -4551,7 +4767,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
-                        color: _accentAmber,
+                        color: _textSecondary,
                       ),
                     ),
                   ),
@@ -4797,7 +5013,48 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!_isSinglePanelMode) ...[
+          if (_isSinglePanelMode) ...[
+            // 2-Column Step-Aligned Metadata Header Row
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: _bgRecessed,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: _borderSubtle),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 56,
+                    child: Text(
+                      'STEP / IMPLEMENTATION ACTION',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                        color: _textSecondary,
+                      ),
+                    ),
+                  ),
+                  Container(width: 1, height: 12, color: _borderSubtle),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 44,
+                    child: Text(
+                      'STEP METADATA (WHERE · CODE · TUNING · GUARDS)',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                        color: _textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
             Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -4836,7 +5093,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     : isSelectedTask;
                 final subDoneCount = task.completedChildrenCount;
                 final subTotalCount = task.totalChildrenCount;
-                final lColor = layerBadgeColor(bp.layerTag);
 
                 return Container(
                   margin: EdgeInsets.only(bottom: _isSinglePanelMode ? 10 : 6),
@@ -4850,21 +5106,21 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                             color: task.completed
                                 ? _accentEmerald.withValues(alpha: 0.45)
                                 : (isTaskDrawerOpen
-                                    ? _accentAmber.withValues(alpha: 0.55)
+                                    ? _borderBright
                                     : _borderSubtle),
-                            width: isTaskDrawerOpen ? 1.2 : 1.0,
+                            width: isTaskDrawerOpen ? 1.4 : 1.0,
                           ),
                         )
                       : BoxDecoration(
                           color: isSelectedTask
-                              ? _accentAmber.withValues(alpha: 0.08)
+                              ? _bgHover
                               : _bgRecessed,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: isSelectedTask
-                                ? _accentAmber.withValues(alpha: 0.55)
+                                ? _borderBright
                                 : _borderSubtle,
-                            width: isSelectedTask ? 1.2 : 1.0,
+                            width: isSelectedTask ? 1.3 : 1.0,
                           ),
                         ),
                   child: Column(
@@ -4885,7 +5141,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                 size: 17,
                                 color: task.completed
                                     ? _accentEmerald
-                                    : _accentAmber,
+                                    : (isTaskDrawerOpen
+                                        ? _accentAmber
+                                        : _textSecondary),
                               ),
                             ),
                           ),
@@ -4910,95 +5168,204 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               child: Padding(
                                 padding: EdgeInsets.fromLTRB(
                                   2,
-                                  _isSinglePanelMode ? 11 : 8,
+                                  _isSinglePanelMode ? 10 : 8,
                                   8,
-                                  _isSinglePanelMode ? 11 : 8,
+                                  _isSinglePanelMode ? 10 : 8,
                                 ),
                                 child: _isSinglePanelMode
-                                    ? Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: isTaskDrawerOpen
-                                                  ? _focalAccent
-                                                  : _bgSurface,
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              border: Border.all(
-                                                color: _borderSubtle,
+                                    ? IntrinsicHeight(
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            // Left Column (56%): Task Step Number + Title
+                                            Expanded(
+                                              flex: 56,
+                                              child: Row(
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: isTaskDrawerOpen
+                                                          ? _focalAccent
+                                                          : _bgSurface,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        4,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: _borderSubtle,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      bp.numLabel,
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 9.5,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        color: isTaskDrawerOpen
+                                                            ? _focalAccentFg
+                                                            : _textSecondary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Text(
+                                                      task.text,
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            isTaskDrawerOpen
+                                                                ? FontWeight.w700
+                                                                : FontWeight.w600,
+                                                        color: task.completed
+                                                            ? _textMuted
+                                                            : _textPrimary,
+                                                        decoration: task
+                                                                .completed
+                                                            ? TextDecoration
+                                                                .lineThrough
+                                                            : TextDecoration
+                                                                .none,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                            child: Text(
-                                              bp.numLabel,
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: isTaskDrawerOpen
-                                                    ? _focalAccentFg
-                                                    : _textSecondary,
+                                            const SizedBox(width: 10),
+                                            Container(
+                                              width: 1,
+                                              color: _borderSubtle,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            // Right Column (44%): Metadata directly aligned with this Task Step
+                                            Expanded(
+                                              flex: 44,
+                                              child: Wrap(
+                                                spacing: 6,
+                                                runSpacing: 4,
+                                                alignment:
+                                                    WrapAlignment.spaceBetween,
+                                                crossAxisAlignment:
+                                                    WrapCrossAlignment.center,
+                                                children: [
+                                                  Wrap(
+                                                    spacing: 5,
+                                                    runSpacing: 4,
+                                                    crossAxisAlignment:
+                                                        WrapCrossAlignment
+                                                            .center,
+                                                    children: [
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: _bgSurface,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(4),
+                                                          border: Border.all(
+                                                            color:
+                                                                _borderSubtle,
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          '📍 ${bp.whereLocation}',
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 8.5,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color:
+                                                                _textSecondary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 5,
+                                                          vertical: 2,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: _bgSurface,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(4),
+                                                          border: Border.all(
+                                                            color:
+                                                                _borderSubtle,
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          bp.durationChip,
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 8.5,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: _textMuted,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 7,
+                                                      vertical: 3,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: isTaskDrawerOpen
+                                                          ? _bgHover
+                                                          : _bgSurface,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        5,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: isTaskDrawerOpen
+                                                            ? _borderBright
+                                                            : _borderSubtle,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      isTaskDrawerOpen
+                                                          ? '$subDoneCount/$subTotalCount steps ▴'
+                                                          : '$subDoneCount/$subTotalCount steps ▸',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: task.completed
+                                                            ? _accentEmerald
+                                                            : (isTaskDrawerOpen
+                                                                ? _textPrimary
+                                                                : _textSecondary),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              task.text,
-                                              style: GoogleFonts.inter(
-                                                fontSize: 13.5,
-                                                fontWeight: isTaskDrawerOpen
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w600,
-                                                color: task.completed
-                                                    ? _textMuted
-                                                    : _textPrimary,
-                                                decoration: task.completed
-                                                    ? TextDecoration.lineThrough
-                                                    : TextDecoration.none,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 3.5,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: isTaskDrawerOpen
-                                                  ? _accentAmber.withValues(
-                                                      alpha: 0.14,
-                                                    )
-                                                  : _bgSurface,
-                                              borderRadius:
-                                                  BorderRadius.circular(5),
-                                              border: Border.all(
-                                                color: isTaskDrawerOpen
-                                                    ? _accentAmber.withValues(
-                                                        alpha: 0.45,
-                                                      )
-                                                    : _borderSubtle,
-                                              ),
-                                            ),
-                                            child: Text(
-                                              isTaskDrawerOpen
-                                                  ? 'Hide Guide ($subDoneCount/$subTotalCount steps) ▴'
-                                                  : 'How-To ($subDoneCount/$subTotalCount steps) ▸',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: isTaskDrawerOpen
-                                                    ? _accentAmber
-                                                    : (task.completed
-                                                        ? _accentEmerald
-                                                        : _textSecondary),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       )
                                     : Column(
                                         crossAxisAlignment:
@@ -5042,19 +5409,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                   vertical: 1,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: lColor.withValues(
-                                                    alpha: 0.14,
-                                                  ),
+                                                  color: _bgSurface,
                                                   borderRadius:
                                                       BorderRadius.circular(3),
+                                                  border: Border.all(
+                                                    color: _borderSubtle,
+                                                  ),
                                                 ),
                                                 child: Text(
                                                   bp.layerTag,
                                                   style:
                                                       GoogleFonts.jetBrainsMono(
                                                     fontSize: 8.5,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: lColor,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: _textSecondary,
                                                   ),
                                                 ),
                                               ),
@@ -5089,9 +5457,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                                           FontWeight.w700,
                                                       color: task.completed
                                                           ? _accentEmerald
-                                                          : (subDoneCount > 0
-                                                              ? _accentAmber
-                                                              : _textMuted),
+                                                          : _textSecondary,
                                                     ),
                                                   ),
                                                 ),
@@ -5158,7 +5524,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       ),
                       if (_isSinglePanelMode && isSelectedTask && isTaskDrawerOpen)
                         Container(
-                          margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                           padding: const EdgeInsets.only(top: 10),
                           decoration: BoxDecoration(
                             border: Border(
@@ -5219,7 +5585,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: _accentAmber,
+                        color: _textPrimary,
                       ),
                     ),
                   ),
@@ -5987,7 +6353,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     buildCoPilotCard(
                       key: const ValueKey('copilot_card_add_checkpoint'),
                       badge: 'CO-PILOT 01 · CHECKPOINT',
-                      badgeColor: _accentEmerald,
+                      badgeColor: _textSecondary,
                       title: '+ Add Polish Checkpoint',
                       subtitle: 'Append a 60/40 playtest checkpoint with tasks & tuning.',
                       onTap: () => _applyFeatureCoPilotAction(
@@ -6002,7 +6368,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     buildCoPilotCard(
                       key: const ValueKey('copilot_card_suggest_tuning'),
                       badge: 'CO-PILOT 02 · TUNING',
-                      badgeColor: _accentAmber,
+                      badgeColor: _textSecondary,
                       title: 'Suggest Tuning Values',
                       subtitle: 'Generate concrete numeric parameters for the active checkpoint.',
                       onTap: () => _applyFeatureCoPilotAction(
@@ -6017,7 +6383,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     buildCoPilotCard(
                       key: const ValueKey('copilot_card_add_guards'),
                       badge: 'CO-PILOT 03 · EDGE GUARDS',
-                      badgeColor: _accentCrimson,
+                      badgeColor: _textSecondary,
                       title: 'Add Edge-Case Guards',
                       subtitle: 'Append [GUARD] boundary conditions to prevent state bugs.',
                       onTap: () => _applyFeatureCoPilotAction(
@@ -6047,12 +6413,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                       decoration: BoxDecoration(
                         color: _showCoPilotDrawer
-                            ? _accentEmerald.withValues(alpha: 0.14)
+                            ? _bgHover
                             : _bgRecessed,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
                           color: _showCoPilotDrawer
-                              ? _accentEmerald.withValues(alpha: 0.45)
+                              ? _borderBright
                               : _borderSubtle,
                         ),
                       ),
@@ -6061,7 +6427,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: _showCoPilotDrawer ? _accentEmerald : _textSecondary,
+                          color: _showCoPilotDrawer ? _textPrimary : _textSecondary,
                         ),
                       ),
                     ),
@@ -6083,10 +6449,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: _accentEmerald.withValues(alpha: 0.12),
+                          color: _bgRecessed,
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: _accentEmerald.withValues(alpha: 0.38),
+                            color: _borderSubtle,
                           ),
                         ),
                         child: Text(
@@ -6094,7 +6460,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
-                            color: _accentEmerald,
+                            color: _textSecondary,
                           ),
                         ),
                       ),
@@ -6115,10 +6481,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: _accentAmber.withValues(alpha: 0.12),
+                          color: _bgRecessed,
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: _accentAmber.withValues(alpha: 0.38),
+                            color: _borderSubtle,
                           ),
                         ),
                         child: Text(
@@ -6126,7 +6492,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
-                            color: _accentAmber,
+                            color: _textSecondary,
                           ),
                         ),
                       ),
@@ -6147,10 +6513,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: _accentCrimson.withValues(alpha: 0.12),
+                          color: _bgRecessed,
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: _accentCrimson.withValues(alpha: 0.38),
+                            color: _borderSubtle,
                           ),
                         ),
                         child: Text(
@@ -6158,7 +6524,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
-                            color: _accentCrimson,
+                            color: _textSecondary,
                           ),
                         ),
                       ),
@@ -6178,15 +6544,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: _accentEmerald.withValues(alpha: 0.14),
+                              color: _bgSurface,
                               borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: _borderSubtle),
                             ),
                             child: Text(
                               'ASK AGENT',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
-                                color: _accentEmerald,
+                                color: _textSecondary,
                               ),
                             ),
                           ),
@@ -6222,7 +6589,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               child: Icon(
                                 Icons.send_rounded,
                                 size: 15,
-                                color: _accentAmber,
+                                color: _textSecondary,
                               ),
                             ),
                           ),
@@ -6279,7 +6646,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           ),
                         ),
                         onPressed: () => _copyFeatureAsMarkdown(feat, states, specBinding),
-                        icon: Icon(Icons.copy_rounded, size: 13, color: _accentAmber),
+                        icon: Icon(Icons.copy_rounded, size: 13, color: _textSecondary),
                         label: Text(
                           'Copy Feature Markdown',
                           style: GoogleFonts.inter(
