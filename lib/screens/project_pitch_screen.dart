@@ -62,6 +62,37 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   int? _hoveredReviewSectionIdx;
   int? _inlineEditingSectionIdx;
 
+  /// Stage 1 Left Outliner Sidebar expand/collapse state.
+  final Set<int> _expandedOutlineSections = {};
+  final Set<int> _collapsedOutlineSections = {};
+  final Map<String, int> _lastOutlineTapMsByKey = {};
+
+  bool _isDoubleClickOnOutlineItem(String key) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final prev = _lastOutlineTapMsByKey[key];
+    _lastOutlineTapMsByKey[key] = now;
+    return prev != null && (now - prev) <= 340;
+  }
+
+  bool _isSectionExpandedInOutline(int sectionIdx) {
+    if (_expandedOutlineSections.contains(sectionIdx)) return true;
+    if (_collapsedOutlineSections.contains(sectionIdx)) return false;
+    return _currentStep == sectionIdx;
+  }
+
+  void _toggleSectionExpandedInOutline(int sectionIdx) {
+    final currentlyExpanded = _isSectionExpandedInOutline(sectionIdx);
+    setState(() {
+      if (currentlyExpanded) {
+        _expandedOutlineSections.remove(sectionIdx);
+        _collapsedOutlineSections.add(sectionIdx);
+      } else {
+        _collapsedOutlineSections.remove(sectionIdx);
+        _expandedOutlineSections.add(sectionIdx);
+      }
+    });
+  }
+
   @override
   bool get isDark => widget.workbench.isDark;
 
@@ -968,29 +999,57 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       }
     }
 
-    // Step 1B / 1C: Structure-First One-Section-at-a-Time Dynamic UI + Step 10 Full Review
+    // Step 1B / 1C: Unified Left Outliner Sidebar (308px) + Focused Co-Design Canvas
     return Container(
       key: const ValueKey('concept_interview_card'),
       color: bgBase,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildStepperRail(draft),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1160),
-                  child: _currentStep < _sections.length
-                      ? _buildFocusedSectionWorkspace(draft, _currentStep)
-                      : _buildFullReviewWorkspace(draft),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 780;
+          final mainCanvasColumn = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1100),
+                      child: _currentStep < _sections.length
+                          ? _buildFocusedSectionWorkspace(draft, _currentStep)
+                          : _buildFullReviewWorkspace(draft),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          _buildConceptStickyBottomDock(draft),
-        ],
+              _buildConceptStickyBottomDock(draft),
+            ],
+          );
+
+          if (!isWide) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: 220,
+                  child: _buildLeftConceptOutlinerRail(draft),
+                ),
+                Expanded(child: mainCanvasColumn),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 308,
+                child: _buildLeftConceptOutlinerRail(draft),
+              ),
+              Expanded(child: mainCanvasColumn),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1776,142 +1835,395 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     );
   }
 
-  // ── Sticky Horizontal Stepper Rail (`01 Goal` ... `09 Prototype Release` + `10 Full Review`) ─
-  Widget _buildStepperRail(ProjectConceptBlueprint draft) {
-    final verifiedCount = _visitedSteps.where((idx) => idx >= 0 && idx < _sections.length).length;
+  // ── Unified 308px Left Concept Outliner Rail (`01 Goal` ... `09 Prototype Release` + `10 Full Review`) ─
+  Widget _buildLeftConceptOutlinerRail(ProjectConceptBlueprint draft) {
+    final verifiedCount =
+        _visitedSteps.where((idx) => idx >= 0 && idx < _sections.length).length;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
+      key: const ValueKey('stage1_left_outliner_rail'),
       decoration: BoxDecoration(
         color: bgSurface,
-        border: Border(bottom: BorderSide(color: borderSubtle)),
+        border: Border(
+          right: BorderSide(color: borderSubtle),
+          bottom: BorderSide(color: borderSubtle),
+        ),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            InkWell(
-              key: const ValueKey('new_spark_reset_btn'),
-              onTap: () => widget.workbench.resetConceptToSpark(),
-              borderRadius: BorderRadius.circular(5),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Text(
-                  '+ New Project',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: accentAmber,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Single-Row Outliner Header (matches Stage 2 & Stage 3 grammar)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: bgRecessed,
+              border: Border(bottom: BorderSide(color: borderSubtle)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: focalAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: focalAccent.withValues(alpha: 0.40),
+                    ),
+                  ),
+                  child: Text(
+                    'CONCEPT',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: focalAccent,
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$verifiedCount/9 Verified',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: accentEmerald,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  key: const ValueKey('new_spark_reset_btn'),
+                  onTap: () => widget.workbench.resetConceptToSpark(),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    child: Text(
+                      '+ New Project',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: accentAmber,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            Container(
-              width: 1,
-              height: 14,
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              color: borderSubtle,
+          ),
+
+          // Scrollable Outliner Tree grouped into 4 clear categories
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 14),
+              children: [
+                _buildOutlineCategoryHeader('VISION & SPECS'),
+                for (final i in const [0, 1, 2])
+                  _buildOutlineSectionNode(draft, i),
+                const SizedBox(height: 6),
+                _buildOutlineCategoryHeader('PILLARS & GUARDRAILS'),
+                for (final i in const [3, 4])
+                  _buildOutlineSectionNode(draft, i),
+                const SizedBox(height: 6),
+                _buildOutlineCategoryHeader('LOOP & SCOPE'),
+                for (final i in const [5, 6, 7])
+                  _buildOutlineSectionNode(draft, i),
+                const SizedBox(height: 6),
+                _buildOutlineCategoryHeader('RELEASE & SIGN-OFF'),
+                _buildOutlineSectionNode(draft, 8),
+                const SizedBox(height: 4),
+                _buildFinalReviewOutlineNode(verifiedCount: verifiedCount),
+              ],
             ),
-            for (int i = 0; i < _sections.length; i++) ...[
-              _buildStepNode(
-                index: i,
-                numText: _sections[i].numLabel,
-                label: _sections[i].shortTitle,
-                isActive: _currentStep == i,
-                isDone: _visitedSteps.contains(i) && _currentStep != i,
-              ),
-              if (i < _sections.length - 1) const SizedBox(width: 2),
-            ],
-            const SizedBox(width: 8),
-            Text(
-              '$verifiedCount/9 Verified',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w600,
-                color: accentEmerald,
-              ),
-            ),
-            const SizedBox(width: 8),
-            _buildStepNode(
-              key: const ValueKey('synthesize_concept_btn'),
-              index: _sections.length,
-              numText: '10',
-              label: 'Full Review',
-              isActive: _currentStep == _sections.length,
-              isDone: false,
-              isFinalReview: true,
-            ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutlineCategoryHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
+      child: Text(
+        title,
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: textMuted,
+          letterSpacing: 0.9,
         ),
       ),
     );
   }
 
-  Widget _buildStepNode({
-    Key? key,
-    required int index,
-    required String numText,
-    required String label,
-    required bool isActive,
-    required bool isDone,
-    bool isFinalReview = false,
-  }) {
-    final activeAccent = isFinalReview ? accentAmber : focalAccent;
-    return InkWell(
-      key: key ?? ValueKey('step_node_$index'),
-      onTap: () => _goToStep(index),
-      borderRadius: BorderRadius.circular(5),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(
-          color: isActive
-              ? activeAccent.withValues(alpha: 0.10)
-              : (isFinalReview ? bgRecessed : Colors.transparent),
-          borderRadius: BorderRadius.circular(5),
-          border: isFinalReview
-              ? Border.all(
-                  color: isActive
-                      ? accentAmber
-                      : accentAmber.withValues(alpha: 0.45),
-                )
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isDone)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(
-                  Icons.check_rounded,
-                  size: 11,
-                  color: accentEmerald,
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(right: 5),
-                child: Text(
-                  numText,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: isActive || isFinalReview
-                        ? FontWeight.w800
-                        : FontWeight.w600,
-                    color: isActive || isFinalReview ? activeAccent : textMuted,
+  List<String> _sectionPreviewItems(ProjectConceptBlueprint draft, int index) {
+    switch (index) {
+      case 0:
+        return draft.goal.trim().isEmpty ? const [] : [draft.goal.trim()];
+      case 1:
+        return draft.gameSpec;
+      case 2:
+        return draft.techSpec;
+      case 3:
+        return draft.designPillars;
+      case 4:
+        return draft.tradeOffs;
+      case 5:
+        return draft.coreLoopBeats;
+      case 6:
+        return draft.exclusions;
+      case 7:
+        return draft.doneWhen.trim().isEmpty
+            ? const []
+            : draft.doneWhen
+                .split(RegExp(r'\n|•'))
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+      case 8:
+        return [
+          'v0.1 ${draft.firstReleasePreset.label}',
+          ...draft.releaseTrainTitles.take(2),
+        ];
+      default:
+        return const [];
+    }
+  }
+
+  String _sectionOutlineMetaBadge(ProjectConceptBlueprint draft, int index, bool isDone) {
+    final items = _sectionPreviewItems(draft, index);
+    if (index == 0 || index == 7) {
+      return isDone ? '✓' : '1 item';
+    }
+    if (index == 5) {
+      return '${items.length} Beats';
+    }
+    if (index == 8) {
+      return 'v0.1';
+    }
+    return '${items.length} items';
+  }
+
+  Widget _buildOutlineSectionNode(ProjectConceptBlueprint draft, int index) {
+    final sec = _sections[index];
+    final isActive = _currentStep == index;
+    final isDone = _visitedSteps.contains(index) && !isActive;
+    final isExpanded = _isSectionExpandedInOutline(index);
+    final previewItems = _sectionPreviewItems(draft, index);
+    final metaBadge = _sectionOutlineMetaBadge(draft, index, isDone);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          key: ValueKey('step_node_$index'),
+          onTap: () {
+            final isDoubleTap = _isDoubleClickOnOutlineItem('sec_$index');
+            if (isDoubleTap || _currentStep == index) {
+              _toggleSectionExpandedInOutline(index);
+            } else {
+              _goToStep(index);
+            }
+          },
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? focalAccent.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isActive
+                    ? focalAccent.withValues(alpha: 0.45)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _toggleSectionExpandedInOutline(index),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 5),
+                    child: Text(
+                      isExpanded ? '▾' : '▸',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: isActive ? focalAccent : textMuted,
+                      ),
+                    ),
                   ),
                 ),
+                if (isDone)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 5),
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 11,
+                      color: accentEmerald,
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(right: 5),
+                    child: Text(
+                      sec.numLabel,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                        color: isActive ? focalAccent : textMuted,
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: Text(
+                    sec.shortTitle,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: isActive
+                          ? textPrimary
+                          : (isDone ? textSecondary : textMuted),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  metaBadge,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: isActive
+                        ? focalAccent
+                        : (isDone ? accentEmerald : textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (isExpanded && previewItems.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(left: 14, bottom: 5),
+            padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: isActive
+                      ? focalAccent.withValues(alpha: 0.35)
+                      : borderSubtle,
+                ),
               ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int pIdx = 0;
+                    pIdx < previewItems.length && pIdx < 5;
+                    pIdx++)
+                  InkWell(
+                    onTap: () => _goToStep(index),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2.5,
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            isDone ? '✓' : '●',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: isDone
+                                  ? accentEmerald
+                                  : (isActive ? focalAccent : textMuted),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              previewItems[pIdx],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                color: isActive ? textSecondary : textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (previewItems.length > 5)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 2),
+                    child: Text(
+                      '+${previewItems.length - 5} more',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        color: textMuted,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFinalReviewOutlineNode({required int verifiedCount}) {
+    final isActive = _currentStep == _sections.length;
+    return InkWell(
+      key: const ValueKey('synthesize_concept_btn'),
+      onTap: () => _goToStep(_sections.length),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? accentAmber.withValues(alpha: 0.14)
+              : bgRecessed,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isActive
+                ? accentAmber
+                : accentAmber.withValues(alpha: 0.45),
+          ),
+        ),
+        child: Row(
+          children: [
             Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 11.5,
-                fontWeight: isActive || isFinalReview
-                    ? FontWeight.w700
-                    : FontWeight.w500,
-                color: isActive || isFinalReview
-                    ? textPrimary
-                    : (isDone ? textSecondary : textMuted),
+              '10',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: accentAmber,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Full Review',
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: textPrimary,
+                ),
+              ),
+            ),
+            Text(
+              '$verifiedCount/9',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: accentAmber,
               ),
             ),
           ],
@@ -4631,35 +4943,40 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: bgRecessed,
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: borderBright),
-                      ),
-                      child: Text(
-                        sec.numLabel,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          color: textSecondary,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: borderBright),
+                        ),
+                        child: Text(
+                          sec.numLabel,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: textSecondary,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      sec.title.toUpperCase(),
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: textPrimary,
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(
+                          sec.title.toUpperCase(),
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: textPrimary,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 AnimatedOpacity(
                   duration: const Duration(milliseconds: 140),

@@ -1770,6 +1770,19 @@ class WorkbenchProvider extends ChangeNotifier {
       }
     }
 
+    // Capture any features deferred (unchecked) in the prior Release Plan Gate
+    // so they automatically carry over into the next release's Beat!
+    final deferredByBeatIndex = <int, List<ProposedFeatureBlueprint>>{};
+    final priorBp = _releaseBlueprint;
+    if (priorBp != null) {
+      for (int bIdx = 0; bIdx < priorBp.beats.length; bIdx++) {
+        final deferredInBeat = priorBp.beats[bIdx].deferredFeatures.toList();
+        if (deferredInBeat.isNotEmpty) {
+          deferredByBeatIndex[bIdx] = deferredInBeat;
+        }
+      }
+    }
+
     _activeReleaseId = targetRelId;
     final relDoc = documents[targetRelId];
     if (relDoc == null) return;
@@ -1785,6 +1798,7 @@ class WorkbenchProvider extends ChangeNotifier {
         releaseDoc: relDoc,
         existingBeats: existingBeats,
         existingFeaturesByBeat: existingFeaturesByBeat,
+        deferredByBeatIndex: deferredByBeatIndex,
         apiKey: _apiKey,
         modelName: _planningModel,
         thinkingLevel: _thinkingLevel,

@@ -27,6 +27,7 @@ class ReleasePlannerAgent {
     List<TierDocument> completedReleases = const [],
     List<TierDocument> existingBeats = const [],
     Map<String, List<TierDocument>> existingFeaturesByBeat = const {},
+    Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex = const {},
     String apiKey = '',
     String modelName = 'gemini-4-argon',
     String thinkingLevel = 'LOW',
@@ -48,7 +49,8 @@ class ReleasePlannerAgent {
     final existingTreeSummary = StringBuffer();
     if (existingBeats.isNotEmpty) {
       existingTreeSummary.writeln('Existing Live Game Tree (from prior release):');
-      for (final b in existingBeats) {
+      for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
+        final b = existingBeats[bIdx];
         existingTreeSummary.writeln('- Beat "${b.title}" (${b.id}):');
         final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
         for (final f in feats) {
@@ -56,6 +58,13 @@ class ReleasePlannerAgent {
           final originVer = f.sections['originVersion'] ?? 'v0.1';
           existingTreeSummary.writeln(
             '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints verified]',
+          );
+        }
+        final queuedDeferred =
+            deferredByBeatIndex[bIdx] ?? const <ProposedFeatureBlueprint>[];
+        for (final df in queuedDeferred) {
+          existingTreeSummary.writeln(
+            '  * QUEUED FROM PRIOR RELEASE FOR $versionTag: "${df.title}" (${df.estimatedHours}h) — ${df.goal}',
           );
         }
       }
@@ -192,6 +201,7 @@ Return ONLY a JSON object with this exact schema:
         versionTag: versionTag,
         existingBeats: existingBeats,
         existingFeaturesByBeat: existingFeaturesByBeat,
+        deferredByBeatIndex: deferredByBeatIndex,
         projectExclusions: projectExclusions,
       );
     }
@@ -395,6 +405,7 @@ Return ONLY a JSON object with this exact schema:
     required String versionTag,
     required List<TierDocument> existingBeats,
     required Map<String, List<TierDocument>> existingFeaturesByBeat,
+    Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex = const {},
     required List<String> projectExclusions,
   }) {
     final beats = <ProposedBeatBlueprint>[];
@@ -512,6 +523,44 @@ Return ONLY a JSON object with this exact schema:
             ],
           ),
         );
+      }
+
+      // Carry over any features that the developer deferred (unchecked) in the prior release for this Beat!
+      final priorDeferred =
+          deferredByBeatIndex[bIdx] ?? const <ProposedFeatureBlueprint>[];
+      for (final df in priorDeferred) {
+        if (!proposedFeats.any(
+          (pf) => pf.title.toLowerCase() == df.title.toLowerCase(),
+        )) {
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: df.id,
+              title: df.title,
+              goal: df.goal,
+              doneWhen: df.doneWhen,
+              estimatedHours: df.estimatedHours > 0 ? df.estimatedHours : 4,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.newFeature,
+              originVersion: versionTag,
+              inScope: List<String>.from(df.inScope),
+              outOfScope: List<String>.from(df.outOfScope),
+              tuningParams: List<String>.from(df.tuningParams),
+              edgeCases: List<String>.from(df.edgeCases),
+              checkpoints: [
+                for (final cp in df.checkpoints)
+                  ProposedCheckpointBlueprint(
+                    title: cp.title,
+                    playtestCriteria: cp.playtestCriteria,
+                    tasks: List<String>.from(cp.tasks),
+                    coveredScope: List<String>.from(cp.coveredScope),
+                    tuningParams: List<String>.from(cp.tuningParams),
+                    edgeCases: List<String>.from(cp.edgeCases),
+                    releaseVersion: versionTag,
+                  ),
+              ],
+            ),
+          );
+        }
       }
 
       beats.add(

@@ -103,6 +103,7 @@ void main() {
         expect(find.byKey(const ValueKey('cloud_sync_auth_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('global_export_spec_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_left_outliner_rail')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
         expect(find.byKey(const ValueKey('new_spark_reset_btn')), findsOneWidget);
         expect(find.text('+ New Project'), findsOneWidget);
@@ -179,6 +180,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // ── Stage 2: Antigravity Release Plan Gate ──
+        expect(find.byKey(const ValueKey('stage2_left_outliner_rail')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_view_mode_toggle_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_hour_budget_bar')), findsOneWidget);
@@ -380,8 +382,17 @@ void main() {
         expect(provider.conceptDraft!.tradeOffs, isNotEmpty);
         expect(provider.conceptDraft!.techSpec, isNotEmpty);
 
-        // Plan & Execute v0.1
+        // Plan & Execute v0.1 (deferring a feature in Beat 2 to verify automatic carryover into v0.2!)
         await provider.openReleasePlanGate();
+        final v1Beat2 = provider.releaseBlueprint!.beats[1];
+        provider.addProposedFeatureToBeat(v1Beat2.id, 'Slide Boost & Cancel');
+        final deferredSlideFeat = v1Beat2.features.last;
+        provider.toggleProposedFeatureScope(
+          v1Beat2.id,
+          deferredSlideFeat.id,
+          false,
+        );
+        expect(deferredSlideFeat.included, isFalse);
         await provider.approveAndExecuteReleasePlan();
 
         final v1Beats = provider.activeReleaseBeats;
@@ -394,6 +405,13 @@ void main() {
         await provider.advanceToNextRelease();
         final v2Blueprint = provider.releaseBlueprint!;
         expect(v2Blueprint.releaseVersionTag, 'v0.2');
+
+        // Verify the feature deferred in v0.1 ("Slide Boost & Cancel") automatically carried over into Beat 2 of v0.2!
+        final carriedOverSlide = v2Blueprint.beats[1].features.firstWhere(
+          (f) => f.title == 'Slide Boost & Cancel',
+        );
+        expect(carriedOverSlide.included, isTrue);
+        expect(carriedOverSlide.originVersion, 'v0.2');
 
         // Beat 1 Feature 1 is upgraded (4h delta), Beat 1 Feature 2 is STABLE (0h delta)
         final b1f1 = v2Blueprint.beats[0].features[0];
