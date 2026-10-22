@@ -1101,6 +1101,8 @@ mixin WorkbenchThemeMixin {
   Color get accentEmerald => AppTheme.accentGreenFor(isDark);
   Color get accentCrimson => AppTheme.accentRedFor(isDark);
   Color get accentAmber => AppTheme.accentAmberFor(isDark);
+  Color get accentCyan => AppTheme.accentCyanFor(isDark);
+  Color get accentViolet => AppTheme.accentPurpleFor(isDark);
 }
 
 /// Paints a true CSS-equivalent `inset 0 3px 6px, inset 2px 0 4px` inner cavity occlusion shadow

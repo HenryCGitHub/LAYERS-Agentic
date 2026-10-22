@@ -179,46 +179,46 @@ void main() {
         await tester.tap(approveConceptBtn);
         await tester.pumpAndSettle();
 
-        // ── Stage 2: Antigravity Release Plan Gate ──
+        // ── Stage 2: Antigravity Release Plan Gate (De-Boxed Flat Section Stepper) ──
         expect(find.byKey(const ValueKey('stage2_left_outliner_rail')), findsOneWidget);
-        expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_view_mode_toggle_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('release_hour_budget_bar')), findsOneWidget);
-        expect(find.byKey(const ValueKey('toggle_release_questions_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_step_goal')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_step_questions')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_beat_jump_bar')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_step_queued')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_all_beats_chip')), findsOneWidget);
         expect(find.byKey(const ValueKey('toggle_all_feat_specs_btn')), findsOneWidget);
-        expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
 
-        // Option A: Stage 2 defaults to Step-by-Beat mode & collapsed Answered Decisions Strip
+        // Stage 2 defaults to dedicated 1-Beat-at-a-Time Focus (B01) with zero top Gate Banner or Clarifying Questions stacked above it
         expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_next_beat_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsNothing);
         expect(find.byKey(const ValueKey('release_question_card_0_0')), findsNothing);
 
-        // Verify expanding Clarifying Release Questions from the Answered Decisions Summary Strip
-        final toggleQuestionsBtn = find.byKey(const ValueKey('toggle_release_questions_btn'));
-        await tester.ensureVisible(toggleQuestionsBtn);
+        // Step to `01 Release Goal & Budget` in the Left Stepper and verify it displays the Gate Banner & Budget Bar
+        await tester.tap(find.byKey(const ValueKey('stage2_step_goal')));
         await tester.pumpAndSettle();
-        await tester.tap(toggleQuestionsBtn);
+        expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_hour_budget_bar')), findsOneWidget);
+        expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
+
+        // Step to `02 Playtest Priorities` in the Left Stepper and verify the Clarifying Questions & Answered Decisions Strip
+        await tester.tap(find.byKey(const ValueKey('stage2_step_questions')));
         await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
+        expect(find.byKey(const ValueKey('toggle_release_questions_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('release_question_card_0_2')), findsOneWidget);
-        await tester.ensureVisible(toggleQuestionsBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(toggleQuestionsBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('release_question_card_0_0')), findsNothing);
 
-        // Verify Stage 2 [ ▯ Step-by-Beat | ◫ Full Blueprint ] switcher
-        final stage2ViewModeBtn = find.byKey(const ValueKey('stage2_view_mode_toggle_btn'));
-        await tester.ensureVisible(stage2ViewModeBtn);
+        // Switch to `◫ Full Release Review` at the bottom of the Left Stepper
+        final fullReleaseReviewBtn = find.byKey(const ValueKey('stage2_all_beats_chip'));
+        await tester.ensureVisible(fullReleaseReviewBtn);
         await tester.pumpAndSettle();
-        await tester.tap(stage2ViewModeBtn);
+        await tester.tap(fullReleaseReviewBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsNothing);
+        expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
         expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
         expect(find.byKey(const ValueKey('restore_deferred_feat_feat_7_2')), findsOneWidget);
 

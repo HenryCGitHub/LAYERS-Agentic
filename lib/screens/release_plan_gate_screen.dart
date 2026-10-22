@@ -26,13 +26,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     with WorkbenchThemeMixin {
   final TextEditingController _releaseChatController = TextEditingController();
   final Set<String> _expandedFeatureIds = {};
-  final Set<int> _expandedOutlineBeatIndices = {};
-  final Set<int> _collapsedOutlineBeatIndices = {};
-  final Set<String> _expandedOutlineFeatureIds = {};
   final Map<String, TextEditingController> _newBeatFeatureControllers = {};
   bool _collapseQuestions = true;
   bool _isStepByBeatMode = true;
   int _activeBeatIndex = 0;
+
+  /// Active section in the Stage 2 Flat Section Stepper:
+  /// `'goal'`, `'questions'`, `'beat'` (uses `_activeBeatIndex`), `'queued'`, or `'full_review'`.
+  String _activeStage2Section = 'beat';
 
   @override
   bool get isDark => widget.workbench.isDark;
@@ -45,25 +46,6 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       return 'v$major.${minor + 1}';
     }
     return 'v0.2';
-  }
-
-  bool _isBeatExpandedInOutline(int beatIdx) {
-    if (_collapsedOutlineBeatIndices.contains(beatIdx)) return false;
-    if (_expandedOutlineBeatIndices.contains(beatIdx)) return true;
-    return _isStepByBeatMode && _activeBeatIndex == beatIdx;
-  }
-
-  void _toggleBeatExpandedInOutline(int beatIdx) {
-    final currentlyExpanded = _isBeatExpandedInOutline(beatIdx);
-    setState(() {
-      if (currentlyExpanded) {
-        _expandedOutlineBeatIndices.remove(beatIdx);
-        _collapsedOutlineBeatIndices.add(beatIdx);
-      } else {
-        _collapsedOutlineBeatIndices.remove(beatIdx);
-        _expandedOutlineBeatIndices.add(beatIdx);
-      }
-    });
   }
 
   TextEditingController _controllerForBeat(String beatId) {
@@ -87,6 +69,163 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     if (text.isEmpty || widget.workbench.isAgentBusy) return;
     _releaseChatController.clear();
     await widget.workbench.sendReleasePlanChatMessage(text);
+  }
+
+  Widget _buildActiveStage2SectionWorkspace(ReleaseBlueprint bp) {
+    if (!_isStepByBeatMode || _activeStage2Section == 'full_review') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildGateBanner(bp),
+          const SizedBox(height: 18),
+          if (bp.questions.isNotEmpty) ...[
+            _buildReleaseQuestionsSection(bp),
+            const SizedBox(height: 22),
+          ],
+          _buildBeatsBlueprintSection(bp),
+          const SizedBox(height: 24),
+          _buildOutOfScopeSummarySection(bp),
+        ],
+      );
+    }
+
+    switch (_activeStage2Section) {
+      case 'goal':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildGateBanner(bp),
+            const SizedBox(height: 18),
+            Align(
+              alignment: Alignment.centerRight,
+              child: InkWell(
+                key: const ValueKey('stage2_goal_next_btn'),
+                onTap: () {
+                  setState(() {
+                    if (bp.questions.isNotEmpty) {
+                      _activeStage2Section = 'questions';
+                      _collapseQuestions = false;
+                    } else {
+                      _activeStage2Section = 'beat';
+                      _activeBeatIndex = 0;
+                    }
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                  child: Text(
+                    bp.questions.isNotEmpty
+                        ? 'Next Section: 02 Playtest Priorities →'
+                        : 'Next Section: B01 →',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: accentCyan,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      case 'questions':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildReleaseQuestionsSection(bp),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                InkWell(
+                  onTap: () => setState(() => _activeStage2Section = 'goal'),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Text(
+                      '‹ Prev Section: 01 Release Goal & Budget',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  key: const ValueKey('stage2_questions_next_btn'),
+                  onTap: () => setState(() {
+                    _activeStage2Section = 'beat';
+                    _activeBeatIndex = 0;
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Text(
+                      'Next Section: B01 ${bp.beats.isNotEmpty ? bp.beats.first.title : "Beats"} →',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: accentCyan,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      case 'queued':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildOutOfScopeSummarySection(bp),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                InkWell(
+                  onTap: () => setState(() {
+                    _activeStage2Section = 'beat';
+                    _activeBeatIndex = bp.beats.isNotEmpty ? bp.beats.length - 1 : 0;
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Text(
+                      '‹ Prev Section: B${bp.beats.length.toString().padLeft(2, '0')}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  key: const ValueKey('stage2_queued_next_btn'),
+                  onTap: () => setState(() {
+                    _isStepByBeatMode = false;
+                    _activeStage2Section = 'full_review';
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Text(
+                      'Next: Full Release Review ◫ →',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: accentCyan,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      case 'beat':
+      default:
+        // Dedicated 1-Beat-at-a-Time Focus Canvas (No Repeated Top Gate Banner or Clarifying Questions)
+        return _buildBeatsBlueprintSection(bp);
+    }
   }
 
   @override
@@ -123,19 +262,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _buildGateBanner(bp),
-                          const SizedBox(height: 10),
                           _buildStage2AgentStrip(),
-                          const SizedBox(height: 10),
-                          if (bp.questions.isNotEmpty) ...[
-                            _buildReleaseQuestionsSection(bp),
-                            const SizedBox(height: 18),
-                          ],
-                          _buildBeatsBlueprintSection(bp),
-                          if (!_isStepByBeatMode) ...[
-                            const SizedBox(height: 22),
-                            _buildOutOfScopeSummarySection(bp),
-                          ],
+                          _buildActiveStage2SectionWorkspace(bp),
                           const SizedBox(height: 16),
                         ],
                       ),
@@ -164,7 +292,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 308,
+                width: 280,
                 child: _buildLeftReleaseOutlinerRail(bp),
               ),
               Expanded(child: mainCanvasColumn),
@@ -179,67 +307,69 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     final interventions = widget.workbench.stage2Interventions;
     final trace = widget.workbench.lastAgentTrace;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (trace != null && trace.toolCalls.isNotEmpty)
-          Container(
-            key: const ValueKey('stage2_agent_trace_banner'),
-            margin: EdgeInsets.only(bottom: interventions.isNotEmpty ? 8 : 0),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: bgSurface,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: accentEmerald.withValues(alpha: 0.42)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: accentEmerald.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
+    if ((trace == null || trace.toolCalls.isEmpty) && interventions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (trace != null && trace.toolCalls.isNotEmpty)
+            Container(
+              key: const ValueKey('stage2_agent_trace_banner'),
+              margin: EdgeInsets.only(bottom: interventions.isNotEmpty ? 8 : 0),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: bgSurface,
+                border: Border(
+                  left: BorderSide(color: accentEmerald, width: 3),
+                  bottom: BorderSide(color: borderSubtle),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(
                     'AGENT TRACE · ${trace.agentRole.toUpperCase()}',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w800,
                       color: accentEmerald,
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${trace.toolCalls.map((c) => "⚙ ${c.toolName}").join(" · ")} — ${trace.reasoning}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      color: textSecondary,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${trace.toolCalls.map((c) => "⚙ ${c.toolName}").join(" · ")} — ${trace.reasoning}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: textSecondary,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () => widget.workbench.clearLastAgentTrace(),
-                  child: Text(
-                    'Dismiss ×',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      color: textMuted,
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => widget.workbench.clearLastAgentTrace(),
+                    child: Text(
+                      'Dismiss ×',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        color: textMuted,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        for (int i = 0; i < interventions.length; i++) ...[
-          _buildInterventionBanner(interventions[i], i),
-          if (i < interventions.length - 1) const SizedBox(height: 8),
+          for (int i = 0; i < interventions.length; i++) ...[
+            _buildInterventionBanner(interventions[i], i),
+            if (i < interventions.length - 1) const SizedBox(height: 8),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -252,8 +382,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: bgSurface,
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
+        border: Border(
+          left: BorderSide(color: color, width: 3),
+          bottom: BorderSide(color: borderSubtle),
+        ),
       ),
       child: Row(
         children: [
@@ -261,22 +393,15 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    item.badge,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: color,
-                    ),
+                Text(
+                  item.badge,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    color: color,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   item.title,
                   style: GoogleFonts.inter(
@@ -329,8 +454,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     return ElevatedButton(
       key: key,
       style: ElevatedButton.styleFrom(
-        backgroundColor: focalAccent,
-        foregroundColor: focalAccentFg,
+        backgroundColor: accentEmerald,
+        foregroundColor: bgBase,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(
@@ -350,13 +475,15 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     );
   }
 
-  // ── Unified 308px Left Release Outliner Rail (Overview, Core Loop Beats -> Features -> Build Tasks, & Queued for Next Release) ─
+  // ── De-Boxed Flush Flat Section Stepper (`01 Goal & Budget`, `02 Priorities`, `B01..B0N`, `↪ Queued`, `◫ Full Release Review`) ─
   Widget _buildLeftReleaseOutlinerRail(ReleaseBlueprint bp) {
     final nextVer = _nextReleaseVersionTag(bp.releaseVersionTag);
-    final deferredItems = <({ProposedBeatBlueprint beat, ProposedFeatureBlueprint feat})>[
-      for (final beat in bp.beats)
-        for (final feat in beat.deferredFeatures) (beat: beat, feat: feat),
-    ];
+    final isGoalActive = _isStepByBeatMode && _activeStage2Section == 'goal';
+    final isQuestionsActive =
+        _isStepByBeatMode && _activeStage2Section == 'questions';
+    final isQueuedActive = _isStepByBeatMode && _activeStage2Section == 'queued';
+    final isFullReviewActive =
+        !_isStepByBeatMode || _activeStage2Section == 'full_review';
 
     return Container(
       key: const ValueKey('stage2_left_outliner_rail'),
@@ -370,31 +497,22 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Single-Row Outliner Header (matches Stage 1 & Stage 3 grammar)
+          // Single-Row Flush Stepper Header
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
               color: bgRecessed,
               border: Border(bottom: BorderSide(color: borderSubtle)),
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: accentAmber.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: accentAmber.withValues(alpha: 0.42),
-                    ),
-                  ),
-                  child: Text(
-                    '${bp.releaseVersionTag.toUpperCase()} GATE',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: accentAmber,
-                    ),
+                Text(
+                  '${bp.releaseVersionTag.toUpperCase()} GATE',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.7,
+                    color: accentCyan,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -424,218 +542,151 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
 
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 14),
+              padding: EdgeInsets.zero,
               children: [
-                _buildOutlineCategoryHeader('OVERVIEW & SCOPE'),
-                InkWell(
-                  key: const ValueKey('stage2_all_beats_chip'),
+                // 01 Release Goal & Budget
+                _buildFlushStepperRow(
+                  rowKey: const ValueKey('stage2_step_goal'),
+                  code: '01',
+                  title: 'Release Goal & Budget',
+                  trailingText: '✓',
+                  trailingColor: accentEmerald,
+                  isActive: isGoalActive,
                   onTap: () {
                     setState(() {
-                      _isStepByBeatMode = false;
+                      _isStepByBeatMode = true;
+                      _activeStage2Section = 'goal';
                     });
                   },
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 3),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: !_isStepByBeatMode
-                          ? focalAccent.withValues(alpha: 0.12)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: !_isStepByBeatMode
-                            ? focalAccent.withValues(alpha: 0.45)
-                            : Colors.transparent,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          '◫',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: !_isStepByBeatMode ? focalAccent : textMuted,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'All Beats (${bp.beats.length})',
-                            style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              fontWeight: !_isStepByBeatMode
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: !_isStepByBeatMode
-                                  ? textPrimary
-                                  : textSecondary,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${bp.totalIncludedHours}h',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: accentEmerald,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
+
+                // 02 Playtest Priorities
                 if (bp.questions.isNotEmpty)
-                  InkWell(
+                  _buildFlushStepperRow(
+                    rowKey: const ValueKey('stage2_step_questions'),
+                    code: '02',
+                    title: 'Playtest Priorities',
+                    trailingText: '${bp.questions.length}/${bp.questions.length} ✓',
+                    trailingColor: accentEmerald,
+                    isActive: isQuestionsActive,
                     onTap: () {
                       setState(() {
-                        _collapseQuestions = !_collapseQuestions;
+                        _isStepByBeatMode = true;
+                        _activeStage2Section = 'questions';
+                        _collapseQuestions = false;
                       });
                     },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: !_collapseQuestions
-                            ? bgHover
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.check_rounded,
-                            size: 11,
-                            color: accentEmerald,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Playtest Priorities',
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w500,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '${bp.questions.length}/${bp.questions.length} ✓',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              color: accentEmerald,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
 
-                const SizedBox(height: 6),
-                _buildOutlineCategoryHeader('CORE LOOP BEATS'),
+                // B01..B0N Core Loop Beats
                 Container(
                   key: const ValueKey('stage2_beat_jump_bar'),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       for (int bIdx = 0; bIdx < bp.beats.length; bIdx++)
-                        _buildOutlineBeatNode(bp, bIdx, nextVer),
+                        _buildOutlineBeatNode(bp, bIdx),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 8),
-                _buildOutlineCategoryHeader(
-                  '↪ QUEUED FOR ${nextVer.toUpperCase()} & CUT',
+                // ↪ Queued for Next Release & Cuts
+                _buildFlushStepperRow(
+                  rowKey: const ValueKey('stage2_step_queued'),
+                  code: '↪',
+                  codeColor: accentAmber,
+                  title: 'Queued for $nextVer & Cuts',
+                  trailingText: bp.totalDeferredFeatures > 0
+                      ? '+${bp.totalDeferredFeatures}f · ${bp.totalDeferredHours}h'
+                      : '${bp.explicitExclusions.length} cuts',
+                  trailingColor: bp.totalDeferredFeatures > 0
+                      ? accentAmber
+                      : accentCrimson,
+                  isActive: isQueuedActive,
+                  onTap: () {
+                    setState(() {
+                      _isStepByBeatMode = true;
+                      _activeStage2Section = 'queued';
+                    });
+                  },
                 ),
-                if (deferredItems.isEmpty && bp.explicitExclusions.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Text(
-                      'No deferred features yet.',
-                      style: GoogleFonts.inter(
-                        fontSize: 10.5,
-                        color: textMuted,
-                      ),
+              ],
+            ),
+          ),
+
+          // Pinned Bottom Step: Full Release Review
+          Material(
+            color: isFullReviewActive ? bgHover : bgRecessed,
+            child: InkWell(
+              key: const ValueKey('stage2_all_beats_chip'),
+              onTap: () {
+                setState(() {
+                  _isStepByBeatMode = false;
+                  _activeStage2Section = 'full_review';
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: borderSubtle),
+                    left: BorderSide(
+                      color: isFullReviewActive ? accentCyan : Colors.transparent,
+                      width: 3,
                     ),
                   ),
-                for (final dItem in deferredItems)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: accentAmber.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                        color: accentAmber.withValues(alpha: 0.35),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 30,
+                      child: Text(
+                        '◫',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: isFullReviewActive ? accentCyan : textSecondary,
+                        ),
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '↪ ${dItem.feat.title} ($nextVer)',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Full Release Review',
                             style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: textPrimary,
+                              fontSize: 12.5,
+                              fontWeight: isFullReviewActive
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isFullReviewActive
+                                  ? textPrimary
+                                  : textSecondary,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        InkWell(
-                          key: ValueKey('outline_restore_deferred_feat_${dItem.feat.id}'),
-                          onTap: () => widget.workbench.toggleProposedFeatureScope(
-                            dItem.beat.id,
-                            dItem.feat.id,
-                            true,
-                          ),
-                          child: Text(
-                            '+ Restore',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: accentEmerald,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                for (final ex in bp.explicitExclusions.take(4))
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    child: Row(
-                      children: [
-                        Text(
-                          '[CUT]',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w700,
-                            color: accentCrimson,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            ex,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 1.5),
+                          Text(
+                            'All ${bp.beats.length} Beats & Scope Budget',
                             style: GoogleFonts.inter(
                               fontSize: 10.5,
                               color: textMuted,
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-              ],
+                    Text(
+                      '${bp.totalIncludedHours}h',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: isFullReviewActive ? accentCyan : accentEmerald,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -643,16 +694,70 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     );
   }
 
-  Widget _buildOutlineCategoryHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
-      child: Text(
-        title,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: textMuted,
-          letterSpacing: 0.9,
+  Widget _buildFlushStepperRow({
+    required Key rowKey,
+    required String code,
+    Color? codeColor,
+    required String title,
+    required String trailingText,
+    required Color trailingColor,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: isActive ? bgHover : Colors.transparent,
+      child: InkWell(
+        key: rowKey,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10.5),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: isActive ? accentCyan : Colors.transparent,
+                width: 3,
+              ),
+              bottom: BorderSide(color: borderSubtle),
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 30,
+                child: Text(
+                  code,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w700,
+                    color: isActive
+                        ? accentCyan
+                        : (codeColor ?? textMuted),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    color: isActive ? textPrimary : textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                trailingText,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: isActive ? accentCyan : trailingColor,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -661,225 +766,29 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
   Widget _buildOutlineBeatNode(
     ReleaseBlueprint bp,
     int bIdx,
-    String nextVer,
   ) {
     final beat = bp.beats[bIdx];
-    final isSelectedBeat = _isStepByBeatMode && _activeBeatIndex == bIdx;
-    final isExpanded = _isBeatExpandedInOutline(bIdx);
+    final isSelectedBeat = _isStepByBeatMode &&
+        _activeStage2Section == 'beat' &&
+        _activeBeatIndex == bIdx;
     final beatNum = 'B${(bIdx + 1).toString().padLeft(2, '0')}';
+    final hasIncluded = beat.includedFeatures.isNotEmpty;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          key: ValueKey('stage2_beat_chip_$bIdx'),
-          onTap: () {
-            setState(() {
-              if (_isStepByBeatMode && _activeBeatIndex == bIdx) {
-                _toggleBeatExpandedInOutline(bIdx);
-              } else {
-                _activeBeatIndex = bIdx;
-                _isStepByBeatMode = true;
-                _collapsedOutlineBeatIndices.remove(bIdx);
-              }
-            });
-          },
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            decoration: BoxDecoration(
-              color: isSelectedBeat
-                  ? focalAccent.withValues(alpha: 0.12)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isSelectedBeat
-                    ? focalAccent.withValues(alpha: 0.45)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Row(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _toggleBeatExpandedInOutline(bIdx),
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: Text(
-                      isExpanded ? '▾' : '▸',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: isSelectedBeat ? focalAccent : textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-                Text(
-                  beatNum,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: isSelectedBeat ? FontWeight.w800 : FontWeight.w600,
-                    color: isSelectedBeat ? focalAccent : textMuted,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    beat.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      fontWeight: isSelectedBeat ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelectedBeat ? textPrimary : textSecondary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '${beat.includedFeatures.length}f · ${beat.totalIncludedHours}h',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: isSelectedBeat ? focalAccent : textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (isExpanded && beat.features.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(left: 14, bottom: 5),
-            padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: isSelectedBeat
-                      ? focalAccent.withValues(alpha: 0.35)
-                      : borderSubtle,
-                ),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int fIdx = 0; fIdx < beat.features.length; fIdx++)
-                  Builder(
-                    builder: (context) {
-                      final feat = beat.features[fIdx];
-                      final isFeatExpanded =
-                          _expandedOutlineFeatureIds.contains(feat.id);
-                      final allTasks = <String>[
-                        for (final cp in feat.checkpoints) ...cp.tasks,
-                      ];
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          InkWell(
-                            key: ValueKey('stage2_outline_feat_${feat.id}'),
-                            onTap: () {
-                              setState(() {
-                                _activeBeatIndex = bIdx;
-                                _isStepByBeatMode = true;
-                                if (isFeatExpanded) {
-                                  _expandedOutlineFeatureIds.remove(feat.id);
-                                } else {
-                                  _expandedOutlineFeatureIds.add(feat.id);
-                                }
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 3,
-                              ),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    isFeatExpanded ? '▾' : '▸',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      color: textMuted,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      '${feat.included ? "✓" : "↪"} ${feat.title}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10.5,
-                                        fontWeight: feat.included
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                        color: feat.included
-                                            ? textSecondary
-                                            : textMuted,
-                                        decoration: feat.included
-                                            ? TextDecoration.none
-                                            : TextDecoration.lineThrough,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    feat.included
-                                        ? '${feat.activeDeltaHours}h'
-                                        : '→ $nextVer',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                      color: feat.included
-                                          ? textMuted
-                                          : accentAmber,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          if (isFeatExpanded && allTasks.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                left: 14,
-                                bottom: 3,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (int tIdx = 0;
-                                      tIdx < allTasks.length;
-                                      tIdx++)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 1.5,
-                                      ),
-                                      child: Text(
-                                        '0${tIdx + 1} · ${allTasks[tIdx]}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 9,
-                                          color: textMuted,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-      ],
+    return _buildFlushStepperRow(
+      rowKey: ValueKey('stage2_beat_chip_$bIdx'),
+      code: beatNum,
+      title: beat.title,
+      trailingText:
+          '${beat.includedFeatures.length}f · ${beat.totalIncludedHours}h',
+      trailingColor: hasIncluded ? accentEmerald : textMuted,
+      isActive: isSelectedBeat,
+      onTap: () {
+        setState(() {
+          _activeBeatIndex = bIdx;
+          _isStepByBeatMode = true;
+          _activeStage2Section = 'beat';
+        });
+      },
     );
   }
 
@@ -894,101 +803,99 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
 
     return Container(
       key: const ValueKey('release_plan_gate_banner'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: bgSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderSubtle),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            spacing: 16,
-            runSpacing: 10,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'STAGE 2 · RELEASE PLAN GATE',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                          color: accentAmber,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Included · ${bp.totalDeferredFeatures} Queued for $nextVer',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    bp.releaseTitle,
-                    style: AppTheme.displayFont(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4,
-                      color: textPrimary,
-                    ),
-                  ),
-                ],
+          Container(
+            padding: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: borderSubtle),
               ),
-              InkWell(
-                key: const ValueKey('stage2_view_mode_toggle_btn'),
-                onTap: () {
-                  setState(() {
-                    _isStepByBeatMode = !_isStepByBeatMode;
-                    if (_activeBeatIndex >= bp.beats.length) {
-                      _activeBeatIndex = 0;
-                    }
-                  });
-                },
-                borderRadius: BorderRadius.circular(5),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: bgRecessed,
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(
-                      color: _isStepByBeatMode ? borderBright : borderSubtle,
+            ),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'STAGE 2 · RELEASE PLAN GATE',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.7,
+                            color: accentCyan,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Included · ${bp.totalDeferredFeatures} Queued for $nextVer',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: Text(
-                    _isStepByBeatMode
-                        ? '▯ Step-by-Beat'
-                        : '◫ Full Blueprint',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: textPrimary,
+                    const SizedBox(height: 5),
+                    Text(
+                      bp.releaseTitle,
+                      style: AppTheme.displayFont(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                        color: textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                InkWell(
+                  key: const ValueKey('stage2_view_mode_toggle_btn'),
+                  onTap: () {
+                    setState(() {
+                      _isStepByBeatMode = !_isStepByBeatMode;
+                      _activeStage2Section =
+                          _isStepByBeatMode ? 'beat' : 'full_review';
+                      if (_activeBeatIndex >= bp.beats.length) {
+                        _activeBeatIndex = 0;
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Text(
+                      _isStepByBeatMode
+                          ? '▯ Step-by-Beat'
+                          : '◫ Full Blueprint',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: accentCyan,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          // Live Visual Scope & Hour Budget Bar
+          const SizedBox(height: 12),
+          // Open Editorial Scope & Hour Budget Bar
           Container(
             key: const ValueKey('release_hour_budget_bar'),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.only(bottom: 14),
             decoration: BoxDecoration(
-              color: bgRecessed,
-              borderRadius: BorderRadius.circular(6),
+              border: Border(
+                bottom: BorderSide(color: borderSubtle),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -999,7 +906,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     Text(
                       'ACTIVE ${bp.releaseVersionTag.toUpperCase()} SCOPE BUDGET',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
                         color: textSecondary,
@@ -1010,18 +917,18 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                           ? '${includedHours}h Included · ${deferredHours}h Queued for $nextVer ↪'
                           : '${includedHours}h Included · 0h Deferred',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
                         color: accentEmerald,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 7),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(999),
                   child: Container(
-                    height: 5,
+                    height: 6,
                     color: bgSurface,
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
@@ -1035,16 +942,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
               ],
             ),
           ),
-          const SizedBox(height: 10),
-          // GOAL Callout Blockquote
+          const SizedBox(height: 14),
+          // GOAL Callout Left-Bar Blockquote
           _buildCalloutBar(
             badgeLabel: 'GOAL',
             statement: bp.goal,
-            accentColor: focalAccent,
+            accentColor: accentCyan,
             highlightMetrics: false,
           ),
-          const SizedBox(height: 6),
-          // DONE WHEN Callout Blockquote with Metric Highlighting
+          const SizedBox(height: 12),
+          // DONE WHEN Callout Left-Bar Blockquote with Metric Highlighting
           _buildCalloutBar(
             badgeLabel: 'DONE WHEN',
             statement: bp.doneWhen,
@@ -1063,70 +970,47 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     required bool highlightMetrics,
   }) {
     return Container(
+      padding: const EdgeInsets.only(left: 14, top: 4, bottom: 4, right: 8),
       decoration: BoxDecoration(
-        color: bgRecessed,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: borderSubtle),
+        border: Border(
+          left: BorderSide(
+            color: accentColor,
+            width: 3,
+          ),
+        ),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 3,
-              color: accentColor,
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 68,
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: highlightMetrics
-                            ? accentEmerald.withValues(alpha: 0.12)
-                            : bgSurface,
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(
-                          color: highlightMetrics
-                              ? accentEmerald.withValues(alpha: 0.45)
-                              : borderBright,
-                        ),
-                      ),
-                      child: Text(
-                        badgeLabel,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: highlightMetrics ? accentEmerald : textSecondary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: highlightMetrics
-                          ? _buildMetricHighlightedRichText(statement)
-                          : Text(
-                              statement,
-                              style: GoogleFonts.inter(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w500,
-                                height: 1.45,
-                                color: textPrimary,
-                              ),
-                            ),
-                    ),
-                  ],
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 78,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                badgeLabel,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  color: accentColor,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: highlightMetrics
+                ? _buildMetricHighlightedRichText(statement)
+                : Text(
+                    statement,
+                    style: GoogleFonts.inter(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      height: 1.48,
+                      color: textPrimary,
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -1145,24 +1029,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       }
       final metricText = match.group(0)!;
       spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(
-              color: accentEmerald.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: accentEmerald.withValues(alpha: 0.42)),
-            ),
-            child: Text(
-              metricText,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                color: textPrimary,
-              ),
-            ),
+        TextSpan(
+          text: metricText,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+            color: accentEmerald,
           ),
         ),
       );
@@ -1178,7 +1050,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
         style: GoogleFonts.inter(
           fontSize: 13.5,
           fontWeight: FontWeight.w500,
-          height: 1.45,
+          height: 1.48,
           color: textPrimary,
         ),
         children: spans,
@@ -1432,7 +1304,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(color: borderSubtle),
@@ -1448,11 +1320,11 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '01',
+                    '02',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: textSecondary.withValues(alpha: 0.85),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: accentCyan,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1468,7 +1340,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 ],
               ),
               Wrap(
-                spacing: 10,
+                spacing: 12,
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
@@ -1487,22 +1359,17 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         _collapseQuestions = !_collapseQuestions;
                       });
                     },
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                      decoration: BoxDecoration(
-                        color: bgSurface,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: borderBright),
-                      ),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
                       child: Text(
                         _collapseQuestions
                             ? 'Edit Decisions ▾'
                             : 'Collapse Decisions ▴',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: accentCyan,
                         ),
                       ),
                     ),
@@ -1512,25 +1379,25 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        // Compact Answered Decisions Summary Strip (always visible for quick glance)
+        const SizedBox(height: 12),
+        // Open Left-Bar Answered Decisions Summary Strip
         Container(
           key: const ValueKey('answered_decisions_strip'),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.only(left: 14, top: 4, bottom: 4),
           decoration: BoxDecoration(
-            color: bgSurface,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: borderSubtle),
+            border: Border(
+              left: BorderSide(color: accentEmerald, width: 3),
+            ),
           ),
           child: Wrap(
-            spacing: 8,
+            spacing: 12,
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 'DECISIONS (${bp.questions.length}/${bp.questions.length} ✓):',
                 style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
+                  fontSize: 10,
                   fontWeight: FontWeight.w800,
                   color: accentEmerald,
                 ),
@@ -1551,23 +1418,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                           });
                         }
                       },
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: bgRecessed,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: borderSubtle,
-                          ),
-                        ),
-                        child: Text(
-                          'Q${qIdx + 1}: ${parsed.title} ✓',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: textPrimary,
-                          ),
+                      child: Text(
+                        'Q${qIdx + 1}: ${parsed.title} ✓',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
                         ),
                       ),
                     );
@@ -1577,15 +1433,15 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           ),
         ),
         if (!_collapseQuestions) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           for (int qIdx = 0; qIdx < bp.questions.length; qIdx++) ...[
             Container(
-              margin: EdgeInsets.only(bottom: qIdx < bp.questions.length - 1 ? 12 : 0),
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.only(bottom: 16),
+              margin: EdgeInsets.only(bottom: qIdx < bp.questions.length - 1 ? 16 : 0),
               decoration: BoxDecoration(
-                color: bgRecessed,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: borderSubtle),
+                border: Border(
+                  bottom: BorderSide(color: borderSubtle),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1597,7 +1453,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         child: Text(
                           bp.questions[qIdx].question,
                           style: AppTheme.displayFont(
-                            fontSize: 14,
+                            fontSize: 15,
                             fontWeight: FontWeight.w700,
                             color: textPrimary,
                           ),
@@ -1678,21 +1534,26 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
 
     return Material(
       color: isSelected ? bgHover : bgSurface,
-      borderRadius: BorderRadius.circular(7),
+      borderRadius: BorderRadius.circular(6),
       child: InkWell(
         key: ValueKey('release_question_card_${qIdx}_$optIdx'),
         onTap: () => widget.workbench.selectReleaseQuestionOption(
           question.id,
           optionText,
         ),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(7),
-            border: Border.all(
-              color: isSelected ? textPrimary : borderSubtle,
-              width: isSelected ? 1.5 : 1.0,
+            borderRadius: BorderRadius.circular(6),
+            border: Border(
+              left: BorderSide(
+                color: isSelected ? accentEmerald : borderSubtle,
+                width: 3,
+              ),
+              top: BorderSide(color: borderSubtle),
+              right: BorderSide(color: borderSubtle),
+              bottom: BorderSide(color: borderSubtle),
             ),
           ),
           child: Column(
@@ -1705,63 +1566,21 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        width: 15,
-                        height: 15,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected ? focalAccent : Colors.transparent,
-                          border: Border.all(
-                            color: isSelected ? focalAccent : textMuted,
-                            width: 1.4,
-                          ),
+                      Text(
+                        isSelected ? '☑ SELECTED' : '☐ OPTION 0${optIdx + 1}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: isSelected ? accentEmerald : textSecondary,
                         ),
-                        child: isSelected
-                            ? Container(
-                                width: 5,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: focalAccentFg,
-                                ),
-                              )
-                            : null,
                       ),
                       if (isFirst)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: accentEmerald.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: accentEmerald.withValues(alpha: 0.42),
-                            ),
-                          ),
-                          child: Text(
-                            'RECOMMENDED',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700,
-                              color: accentEmerald,
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: bgRecessed,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(color: borderSubtle),
-                          ),
-                          child: Text(
-                            'OPTION 0${optIdx + 1}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700,
-                              color: textSecondary,
-                            ),
+                        Text(
+                          'RECOMMENDED',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: accentCyan,
                           ),
                         ),
                     ],
@@ -1806,7 +1625,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(color: borderSubtle),
@@ -1822,34 +1641,25 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '02',
+                    'STAGE 2 · CORE LOOP BEATS & PLAYABLE FEATURES',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: textSecondary.withValues(alpha: 0.85),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'CORE LOOP BEATS & PLAYABLE FEATURES',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 13.5,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: textPrimary,
+                      letterSpacing: 0.7,
+                      color: accentCyan,
                     ),
                   ),
                 ],
               ),
               Wrap(
-                spacing: 10,
+                spacing: 14,
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     'Uncheck any feature to queue for $nextVer ↪',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: textSecondary,
                     ),
@@ -1866,29 +1676,46 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                       });
                     },
                     borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                      decoration: BoxDecoration(
-                        color: bgSurface,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: borderSubtle),
-                      ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
                       child: Text(
                         allSpecsExpanded ? 'Collapse All Specs ▴' : 'Expand All Specs ▾',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: accentCyan,
                         ),
                       ),
                     ),
                   ),
+                  if (_isStepByBeatMode)
+                    InkWell(
+                      key: const ValueKey('stage2_view_mode_toggle_btn'),
+                      onTap: () {
+                        setState(() {
+                          _isStepByBeatMode = false;
+                          _activeStage2Section = 'full_review';
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+                        child: Text(
+                          '◫ Full Blueprint',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         if (_isStepByBeatMode && bp.beats.isNotEmpty) ...[
           Builder(
             builder: (context) {
@@ -1898,7 +1725,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildBeatCard(bp, bp.beats[safeIdx], safeIdx),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1906,23 +1733,24 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         key: const ValueKey('stage2_prev_beat_btn'),
                         onTap: safeIdx > 0
                             ? () => setState(() => _activeBeatIndex = safeIdx - 1)
-                            : null,
-                        borderRadius: BorderRadius.circular(5),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: borderSubtle),
-                          ),
+                            : () => setState(() {
+                                  if (bp.questions.isNotEmpty) {
+                                    _activeStage2Section = 'questions';
+                                    _collapseQuestions = false;
+                                  } else {
+                                    _activeStage2Section = 'goal';
+                                  }
+                                }),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                           child: Text(
                             safeIdx > 0
                                 ? '‹ Prev Beat: B${safeIdx.toString().padLeft(2, '0')} ${bp.beats[safeIdx - 1].title}'
-                                : '‹ First Beat',
+                                : '‹ Prev: Playtest Priorities',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: safeIdx > 0 ? textSecondary : textMuted,
+                              color: textSecondary,
                             ),
                           ),
                         ),
@@ -1932,32 +1760,27 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: textSecondary,
+                          color: accentCyan,
                         ),
                       ),
                       InkWell(
                         key: const ValueKey('stage2_next_beat_btn'),
                         onTap: safeIdx < bp.beats.length - 1
                             ? () => setState(() => _activeBeatIndex = safeIdx + 1)
-                            : () => setState(() => _isStepByBeatMode = false),
-                        borderRadius: BorderRadius.circular(5),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                              color: borderBright,
-                            ),
-                          ),
+                            : () => setState(() {
+                                  _isStepByBeatMode = false;
+                                  _activeStage2Section = 'full_review';
+                                }),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                           child: Text(
                             safeIdx < bp.beats.length - 1
                                 ? 'Next Beat: B${(safeIdx + 2).toString().padLeft(2, '0')} ${bp.beats[safeIdx + 1].title} →'
-                                : 'View Full Blueprint ◫',
+                                : 'View Full Blueprint ◫ →',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w800,
-                              color: textPrimary,
+                              color: accentCyan,
                             ),
                           ),
                         ),
@@ -1971,17 +1794,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
         ] else
           for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) ...[
             _buildBeatCard(bp, bp.beats[bIdx], bIdx),
-            if (bIdx < bp.beats.length - 1)
-              Row(
-                children: [
-                  const SizedBox(width: 47),
-                  Container(
-                    width: 2,
-                    height: 10,
-                    color: borderBright,
-                  ),
-                ],
-              ),
+            if (bIdx < bp.beats.length - 1) const SizedBox(height: 22),
           ],
       ],
     );
@@ -2004,17 +1817,18 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       widget.workbench.addProposedFeatureToBeat(beat.id, text);
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgRecessed,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Open Editorial Beat Header with 1px Bottom Hairline
+        Container(
+          padding: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: borderSubtle),
+            ),
+          ),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               InkWell(
@@ -2025,37 +1839,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 ),
                 borderRadius: BorderRadius.circular(4),
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 2, right: 8),
+                  padding: const EdgeInsets.only(top: 3, right: 10),
                   child: Icon(
                     allIncluded
                         ? Icons.check_box_rounded
                         : Icons.check_box_outline_blank_rounded,
-                    size: 17,
+                    size: 18,
                     color: allIncluded ? accentEmerald : textMuted,
                   ),
                 ),
               ),
-              Container(
-                width: 68,
-                padding: const EdgeInsets.symmetric(vertical: 2.5),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: bgSurface,
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: borderBright,
-                  ),
-                ),
-                child: Text(
-                  beatCode,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: textPrimary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2064,29 +1857,36 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Text(
-                            beat.title,
-                            style: AppTheme.displayFont(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary,
-                            ),
+                          child: Row(
+                            children: [
+                              Text(
+                                beatCode,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: accentCyan,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  beat.title,
+                                  style: AppTheme.displayFont(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: borderSubtle),
-                          ),
-                          child: Text(
-                            '${beat.includedFeatures.length} Features · ${beat.totalIncludedHours}h',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: textSecondary,
-                            ),
+                        Text(
+                          '${beat.includedFeatures.length} Features · ${beat.totalIncludedHours}h',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: accentEmerald,
                           ),
                         ),
                       ],
@@ -2095,7 +1895,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     Text(
                       beat.goal,
                       style: GoogleFonts.inter(
-                        fontSize: 12.5,
+                        fontSize: 13,
                         color: textSecondary,
                       ),
                     ),
@@ -2104,122 +1904,67 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // 2-Column Feature Playing Cards when Beat has 2+ features and none are expanded
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final hasAnyExpanded = beat.features.any(
-                (f) => _expandedFeatureIds.contains(f.id),
-              );
-              final useTwoCol = constraints.maxWidth >= 1060 &&
-                  beat.features.length >= 2 &&
-                  !hasAnyExpanded;
-              if (!useTwoCol) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (int fIdx = 0; fIdx < beat.features.length; fIdx++) ...[
-                      _buildFeatureToggleRow(bp, beat, beat.features[fIdx]),
-                      if (fIdx < beat.features.length - 1) const SizedBox(height: 7),
-                    ],
-                  ],
-                );
-              }
-              final rows = <Widget>[];
-              for (int i = 0; i < beat.features.length; i += 2) {
-                final hasSecond = i + 1 < beat.features.length;
-                rows.add(
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: _buildFeatureToggleRow(
-                            bp,
-                            beat,
-                            beat.features[i],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: hasSecond
-                              ? _buildFeatureToggleRow(
-                                  bp,
-                                  beat,
-                                  beat.features[i + 1],
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-                if (i + 2 < beat.features.length) {
-                  rows.add(const SizedBox(height: 8));
-                }
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: rows,
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          // Inline "+ Add Feature to Beat" input bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-            decoration: BoxDecoration(
-              color: bgSurface,
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: borderSubtle),
+        ),
+
+        // Open Hairline-Divided Feature Rows (No Outer 4-Sided Card Boxes)
+        for (int fIdx = 0; fIdx < beat.features.length; fIdx++)
+          _buildFeatureToggleRow(bp, beat, beat.features[fIdx]),
+
+        const SizedBox(height: 10),
+        // Inline "+ Add Feature to Beat" input bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: borderSubtle),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.add_rounded, size: 15, color: textMuted),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    key: ValueKey('add_beat_feature_input_${beat.id}'),
-                    controller: beatCtrl,
-                    onSubmitted: (_) => submitNewBeatFeature(),
-                    style: GoogleFonts.inter(
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.add_rounded, size: 15, color: textMuted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  key: ValueKey('add_beat_feature_input_${beat.id}'),
+                  controller: beatCtrl,
+                  onSubmitted: (_) => submitNewBeatFeature(),
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 7),
+                    hintText:
+                        'Add playable feature to $beatCode (e.g., Slide Boost & Cancel)...',
+                    hintStyle: GoogleFonts.inter(
                       fontSize: 12,
-                      color: textPrimary,
-                    ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 7),
-                      hintText:
-                          'Add playable feature to $beatCode (e.g., Slide Boost & Cancel)...',
-                      hintStyle: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: textMuted,
-                      ),
+                      color: textMuted,
                     ),
                   ),
                 ),
-                InkWell(
-                  key: ValueKey('add_beat_feature_btn_${beat.id}'),
-                  onTap: submitNewBeatFeature,
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    child: Text(
-                      '+ Add Feature (4h)',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: textPrimary,
-                      ),
+              ),
+              InkWell(
+                key: ValueKey('add_beat_feature_btn_${beat.id}'),
+                onTap: submitNewBeatFeature,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  child: Text(
+                    '+ Add Feature (4h)',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: accentCyan,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -2241,259 +1986,198 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: isIncluded ? bgSurface : bgRecessed.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isIncluded ? borderBright : borderSubtle,
+        border: Border(
+          bottom: BorderSide(color: borderSubtle),
         ),
       ),
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InkWell(
-                  key: ValueKey('toggle_feat_${feat.id}'),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                key: ValueKey('toggle_feat_${feat.id}'),
+                onTap: () => widget.workbench.toggleProposedFeatureScope(
+                  beat.id,
+                  feat.id,
+                  !feat.included,
+                ),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 1, right: 10),
+                  child: Icon(
+                    isIncluded
+                        ? Icons.check_box_rounded
+                        : Icons.check_box_outline_blank_rounded,
+                    size: 17,
+                    color: isIncluded ? accentEmerald : textMuted,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: InkWell(
                   onTap: () => widget.workbench.toggleProposedFeatureScope(
                     beat.id,
                     feat.id,
                     !feat.included,
                   ),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 1, right: 2),
-                    child: Icon(
-                      isIncluded
-                          ? Icons.check_box_rounded
-                          : Icons.check_box_outline_blank_rounded,
-                      size: 16,
-                      color: isIncluded ? accentEmerald : textMuted,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => widget.workbench.toggleProposedFeatureScope(
-                      beat.id,
-                      feat.id,
-                      !feat.included,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              feat.title,
-                              style: AppTheme.displayFont(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
-                                color: isIncluded ? textPrimary : textMuted,
-                              ).copyWith(
-                                decoration: isIncluded
-                                    ? TextDecoration.none
-                                    : TextDecoration.lineThrough,
-                              ),
-                            ),
-                            _buildLifecycleBadge(feat, bp.releaseVersionTag),
-                            Container(
-                              key: ValueKey('stage2_dep_tier_${feat.id}'),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: bgRecessed,
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: borderSubtle,
-                                ),
-                              ),
-                              child: Text(
-                                depTier.shortBadge,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ),
-                            if (feat.lifecycle == FeatureLifecycleStatus.upgrade)
-                              Container(
-                                key: ValueKey('stage2_upgrade_diff_${feat.id}'),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 1.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: accentEmerald.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                    color: accentEmerald.withValues(alpha: 0.4),
-                                  ),
-                                ),
-                                child: Text(
-                                  '${feat.originVersion} ✓ → +${feat.checkpoints.fold<int>(0, (sum, c) => sum + c.tasks.length)} ${bp.releaseVersionTag} Tasks',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 8.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: accentEmerald,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          !isIncluded &&
-                                  feat.lifecycle !=
-                                      FeatureLifecycleStatus.superseded
-                              ? '↪ Queued for $nextVer Release Gate · ${feat.goal}'
-                              : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                  ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
-                                  : feat.goal),
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            height: 1.45,
-                            color: isIncluded ? textSecondary : textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (feat.checkpoints.isNotEmpty) ...[
-                  Builder(
-                    builder: (context) {
-                      final totalTasksCount = feat.checkpoints.fold<int>(
-                        0,
-                        (sum, c) => sum + c.tasks.length,
-                      );
-                      return InkWell(
-                        key: ValueKey('inspect_feat_${feat.id}'),
-                        onTap: () {
-                          setState(() {
-                            if (isExpanded) {
-                              _expandedFeatureIds.remove(feat.id);
-                            } else {
-                              _expandedFeatureIds.add(feat.id);
-                            }
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: isExpanded
-                                ? bgHover
-                                : bgRecessed,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: isExpanded
-                                  ? borderBright
-                                  : borderSubtle,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            feat.title,
+                            style: AppTheme.displayFont(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: isIncluded ? textPrimary : textMuted,
+                            ).copyWith(
+                              decoration: isIncluded
+                                  ? TextDecoration.none
+                                  : TextDecoration.lineThrough,
                             ),
                           ),
-                          child: Text(
-                            '$totalTasksCount Tasks · ${feat.tuningParams.length} Tune ${isExpanded ? "▴" : "▾"}',
+                          _buildLifecycleBadge(feat, bp.releaseVersionTag),
+                          Text(
+                            depTier.shortBadge,
+                            key: ValueKey('stage2_dep_tier_${feat.id}'),
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              color: isExpanded ? textPrimary : textSecondary,
+                              fontWeight: FontWeight.w800,
+                              color: accentCyan,
                             ),
                           ),
+                          if (feat.lifecycle == FeatureLifecycleStatus.upgrade)
+                            Text(
+                              '${feat.originVersion} ✓ → +${feat.checkpoints.fold<int>(0, (sum, c) => sum + c.tasks.length)} ${bp.releaseVersionTag} Tasks',
+                              key: ValueKey('stage2_upgrade_diff_${feat.id}'),
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: accentEmerald,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        !isIncluded &&
+                                feat.lifecycle !=
+                                    FeatureLifecycleStatus.superseded
+                            ? '↪ Queued for $nextVer Release Gate · ${feat.goal}'
+                            : (feat.lifecycle == FeatureLifecycleStatus.stable
+                                ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
+                                : feat.goal),
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          height: 1.45,
+                          color: isIncluded ? textSecondary : textMuted,
                         ),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                InkWell(
-                  key: ValueKey('edit_stage2_feat_${feat.id}'),
-                  onTap: () => _showEditProposedFeatureDialog(beat.id, feat),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: bgRecessed,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: borderSubtle),
-                    ),
-                    child: Text(
-                      'Edit ✎',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: textSecondary,
                       ),
-                    ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                InkWell(
-                  key: ValueKey('edit_stage2_feat_hours_${feat.id}'),
-                  onTap: () => _showEditProposedFeatureDialog(beat.id, feat),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    key: !isIncluded
-                        ? ValueKey('stage2_queued_badge_${feat.id}')
-                        : null,
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: !isIncluded
-                          ? accentAmber.withValues(alpha: 0.14)
-                          : (feat.lifecycle == FeatureLifecycleStatus.stable
-                              ? accentEmerald.withValues(alpha: 0.12)
-                              : bgRecessed),
+              ),
+              const SizedBox(width: 8),
+              if (feat.checkpoints.isNotEmpty) ...[
+                Builder(
+                  builder: (context) {
+                    final totalTasksCount = feat.checkpoints.fold<int>(
+                      0,
+                      (sum, c) => sum + c.tasks.length,
+                    );
+                    return InkWell(
+                      key: ValueKey('inspect_feat_${feat.id}'),
+                      onTap: () {
+                        setState(() {
+                          if (isExpanded) {
+                            _expandedFeatureIds.remove(feat.id);
+                          } else {
+                            _expandedFeatureIds.add(feat.id);
+                          }
+                        });
+                      },
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: !isIncluded
-                            ? accentAmber.withValues(alpha: 0.45)
-                            : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                ? accentEmerald.withValues(alpha: 0.42)
-                                : borderSubtle),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        child: Text(
+                          '$totalTasksCount Tasks · ${feat.tuningParams.length} Tune ${isExpanded ? "▴" : "▾"}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: isExpanded ? accentCyan : textSecondary,
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      !isIncluded
-                          ? (feat.lifecycle == FeatureLifecycleStatus.superseded
-                              ? 'ARCHIVED'
-                              : 'QUEUED FOR ${nextVer.toUpperCase()} ↪')
-                          : (feat.lifecycle == FeatureLifecycleStatus.stable
-                              ? 'STABLE · 0h'
-                              : '${feat.activeDeltaHours}h'),
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        color: !isIncluded
-                            ? accentAmber
-                            : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                ? accentEmerald
-                                : textPrimary),
-                      ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
+                const SizedBox(width: 8),
               ],
-            ),
+              InkWell(
+                key: ValueKey('edit_stage2_feat_${feat.id}'),
+                onTap: () => _showEditProposedFeatureDialog(beat.id, feat),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                  child: Text(
+                    'Edit ✎',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                key: ValueKey('edit_stage2_feat_hours_${feat.id}'),
+                onTap: () => _showEditProposedFeatureDialog(beat.id, feat),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  key: !isIncluded
+                      ? ValueKey('stage2_queued_badge_${feat.id}')
+                      : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2.5),
+                  child: Text(
+                    !isIncluded
+                        ? (feat.lifecycle == FeatureLifecycleStatus.superseded
+                            ? 'ARCHIVED'
+                            : 'QUEUED FOR ${nextVer.toUpperCase()} ↪')
+                        : (feat.lifecycle == FeatureLifecycleStatus.stable
+                            ? 'STABLE · 0h'
+                            : '${feat.activeDeltaHours}h'),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: !isIncluded
+                          ? accentAmber
+                          : (feat.lifecycle == FeatureLifecycleStatus.stable
+                              ? accentEmerald
+                              : textPrimary),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
+          // ── 2px Vertical Spec Thread (No Box-Inside-Box Drawer) ──
           if (isExpanded)
             Container(
               key: ValueKey('inspect_feat_drawer_${feat.id}'),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              margin: const EdgeInsets.only(left: 27, top: 10),
+              padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
               decoration: BoxDecoration(
-                color: bgRecessed,
-                border: Border(top: BorderSide(color: borderSubtle)),
+                border: Border(
+                  left: BorderSide(color: borderBright, width: 2),
+                ),
               ),
               child: Builder(
                 builder: (context) {
@@ -2504,20 +2188,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: accentEmerald.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(3),
-                              border: Border.all(
-                                color: accentEmerald.withValues(alpha: 0.4),
-                              ),
-                            ),
+                          SizedBox(
+                            width: 148,
                             child: Text(
                               'FEATURE GOAL & PLAYTEST',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 8.5,
+                                fontSize: 9.5,
                                 fontWeight: FontWeight.w800,
                                 color: accentEmerald,
                               ),
@@ -2528,7 +2206,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                             child: Text(
                               feat.doneWhen,
                               style: GoogleFonts.inter(
-                                fontSize: 11.5,
+                                fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
                                 color: textPrimary,
                               ),
@@ -2537,92 +2215,64 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         ],
                       ),
                       if (allTasks.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 8,
-                          children: [
-                            for (int tIdx = 0; tIdx < allTasks.length; tIdx++)
-                              Container(
-                                width: 320,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: bgSurface,
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(color: borderSubtle),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${(tIdx + 1).toString().padLeft(2, '0')} · ',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        color: accentAmber,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        allTasks[tIdx],
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: textPrimary,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                        const SizedBox(height: 8),
+                        for (int tIdx = 0; tIdx < allTasks.length; tIdx++)
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 5),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: borderSubtle.withValues(alpha: 0.7),
                                 ),
                               ),
-                          ],
-                        ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${(tIdx + 1).toString().padLeft(2, '0')} · ',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: accentCyan,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    allTasks[tIdx],
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                       if (feat.tuningParams.isNotEmpty || feat.edgeCases.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Wrap(
-                          spacing: 6,
-                          runSpacing: 5,
+                          spacing: 14,
+                          runSpacing: 6,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             for (final t in feat.tuningParams)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: bgSurface,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                    color: borderSubtle,
-                                  ),
-                                ),
-                                child: Text(
-                                  '⚙ $t',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: textPrimary,
-                                  ),
+                              Text(
+                                '⚙ $t',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: accentViolet,
                                 ),
                               ),
                             for (final e in feat.edgeCases)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: bgSurface,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                    color: borderSubtle,
-                                  ),
-                                ),
-                                child: Text(
-                                  '⚠ $e',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    color: textSecondary,
-                                  ),
+                              Text(
+                                '⚠ $e',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: accentAmber,
                                 ),
                               ),
                           ],
@@ -2644,65 +2294,43 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
   ) {
     String label;
     Color textColor;
-    Color bgColor;
-    Color borderColor;
     switch (feat.lifecycle) {
       case FeatureLifecycleStatus.stable:
         label = 'STABLE · ${feat.originVersion} ✓';
         textColor = accentEmerald;
-        bgColor = accentEmerald.withValues(alpha: 0.14);
-        borderColor = accentEmerald.withValues(alpha: 0.42);
         break;
       case FeatureLifecycleStatus.upgrade:
         label = '${feat.originVersion} → $releaseVersionTag';
         textColor = accentAmber;
-        bgColor = accentAmber.withValues(alpha: 0.14);
-        borderColor = accentAmber.withValues(alpha: 0.42);
         break;
       case FeatureLifecycleStatus.superseded:
         label = 'SUPERSEDED (${feat.originVersion})';
         textColor = textMuted;
-        bgColor = bgRecessed;
-        borderColor = borderSubtle;
         break;
       case FeatureLifecycleStatus.newFeature:
         label = 'NEW $releaseVersionTag';
-        textColor = textSecondary;
-        bgColor = bgRecessed;
-        borderColor = borderSubtle;
+        textColor = accentCyan;
         break;
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: borderColor, width: 0.8),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w800,
-          color: textColor,
-        ),
+    return Text(
+      label,
+      style: GoogleFonts.jetBrainsMono(
+        fontSize: 9.5,
+        fontWeight: FontWeight.w800,
+        color: textColor,
       ),
     );
   }
 
   Widget _buildOutOfScopeSummarySection(ReleaseBlueprint bp) {
     final nextVer = _nextReleaseVersionTag(bp.releaseVersionTag);
-    // Collect explicit exclusions + deferred features with their beatId/featId for 1-click Restore
-    final items = <({String text, String? beatId, String? featId})>[
-      for (final ex in bp.explicitExclusions)
-        (text: ex, beatId: null, featId: null),
-    ];
+    final deferredItems = <({String text, String beatId, String featId})>[];
     for (final beat in bp.beats) {
       for (final deferred in beat.deferredFeatures) {
         final label = '${deferred.title} (queued from ${beat.title})';
-        if (!items.any((it) => it.text == label)) {
-          items.add((
+        if (!deferredItems.any((it) => it.text == label)) {
+          deferredItems.add((
             text: label,
             beatId: beat.id,
             featId: deferred.id,
@@ -2711,144 +2339,168 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       }
     }
 
-    Widget buildOutOfScopeCard(int idx) {
-      final item = items[idx];
-      final isDeferredFeat = item.beatId != null && item.featId != null;
-
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: bgRecessed.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isDeferredFeat
-                ? accentAmber.withValues(alpha: 0.38)
-                : borderSubtle,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: isDeferredFeat
-                    ? accentAmber.withValues(alpha: 0.14)
-                    : accentCrimson.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(
-                  color: isDeferredFeat
-                      ? accentAmber.withValues(alpha: 0.45)
-                      : accentCrimson.withValues(alpha: 0.42),
-                ),
-              ),
-              child: Text(
-                isDeferredFeat ? 'QUEUED FOR ${nextVer.toUpperCase()} ↪' : 'CUT',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  color: isDeferredFeat ? accentAmber : accentCrimson,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                item.text,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  fontWeight: isDeferredFeat ? FontWeight.w600 : FontWeight.w400,
-                  color: isDeferredFeat
-                      ? textPrimary
-                      : textSecondary.withValues(alpha: 0.85),
-                ),
-              ),
-            ),
-            if (isDeferredFeat) ...[
-              const SizedBox(width: 8),
-              InkWell(
-                key: ValueKey('restore_deferred_feat_${item.featId}'),
-                onTap: () => widget.workbench.toggleProposedFeatureScope(
-                  item.beatId!,
-                  item.featId!,
-                  true,
-                ),
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: bgSurface,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: borderBright),
-                  ),
-                  child: Text(
-                    '+ Restore',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: accentEmerald,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSectionHeader(
-          numLabel: '03',
-          title: 'Queued for $nextVer & Out of Scope Exclusions',
-          trailingMeta: '${items.length} Items',
+          numLabel: '↪',
+          title: 'Queued for $nextVer & Permanent Exclusions',
+          trailingMeta:
+              '${deferredItems.length} Queued · ${bp.explicitExclusions.length} Cuts',
         ),
-        const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final useTwoCol = constraints.maxWidth >= 620 && items.length > 1;
-            if (!useTwoCol) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int i = 0; i < items.length; i++) ...[
-                    buildOutOfScopeCard(i),
-                    if (i < items.length - 1) const SizedBox(height: 7),
-                  ],
-                ],
-              );
-            }
-            final rows = <Widget>[];
-            for (int i = 0; i < items.length; i += 2) {
-              final hasSecond = i + 1 < items.length;
-              rows.add(
-                IntrinsicHeight(
+        const SizedBox(height: 14),
+        // Open 3px Amber Left-Bar Section: Saved for Next Release Gate
+        Container(
+          padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: accentAmber, width: 3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '↪ SAVED FOR ${nextVer.toUpperCase()} RELEASE GATE (NOT DELETED)',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: accentAmber,
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (deferredItems.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Text(
+                    'All proposed features are currently included in ${bp.releaseVersionTag}. Uncheck any feature in a Beat to queue it for $nextVer.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+              for (final item in deferredItems)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: borderSubtle),
+                    ),
+                  ),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: buildOutOfScopeCard(i)),
-                      const SizedBox(width: 8),
+                      Text(
+                        'QUEUED FOR ${nextVer.toUpperCase()} ↪',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: accentAmber,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: hasSecond
-                            ? buildOutOfScopeCard(i + 1)
-                            : const SizedBox.shrink(),
+                        child: Text(
+                          item.text,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        key: ValueKey('restore_deferred_feat_${item.featId}'),
+                        onTap: () => widget.workbench.toggleProposedFeatureScope(
+                          item.beatId,
+                          item.featId,
+                          true,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            '+ Restore',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: accentEmerald,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              );
-              if (i + 2 < items.length) {
-                rows.add(const SizedBox(height: 8));
-              }
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: rows,
-            );
-          },
+            ],
+          ),
         ),
+        if (bp.explicitExclusions.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          // Open 3px Rose Left-Bar Section: Permanent Concept Exclusions
+          Container(
+            padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: accentCrimson, width: 3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '✕ PERMANENT CONCEPT EXCLUSIONS (NEVER BUILT)',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                    color: accentCrimson,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final ex in bp.explicitExclusions)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 52,
+                          child: Text(
+                            '✕ CUT',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: accentCrimson,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            ex,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -62,37 +62,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   int? _hoveredReviewSectionIdx;
   int? _inlineEditingSectionIdx;
 
-  /// Stage 1 Left Outliner Sidebar expand/collapse state.
-  final Set<int> _expandedOutlineSections = {};
-  final Set<int> _collapsedOutlineSections = {};
-  final Map<String, int> _lastOutlineTapMsByKey = {};
-
-  bool _isDoubleClickOnOutlineItem(String key) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final prev = _lastOutlineTapMsByKey[key];
-    _lastOutlineTapMsByKey[key] = now;
-    return prev != null && (now - prev) <= 340;
-  }
-
-  bool _isSectionExpandedInOutline(int sectionIdx) {
-    if (_expandedOutlineSections.contains(sectionIdx)) return true;
-    if (_collapsedOutlineSections.contains(sectionIdx)) return false;
-    return _currentStep == sectionIdx;
-  }
-
-  void _toggleSectionExpandedInOutline(int sectionIdx) {
-    final currentlyExpanded = _isSectionExpandedInOutline(sectionIdx);
-    setState(() {
-      if (currentlyExpanded) {
-        _expandedOutlineSections.remove(sectionIdx);
-        _collapsedOutlineSections.add(sectionIdx);
-      } else {
-        _collapsedOutlineSections.remove(sectionIdx);
-        _expandedOutlineSections.add(sectionIdx);
-      }
-    });
-  }
-
   @override
   bool get isDark => widget.workbench.isDark;
 
@@ -1835,15 +1804,17 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     );
   }
 
-  // ── Unified 308px Left Concept Outliner Rail (`01 Goal` ... `09 Prototype Release` + `10 Full Review`) ─
+  // ── Unified 308px Left Concept Stepper (`01 Goal` ... `09 Prototype Release` + `10 Full Review`) ─
   Widget _buildLeftConceptOutlinerRail(ProjectConceptBlueprint draft) {
     final verifiedCount =
         _visitedSteps.where((idx) => idx >= 0 && idx < _sections.length).length;
+    final viewSummary = draft.gameSpec.isNotEmpty ? draft.gameSpec.first : '2D/3D';
+    final engineSummary = draft.techSpec.isNotEmpty ? draft.techSpec.first : 'Engine';
 
     return Container(
       key: const ValueKey('stage1_left_outliner_rail'),
       decoration: BoxDecoration(
-        color: bgSurface,
+        color: bgRecessed,
         border: Border(
           right: BorderSide(color: borderSubtle),
           bottom: BorderSide(color: borderSubtle),
@@ -1852,381 +1823,266 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Single-Row Outliner Header (matches Stage 2 & Stage 3 grammar)
+          // Flush Top Snapshot Header (Zero 4-sided nested boxes — separated by 1px bottom hairline)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 11),
             decoration: BoxDecoration(
-              color: bgRecessed,
               border: Border(bottom: BorderSide(color: borderSubtle)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: focalAccent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: focalAccent.withValues(alpha: 0.40),
-                    ),
-                  ),
-                  child: Text(
-                    'CONCEPT',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: focalAccent,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '$verifiedCount/9 Verified',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: accentEmerald,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                InkWell(
-                  key: const ValueKey('new_spark_reset_btn'),
-                  onTap: () => widget.workbench.resetConceptToSpark(),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    child: Text(
-                      '+ New Project',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: accentAmber,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        draft.title.trim().isEmpty ? 'Concept Blueprint' : draft.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$verifiedCount/9 ✓',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: accentEmerald,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '$viewSummary · $engineSummary · ${draft.coreLoopBeats.length} Beats',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: textMuted,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      key: const ValueKey('new_spark_reset_btn'),
+                      onTap: () => widget.workbench.resetConceptToSpark(),
+                      borderRadius: BorderRadius.circular(3),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Text(
+                          '+ New Project',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: accentCyan,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Scrollable Outliner Tree grouped into 4 clear categories
+          // Flat 9-Step Section List (Flush rows, 3px Cyan active left bar, zero nested boxes)
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 14),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               children: [
-                _buildOutlineCategoryHeader('VISION & SPECS'),
-                for (final i in const [0, 1, 2])
+                for (int i = 0; i < _sections.length; i++)
                   _buildOutlineSectionNode(draft, i),
-                const SizedBox(height: 6),
-                _buildOutlineCategoryHeader('PILLARS & GUARDRAILS'),
-                for (final i in const [3, 4])
-                  _buildOutlineSectionNode(draft, i),
-                const SizedBox(height: 6),
-                _buildOutlineCategoryHeader('LOOP & SCOPE'),
-                for (final i in const [5, 6, 7])
-                  _buildOutlineSectionNode(draft, i),
-                const SizedBox(height: 6),
-                _buildOutlineCategoryHeader('RELEASE & SIGN-OFF'),
-                _buildOutlineSectionNode(draft, 8),
-                const SizedBox(height: 4),
-                _buildFinalReviewOutlineNode(verifiedCount: verifiedCount),
               ],
             ),
           ),
+
+          // Flush Bottom Step 10: Full Concept Review (Separated by 1px top hairline)
+          _buildFinalReviewOutlineNode(verifiedCount: verifiedCount),
         ],
       ),
     );
   }
 
-  Widget _buildOutlineCategoryHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
-      child: Text(
-        title,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          color: textMuted,
-          letterSpacing: 0.9,
-        ),
-      ),
-    );
-  }
-
-  List<String> _sectionPreviewItems(ProjectConceptBlueprint draft, int index) {
+  String _sectionOutlineMetaBadge(ProjectConceptBlueprint draft, int index) {
     switch (index) {
       case 0:
-        return draft.goal.trim().isEmpty ? const [] : [draft.goal.trim()];
+        return draft.goal.trim().isEmpty ? 'Draft' : 'Locked';
       case 1:
-        return draft.gameSpec;
+        return draft.gameSpec.isNotEmpty ? draft.gameSpec.first : 'Spec';
       case 2:
-        return draft.techSpec;
+        return draft.techSpec.isNotEmpty ? draft.techSpec.first : 'Tech';
       case 3:
-        return draft.designPillars;
+        return '${draft.designPillars.length} Pillars';
       case 4:
-        return draft.tradeOffs;
+        return '${draft.tradeOffs.length} Rules';
       case 5:
-        return draft.coreLoopBeats;
+        return '${draft.coreLoopBeats.length} Beats';
       case 6:
-        return draft.exclusions;
+        return '${draft.exclusions.length} Cuts';
       case 7:
-        return draft.doneWhen.trim().isEmpty
-            ? const []
-            : draft.doneWhen
-                .split(RegExp(r'\n|•'))
-                .map((s) => s.trim())
-                .where((s) => s.isNotEmpty)
-                .toList();
+        return 'Playtest';
       case 8:
-        return [
-          'v0.1 ${draft.firstReleasePreset.label}',
-          ...draft.releaseTrainTitles.take(2),
-        ];
+        return 'v0.1';
       default:
-        return const [];
+        return '';
     }
-  }
-
-  String _sectionOutlineMetaBadge(ProjectConceptBlueprint draft, int index, bool isDone) {
-    final items = _sectionPreviewItems(draft, index);
-    if (index == 0 || index == 7) {
-      return isDone ? '✓' : '1 item';
-    }
-    if (index == 5) {
-      return '${items.length} Beats';
-    }
-    if (index == 8) {
-      return 'v0.1';
-    }
-    return '${items.length} items';
   }
 
   Widget _buildOutlineSectionNode(ProjectConceptBlueprint draft, int index) {
     final sec = _sections[index];
     final isActive = _currentStep == index;
-    final isDone = _visitedSteps.contains(index) && !isActive;
-    final isExpanded = _isSectionExpandedInOutline(index);
-    final previewItems = _sectionPreviewItems(draft, index);
-    final metaBadge = _sectionOutlineMetaBadge(draft, index, isDone);
+    final isDone = _visitedSteps.contains(index);
+    final metaBadge = _sectionOutlineMetaBadge(draft, index);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          key: ValueKey('step_node_$index'),
-          onTap: () {
-            final isDoubleTap = _isDoubleClickOnOutlineItem('sec_$index');
-            if (isDoubleTap || _currentStep == index) {
-              _toggleSectionExpandedInOutline(index);
-            } else {
-              _goToStep(index);
-            }
-          },
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            decoration: BoxDecoration(
-              color: isActive
-                  ? focalAccent.withValues(alpha: 0.12)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isActive
-                    ? focalAccent.withValues(alpha: 0.45)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Row(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _toggleSectionExpandedInOutline(index),
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: Text(
-                      isExpanded ? '▾' : '▸',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: isActive ? focalAccent : textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-                if (isDone)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: Icon(
-                      Icons.check_rounded,
-                      size: 11,
-                      color: accentEmerald,
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: Text(
-                      sec.numLabel,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                        color: isActive ? focalAccent : textMuted,
-                      ),
-                    ),
-                  ),
-                Expanded(
-                  child: Text(
-                    sec.shortTitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                      color: isActive
-                          ? textPrimary
-                          : (isDone ? textSecondary : textMuted),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  metaBadge,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: isActive
-                        ? focalAccent
-                        : (isDone ? accentEmerald : textMuted),
-                  ),
-                ),
-              ],
+    return InkWell(
+      key: ValueKey('step_node_$index'),
+      onTap: () => _goToStep(index),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(13, 9, 12, 9),
+        decoration: BoxDecoration(
+          color: isActive
+              ? accentCyan.withValues(alpha: 0.09)
+              : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: isActive ? accentCyan : Colors.transparent,
+              width: 3,
             ),
           ),
         ),
-        if (isExpanded && previewItems.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(left: 14, bottom: 5),
-            padding: const EdgeInsets.only(left: 8, top: 2, bottom: 2),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: isActive
-                      ? focalAccent.withValues(alpha: 0.35)
-                      : borderSubtle,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              child: Text(
+                sec.numLabel,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10.5,
+                  fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                  color: isActive ? accentCyan : textMuted,
                 ),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int pIdx = 0;
-                    pIdx < previewItems.length && pIdx < 5;
-                    pIdx++)
-                  InkWell(
-                    onTap: () => _goToStep(index),
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2.5,
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            isDone ? '✓' : '●',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700,
-                              color: isDone
-                                  ? accentEmerald
-                                  : (isActive ? focalAccent : textMuted),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              previewItems[pIdx],
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 10.5,
-                                color: isActive ? textSecondary : textMuted,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (previewItems.length > 5)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 2),
-                    child: Text(
-                      '+${previewItems.length - 5} more',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9,
-                        color: textMuted,
-                      ),
-                    ),
-                  ),
-              ],
+            Expanded(
+              child: Text(
+                sec.shortTitle,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive
+                      ? textPrimary
+                      : (isDone ? textSecondary : textMuted),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-      ],
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 88),
+              child: Text(
+                metaBadge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? textPrimary : textMuted,
+                ),
+              ),
+            ),
+            if (isDone) ...[
+              const SizedBox(width: 6),
+              Text(
+                '✓',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: accentEmerald,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildFinalReviewOutlineNode({required int verifiedCount}) {
     final isActive = _currentStep == _sections.length;
-    return InkWell(
-      key: const ValueKey('synthesize_concept_btn'),
-      onTap: () => _goToStep(_sections.length),
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? accentAmber.withValues(alpha: 0.14)
-              : bgRecessed,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: borderSubtle)),
+      ),
+      child: InkWell(
+        key: const ValueKey('synthesize_concept_btn'),
+        onTap: () => _goToStep(_sections.length),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(13, 11, 12, 11),
+          decoration: BoxDecoration(
             color: isActive
-                ? accentAmber
-                : accentAmber.withValues(alpha: 0.45),
-          ),
-        ),
-        child: Row(
-          children: [
-            Text(
-              '10',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: accentAmber,
+                ? accentEmerald.withValues(alpha: 0.10)
+                : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: isActive ? accentEmerald : Colors.transparent,
+                width: 3,
               ),
             ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Full Review',
-                style: GoogleFonts.inter(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  color: textPrimary,
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                child: Text(
+                  '10',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: isActive ? accentEmerald : textSecondary,
+                  ),
                 ),
               ),
-            ),
-            Text(
-              '$verifiedCount/9',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w700,
-                color: accentAmber,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Full Concept Review',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Inspect all 9 sections ($verifiedCount/9)',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        color: textMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              Text(
+                'READY →',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: accentEmerald,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2404,141 +2260,130 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           ),
           const SizedBox(height: 10),
         ],
-        // CARD 1: THE FOCUSED ARTIFACT SECTION CARD (Full-Width 1160px Canvas, Matching Step 10 Hierarchy)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          decoration: BoxDecoration(
-            color: bgSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: borderSubtle),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Top Section Header Bar (Full Width — No 210px Left Squeeze)
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                runSpacing: 8,
-                spacing: 12,
+        // SECTION 1: DE-BOXED EDITORIAL ARTIFACT SECTION WORKSPACE
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: borderSubtle),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    runSpacing: 8,
+                    spacing: 12,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: bgRecessed,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(color: borderBright),
-                        ),
-                        child: Text(
-                          sec.numLabel,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            color: textSecondary,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'SECTION ${sec.numLabel} / 09',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                              color: accentCyan,
+                            ),
                           ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '· ${sec.shortTitle.toUpperCase()}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '← / → Step',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 11,
+                                color: textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Click any item below to edit directly',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Text(
+                        sec.numLabel,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: accentCyan,
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        sec.title.toUpperCase(),
-                        style: AppTheme.displayFont(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                          color: textPrimary,
+                      Expanded(
+                        child: Text(
+                          sec.title,
+                          style: AppTheme.displayFont(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                            color: textPrimary,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: bgRecessed,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: borderSubtle),
-                        ),
-                        child: Text(
-                          'SECTION ${sec.numLabel} / 09',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: textSecondary.withValues(alpha: 0.85),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: bgRecessed,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: borderBright.withValues(alpha: 0.55)),
-                        ),
-                        child: Text(
-                          '← / → Step',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: textSecondary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: bgRecessed,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: borderSubtle),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.edit_outlined,
-                              size: 11,
-                              color: textSecondary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Click any item below to edit directly',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    sec.purpose,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: textSecondary,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                sec.purpose,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  color: textSecondary,
-                ),
-              ),
-              const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 16),
 
-              // Full-Width Artifact Content (Identical Proportions to Step 10 Full Review)
-              _buildSectionContentWidget(draft, sectionIdx),
-            ],
-          ),
+            // Full-Width Editorial Artifact Content (No Outer 4-Sided Box)
+            _buildSectionContentWidget(draft, sectionIdx),
+          ],
         ),
 
-        const SizedBox(height: 18),
+        const SizedBox(height: 22),
 
-        // CARD 2: THE AGENT CO-DESIGN CONSOLE & STEP NAVIGATION CARD
+        // SECTION 2: THE AGENT CO-DESIGN CONSOLE (Top Hairline Divider + Surface Band)
         Container(
           decoration: BoxDecoration(
             color: bgSurface,
@@ -2551,48 +2396,36 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             children: [
               Container(
                 padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
-                decoration: BoxDecoration(
-                  color: bgRecessed,
-                  border: Border(
-                    bottom: BorderSide(color: borderSubtle),
-                  ),
-                ),
+                color: bgSurface,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                          decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: borderBright),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: accentAmber,
-                                ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: accentCyan,
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'AGENT · ${widget.workbench.conversationModel.toUpperCase()}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: textPrimary,
-                                ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'AGENT · ${widget.workbench.conversationModel.toUpperCase()}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6,
+                                color: accentCyan,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             sec.question,
@@ -2611,19 +2444,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                               horizontal: 7,
                               vertical: 3,
                             ),
-                            decoration: BoxDecoration(
-                              color: bgSurface,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: borderSubtle,
-                              ),
-                            ),
                             child: Text(
                               '+ / ✓ MULTI-SELECT · ADD ANY',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9,
+                                fontSize: 9.5,
                                 fontWeight: FontWeight.w800,
-                                color: textSecondary,
+                                color: accentEmerald,
                               ),
                             ),
                           ),
@@ -2641,20 +2467,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                             );
                           },
                           borderRadius: BorderRadius.circular(4),
-                          child: Container(
+                          child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
+                              horizontal: 6,
                               vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: bgSurface,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: borderSubtle),
                             ),
                             child: Text(
                               '↻ Refresh Options',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color: textSecondary,
                               ),
@@ -3439,45 +3260,32 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     required bool highlightMetrics,
     VoidCallback? onEditTap,
   }) {
+    final barColor = highlightMetrics ? accentEmerald : accentCyan;
     return Material(
-      color: bgRecessed,
-      borderRadius: BorderRadius.circular(6),
+      color: Colors.transparent,
       child: InkWell(
         onTap: onEditTap,
-        borderRadius: BorderRadius.circular(6),
         child: Container(
+          padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8, right: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: borderSubtle),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  width: 3,
-                  color: highlightMetrics ? accentEmerald : focalAccent,
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-                    child: highlightMetrics
-                        ? _buildMetricHighlightedRichText(statement)
-                        : Text(
-                            statement,
-                            style: GoogleFonts.inter(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              height: 1.58,
-                              color: textPrimary,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+            border: Border(
+              left: BorderSide(
+                color: barColor,
+                width: 3,
+              ),
             ),
           ),
+          child: highlightMetrics
+              ? _buildMetricHighlightedRichText(statement)
+              : Text(
+                  statement,
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    height: 1.58,
+                    color: textPrimary,
+                  ),
+                ),
         ),
       ),
     );
@@ -3734,14 +3542,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     );
   }
 
-  // ── Section 04: 3 Side-by-Side Design Pillar Playing Cards + Inline Add/Delete ──
+  // ── Section 04: Open Editorial Hairline-Divided Design Pillars + Inline Add/Delete ──
   Widget _buildDesignPillarCards(
     ProjectConceptBlueprint draft, {
     bool isReadOnlySummary = false,
   }) {
     final pillars = draft.designPillars;
 
-    Widget buildPillarCard(int idx) {
+    Widget buildPillarRow(int idx) {
       final raw = pillars[idx];
       final colonIdx = raw.indexOf(':');
       final String title = (colonIdx > 0 && colonIdx < 48)
@@ -3752,8 +3560,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           : raw;
 
       return Material(
-        color: bgRecessed,
-        borderRadius: BorderRadius.circular(7),
+        color: Colors.transparent,
         child: InkWell(
           onTap: () => _showDirectSectionTextEditDialog(
             title: 'P·${(idx + 1).toString().padLeft(2, '0')} Design Pillar',
@@ -3764,74 +3571,75 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               d.designPillars = next;
             }),
           ),
-          borderRadius: BorderRadius.circular(7),
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: borderSubtle),
+              border: Border(
+                bottom: BorderSide(color: borderSubtle),
+              ),
             ),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: bgSurface,
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: borderBright),
+                SizedBox(
+                  width: 48,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      'P·${(idx + 1).toString().padLeft(2, '0')}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: accentCyan,
                       ),
-                      child: Text(
-                        'P·${(idx + 1).toString().padLeft(2, '0')}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: AppTheme.displayFont(
+                          fontSize: 14.5,
                           fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        body,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          height: 1.48,
                           color: textSecondary,
                         ),
                       ),
-                    ),
-                    if (!isReadOnlySummary && pillars.length > 1)
-                      InkWell(
-                        onTap: () => widget.workbench.updateConceptDraft((d) {
-                          final next = List<String>.from(d.designPillars)..removeAt(idx);
-                          d.designPillars = next;
-                        }),
-                        borderRadius: BorderRadius.circular(3),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                          child: Text(
-                            '×',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: textMuted,
-                            ),
-                          ),
+                    ],
+                  ),
+                ),
+                if (!isReadOnlySummary && pillars.length > 1) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => widget.workbench.updateConceptDraft((d) {
+                      final next = List<String>.from(d.designPillars)..removeAt(idx);
+                      d.designPillars = next;
+                    }),
+                    borderRadius: BorderRadius.circular(3),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      child: Text(
+                        '×',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: textMuted,
                         ),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  title,
-                  style: AppTheme.displayFont(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  body,
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    height: 1.48,
-                    color: textSecondary,
-                  ),
-                ),
+                ],
               ],
             ),
           ),
@@ -3842,33 +3650,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 680 && pillars.length <= 4;
-            if (!isWide) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int i = 0; i < pillars.length; i++) ...[
-                    buildPillarCard(i),
-                    if (i < pillars.length - 1) const SizedBox(height: 8),
-                  ],
-                ],
-              );
-            }
-            return IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int i = 0; i < pillars.length; i++) ...[
-                    Expanded(child: buildPillarCard(i)),
-                    if (i < pillars.length - 1) const SizedBox(width: 10),
-                  ],
-                ],
-              ),
-            );
-          },
-        ),
+        for (int i = 0; i < pillars.length; i++) buildPillarRow(i),
         if (!isReadOnlySummary) ...[
           const SizedBox(height: 10),
           _buildInlineAddBar(
@@ -3948,8 +3730,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       children: [
         for (int i = 0; i < items.length; i++) ...[
           Material(
-            color: bgRecessed,
-            borderRadius: BorderRadius.circular(5),
+            color: Colors.transparent,
             child: InkWell(
               onTap: onEditItem == null
                   ? null
@@ -3958,37 +3739,31 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                         initialText: items[i],
                         onSave: (val) => onEditItem(i, val),
                       ),
-              borderRadius: BorderRadius.circular(5),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 13),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: borderSubtle),
+                  border: Border(
+                    bottom: BorderSide(color: borderSubtle),
+                  ),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
+                    SizedBox(
                       width: 68,
-                      padding: const EdgeInsets.symmetric(vertical: 2.5),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: bgSurface,
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(
-                          color: borderBright,
-                        ),
-                      ),
-                      child: Text(
-                        '$prefix·${(i + 1).toString().padLeft(2, '0')}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isCoreLoop ? textPrimary : textSecondary,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 1.5),
+                        child: Text(
+                          '$prefix·${(i + 1).toString().padLeft(2, '0')}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: accentCyan,
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: _buildFormattedLeadInText(items[i]),
                     ),
@@ -4015,49 +3790,19 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               ),
             ),
           ),
-          if (i < items.length - 1)
-            if (isCoreLoop)
-              Row(
-                children: [
-                  const SizedBox(width: 47),
-                  Container(
-                    width: 2,
-                    height: 8,
-                    color: borderBright,
-                  ),
-                ],
-              )
-            else
-              const SizedBox(height: 7),
         ],
         if (isCoreLoop && items.isNotEmpty) ...[
-          Row(
-            children: [
-              const SizedBox(width: 47),
-              Container(
-                width: 2,
-                height: 8,
-                color: borderBright,
-              ),
-            ],
-          ),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: bgSurface,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: borderBright,
-                ),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               child: Text(
                 '↺ Loops back to BEAT·01 (Continuous Cycle)',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: textSecondary,
+                  color: accentCyan,
                 ),
               ),
             ),
@@ -4097,7 +3842,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                     ),
             onDelete: onDeleteItem == null ? null : () => onDeleteItem(i),
           ),
-          if (i < tradeOffs.length - 1) const SizedBox(height: 7),
         ],
         if (onAddItem != null) ...[
           const SizedBox(height: 10),
@@ -4121,68 +3865,49 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     final loseText = parts.length > 1 ? parts.sublist(1).join(' over ').trim() : 'secondary complexity';
 
     return Material(
-      color: bgRecessed,
-      borderRadius: BorderRadius.circular(5),
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(5),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 13),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: borderSubtle),
+            border: Border(
+              bottom: BorderSide(color: borderSubtle),
+            ),
           ),
           child: Row(
             children: [
-              // Left winning option: Checkmark on far left, winning text right-aligned toward center OVER pill
-              Container(
-                width: 68,
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: accentEmerald.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: accentEmerald.withValues(alpha: 0.45),
-                  ),
-                ),
+              SizedBox(
+                width: 58,
                 child: Text(
                   '✓ WIN',
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
                     color: accentEmerald,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   winText,
                   textAlign: TextAlign.right,
                   style: GoogleFonts.inter(
-                    fontSize: 13,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w700,
                     color: textPrimary,
                   ),
                 ),
               ),
               const SizedBox(width: 14),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: bgSurface,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: borderBright),
-                ),
-                child: Text(
-                  'OVER',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                    color: textSecondary,
-                  ),
+              Text(
+                'OVER',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                  color: textSecondary,
                 ),
               ),
               const SizedBox(width: 14),
@@ -4191,7 +3916,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   loseText,
                   textAlign: TextAlign.left,
                   style: GoogleFonts.inter(
-                    fontSize: 13,
+                    fontSize: 13.5,
                     color: textSecondary.withValues(alpha: 0.78),
                     decoration: TextDecoration.lineThrough,
                     decorationColor: accentCrimson.withValues(alpha: 0.70),
@@ -4230,10 +3955,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     void Function(int index)? onDeleteItem,
     VoidCallback? onAddItem,
   }) {
-    Widget buildExclusionCard(int idx) {
+    Widget buildExclusionRow(int idx) {
       return Material(
-        color: bgRecessed.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(6),
+        color: Colors.transparent,
         child: InkWell(
           onTap: onEditItem == null
               ? null
@@ -4242,41 +3966,33 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                     initialText: exclusions[idx],
                     onSave: (val) => onEditItem(idx, val),
                   ),
-          borderRadius: BorderRadius.circular(6),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 11),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: borderSubtle),
+              border: Border(
+                bottom: BorderSide(color: borderSubtle),
+              ),
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: accentCrimson.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: accentCrimson.withValues(alpha: 0.42),
-                    ),
-                  ),
+                SizedBox(
+                  width: 52,
                   child: Text(
-                    'CUT',
+                    '✕ CUT',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
                       color: accentCrimson,
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     exclusions[idx],
                     style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      color: textSecondary.withValues(alpha: 0.88),
+                      fontSize: 13,
+                      color: textSecondary.withValues(alpha: 0.9),
                     ),
                   ),
                 ),
@@ -4308,49 +4024,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final isTwoCol = constraints.maxWidth >= 620 && exclusions.length > 1;
-            if (!isTwoCol) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int i = 0; i < exclusions.length; i++) ...[
-                    buildExclusionCard(i),
-                    if (i < exclusions.length - 1) const SizedBox(height: 7),
-                  ],
-                ],
-              );
-            }
-            final rows = <Widget>[];
-            for (int i = 0; i < exclusions.length; i += 2) {
-              final hasSecond = i + 1 < exclusions.length;
-              rows.add(
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: buildExclusionCard(i)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: hasSecond
-                            ? buildExclusionCard(i + 1)
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-              if (i + 2 < exclusions.length) {
-                rows.add(const SizedBox(height: 8));
-              }
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: rows,
-            );
-          },
-        ),
+        for (int i = 0; i < exclusions.length; i++) buildExclusionRow(i),
         if (onAddItem != null) ...[
           const SizedBox(height: 10),
           _buildInlineAddBar(
