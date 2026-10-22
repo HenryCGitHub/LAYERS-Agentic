@@ -132,6 +132,14 @@
   </div>
 
   <script>
+    // Unregister any stale Flutter PWA ServiceWorkers so GitHub Pages updates appear immediately
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (var i = 0; i < registrations.length; i++) {
+          registrations[i].unregister();
+        }
+      });
+    }
     // Automatically remove loader when Flutter renders its first frame
     window.addEventListener('flutter-first-frame', function () {
       var loader = document.getElementById('layers-loader');
