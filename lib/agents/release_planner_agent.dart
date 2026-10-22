@@ -263,8 +263,9 @@ Return ONLY a JSON object with this exact schema:
               playtestCriteria: 'Execute $beatTitle in the test arena -> verify "$beatDesc" responds immediately on screen.',
               releaseVersion: versionTag,
               tasks: [
-                'Implement core state and player interaction for $beatTitle (3h)',
-                'Hook visual/audio feedback cues and transition guard for $beatTitle (2h)',
+                'Create actor/node structure and base properties for $beatTitle (2h)',
+                'Implement core state transitions and player interaction for $beatTitle (2h)',
+                'Hook visual/audio feedback cues and transition guard for $beatTitle (1h)',
               ],
               coveredScope: archetype.inScope,
               tuningParams: archetype.tuningParams,
@@ -300,8 +301,9 @@ Return ONLY a JSON object with this exact schema:
                 playtestCriteria: 'Trigger $beatTitle near arena boundary -> camera tracks smoothly and HUD updates state.',
                 releaseVersion: versionTag,
                 tasks: const [
+                  'Create camera rig and HUD state readout container (1h)',
                   'Implement camera follow smoothing and boundary clamp (2h)',
-                  'Wire active state readout indicator on HUD (2h)',
+                  'Wire active state readout indicator and viewport test (1h)',
                 ],
                 coveredScope: [
                   'Camera follow smoothing and active state indicator for $beatTitle',
@@ -1054,7 +1056,7 @@ class ReleaseExecutorAgent {
       for (int fIdx = 0; fIdx < includedFeats.length; fIdx++) {
         final featBp = includedFeats[fIdx];
         onProgress?.call(
-          'Syncing 60/40 Checkpoints & Spec Context for "${featBp.title}"...',
+          'Syncing Build Tasks, Tuning & Guards for "${featBp.title}"...',
         );
         await Future<void>.delayed(const Duration(milliseconds: 40));
 

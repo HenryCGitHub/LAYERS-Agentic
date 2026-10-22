@@ -1245,13 +1245,45 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  InkWell(
+                    key: const ValueKey('stage2_all_beats_chip'),
+                    onTap: () {
+                      setState(() {
+                        _isStepByBeatMode = false;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: !_isStepByBeatMode ? bgHover : bgRecessed,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: !_isStepByBeatMode ? borderBright : borderSubtle,
+                          width: !_isStepByBeatMode ? 1.3 : 1.0,
+                        ),
+                      ),
+                      child: Text(
+                        'All Beats (${bp.beats.length})',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: !_isStepByBeatMode ? FontWeight.w800 : FontWeight.w600,
+                          color: !_isStepByBeatMode ? textPrimary : textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
                   for (int bIdx = 0; bIdx < bp.beats.length; bIdx++)
                     InkWell(
                       key: ValueKey('stage2_beat_chip_$bIdx'),
                       onTap: () {
                         setState(() {
-                          _activeBeatIndex = bIdx;
-                          _isStepByBeatMode = true;
+                          if (_isStepByBeatMode && _activeBeatIndex == bIdx) {
+                            _isStepByBeatMode = false;
+                          } else {
+                            _activeBeatIndex = bIdx;
+                            _isStepByBeatMode = true;
+                          }
                         });
                       },
                       borderRadius: BorderRadius.circular(4),
@@ -1272,7 +1304,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                           ),
                         ),
                         child: Text(
-                          'B${(bIdx + 1).toString().padLeft(2, '0')} · ${bp.beats[bIdx].title} (${bp.beats[bIdx].totalIncludedHours}h)',
+                          'B${(bIdx + 1).toString().padLeft(2, '0')} · ${bp.beats[bIdx].title} (${bp.beats[bIdx].includedFeatures.length} Feats · ${bp.beats[bIdx].totalIncludedHours}h)',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9.5,
                             fontWeight: (_isStepByBeatMode && _activeBeatIndex == bIdx)
@@ -1772,7 +1804,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                                   ),
                                 ),
                                 child: Text(
-                                  '${feat.originVersion} ✓ → +${feat.checkpoints.length} ${bp.releaseVersionTag} CPs',
+                                  '${feat.originVersion} ✓ → +${feat.checkpoints.fold<int>(0, (sum, c) => sum + c.tasks.length)} ${bp.releaseVersionTag} Tasks',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 8.5,
                                     fontWeight: FontWeight.w800,
@@ -1799,40 +1831,48 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 ),
                 const SizedBox(width: 8),
                 if (feat.checkpoints.isNotEmpty) ...[
-                  InkWell(
-                    key: ValueKey('inspect_feat_${feat.id}'),
-                    onTap: () {
-                      setState(() {
-                        if (isExpanded) {
-                          _expandedFeatureIds.remove(feat.id);
-                        } else {
-                          _expandedFeatureIds.add(feat.id);
-                        }
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isExpanded
-                            ? bgHover
-                            : bgRecessed,
+                  Builder(
+                    builder: (context) {
+                      final totalTasksCount = feat.checkpoints.fold<int>(
+                        0,
+                        (sum, c) => sum + c.tasks.length,
+                      );
+                      return InkWell(
+                        key: ValueKey('inspect_feat_${feat.id}'),
+                        onTap: () {
+                          setState(() {
+                            if (isExpanded) {
+                              _expandedFeatureIds.remove(feat.id);
+                            } else {
+                              _expandedFeatureIds.add(feat.id);
+                            }
+                          });
+                        },
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: isExpanded
-                              ? borderBright
-                              : borderSubtle,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isExpanded
+                                ? bgHover
+                                : bgRecessed,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: isExpanded
+                                  ? borderBright
+                                  : borderSubtle,
+                            ),
+                          ),
+                          child: Text(
+                            '$totalTasksCount Tasks · ${feat.tuningParams.length} Tune ${isExpanded ? "▴" : "▾"}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: isExpanded ? textPrimary : textSecondary,
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        '${feat.checkpoints.length} Checkpoints · ${feat.tuningParams.length} Tune ${isExpanded ? "▴" : "▾"}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: isExpanded ? textPrimary : textSecondary,
-                        ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -1910,145 +1950,142 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 color: bgRecessed,
                 border: Border(top: BorderSide(color: borderSubtle)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              child: Builder(
+                builder: (context) {
+                  final allTasks = <String>[
+                    for (final cp in feat.checkpoints) ...cp.tasks,
+                  ];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: accentEmerald.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                            color: accentEmerald.withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Text(
-                          'DONE WHEN',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w800,
-                            color: accentEmerald,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          feat.doneWhen,
-                          style: GoogleFonts.inter(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
-                    children: [
-                      for (int cIdx = 0; cIdx < feat.checkpoints.length; cIdx++)
-                        Container(
-                          width: 320,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: borderSubtle),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'CHECKPOINT ${cIdx + 1} · ${feat.checkpoints[cIdx].title}',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: textPrimary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Text(
-                                    'PLAYTEST',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 8.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                feat.checkpoints[cIdx].playtestCriteria,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (feat.tuningParams.isNotEmpty || feat.edgeCases.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 5,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        for (final t in feat.tuningParams)
+                      Row(
+                        children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: bgSurface,
+                              color: accentEmerald.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(3),
                               border: Border.all(
-                                color: borderSubtle,
+                                color: accentEmerald.withValues(alpha: 0.4),
                               ),
                             ),
                             child: Text(
-                              '⚙ $t',
+                              'FEATURE GOAL & PLAYTEST',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w800,
+                                color: accentEmerald,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              feat.doneWhen,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
                                 color: textPrimary,
                               ),
                             ),
                           ),
-                        for (final e in feat.edgeCases)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: bgSurface,
-                              borderRadius: BorderRadius.circular(3),
-                              border: Border.all(
-                                color: borderSubtle,
+                        ],
+                      ),
+                      if (allTasks.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 8,
+                          children: [
+                            for (int tIdx = 0; tIdx < allTasks.length; tIdx++)
+                              Container(
+                                width: 320,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: bgSurface,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(color: borderSubtle),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${(tIdx + 1).toString().padLeft(2, '0')} · ',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        color: accentAmber,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        allTasks[tIdx],
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            child: Text(
-                              '⚠ $e',
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ),
+                          ],
+                        ),
                       ],
-                    ),
-                  ],
-                ],
+                      if (feat.tuningParams.isNotEmpty || feat.edgeCases.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 5,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            for (final t in feat.tuningParams)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: bgSurface,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: borderSubtle,
+                                  ),
+                                ),
+                                child: Text(
+                                  '⚙ $t',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                              ),
+                            for (final e in feat.edgeCases)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: bgSurface,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: borderSubtle,
+                                  ),
+                                ),
+                                child: Text(
+                                  '⚠ $e',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
         ],
@@ -2374,9 +2411,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     final hoursCtrl = TextEditingController(text: '${feat.estimatedHours}');
     final goalCtrl = TextEditingController(text: feat.goal);
     final doneWhenCtrl = TextEditingController(text: feat.doneWhen);
-    final cpLines = feat.checkpoints
-        .map((c) => '${c.title} | ${c.playtestCriteria}')
-        .join('\n');
+    final cpLines = [
+      for (final c in feat.checkpoints) ...c.tasks,
+    ].join('\n');
     final cpCtrl = TextEditingController(text: cpLines);
     final tuningCtrl = TextEditingController(
       text: feat.tuningParams.join(', '),
@@ -2443,7 +2480,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 ),
                 const SizedBox(height: 10),
                 _buildDialogField(
-                  label: 'CHECKPOINTS (1 PER LINE: Title | Playtest Criteria)',
+                  label: 'BUILD TASKS (1 PER LINE)',
                   controller: cpCtrl,
                   fieldKey: const ValueKey('edit_feat_checkpoints_input'),
                   maxLines: 3,
@@ -2519,35 +2556,25 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
         .where((s) => s.isNotEmpty)
         .toList();
 
-    final rawCpLines = cpCtrl.text
+    final rawTaskLines = cpCtrl.text
         .split('\n')
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
     final updatedCheckpoints = <ProposedCheckpointBlueprint>[];
-    for (int i = 0; i < rawCpLines.length; i++) {
-      final parts = rawCpLines[i].split('|');
-      final cpTitle = parts.first.trim();
-      final cpPlaytest = parts.length > 1
-          ? parts.sublist(1).join('|').trim()
-          : (i < feat.checkpoints.length
-              ? feat.checkpoints[i].playtestCriteria
-              : feat.doneWhen);
-      final existingCp =
-          i < feat.checkpoints.length ? feat.checkpoints[i] : null;
+    if (rawTaskLines.isNotEmpty) {
+      final firstCp = feat.checkpoints.isNotEmpty ? feat.checkpoints.first : null;
       updatedCheckpoints.add(
         ProposedCheckpointBlueprint(
-          title: cpTitle,
-          playtestCriteria: cpPlaytest,
-          tasks: existingCp?.tasks ??
-              const [
-                'Wire core input & movement state (2h)',
-                'Connect feedback & boundary guard (1h)',
-              ],
-          coveredScope: existingCp?.coveredScope ?? feat.inScope,
+          title: firstCp?.title ?? titleCtrl.text.trim(),
+          playtestCriteria: doneWhenCtrl.text.trim().isNotEmpty
+              ? doneWhenCtrl.text.trim()
+              : (firstCp?.playtestCriteria ?? feat.doneWhen),
+          tasks: rawTaskLines,
+          coveredScope: firstCp?.coveredScope ?? feat.inScope,
           tuningParams: parsedTuning,
-          edgeCases: existingCp?.edgeCases ?? feat.edgeCases,
-          releaseVersion: existingCp?.releaseVersion ?? feat.originVersion,
+          edgeCases: firstCp?.edgeCases ?? feat.edgeCases,
+          releaseVersion: firstCp?.releaseVersion ?? feat.originVersion,
         ),
       );
     }

@@ -1811,7 +1811,7 @@ class WorkbenchProvider extends ChangeNotifier {
             AgentToolCall(
               toolName: 'bind_engine_tuning_and_guards',
               targetTitle: 'Engine Architect',
-              summary: 'Injected 60/40 Checkpoints, numeric tuning variables, and [GUARD] rules',
+              summary: 'Injected Build Tasks, numeric tuning variables, and [GUARD] rules',
             ),
           ],
         ));
@@ -2014,7 +2014,7 @@ class WorkbenchProvider extends ChangeNotifier {
           agentRole: 'Systems & Engine Architect',
           userGoal: 'Add Feature "$cleanTitle" to ${beat.title}',
           reasoning:
-              'Synthesized 2 playable 60/40 Checkpoints, ${archetype.tuningParams.length} numeric tuning variables, and ${archetype.edgeCases.length} [GUARD] rules.',
+              'Synthesized Build Tasks, ${archetype.tuningParams.length} numeric tuning variables, and ${archetype.edgeCases.length} [GUARD] rules.',
           toolCalls: [
             AgentToolCall(
               toolName: 'create_feature_blueprint',
@@ -2190,7 +2190,7 @@ class WorkbenchProvider extends ChangeNotifier {
     return newTaskIndex;
   }
 
-  /// Tailors the 3 checkable How-To sub-steps (`Step X.1`, `Step X.2`, `Step X.3`) for a specific
+  /// Tailors all 6 checkable How-To sub-steps (`Step X.1` through `Step X.6`) for a specific
   /// Parent Task in Stage 3 using either Gemini AI (`gemini-flash-latest`) or deterministic
   /// Scene/Node context injection when offline.
   Future<void> tailorTaskHowToSubSteps({
@@ -2228,13 +2228,12 @@ class WorkbenchProvider extends ChangeNotifier {
 You are a senior game engine programmer assisting with a concrete implementation task.
 Engine: $engineLabel
 Feature: "${featDoc?.title ?? cpNode.name}"
-Checkpoint: "${cpNode.cleanStageTitle}"
 Task ($taskNum): "${parentTask.text}"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
-Rewrite the 3 checkable How-To Sub-Steps (Step $taskNum.1 Setup/Input, Step $taskNum.2 Core Logic with Tuning Variable, Step $taskNum.3 Edge-Case Guard Check) specifically using the developer's node/script names from "$cleanContext".
+Rewrite all 6 checkable How-To Sub-Steps (Step $taskNum.1 Where/Setup, Step $taskNum.2 Variables & State, Step $taskNum.3 Core Logic with Tuning Variable, Step $taskNum.4 Edge-Case Guard Check, Step $taskNum.5 Signal/Input Wiring, Step $taskNum.6 Viewport Playtest) specifically using the developer's node/script names from "$cleanContext".
 Return ONLY a JSON object with this exact schema:
 {
   "subSteps": [
@@ -2245,13 +2244,28 @@ Return ONLY a JSON object with this exact schema:
     },
     {
       "title": "STEP $taskNum.2 · SHORT LITERAL SUB-STEP TITLE",
+      "instruction": "1-sentence literal instruction declaring variables/state",
+      "codeFormula": "2-3 lines of $engineLabel code declaring exported variables"
+    },
+    {
+      "title": "STEP $taskNum.3 · SHORT LITERAL SUB-STEP TITLE",
       "instruction": "1-sentence literal instruction applying the tuning variable",
       "codeFormula": "2-3 lines of $engineLabel code applying the tuning variable"
     },
     {
-      "title": "STEP $taskNum.3 · SHORT LITERAL GUARD TITLE",
+      "title": "STEP $taskNum.4 · SHORT LITERAL GUARD TITLE",
       "instruction": "1-sentence literal instruction enforcing the edge-case guard",
       "codeFormula": "1-2 lines of $engineLabel guard check code"
+    },
+    {
+      "title": "STEP $taskNum.5 · SHORT LITERAL WIRING TITLE",
+      "instruction": "1-sentence literal instruction wiring input/signals",
+      "codeFormula": "2-3 lines of $engineLabel signal or input binding code"
+    },
+    {
+      "title": "STEP $taskNum.6 · SHORT LITERAL PLAYTEST TITLE",
+      "instruction": "1-sentence literal instruction verifying behavior in viewport",
+      "codeFormula": "1-2 lines of $engineLabel debug log or assertion code"
     }
   ]
 }

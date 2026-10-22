@@ -1866,8 +1866,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         decoration: BoxDecoration(
           color: isActive
               ? activeAccent.withValues(alpha: 0.10)
-              : Colors.transparent,
+              : (isFinalReview ? bgRecessed : Colors.transparent),
           borderRadius: BorderRadius.circular(5),
+          border: isFinalReview
+              ? Border.all(
+                  color: isActive
+                      ? accentAmber
+                      : accentAmber.withValues(alpha: 0.45),
+                )
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1888,8 +1895,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   numText,
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
-                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                    color: isActive ? activeAccent : textMuted,
+                    fontWeight: isActive || isFinalReview
+                        ? FontWeight.w800
+                        : FontWeight.w600,
+                    color: isActive || isFinalReview ? activeAccent : textMuted,
                   ),
                 ),
               ),
@@ -1897,8 +1906,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               label,
               style: GoogleFonts.inter(
                 fontSize: 11.5,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive
+                fontWeight: isActive || isFinalReview
+                    ? FontWeight.w700
+                    : FontWeight.w500,
+                color: isActive || isFinalReview
                     ? textPrimary
                     : (isDone ? textSecondary : textMuted),
               ),
@@ -2644,14 +2655,29 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   ),
                   Row(
                     children: [
-                      TextButton(
+                      OutlinedButton(
+                        key: const ValueKey('skip_to_full_review_btn'),
                         onPressed: () => _goToStep(_sections.length),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textPrimary,
+                          backgroundColor: bgRecessed,
+                          side: BorderSide(
+                            color: accentAmber.withValues(alpha: 0.55),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 11,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
                         child: Text(
-                          'Skip to Final Review',
+                          'Review Full Blueprint ◫',
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: textSecondary,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
                           ),
                         ),
                       ),

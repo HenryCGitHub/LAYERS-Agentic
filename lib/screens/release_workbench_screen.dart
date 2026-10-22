@@ -1354,7 +1354,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               Icon(Icons.verified_rounded, color: accentEmerald, size: 18),
               const SizedBox(width: 10),
               Text(
-                'All Checkpoints in ${rel.title} are VERIFIED ✓!',
+                'All Features in ${rel.title} are 100% Complete ✓!',
                 style: GoogleFonts.inter(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w800,
@@ -1419,13 +1419,17 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final allFeats = <TierDocument>[
       for (final b in beats) ...widget.workbench.featuresForBeat(b.id),
     ];
-    int totalCheckpoints = 0;
     int totalTasks = 0;
+    int totalStepsDone = 0;
     for (final f in allFeats) {
       final states = FeatureStateNode.getStatesForDocument(f);
-      totalCheckpoints += states.length;
       for (final s in states) {
         totalTasks += s.totalChecklistCount;
+        for (final t in s.checklist) {
+          totalStepsDone += t.children.isNotEmpty
+              ? t.children.where((c) => c.completed).length
+              : (t.completed ? 6 : 0);
+        }
       }
     }
 
@@ -1460,7 +1464,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Every playable checkpoint and How-To sub-step across your Core Loop has been verified:',
+                'Every Feature, Build Task, and Step across your Core Loop has been completed and verified:',
                 style: GoogleFonts.inter(fontSize: 12.5, color: textSecondary),
               ),
               const SizedBox(height: 12),
@@ -1515,7 +1519,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     Column(
                       children: [
                         Text(
-                          '$totalCheckpoints',
+                          '$totalTasks',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -1523,7 +1527,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           ),
                         ),
                         Text(
-                          'CHECKPOINTS',
+                          'BUILD TASKS',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9,
                             color: textMuted,
@@ -1534,7 +1538,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     Column(
                       children: [
                         Text(
-                          '$totalTasks',
+                          '$totalStepsDone',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -1542,7 +1546,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           ),
                         ),
                         Text(
-                          'TASKS DONE',
+                          'STEPS DONE',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9,
                             color: textMuted,

@@ -159,7 +159,8 @@ void main() {
           contains('Tactical Positioning'),
         );
 
-        // Jump to Step 10: Full Blueprint Review
+        // Jump to Step 10: Full Blueprint Review using the prominent bottom dock button
+        expect(find.byKey(const ValueKey('skip_to_full_review_btn')), findsOneWidget);
         final synthBtn = find.byKey(const ValueKey('synthesize_concept_btn'));
         await tester.ensureVisible(synthBtn);
         await tester.pumpAndSettle();
@@ -184,6 +185,7 @@ void main() {
         expect(find.byKey(const ValueKey('toggle_release_questions_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_beat_jump_bar')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_all_beats_chip')), findsOneWidget);
         expect(find.byKey(const ValueKey('toggle_all_feat_specs_btn')), findsOneWidget);
         expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
         expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
@@ -223,8 +225,10 @@ void main() {
         expect(provider.releaseBlueprint!.totalIncludedFeatures, 8);
         expect(find.byKey(const ValueKey('release_sticky_bottom_dock')), findsOneWidget);
 
-        // Verify Expandable Checkpoint & Playtest Preview Drawer on Beat 1 Feature 1
-        final firstProposedFeatId = provider.releaseBlueprint!.beats.first.features.first.id;
+        // Verify Expandable Build Tasks & Playtest Preview Drawer on Beat 1 Feature 1 (seeds 3 Build Tasks: 01, 02, 03)
+        final firstProposedFeat = provider.releaseBlueprint!.beats.first.features.first;
+        expect(firstProposedFeat.checkpoints.first.tasks.length, 3);
+        final firstProposedFeatId = firstProposedFeat.id;
         final inspectBtn = find.byKey(ValueKey('inspect_feat_$firstProposedFeatId'));
         expect(find.byKey(ValueKey('inspect_feat_drawer_$firstProposedFeatId')), findsNothing);
         await tester.ensureVisible(inspectBtn);
@@ -232,6 +236,10 @@ void main() {
         await tester.tap(inspectBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(ValueKey('inspect_feat_drawer_$firstProposedFeatId')), findsOneWidget);
+        expect(find.text('FEATURE GOAL & PLAYTEST'), findsOneWidget);
+        expect(find.text('01 · '), findsWidgets);
+        expect(find.text('02 · '), findsWidgets);
+        expect(find.text('03 · '), findsWidgets);
 
         final buildRelBtn = find.byKey(const ValueKey('approve_and_build_release_btn'));
         await tester.ensureVisible(buildRelBtn);
