@@ -822,6 +822,7 @@ class TaskHowToBlueprint {
         ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
         : '[STATE GUARD] Prevent duplicate trigger while active';
     final isFoundationTask = taskIndex == 0;
+    final isStateLogicTask = taskIndex == 1;
 
     ({
       String stepHeader,
@@ -842,53 +843,91 @@ class TaskHowToBlueprint {
               return (
                 stepHeader: isFoundationTask
                     ? 'STEP $taskNum.1 · CREATE $cppClass C++ CLASS'
-                    : 'STEP $taskNum.1 · OPEN EXISTING $pascalAsset.h / .cpp',
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.1 · DEFINE STATE ENUM & PROPERTIES IN $pascalAsset.h'
+                        : 'STEP $taskNum.1 · BIND INTERACTION INPUT IN $pascalAsset.cpp'),
                 shortTitle: isFoundationTask
                     ? 'Create $cppClass C++ Class'
-                    : 'Open Existing $pascalAsset.cpp',
+                    : (isStateLogicTask
+                        ? 'Define State Enum & Properties'
+                        : 'Bind Player Interaction Input'),
                 instruction: isFoundationTask
                     ? 'In the Unreal Editor top menu, click Tools → New C++ Class... → choose Actor as the parent class → name it $pascalAsset and click Create Class.'
-                    : 'Open your existing $pascalAsset.h and $pascalAsset.cpp files (created in Task 01) in Visual Studio or Rider to extend them for "$cleanTitle".',
+                    : (isStateLogicTask
+                        ? 'Open $pascalAsset.h and declare the state enum and active state properties for "$cleanTitle" on $cppClass.'
+                        : 'Open $pascalAsset.cpp and bind the player interaction action / trace trigger for "$cleanTitle".'),
                 verify: isFoundationTask
                     ? 'Visual Studio / Rider opens with $pascalAsset.h and $pascalAsset.cpp generated.'
-                    : '$pascalAsset.cpp is open in your IDE with no compile errors.',
+                    : '$pascalAsset.h and $pascalAsset.cpp compile cleanly in your IDE.',
                 path: 'Source/Project/$pascalAsset.h',
                 code: '#pragma once\n#include "CoreMinimal.h"\n#include "GameFramework/Actor.h"\n#include "$pascalAsset.generated.h"\n\nUCLASS()\nclass $cppClass : public AActor {\n  GENERATED_BODY()\npublic:\n  $cppClass();\n  EMechanicState ActiveState = EMechanicState::Idle;\n};',
                 explain: 'An AActor C++ class is the foundation object you can spawn or place inside a level.',
               );
             case 1:
               return (
-                stepHeader: 'STEP $taskNum.2 · ATTACH MESH & COLLISION SUBOBJECTS',
-                shortTitle: 'Create Mesh & Collision Subobjects',
-                instruction:
-                    'Inside the $cppClass() constructor in $pascalAsset.cpp, instantiate a UStaticMeshComponent ("VisualMesh") and UBoxComponent ("InteractBox") and attach them to RootComponent.',
-                verify:
-                    'Live Coding (Ctrl+Alt+F11) compiles cleanly with VisualMesh and InteractBox attached under RootComponent.',
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.2 · ATTACH MESH & COLLISION SUBOBJECTS'
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION FUNCTION'
+                        : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE IN C++'),
+                shortTitle: isFoundationTask
+                    ? 'Create Mesh & Collision Subobjects'
+                    : (isStateLogicTask
+                        ? 'Build State Transition Function'
+                        : 'Cast Interaction LineTrace'),
+                instruction: isFoundationTask
+                    ? 'Inside the $cppClass() constructor in $pascalAsset.cpp, instantiate a UStaticMeshComponent ("VisualMesh") and UBoxComponent ("InteractBox") and attach them to RootComponent.'
+                    : (isStateLogicTask
+                        ? 'In $pascalAsset.cpp, add a SetMechanicState(EMechanicState NewState) method that validates and updates ActiveState.'
+                        : 'In $pascalAsset.cpp, run GetWorld()->LineTraceSingleByChannel from the camera view to detect $cppClass instances.'),
+                verify: isFoundationTask
+                    ? 'Live Coding (Ctrl+Alt+F11) compiles cleanly with VisualMesh and InteractBox attached under RootComponent.'
+                    : (isStateLogicTask
+                        ? 'SetMechanicState compiles cleanly and updates ActiveState when called.'
+                        : 'LineTrace hits $cppClass InteractBox within interaction range.'),
                 path: 'Source/Project/$pascalAsset.cpp :: $cppClass()',
-                code: '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>("VisualMesh");\n  VisualMesh->SetupAttachment(RootComponent);\n  InteractBox = CreateDefaultSubobject<UBoxComponent>("InteractBox");\n  InteractBox->InitBoxExtent(FVector(50.f, 50.f, 20.f));\n  InteractBox->SetupAttachment(RootComponent);\n}',
-                explain: 'CreateDefaultSubobject constructs the visible 3D mesh and the collision sensor box inside your C++ constructor.',
+                code: isFoundationTask
+                    ? '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>("VisualMesh");\n  VisualMesh->SetupAttachment(RootComponent);\n  InteractBox = CreateDefaultSubobject<UBoxComponent>("InteractBox");\n  InteractBox->InitBoxExtent(FVector(50.f, 50.f, 20.f));\n  InteractBox->SetupAttachment(RootComponent);\n}'
+                    : (isStateLogicTask
+                        ? 'void $cppClass::SetMechanicState(EMechanicState NewState) {\n  if (ActiveState == NewState) return;\n  ActiveState = NewState;\n  OnStateChanged(ActiveState);\n}'
+                        : 'FHitResult Hit;\nGetWorld()->LineTraceSingleByChannel(Hit, StartLoc, EndLoc, ECC_Visibility);\nif ($cppClass* Target = Cast<$cppClass>(Hit.GetActor())) {\n  Target->Interact();\n}'),
+                explain: isFoundationTask
+                    ? 'CreateDefaultSubobject constructs the visible 3D mesh and the collision sensor box inside your C++ constructor.'
+                    : 'Separating state transition and raycast queries into dedicated C++ methods keeps your actor modular and easy to debug.',
               );
             case 2:
               return (
                 stepHeader: isFoundationTask
                     ? 'STEP $taskNum.3 · COMPILE & PLACE IN LEVEL VIEWPORT'
-                    : 'STEP $taskNum.3 · SELECT INSTANCE IN LEVEL OUTLINER',
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.3 · SWAP MATERIAL / VISUAL ON STATE CHANGE'
+                        : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $cppClass'),
                 shortTitle: isFoundationTask
                     ? 'Place $cppClass in Level'
-                    : 'Select $cppClass in Outliner',
+                    : (isStateLogicTask
+                        ? 'Swap Visual Material on State Change'
+                        : 'Call Interact Trigger on Hit Actor'),
                 instruction: isFoundationTask
                     ? 'Press Ctrl+Alt+F11 (Live Coding) to compile, then open C++ Classes in the Content Browser and drag $pascalAsset into the Level Viewport at (0, 0, 0).'
-                    : 'Press Ctrl+Alt+F11 (Live Coding) and select your existing $pascalAsset instance in the Level Outliner to inspect its updated properties.',
+                    : (isStateLogicTask
+                        ? 'Inside OnStateChanged(), update VisualMesh material parameters so each state of $cppClass is visually distinct.'
+                        : 'When the trace hits $cppClass, invoke its interaction method to advance the state machine.'),
                 verify:
-                    '$pascalAsset appears in the World Outliner at (0, 0, 0) with VisualMesh and InteractBox visible.',
+                    '$pascalAsset updates cleanly in the Level Viewport and World Outliner.',
                 path: 'Level Editor → Content Browser → C++ Classes → Viewport',
-                code: 'Instance: ${pascalAsset}_0 ($cppClass)\nTransform Location: FVector(0.f, 0.f, 0.f)',
-                explain: 'Dragging the C++ class into the Level Viewport spawns a physical instance in your playable scene.',
+                code: isFoundationTask
+                    ? 'Instance: ${pascalAsset}_0 ($cppClass)\nTransform Location: FVector(0.f, 0.f, 0.f)'
+                    : 'VisualMesh->SetVectorParameterValueOnMaterials(TEXT("StateTint"), ActiveColor);',
+                explain: 'Immediate visual feedback on the mesh lets playtesters see state changes without relying on debug text.',
               );
             case 3:
               return (
                 stepHeader: 'STEP $taskNum.4 · EXPOSE UPROPERTY TUNING VARIABLES',
-                shortTitle: 'Expose UPROPERTY $primaryVarName',
+                shortTitle: isFoundationTask
+                    ? 'Expose UPROPERTY $primaryVarName'
+                    : (isStateLogicTask
+                        ? 'Bind $primaryVarName to State Transition'
+                        : 'Add Target Hover Highlight Cue'),
                 instruction:
                     'In $pascalAsset.h under public:, declare $primaryVarName with UPROPERTY(EditAnywhere, BlueprintReadWrite) so designers can tune "$primaryVar" in the Details panel.',
                 verify:
@@ -900,7 +939,11 @@ class TaskHowToBlueprint {
             case 4:
               return (
                 stepHeader: 'STEP $taskNum.5 · IMPLEMENT OVERLAP / TICK LOGIC',
-                shortTitle: 'Implement $cleanTitle in C++',
+                shortTitle: isFoundationTask
+                    ? 'Initialize Default Component State'
+                    : (isStateLogicTask
+                        ? 'Step State with Interpolation Logic'
+                        : 'Connect Cooldown & Range Check'),
                 instruction:
                     'In $pascalAsset.cpp, implement the trigger and state interpolation for "$cleanTitle" using FMath::FInterpConstantTo driven by $primaryVarName.',
                 verify:
@@ -911,8 +954,16 @@ class TaskHowToBlueprint {
               );
             default:
               return (
-                stepHeader: 'STEP $taskNum.6 · ADD GUARD CHECK & PLAYTEST (ALT+P)',
-                shortTitle: 'Add Guard & Playtest (Alt+P)',
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.6 · COMPILE & VERIFY ACTOR IN LEVEL'
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
+                        : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (ALT+P)'),
+                shortTitle: isFoundationTask
+                    ? 'Compile & Verify Actor in Level'
+                    : (isStateLogicTask
+                        ? 'Add Invalid-State Transition Guard'
+                        : 'Playtest Full Loop in Viewport (Alt+P)'),
                 instruction:
                     'Add a guard check at the top of your function to enforce "$primaryGuard", compile with Ctrl+Alt+F11, and press Play (Alt+P) to test in the viewport.',
                 verify:
@@ -929,53 +980,104 @@ class TaskHowToBlueprint {
               return (
                 stepHeader: isFoundationTask
                     ? 'STEP $taskNum.1 · CREATE $bpAsset BLUEPRINT ASSET'
-                    : 'STEP $taskNum.1 · OPEN EXISTING $bpAsset BLUEPRINT',
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.1 · DEFINE STATE ENUM & VARIABLES IN $bpAsset'
+                        : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $bpAsset'),
                 shortTitle: isFoundationTask
                     ? 'Create $bpAsset'
-                    : 'Open Existing $bpAsset',
+                    : (isStateLogicTask
+                        ? 'Define State Enum & Variables'
+                        : 'Bind Player Interaction Input'),
                 instruction: isFoundationTask
                     ? 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Actor, and name it $bpAsset.'
-                    : 'In the Content Browser (/Game/Blueprints), double-click your existing $bpAsset (created in Task 01) to open it for "$cleanTitle".',
+                    : (isStateLogicTask
+                        ? 'In /Game/Blueprints, double-click $bpAsset (created in Task 01) and add a State variable (Enum / Integer) under My Blueprint → Variables for "$cleanTitle".'
+                        : 'Open $bpAsset in /Game/Blueprints and add your player interaction input event (e.g., EnhancedInputAction IA_Interact) on the Event Graph.'),
                 verify: isFoundationTask
                     ? 'A new blue-underlined Blueprint icon named $bpAsset appears inside /Game/Blueprints.'
-                    : 'The Blueprint Editor opens showing your existing $bpAsset components and Event Graph.',
+                    : 'The Blueprint Editor opens showing $bpAsset ready for "$cleanTitle".',
                 path: 'Content Browser → /Game/Blueprints/$bpAsset',
                 code: 'Asset Name:   $bpAsset\nParent Class: Actor (AActor / EMechanicState::Active)',
                 explain: 'An Actor Blueprint is a visual container you can place in a level that holds 3D meshes, collision sensors, and Event Graph nodes.',
               );
             case 1:
               return (
-                stepHeader: 'STEP $taskNum.2 · ATTACH VISUAL MESH & BOX COLLISION',
-                shortTitle: 'Attach Mesh & BoxCollision',
-                instruction:
-                    'Inside $bpAsset, look at the top-left Components panel and click + Add to attach a Static Mesh ("VisualMesh", set to Shape_Plane/Cube) and a Box Collision ("InteractBox").',
-                verify:
-                    'A visible 3D shape surrounded by an orange wireframe collision box appears in the central Viewport tab.',
-                path: '$bpAsset → Components Panel (Top-Left)',
-                code: '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)',
-                explain: 'Static Mesh makes the object visible to the player. Box Collision creates an invisible trigger zone so the game knows when the player overlaps or clicks it.',
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.2 · ATTACH VISUAL MESH & BOX COLLISION'
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.2 · BUILD STATE TRANSITION FUNCTION'
+                        : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE BY CHANNEL'),
+                shortTitle: isFoundationTask
+                    ? 'Attach Mesh & BoxCollision'
+                    : (isStateLogicTask
+                        ? 'Build State Transition Function'
+                        : 'Cast Interaction LineTrace'),
+                instruction: isFoundationTask
+                    ? 'Inside $bpAsset, look at the top-left Components panel and click + Add to attach a Static Mesh ("VisualMesh", set to Shape_Plane/Cube) and a Box Collision ("InteractBox").'
+                    : (isStateLogicTask
+                        ? 'In $bpAsset under My Blueprint → Functions, click + to create a function named "AdvanceState" with a Switch on State node to step through valid states.'
+                        : 'From your Input Action node, wire a LineTraceByChannel node projecting forward from the Player Camera to detect $bpAsset.'),
+                verify: isFoundationTask
+                    ? 'A visible 3D shape surrounded by an orange wireframe collision box appears in the central Viewport tab.'
+                    : (isStateLogicTask
+                        ? 'The AdvanceState function tab opens with Input → Switch on State → Set CurrentState nodes.'
+                        : 'Triggering the input fires a red debug trace line toward the targeted $bpAsset.'),
+                path: isFoundationTask
+                    ? '$bpAsset → Components Panel (Top-Left)'
+                    : '$bpAsset → Functions / Event Graph',
+                code: isFoundationTask
+                    ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)'
+                    : (isStateLogicTask
+                        ? '[Function: AdvanceState]\n   └──► [Switch on E_State]\n           ├──► Idle   ──► [Set CurrentState = Active]\n           └──► Active ──► [Set CurrentState = Complete]'
+                        : '[IA_Interact (Started)] ──► [LineTraceByChannel (Camera → +400cm)]\n   └──► [Break Hit Result (Hit Actor)]'),
+                explain: isFoundationTask
+                    ? 'Static Mesh makes the object visible to the player. Box Collision creates an invisible trigger zone so the game knows when the player overlaps or clicks it.'
+                    : (isStateLogicTask
+                        ? 'Putting state transitions inside a dedicated function keeps your Event Graph clean and callable from any trigger.'
+                        : 'LineTraceByChannel projects an invisible ray from the player camera to find exactly which actor you are looking at.'),
               );
             case 2:
               return (
                 stepHeader: isFoundationTask
                     ? 'STEP $taskNum.3 · DRAG $bpAsset INTO LEVEL VIEWPORT'
-                    : 'STEP $taskNum.3 · VERIFY $bpAsset IN LEVEL OUTLINER',
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.3 · SWAP VISUAL MATERIAL ON STATE CHANGE'
+                        : 'STEP $taskNum.3 · CALL INTERACT TRIGGER ON HIT ACTOR'),
                 shortTitle: isFoundationTask
                     ? 'Drag into Level Viewport'
-                    : 'Select in Level Outliner',
+                    : (isStateLogicTask
+                        ? 'Swap Visual Material on State Change'
+                        : 'Call Interact Trigger on Hit Actor'),
                 instruction: isFoundationTask
                     ? 'Click Compile & Save (top-left of $bpAsset), then switch to the main Level tab and drag $bpAsset from the Content Browser onto the floor at (0, 0, 0).'
-                    : 'Click Compile & Save, then select your existing $bpAsset instance in the Level Outliner on the right to verify the updated component.',
-                verify:
-                    '$bpAsset sits on the level floor and is listed inside the World Outliner panel.',
-                path: 'Main Level Viewport & World Outliner',
-                code: 'Instance: ${bpAsset}_0\nLocation: X = 0.0, Y = 0.0, Z = 0.0',
-                explain: 'A Blueprint in the Content Browser is just a template. Dragging it into the Level Viewport spawns an actual physical copy inside your game world.',
+                    : (isStateLogicTask
+                        ? 'At the end of AdvanceState in $bpAsset, drag VisualMesh into the graph and call Set Material (or Set Vector Parameter Value) so each state changes color on screen.'
+                        : 'Drag off the Hit Actor pin from Break Hit Result, Cast To $bpAsset, and call its AdvanceState / Interact function.'),
+                verify: isFoundationTask
+                    ? '$bpAsset sits on the level floor and is listed inside the World Outliner panel.'
+                    : (isStateLogicTask
+                        ? 'VisualMesh updates its material color immediately whenever CurrentState changes.'
+                        : 'Looking at $bpAsset and pressing Interact invokes AdvanceState on the hit instance.'),
+                path: isFoundationTask
+                    ? 'Main Level Viewport & World Outliner'
+                    : '$bpAsset → Event Graph / AdvanceState',
+                code: isFoundationTask
+                    ? 'Instance: ${bpAsset}_0\nLocation: X = 0.0, Y = 0.0, Z = 0.0'
+                    : (isStateLogicTask
+                        ? '[Set CurrentState] ──► [Set Material (Target: VisualMesh)]\n                         (Select Material by CurrentState)'
+                        : '[Break Hit Result] ──► [Cast To $bpAsset]\n                          └──► [Call AdvanceState ()]'),
+                explain: isFoundationTask
+                    ? 'A Blueprint in the Content Browser is just a template. Dragging it into the Level Viewport spawns an actual physical copy inside your game world.'
+                    : 'Updating the mesh material gives instant visual confirmation that the state change succeeded.',
               );
             case 3:
               return (
                 stepHeader: 'STEP $taskNum.4 · ADD & EXPOSE TUNING VARIABLES',
-                shortTitle: 'Add $primaryVarName Variable',
+                shortTitle: isFoundationTask
+                    ? 'Add $primaryVarName Variable'
+                    : (isStateLogicTask
+                        ? 'Bind $primaryVarName to Transition Speed'
+                        : 'Add Target Hover Highlight Cue'),
                 instruction:
                     'In $bpAsset, find My Blueprint → Variables on the left and click + to add "$primaryVarName" (Float) and "bIsActive" (Boolean). Click the Eye Icon next to "$primaryVarName" to make it Instance Editable.',
                 verify:
@@ -987,7 +1089,11 @@ class TaskHowToBlueprint {
             case 4:
               return (
                 stepHeader: 'STEP $taskNum.5 · WIRE EVENT GRAPH NODE CHAIN',
-                shortTitle: 'Wire Event Graph Logic',
+                shortTitle: isFoundationTask
+                    ? 'Initialize Default Component State'
+                    : (isStateLogicTask
+                        ? 'Step State with Interpolation Logic'
+                        : 'Connect Cooldown & Range Check'),
                 instruction:
                     'Open the Event Graph tab. Right-click InteractBox → Add Event → OnComponentBeginOverlap (or Input Action) → connect a Branch node → Set bIsActive = true and update using FMath::FInterpConstantTo ($primaryVarName).',
                 verify:
@@ -998,8 +1104,16 @@ class TaskHowToBlueprint {
               );
             default:
               return (
-                stepHeader: 'STEP $taskNum.6 · ADD GUARD & PLAYTEST (ALT+P)',
-                shortTitle: 'Connect Guard & Playtest (Alt+P)',
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.6 · COMPILE & VERIFY ACTOR IN LEVEL'
+                    : (isStateLogicTask
+                        ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
+                        : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (ALT+P)'),
+                shortTitle: isFoundationTask
+                    ? 'Compile & Verify Actor in Level'
+                    : (isStateLogicTask
+                        ? 'Add Invalid-State Transition Guard'
+                        : 'Playtest Full Loop in Viewport (Alt+P)'),
                 instruction:
                     'Ensure your Branch node checks "$primaryGuard" before firing, connect a Print String ("$cleanTitle Active!") node to confirm, click Compile, and press Play (Alt+P).',
                 verify:
@@ -1021,26 +1135,43 @@ class TaskHowToBlueprint {
             return (
               stepHeader: isFoundationTask
                   ? 'STEP $taskNum.1 · CREATE $pascalAsset.cs C# SCRIPT'
-                  : 'STEP $taskNum.1 · OPEN EXISTING $pascalAsset.cs SCRIPT',
+                  : (isStateLogicTask
+                      ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $pascalAsset.cs'
+                      : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $pascalAsset.cs'),
               shortTitle: isFoundationTask
                   ? 'Create $pascalAsset.cs'
-                  : 'Open Existing $pascalAsset.cs',
+                  : (isStateLogicTask
+                      ? 'Define State Enum & Variables'
+                      : 'Bind Player Interaction Input'),
               instruction: isFoundationTask
                   ? 'In the Project window (bottom panel), right-click inside Assets/Scripts → Create → C# Script, and name it $pascalAsset.'
-                  : 'In Assets/Scripts, double-click your existing $pascalAsset.cs script (from Task 01) to open it in your code editor for "$cleanTitle".',
+                  : (isStateLogicTask
+                      ? 'In Assets/Scripts, open $pascalAsset.cs and define the state enum and active state field for "$cleanTitle".'
+                      : 'Open $pascalAsset.cs and bind the player interaction input check for "$cleanTitle".'),
               verify: isFoundationTask
                   ? '$pascalAsset.cs appears in Assets/Scripts with class $pascalAsset : MonoBehaviour.'
-                  : '$pascalAsset.cs is open in VS Code / Visual Studio / Rider.',
+                  : '$pascalAsset.cs compiles cleanly in your code editor.',
               path: 'Project Window → Assets/Scripts/$pascalAsset.cs',
               code: 'using UnityEngine;\n\npublic class $pascalAsset : MonoBehaviour {\n    private bool isActive = false;\n}',
               explain: 'A MonoBehaviour C# script is a custom component you can attach to any GameObject in your Unity scene.',
             );
           case 1:
             return (
-              stepHeader: 'STEP $taskNum.2 · CREATE GAMEOBJECT & ATTACH COLLIDER',
-              shortTitle: 'Add Mesh & BoxCollider',
-              instruction:
-                  'In the Hierarchy window (left), right-click → Create Empty → name it "$pascalAsset". In the Inspector, click Add Component to attach a MeshRenderer/SpriteRenderer, a BoxCollider (check Is Trigger), and your $pascalAsset script.',
+              stepHeader: isFoundationTask
+                  ? 'STEP $taskNum.2 · CREATE GAMEOBJECT & ATTACH COLLIDER'
+                  : (isStateLogicTask
+                      ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION METHOD'
+                      : 'STEP $taskNum.2 · CAST PHYSICS RAYCAST TO TARGET'),
+              shortTitle: isFoundationTask
+                  ? 'Add Mesh & BoxCollider'
+                  : (isStateLogicTask
+                      ? 'Build State Transition Function'
+                      : 'Cast Interaction Raycast'),
+              instruction: isFoundationTask
+                  ? 'In the Hierarchy window (left), right-click → Create Empty → name it "$pascalAsset". In the Inspector, click Add Component to attach a MeshRenderer/SpriteRenderer, a BoxCollider (check Is Trigger), and your $pascalAsset script.'
+                  : (isStateLogicTask
+                      ? 'Inside $pascalAsset.cs, write a SetState() method that validates and advances the current state.'
+                      : 'Inside $pascalAsset.cs, cast a Physics.Raycast from Camera.main to detect the targeted $pascalAsset collider.'),
               verify:
                   'Selecting $pascalAsset in the Scene view shows a green wireframe BoxCollider outline.',
               path: 'Hierarchy → $pascalAsset → Inspector → Add Component',
@@ -1051,13 +1182,19 @@ class TaskHowToBlueprint {
             return (
               stepHeader: isFoundationTask
                   ? 'STEP $taskNum.3 · POSITION IN SCENE & SAVE PREFAB'
-                  : 'STEP $taskNum.3 · SELECT $pascalAsset IN SCENE HIERARCHY',
+                  : (isStateLogicTask
+                      ? 'STEP $taskNum.3 · SWAP MATERIAL COLOR ON STATE CHANGE'
+                      : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $pascalAsset'),
               shortTitle: isFoundationTask
                   ? 'Place in Scene at (0, 0, 0)'
-                  : 'Select in Scene Hierarchy',
+                  : (isStateLogicTask
+                      ? 'Swap Visual Material on State Change'
+                      : 'Call Interact Trigger on Hit Actor'),
               instruction: isFoundationTask
                   ? 'Select $pascalAsset in the Hierarchy, set its Transform Position to (0, 0, 0) in the Inspector, and drag it into Assets/Prefabs to save a reusable Prefab.'
-                  : 'Select your $pascalAsset instance in the Hierarchy so you can inspect the new fields in the Inspector.',
+                  : (isStateLogicTask
+                      ? 'Update the MeshRenderer / SpriteRenderer color inside SetState() so each state is visually distinct.'
+                      : 'When Physics.Raycast hits a collider, call GetComponent<$pascalAsset>()?.TriggerInteract().'),
               verify:
                   '$pascalAsset sits at (0, 0, 0) in the Scene view with a blue Prefab icon in the Hierarchy.',
               path: 'Hierarchy & Scene View → Transform (0, 0, 0)',
@@ -1067,7 +1204,11 @@ class TaskHowToBlueprint {
           case 3:
             return (
               stepHeader: 'STEP $taskNum.4 · EXPOSE [SerializeField] TUNING VARIABLES',
-              shortTitle: 'Add [SerializeField] $primaryVarName',
+              shortTitle: isFoundationTask
+                  ? 'Add [SerializeField] $primaryVarName'
+                  : (isStateLogicTask
+                      ? 'Bind $primaryVarName to Transition Speed'
+                      : 'Add Target Hover Highlight Cue'),
               instruction:
                   'At the top of $pascalAsset.cs inside the class body, add [SerializeField] private float $primaryVarName so you can tune "$primaryVar" directly in the Unity Inspector.',
               verify:
@@ -1079,7 +1220,11 @@ class TaskHowToBlueprint {
           case 4:
             return (
               stepHeader: 'STEP $taskNum.5 · WRITE UPDATE / TRIGGER LOGIC IN C#',
-              shortTitle: 'Implement Update() / Trigger Logic',
+              shortTitle: isFoundationTask
+                  ? 'Initialize Default Component State'
+                  : (isStateLogicTask
+                      ? 'Step State with Interpolation Logic'
+                      : 'Connect Cooldown & Range Check'),
               instruction:
                   'Inside $pascalAsset.cs, implement Update() / FixedUpdate() to read input with Input.GetButton("Fire1") and advance state using Time.fixedDeltaTime and $primaryVarName.',
               verify:
@@ -1090,8 +1235,16 @@ class TaskHowToBlueprint {
             );
           default:
             return (
-              stepHeader: 'STEP $taskNum.6 · ADD GUARD CHECK & PRESS PLAY (CTRL+P)',
-              shortTitle: 'Add Guard & Playtest (Ctrl+P)',
+              stepHeader: isFoundationTask
+                  ? 'STEP $taskNum.6 · COMPILE & VERIFY PREFAB IN SCENE'
+                  : (isStateLogicTask
+                      ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
+                      : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN EDITOR (CTRL+P)'),
+              shortTitle: isFoundationTask
+                  ? 'Compile & Verify in Scene'
+                  : (isStateLogicTask
+                      ? 'Add Invalid-State Transition Guard'
+                      : 'Playtest Full Loop in Editor (Ctrl+P)'),
               instruction:
                   'Add an early return guard at the top of your method to enforce "$primaryGuard", save the script, and press the Play button (Ctrl+P) at the top of the Unity Editor.',
               verify:
@@ -1111,13 +1264,19 @@ class TaskHowToBlueprint {
           return (
             stepHeader: isFoundationTask
                 ? 'STEP $taskNum.1 · CREATE $snakeAsset.tscn & .gd SCRIPT'
-                : 'STEP $taskNum.1 · OPEN EXISTING $snakeAsset.gd SCRIPT',
+                : (isStateLogicTask
+                    ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $snakeAsset.gd'
+                    : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $snakeAsset.gd'),
             shortTitle: isFoundationTask
                 ? 'Create $snakeAsset.tscn & .gd'
-                : 'Open Existing $snakeAsset.gd',
+                : (isStateLogicTask
+                    ? 'Define State Enum & Variables'
+                    : 'Bind Player Interaction Input'),
             instruction: isFoundationTask
                 ? 'In the Scene dock (top-left), click + Other Node → select Node2D / CharacterBody2D → name it "$pascalAsset". Save the scene as res://scenes/$snakeAsset.tscn, then click the Attach Script icon to create res://scripts/$snakeAsset.gd.'
-                : 'In the FileSystem dock (bottom-left), double-click your existing res://scripts/$snakeAsset.gd script (from Task 01) to open it for "$cleanTitle".',
+                : (isStateLogicTask
+                    ? 'In the FileSystem dock, open res://scripts/$snakeAsset.gd and declare the state enum and active state variable for "$cleanTitle".'
+                    : 'Open res://scripts/$snakeAsset.gd and bind the player interaction input action for "$cleanTitle".'),
             verify: isFoundationTask
                 ? '$pascalAsset appears in the Scene tree with a scroll icon next to it, and $snakeAsset.gd opens in the Script editor.'
                 : '$snakeAsset.gd is open in the central Script workspace.',
@@ -1127,10 +1286,21 @@ class TaskHowToBlueprint {
           );
         case 1:
           return (
-            stepHeader: 'STEP $taskNum.2 · ADD VISUAL & COLLISION CHILD NODES',
-            shortTitle: 'Add Sprite2D & Area2D/CollisionShape2D',
-            instruction:
-                'Right-click the root "$pascalAsset" node in the Scene dock → + Add Child Node → add a Sprite2D (or ColorRect) named "Visual" and an Area2D with a CollisionShape2D (RectangleShape2D) named "HitBox".',
+            stepHeader: isFoundationTask
+                ? 'STEP $taskNum.2 · ADD VISUAL & COLLISION CHILD NODES'
+                : (isStateLogicTask
+                    ? 'STEP $taskNum.2 · BUILD SET_STATE() TRANSITION FUNCTION'
+                    : 'STEP $taskNum.2 · CAST RAYCAST2D / AREA2D QUERY'),
+            shortTitle: isFoundationTask
+                ? 'Add Sprite2D & Area2D/CollisionShape2D'
+                : (isStateLogicTask
+                    ? 'Build State Transition Function'
+                    : 'Cast Interaction RayCast2D'),
+            instruction: isFoundationTask
+                ? 'Right-click the root "$pascalAsset" node in the Scene dock → + Add Child Node → add a Sprite2D (or ColorRect) named "Visual" and an Area2D with a CollisionShape2D (RectangleShape2D) named "HitBox".'
+                : (isStateLogicTask
+                    ? 'In $snakeAsset.gd, add func set_mechanic_state(new_state: int) -> void: to validate and update the active state.'
+                    : 'Use a RayCast2D / Area2D overlap check in $snakeAsset.gd to detect targeted $pascalAsset instances.'),
             verify:
                 'The 2D Viewport shows your visible shape surrounded by a light-blue rectangle collision outline (no yellow warning triangle).',
             path: 'Scene Dock (Top-Left) → $pascalAsset Hierarchy',
@@ -1141,13 +1311,19 @@ class TaskHowToBlueprint {
           return (
             stepHeader: isFoundationTask
                 ? 'STEP $taskNum.3 · INSTANCE SCENE IN MAIN LEVEL'
-                : 'STEP $taskNum.3 · SELECT $pascalAsset IN MAIN SCENE',
+                : (isStateLogicTask
+                    ? 'STEP $taskNum.3 · SWAP MODULATE / VISUAL ON STATE CHANGE'
+                    : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $pascalAsset'),
             shortTitle: isFoundationTask
                 ? 'Instance in Main Scene'
-                : 'Select in Main Scene',
+                : (isStateLogicTask
+                    ? 'Swap Visual Color on State Change'
+                    : 'Call Interact Trigger on Hit Node'),
             instruction: isFoundationTask
                 ? 'Press Ctrl+S to save $snakeAsset.tscn, switch to your Main level scene tab, and click the Chain-Link icon ("Instantiate Child Scene") to drop $snakeAsset.tscn into the level at (0, 0).'
-                : 'Switch to your Main level scene tab and select the $pascalAsset node to preview its updated Inspector properties.',
+                : (isStateLogicTask
+                    ? 'Inside set_mechanic_state(), update \$Visual.modulate so each state of $pascalAsset has a distinct color on screen.'
+                    : 'When the RayCast2D / Area2D hits $pascalAsset, call target.set_mechanic_state() to trigger the transition.'),
             verify:
                 '$pascalAsset appears in the Main scene tree with a small movie-clapper / chain icon next to it.',
             path: 'Main Scene Tab → Instantiate Child Scene (Ctrl+Shift+A)',
@@ -1157,7 +1333,11 @@ class TaskHowToBlueprint {
         case 3:
           return (
             stepHeader: 'STEP $taskNum.4 · ADD @export TUNING VARIABLES IN GDSCRIPT',
-            shortTitle: 'Add @export var $primaryVarName',
+            shortTitle: isFoundationTask
+                ? 'Add @export var $primaryVarName'
+                : (isStateLogicTask
+                    ? 'Bind $primaryVarName to Transition Speed'
+                    : 'Add Target Hover Highlight Cue'),
             instruction:
                 'At the top of $snakeAsset.gd, add @export var $primaryVarName: float = 1.0 so you can tune "$primaryVar" directly in the right-hand Inspector dock.',
             verify:
@@ -1169,7 +1349,11 @@ class TaskHowToBlueprint {
         case 4:
           return (
             stepHeader: 'STEP $taskNum.5 · IMPLEMENT _physics_process(delta) LOGIC',
-            shortTitle: 'Write _physics_process(delta)',
+            shortTitle: isFoundationTask
+                ? 'Initialize Default Node State'
+                : (isStateLogicTask
+                    ? 'Step State with Interpolation Logic'
+                    : 'Connect Cooldown & Range Check'),
             instruction:
                 'Inside $snakeAsset.gd, add func _physics_process(delta: float) -> void: to check Input.is_action_pressed("primary_action") and step the value using move_toward and $primaryVarName.',
             verify:
@@ -1180,8 +1364,16 @@ class TaskHowToBlueprint {
           );
         default:
           return (
-            stepHeader: 'STEP $taskNum.6 · ADD GUARD CHECK & PRESS PLAY (F5)',
-            shortTitle: 'Add Guard & Playtest (F5)',
+            stepHeader: isFoundationTask
+                ? 'STEP $taskNum.6 · SAVE & VERIFY SCENE IN VIEWPORT'
+                : (isStateLogicTask
+                    ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
+                    : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (F5)'),
+            shortTitle: isFoundationTask
+                ? 'Save & Verify Scene in Viewport'
+                : (isStateLogicTask
+                    ? 'Add Invalid-State Transition Guard'
+                    : 'Playtest Full Loop in Viewport (F5)'),
             instruction:
                 'Add a guard check at the top of _physics_process to enforce "$primaryGuard", add print("$cleanTitle Active!"), and press F5 (or the top-right Play button) to test.',
             verify:
@@ -1510,11 +1702,35 @@ class TaskHowToBlueprint {
     }
     if (parentTask.children.length > 2) {
       parentTask.children[2].text =
-          'STEP $taskNum.3 · ENFORCE GUARD CHECK ON ${secondaryNode.toUpperCase()}';
+          'STEP $taskNum.3 · SYNC ${tertiaryNode.toUpperCase()} VISUAL STATE FROM ${primaryNode.toUpperCase()}';
       parentTask.children[2].specNotes =
-          'Guard $primaryNode / $secondaryNode against invalid state or rapid re-triggers to satisfy "$primaryGuard":';
-      parentTask.children[2].codeSnippet = step3Code;
+          'Update $tertiaryNode visual feedback whenever $primaryNode / $secondaryNode changes state:';
+      parentTask.children[2].codeSnippet = step2Code;
       parentTask.children[2].codeTargetFile = 'custom_snippet';
+    }
+    if (parentTask.children.length > 3) {
+      parentTask.children[3].text =
+          'STEP $taskNum.4 · EXPOSE ${primaryVarName.toUpperCase()} ON ${primaryNode.toUpperCase()}';
+      parentTask.children[3].specNotes =
+          'Expose $primaryVarName on $primaryNode so you can tune $secondaryNode and $tertiaryNode live in the editor:';
+      parentTask.children[3].codeSnippet = step2Code;
+      parentTask.children[3].codeTargetFile = 'custom_snippet';
+    }
+    if (parentTask.children.length > 4) {
+      parentTask.children[4].text =
+          'STEP $taskNum.5 · STEP ${secondaryNode.toUpperCase()} INTERPOLATION IN ${primaryNode.toUpperCase()}';
+      parentTask.children[4].specNotes =
+          'Advance $secondaryNode and $tertiaryNode each physics tick inside $primaryNode using $primaryVarName:';
+      parentTask.children[4].codeSnippet = step2Code;
+      parentTask.children[4].codeTargetFile = 'custom_snippet';
+    }
+    if (parentTask.children.length > 5) {
+      parentTask.children[5].text =
+          'STEP $taskNum.6 · ENFORCE GUARD CHECK ON ${secondaryNode.toUpperCase()} & PLAYTEST';
+      parentTask.children[5].specNotes =
+          'Guard $primaryNode / $secondaryNode against invalid state or rapid re-triggers to satisfy "$primaryGuard":';
+      parentTask.children[5].codeSnippet = step3Code;
+      parentTask.children[5].codeTargetFile = 'custom_snippet';
     }
     _blueprintCache.remove('${checkpointNode.id}_${parentTask.id}_$taskIndex');
   }

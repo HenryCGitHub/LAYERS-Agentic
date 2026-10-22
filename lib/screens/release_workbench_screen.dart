@@ -39,7 +39,61 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
   final Set<String> _expandedHowToTaskKeys = {};
+  final Set<String> _collapsedOutlineFeatureIds = {};
+  final Set<String> _expandedOutlineFeatureIds = {};
+  final Set<String> _expandedOutlineTaskKeys = {};
+  final Set<String> _collapsedOutlineTaskKeys = {};
+  final Map<String, int> _lastOutlineTapMsByKey = {};
   bool _unrealCppMode = false;
+
+  bool _isDoubleClickOnOutlineItem(String key) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final prev = _lastOutlineTapMsByKey[key];
+    _lastOutlineTapMsByKey[key] = now;
+    return prev != null && (now - prev) <= 340;
+  }
+
+  bool _isFeatureExpandedInOutline(String featId, {required bool isSelected}) {
+    if (_expandedOutlineFeatureIds.contains(featId)) return true;
+    if (_collapsedOutlineFeatureIds.contains(featId)) return false;
+    return isSelected;
+  }
+
+  void _toggleFeatureExpandedInOutline(
+    String featId, {
+    required bool currentlyExpanded,
+  }) {
+    if (currentlyExpanded) {
+      _expandedOutlineFeatureIds.remove(featId);
+      _collapsedOutlineFeatureIds.add(featId);
+    } else {
+      _collapsedOutlineFeatureIds.remove(featId);
+      _expandedOutlineFeatureIds.add(featId);
+    }
+  }
+
+  bool _isTaskExpandedInOutline(
+    String taskKey, {
+    required bool isTaskActive,
+    required bool isTaskCompleted,
+  }) {
+    if (_expandedOutlineTaskKeys.contains(taskKey)) return true;
+    if (_collapsedOutlineTaskKeys.contains(taskKey)) return false;
+    return isTaskActive && !isTaskCompleted;
+  }
+
+  void _toggleTaskExpandedInOutline(
+    String taskKey, {
+    required bool currentlyExpanded,
+  }) {
+    if (currentlyExpanded) {
+      _expandedOutlineTaskKeys.remove(taskKey);
+      _collapsedOutlineTaskKeys.add(taskKey);
+    } else {
+      _collapsedOutlineTaskKeys.remove(taskKey);
+      _expandedOutlineTaskKeys.add(taskKey);
+    }
+  }
 
   @override
   bool get isDark => widget.workbench.isDark;
@@ -515,6 +569,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     int globalFeatureIndex = 0,
   }) {
     final isSelected = widget.workbench.selectedFeatureId == feat.id;
+    final isExpanded =
+        _isFeatureExpandedInOutline(feat.id, isSelected: isSelected);
     final progress = widget.workbench.getDocumentProgress(feat.id);
     final featRemMins = _computeFeatureRemainingMinutes(feat);
     final featRemLabel =
@@ -537,8 +593,17 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
           InkWell(
             key: ValueKey('rail_feat_${feat.id}'),
             onTap: () {
+              final isDouble = _isDoubleClickOnOutlineItem('feat_${feat.id}');
               setState(() {
                 _manualCheckpointFocusIndex = null;
+                if (isDouble) {
+                  _toggleFeatureExpandedInOutline(
+                    feat.id,
+                    currentlyExpanded: isExpanded,
+                  );
+                } else {
+                  _collapsedOutlineFeatureIds.remove(feat.id);
+                }
               });
               widget.workbench.selectFeature(feat.id);
             },
@@ -551,21 +616,36 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               ),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 12,
-                    child: Text(
-                      isSelected ? '▾' : '▸',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: isDone
-                            ? textMuted.withValues(alpha: 0.45)
-                            : (isSelected ? textSecondary : textMuted),
+                  InkWell(
+                    key: ValueKey('outline_feat_chevron_${feat.id}'),
+                    onTap: () {
+                      setState(() {
+                        _toggleFeatureExpandedInOutline(
+                          feat.id,
+                          currentlyExpanded: isExpanded,
+                        );
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: SizedBox(
+                      width: 14,
+                      height: 18,
+                      child: Center(
+                        child: Text(
+                          isExpanded ? '▾' : '▸',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: isDone
+                                ? textMuted.withValues(alpha: 0.45)
+                                : (isSelected ? textSecondary : textMuted),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 7),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       feat.title,
@@ -608,14 +688,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               ),
             ),
           ),
-          if (isSelected) _buildOutlineFeatureChildrenTree(feat),
+          if (isExpanded) _buildOutlineFeatureChildrenTree(feat),
         ],
       ),
     );
   }
 
-  /// Renders the flat, borderless indented tree of Checkpoints -> Tasks -> Sub-Steps
-  /// directly under the selected Feature in the Left Outline Sidebar.
+  /// Option A Outliner Hierarchy: Renders `Feature -> Numbered Tasks (01 · ...) -> Leaf Steps (✓ / ● / ○)`
+  /// directly under the Feature in the Left Outline Sidebar without a redundant middle `Checkpoint 1` wrapper.
   Widget _buildOutlineFeatureChildrenTree(TierDocument feat) {
     final states = FeatureStateNode.getStatesForDocument(feat);
     if (states.isEmpty) return const SizedBox.shrink();
@@ -638,8 +718,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final engineHint = _engineHint;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(26, 2, 8, 6),
-      padding: const EdgeInsets.only(left: 10),
+      margin: const EdgeInsets.fromLTRB(24, 2, 8, 6),
+      padding: const EdgeInsets.only(left: 8),
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: borderSubtle)),
       ),
@@ -653,12 +733,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 final cpDone = cpNode.isCompleted &&
                     !_awaitingPlaytestVerification.contains(cpNode.id);
                 final isCpActive = cpIdx == effectiveCpIdx;
-                // Auto-collapse completed Checkpoints (#4) unless explicitly expanded by user
-                final isCpExpanded =
-                    (isCpActive && !cpDone) || _expandedDoneCheckpoints.contains(cpNode.id);
-                final cpRemMins = _computeCheckpointRemainingMinutes(cpNode);
-                final cpRemLabel =
-                    TaskHowToBlueprint.formatRemainingHoursShort(cpRemMins);
+                final isCpVisible = states.length == 1 ||
+                    isCpActive ||
+                    _expandedDoneCheckpoints.contains(cpNode.id);
 
                 int activeTaskIdx = _selectedTaskIndexByCheckpoint[cpNode.id] ??
                     cpNode.checklist.indexWhere((t) => !t.completed);
@@ -669,354 +746,416 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    InkWell(
-                      key: ValueKey('outline_cp_${feat.id}_$cpIdx'),
-                      onTap: () {
-                        setState(() {
-                          _manualCheckpointFocusIndex = cpIdx;
-                          if (cpDone) {
-                            if (_expandedDoneCheckpoints.contains(cpNode.id)) {
-                              _expandedDoneCheckpoints.remove(cpNode.id);
-                            } else {
-                              _expandedDoneCheckpoints.add(cpNode.id);
+                    Offstage(
+                      offstage: true,
+                      child: InkWell(
+                        key: ValueKey('outline_cp_${feat.id}_$cpIdx'),
+                        onTap: () {
+                          setState(() {
+                            _manualCheckpointFocusIndex = cpIdx;
+                            if (cpDone) {
+                              if (_expandedDoneCheckpoints.contains(cpNode.id)) {
+                                _expandedDoneCheckpoints.remove(cpNode.id);
+                              } else {
+                                _expandedDoneCheckpoints.add(cpNode.id);
+                              }
                             }
-                          }
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(5),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 5,
-                        ),
-                        child: Row(
-                          children: [
-                            Text(
-                              isCpExpanded ? '▾' : '▸',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                color: cpDone
-                                    ? textMuted.withValues(alpha: 0.45)
-                                    : (isCpActive ? textPrimary : textMuted),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                cpNode.cleanStageTitle,
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: isCpActive && !cpDone
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
-                                  color: cpDone
-                                      ? textMuted.withValues(alpha: 0.45)
-                                      : (isCpActive
-                                          ? textPrimary
-                                          : textSecondary),
-                                  decoration: cpDone
-                                      ? TextDecoration.lineThrough
-                                      : TextDecoration.none,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              cpRemLabel,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w500,
-                                color: cpDone
-                                    ? textMuted.withValues(alpha: 0.45)
-                                    : textMuted,
-                                decoration: cpDone
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
-                              ),
-                            ),
-                          ],
-                        ),
+                          });
+                        },
+                        child: Text(cpNode.cleanStageTitle),
                       ),
                     ),
-                    if (isCpExpanded && cpNode.checklist.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(left: 10),
-                        padding: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          border: Border(left: BorderSide(color: borderSubtle)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (int tIdx = 0;
-                                tIdx < cpNode.checklist.length;
-                                tIdx++)
-                              Builder(
-                                builder: (context) {
-                                  final task = cpNode.checklist[tIdx];
-                                  final isTaskActive = tIdx == activeTaskIdx;
-                                  final bp = TaskHowToBlueprint.resolve(
-                                    parentTask: task,
-                                    taskIndex: tIdx,
-                                    checkpointNode: cpNode,
-                                    engineHint: engineHint,
-                                    unrealCppMode: _unrealCppMode,
-                                  );
-                                  final taskRemLabel = TaskHowToBlueprint
-                                      .formatRemainingHoursShort(
-                                    bp.remainingTaskMinutes,
-                                  );
-                                  final taskKey = '${cpNode.id}_$tIdx';
-                                  int activeSubIdx =
-                                      _selectedSubStepIndexByTask[taskKey] ??
-                                          task.children.indexWhere(
-                                            (c) => !c.completed,
-                                          );
-                                  if (activeSubIdx < 0 ||
-                                      activeSubIdx >= bp.subSteps.length) {
-                                    activeSubIdx = 0;
-                                  }
+                    if (isCpVisible && cpNode.checklist.isNotEmpty)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (int tIdx = 0;
+                              tIdx < cpNode.checklist.length;
+                              tIdx++)
+                            Builder(
+                              builder: (context) {
+                                final task = cpNode.checklist[tIdx];
+                                final isTaskActive =
+                                    isCpActive && tIdx == activeTaskIdx;
+                                final bp = TaskHowToBlueprint.resolve(
+                                  parentTask: task,
+                                  taskIndex: tIdx,
+                                  checkpointNode: cpNode,
+                                  engineHint: engineHint,
+                                  unrealCppMode: _unrealCppMode,
+                                );
+                                final taskRemLabel = TaskHowToBlueprint
+                                    .formatRemainingHoursShort(
+                                  bp.remainingTaskMinutes,
+                                );
+                                final taskKey = '${cpNode.id}_$tIdx';
+                                final isTaskExpanded = _isTaskExpandedInOutline(
+                                  taskKey,
+                                  isTaskActive: isTaskActive,
+                                  isTaskCompleted: task.completed,
+                                );
+                                int activeSubIdx =
+                                    _selectedSubStepIndexByTask[taskKey] ??
+                                        task.children.indexWhere(
+                                          (c) => !c.completed,
+                                        );
+                                if (activeSubIdx < 0 ||
+                                    activeSubIdx >= bp.subSteps.length) {
+                                  activeSubIdx = 0;
+                                }
 
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      InkWell(
-                                        key: ValueKey(
-                                          'outline_task_${cpNode.id}_$tIdx',
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    InkWell(
+                                      key: ValueKey(
+                                        'outline_task_${cpNode.id}_$tIdx',
+                                      ),
+                                      onTap: () {
+                                        final isDouble =
+                                            _isDoubleClickOnOutlineItem(
+                                          'task_$taskKey',
+                                        );
+                                        setState(() {
+                                          _manualCheckpointFocusIndex = cpIdx;
+                                          _selectedTaskIndexByCheckpoint[
+                                              cpNode.id] = tIdx;
+                                          _expandedHowToTaskKeys
+                                            ..clear()
+                                            ..add(taskKey);
+                                          if (isDouble) {
+                                            _toggleTaskExpandedInOutline(
+                                              taskKey,
+                                              currentlyExpanded: isTaskExpanded,
+                                            );
+                                          } else {
+                                            _collapsedOutlineTaskKeys
+                                                .remove(taskKey);
+                                          }
+                                        });
+                                        if (widget.workbench.selectedFeatureId !=
+                                            feat.id) {
+                                          widget.workbench
+                                              .selectFeature(feat.id);
+                                        }
+                                      },
+                                      borderRadius: BorderRadius.circular(5),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 4.5,
                                         ),
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedTaskIndexByCheckpoint[
-                                                cpNode.id] = tIdx;
-                                            _expandedHowToTaskKeys
-                                              ..clear()
-                                              ..add(taskKey);
-                                          });
-                                        },
-                                        borderRadius: BorderRadius.circular(5),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 4.5,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Text(
-                                                isTaskActive ? '▾' : '▸',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 9,
+                                        child: Row(
+                                          children: [
+                                            InkWell(
+                                              key: ValueKey(
+                                                'outline_task_chevron_${cpNode.id}_$tIdx',
+                                              ),
+                                              onTap: () {
+                                                setState(() {
+                                                  _toggleTaskExpandedInOutline(
+                                                    taskKey,
+                                                    currentlyExpanded:
+                                                        isTaskExpanded,
+                                                  );
+                                                });
+                                              },
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: SizedBox(
+                                                width: 14,
+                                                height: 16,
+                                                child: Center(
+                                                  child: Text(
+                                                    isTaskExpanded ? '▾' : '▸',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 9.5,
+                                                      color: task.completed
+                                                          ? textMuted
+                                                              .withValues(
+                                                              alpha: 0.45,
+                                                            )
+                                                          : (isTaskActive
+                                                              ? textPrimary
+                                                              : textMuted),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                '${bp.numLabel} · ${bp.cleanTitle}',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  fontWeight: isTaskActive &&
+                                                          !task.completed
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
                                                   color: task.completed
                                                       ? textMuted.withValues(
                                                           alpha: 0.45,
                                                         )
                                                       : (isTaskActive
                                                           ? textPrimary
-                                                          : textMuted),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 5),
-                                              Expanded(
-                                                child: Text(
-                                                  bp.cleanTitle,
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 11.5,
-                                                    fontWeight: isTaskActive &&
-                                                            !task.completed
-                                                        ? FontWeight.w600
-                                                        : FontWeight.w400,
-                                                    color: task.completed
-                                                        ? textMuted.withValues(
-                                                            alpha: 0.45,
-                                                          )
-                                                        : (isTaskActive
-                                                            ? textPrimary
-                                                            : textSecondary),
-                                                    decoration: task.completed
-                                                        ? TextDecoration
-                                                            .lineThrough
-                                                        : TextDecoration.none,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                taskRemLabel,
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: task.completed
-                                                      ? textMuted.withValues(
-                                                          alpha: 0.45,
-                                                        )
-                                                      : textMuted,
+                                                          : textSecondary),
                                                   decoration: task.completed
                                                       ? TextDecoration
                                                           .lineThrough
                                                       : TextDecoration.none,
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      if (isTaskActive && bp.subSteps.isNotEmpty)
-                                        Container(
-                                          margin: const EdgeInsets.only(
-                                            left: 10,
-                                            bottom: 4,
-                                          ),
-                                          padding: const EdgeInsets.only(left: 8),
-                                          decoration: BoxDecoration(
-                                            border: Border(
-                                              left: BorderSide(
-                                                color: borderSubtle,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              for (int sIdx = 0;
-                                                  sIdx < bp.subSteps.length;
-                                                  sIdx++)
-                                                Builder(
-                                                  builder: (context) {
-                                                    final step =
-                                                        bp.subSteps[sIdx];
-                                                    final isStepActive =
-                                                        sIdx == activeSubIdx;
-                                                    final stepDone = step
-                                                        .subtask.completed;
-                                                    return InkWell(
-                                                      key: ValueKey(
-                                                        'outline_step_${cpNode.id}_${tIdx}_$sIdx',
-                                                      ),
-                                                      onTap: () {
-                                                        setState(() {
-                                                          _selectedSubStepIndexByTask[
-                                                              taskKey] = sIdx;
-                                                          _expandedHowToTaskKeys
-                                                            ..clear()
-                                                            ..add(taskKey);
-                                                        });
-                                                      },
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        4,
-                                                      ),
-                                                      child: Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4.5,
-                                                        ),
-                                                        decoration: BoxDecoration(
-                                                          color: isStepActive
-                                                              ? bgRecessed
-                                                              : Colors
-                                                                  .transparent,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(4),
-                                                        ),
-                                                        child: Row(
-                                                          children: [
-                                                            Offstage(
-                                                              offstage: true,
-                                                              child: InkWell(
-                                                                key: ValueKey(
-                                                                  'outline_step_chk_${cpNode.id}_${tIdx}_$sIdx',
-                                                                ),
-                                                                onTap: () {
-                                                                  setState(() {
-                                                                    step.subtask
-                                                                            .completed =
-                                                                        !step
-                                                                            .subtask
-                                                                            .completed;
-                                                                    task.completed = task
-                                                                            .children
-                                                                            .isNotEmpty &&
-                                                                        task.children
-                                                                            .every(
-                                                                          (c) => c
-                                                                              .completed,
-                                                                        );
-                                                                  });
-                                                                  widget.workbench
-                                                                      .updateFeatureStates(
-                                                                    feat.id,
-                                                                    states,
-                                                                  );
-                                                                },
-                                                                child: const SizedBox
-                                                                    .shrink(),
-                                                              ),
-                                                            ),
-                                                            Expanded(
-                                                              child: Text(
-                                                                step.shortTitle
-                                                                        .isNotEmpty
-                                                                    ? step
-                                                                        .shortTitle
-                                                                    : step
-                                                                        .stepNumberLabel,
-                                                                style:
-                                                                    GoogleFonts
-                                                                        .inter(
-                                                                  fontSize: 11.5,
-                                                                  fontWeight: isStepActive &&
-                                                                          !stepDone
-                                                                      ? FontWeight
-                                                                          .w600
-                                                                      : FontWeight
-                                                                          .w400,
-                                                                  color: stepDone
-                                                                      ? textMuted
-                                                                          .withValues(
-                                                                          alpha:
-                                                                              0.45,
-                                                                        )
-                                                                      : (isStepActive
-                                                                          ? textPrimary
-                                                                          : textSecondary),
-                                                                  decoration: stepDone
-                                                                      ? TextDecoration
-                                                                          .lineThrough
-                                                                      : TextDecoration
-                                                                          .none,
-                                                                ),
-                                                                maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                            ],
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              taskRemLabel,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: task.completed
+                                                    ? textMuted.withValues(
+                                                        alpha: 0.45,
+                                                      )
+                                                    : textMuted,
+                                                decoration: task.completed
+                                                    ? TextDecoration.lineThrough
+                                                    : TextDecoration.none,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    if (isTaskExpanded &&
+                                        bp.subSteps.isNotEmpty)
+                                      Container(
+                                        margin: const EdgeInsets.only(
+                                          left: 12,
+                                          bottom: 4,
+                                        ),
+                                        padding: const EdgeInsets.only(left: 8),
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            left: BorderSide(
+                                              color: borderSubtle,
+                                            ),
                                           ),
                                         ),
-                                    ],
-                                  );
-                                },
-                              ),
-                          ],
-                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            for (int sIdx = 0;
+                                                sIdx < bp.subSteps.length;
+                                                sIdx++)
+                                              Builder(
+                                                builder: (context) {
+                                                  final step =
+                                                      bp.subSteps[sIdx];
+                                                  final isStepActive =
+                                                      isTaskActive &&
+                                                          sIdx == activeSubIdx;
+                                                  final stepDone =
+                                                      step.subtask.completed;
+                                                  final leafSymbol = stepDone
+                                                      ? '✓'
+                                                      : (isStepActive
+                                                          ? '●'
+                                                          : '○');
+
+                                                  return InkWell(
+                                                    key: ValueKey(
+                                                      'outline_step_${cpNode.id}_${tIdx}_$sIdx',
+                                                    ),
+                                                    onTap: () {
+                                                      final isDouble =
+                                                          _isDoubleClickOnOutlineItem(
+                                                        'step_${cpNode.id}_${tIdx}_$sIdx',
+                                                      );
+                                                      setState(() {
+                                                        _manualCheckpointFocusIndex =
+                                                            cpIdx;
+                                                        _selectedTaskIndexByCheckpoint[
+                                                            cpNode.id] = tIdx;
+                                                        _selectedSubStepIndexByTask[
+                                                            taskKey] = sIdx;
+                                                        _expandedHowToTaskKeys
+                                                          ..clear()
+                                                          ..add(taskKey);
+                                                        if (isDouble) {
+                                                          step.subtask
+                                                                  .completed =
+                                                              !step.subtask
+                                                                  .completed;
+                                                          task.completed = task
+                                                                  .children
+                                                                  .isNotEmpty &&
+                                                              task.children
+                                                                  .every(
+                                                                (c) =>
+                                                                    c.completed,
+                                                              );
+                                                        }
+                                                      });
+                                                      if (isDouble) {
+                                                        widget.workbench
+                                                            .updateFeatureStates(
+                                                          feat.id,
+                                                          states,
+                                                        );
+                                                      }
+                                                      if (widget.workbench
+                                                              .selectedFeatureId !=
+                                                          feat.id) {
+                                                        widget.workbench
+                                                            .selectFeature(
+                                                          feat.id,
+                                                        );
+                                                      }
+                                                    },
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      4,
+                                                    ),
+                                                    child: Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 4.5,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: isStepActive
+                                                            ? bgRecessed
+                                                            : Colors
+                                                                .transparent,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                      ),
+                                                      child: Row(
+                                                        children: [
+                                                          Offstage(
+                                                            offstage: true,
+                                                            child: InkWell(
+                                                              key: ValueKey(
+                                                                'outline_step_chk_${cpNode.id}_${tIdx}_$sIdx',
+                                                              ),
+                                                              onTap: () {
+                                                                setState(() {
+                                                                  step.subtask
+                                                                          .completed =
+                                                                      !step
+                                                                          .subtask
+                                                                          .completed;
+                                                                  task.completed = task
+                                                                          .children
+                                                                          .isNotEmpty &&
+                                                                      task.children
+                                                                          .every(
+                                                                        (c) => c
+                                                                            .completed,
+                                                                      );
+                                                                });
+                                                                widget.workbench
+                                                                    .updateFeatureStates(
+                                                                  feat.id,
+                                                                  states,
+                                                                );
+                                                              },
+                                                              child:
+                                                                  const SizedBox
+                                                                      .shrink(),
+                                                            ),
+                                                          ),
+                                                          SizedBox(
+                                                            width: 13,
+                                                            child: Text(
+                                                              leafSymbol,
+                                                              textAlign:
+                                                                  TextAlign
+                                                                      .center,
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 9.5,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                color: stepDone
+                                                                    ? accentEmerald
+                                                                        .withValues(
+                                                                        alpha:
+                                                                            0.7,
+                                                                      )
+                                                                    : (isStepActive
+                                                                        ? textPrimary
+                                                                        : textMuted
+                                                                            .withValues(
+                                                                            alpha:
+                                                                                0.65,
+                                                                          )),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 5,
+                                                          ),
+                                                          Expanded(
+                                                            child: Text(
+                                                              step.shortTitle
+                                                                      .isNotEmpty
+                                                                  ? step
+                                                                      .shortTitle
+                                                                  : step
+                                                                      .stepNumberLabel,
+                                                              style: GoogleFonts
+                                                                  .inter(
+                                                                fontSize: 11.5,
+                                                                fontWeight: isStepActive &&
+                                                                        !stepDone
+                                                                    ? FontWeight
+                                                                        .w600
+                                                                    : FontWeight
+                                                                        .w400,
+                                                                color: stepDone
+                                                                    ? textMuted
+                                                                        .withValues(
+                                                                        alpha:
+                                                                            0.45,
+                                                                      )
+                                                                    : (isStepActive
+                                                                        ? textPrimary
+                                                                        : textSecondary),
+                                                                decoration: stepDone
+                                                                    ? TextDecoration
+                                                                        .lineThrough
+                                                                    : TextDecoration
+                                                                        .none,
+                                                              ),
+                                                              maxLines: 1,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                        ],
                       ),
                   ],
                 );
@@ -1757,7 +1896,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Describe your exact Scene / Node / Script setup for "${parentTask.text}". The Agent will rewrite Steps ${pIdx + 1}.1, ${pIdx + 1}.2, and ${pIdx + 1}.3 using your exact node and script names:',
+                  'Describe your exact Scene / Node / Script setup for "${parentTask.text}". The Agent will rewrite all sub-steps in Task ${(pIdx + 1).toString().padLeft(2, '0')} using your exact node and script names:',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     height: 1.4,
@@ -1945,6 +2084,31 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       }
     }
 
+    final canGoToPreviousStep = selectedTaskIdx > 0 || activeSubStepIdx > 0;
+
+    void retreatToPreviousStep(int pIdx, int sIdx) {
+      if (pIdx < 0 || pIdx >= node.checklist.length) return;
+      if (sIdx > 0) {
+        setState(() {
+          _selectedTaskIndexByCheckpoint[node.id] = pIdx;
+          _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx - 1;
+        });
+        return;
+      }
+      if (pIdx > 0) {
+        final prevTaskIdx = pIdx - 1;
+        final prevBp = howToBlueprints[prevTaskIdx];
+        final prevLastStepIdx =
+            prevBp.subSteps.isNotEmpty ? prevBp.subSteps.length - 1 : 0;
+        setState(() {
+          _selectedTaskIndexByCheckpoint[node.id] = prevTaskIdx;
+          _selectedSubStepIndexByTask['${node.id}_$prevTaskIdx'] =
+              prevLastStepIdx;
+          _collapsedOutlineTaskKeys.remove('${node.id}_$prevTaskIdx');
+        });
+      }
+    }
+
     // Determine whether this is the final remaining step of the entire Checkpoint (#2)
     final isFinalCheckpointStep = node.isCompleted ||
         (selectedParentTask != null &&
@@ -1960,15 +2124,21 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     : 0) &&
             activeSubStepIdx == (selectedHowTo?.subSteps.length ?? 1) - 1);
 
-    // Determine pure-title "Next:" label for the bottom of the Left Instruction Pane
-    String nextUpLabel = 'Verify Checkpoint & Continue';
+    // Determine pure-title "Next:" label and progression button label for the bottom of the Left Instruction Pane
+    String nextUpLabel = 'Complete Feature & Continue';
+    String advanceButtonLabel = 'Complete Feature & Continue →';
     if (selectedHowTo != null && !isFinalCheckpointStep) {
       if (activeSubStepIdx + 1 < selectedHowTo.subSteps.length) {
         final nextSub = selectedHowTo.subSteps[activeSubStepIdx + 1];
         nextUpLabel = nextSub.shortTitle;
+        advanceButtonLabel = 'Next Step →';
       } else if (selectedTaskIdx + 1 < howToBlueprints.length) {
         final nextTaskBp = howToBlueprints[selectedTaskIdx + 1];
-        nextUpLabel = nextTaskBp.cleanTitle;
+        nextUpLabel = '${nextTaskBp.numLabel} · ${nextTaskBp.cleanTitle}';
+        advanceButtonLabel =
+            'Next Task: ${nextTaskBp.numLabel} · ${nextTaskBp.cleanTitle} →';
+      } else {
+        advanceButtonLabel = 'Next Step →';
       }
     }
 
@@ -1990,7 +2160,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── Option B: Full-Width Top Header Bar (.opt2-top) ──
+                // ── Option A: Full-Width Top Header Bar ──
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 28,
@@ -2023,11 +2193,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   ),
                                   children: [
                                     TextSpan(
-                                      text:
-                                          '${feat.title}  /  ${node.cleanStageTitle}  /  ',
+                                      text: '${feat.title}  /  ',
                                     ),
                                     TextSpan(
-                                      text: selectedHowTo.cleanTitle,
+                                      text:
+                                          '${selectedHowTo.numLabel} · ${selectedHowTo.cleanTitle}',
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.w700,
@@ -2056,7 +2226,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                               ),
                               children: [
                                 TextSpan(
-                                  text: 'Checkpoint Goal: ',
+                                  text: 'Feature Goal: ',
                                   style: GoogleFonts.inter(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
@@ -2289,7 +2459,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       style: GoogleFonts.inter(
                                         fontSize: 13,
                                         height: 1.5,
-                                        color: const Color(0xFFD1FAE5),
+                                        color: isDark
+                                            ? const Color(0xFFD1FAE5)
+                                            : const Color(0xFF065F46),
                                       ),
                                     ),
                                   ],
@@ -2411,6 +2583,51 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    // Compact Previous Step (←) Button
+                                    Tooltip(
+                                      message: canGoToPreviousStep
+                                          ? 'Previous Step'
+                                          : 'First Step',
+                                      child: InkWell(
+                                        key: ValueKey(
+                                          'prev_active_step_btn_${node.id}',
+                                        ),
+                                        onTap: canGoToPreviousStep
+                                            ? () => retreatToPreviousStep(
+                                                  selectedTaskIdx,
+                                                  activeSubStepIdx,
+                                                )
+                                            : null,
+                                        borderRadius: BorderRadius.circular(7),
+                                        child: Container(
+                                          width: 38,
+                                          height: 38,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: canGoToPreviousStep
+                                                ? bgBase
+                                                : bgBase.withValues(alpha: 0.45),
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            border: Border.all(
+                                              color: canGoToPreviousStep
+                                                  ? borderBright
+                                                  : borderSubtle,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            Icons.arrow_back_rounded,
+                                            size: 16,
+                                            color: canGoToPreviousStep
+                                                ? textPrimary
+                                                : textMuted.withValues(
+                                                    alpha: 0.35,
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
                                     // Simple Square Checkmark Box [✓]
                                     Tooltip(
                                       message: activeSubStep.subtask.completed
@@ -2459,7 +2676,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    // Gated Next → Button (Morphs into Emerald "Verify Checkpoint & Continue →" on final step #2)
+                                    // Gated Next Step / Next Task / Complete Feature Button
                                     InkWell(
                                       key: ValueKey(
                                         'next_active_step_btn_${node.id}',
@@ -2495,9 +2712,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                           ),
                                         ),
                                         child: Text(
-                                          isFinalCheckpointStep
-                                              ? 'Verify Checkpoint & Continue →'
-                                              : 'Next →',
+                                          advanceButtonLabel,
                                           style: GoogleFonts.inter(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w700,
@@ -2664,7 +2879,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 13,
                                     height: 1.65,
-                                    color: const Color(0xFFD1D5DB),
+                                    color: isDark
+                                        ? const Color(0xFFD1D5DB)
+                                        : textPrimary,
                                   ),
                                 ),
                               ),

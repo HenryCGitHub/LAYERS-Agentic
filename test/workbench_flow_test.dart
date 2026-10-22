@@ -292,7 +292,7 @@ void main() {
         );
         expect(nextBtnAfter.onTap, isNotNull);
 
-        // Tap Next → to advance to Step 2
+        // Tap Next Step → to advance to Step 2
         final nextBtnFinder = find.byKey(
           ValueKey('next_active_step_btn_$secondCp0NodeId'),
         );
@@ -301,6 +301,27 @@ void main() {
         await tester.tap(nextBtnFinder);
         await tester.pumpAndSettle();
         expect(find.textContaining('STEP 2 OF 6 · ~'), findsOneWidget);
+
+        // Verify clicking the task chevron in the Outliner expands Task 02 for peeking without losing Step 2 in the workspace
+        final task1ChevronFinder = find.byKey(
+          ValueKey('outline_task_chevron_${secondCp0NodeId}_1'),
+        );
+        if (task1ChevronFinder.evaluate().isNotEmpty) {
+          await tester.tap(task1ChevronFinder);
+          await tester.pumpAndSettle();
+          expect(find.textContaining('STEP 2 OF 6 · ~'), findsOneWidget);
+        }
+
+        // Verify the compact Previous Step (←) button steps back to Step 1
+        final prevBtnFinder = find.byKey(
+          ValueKey('prev_active_step_btn_$secondCp0NodeId'),
+        );
+        expect(prevBtnFinder, findsOneWidget);
+        await tester.ensureVisible(prevBtnFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(prevBtnFinder);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
 
         // Tap Step 1 in the Left Outline and uncheck it via the workspace Checkmark Box [✓] to restore clean state, then select Feature 1
         await tester.tap(find.byKey(ValueKey('outline_step_${secondCp0NodeId}_0_0')));
@@ -526,6 +547,32 @@ void main() {
         expect(unrealCpp.subSteps[0].explainConcept, contains('AWasdMovementDashActor'));
         expect(unrealCpp.subSteps[3].codeFormula, contains('UPROPERTY(EditAnywhere'));
         expect(unrealCpp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
+
+        // Verify Task 01 (Setup), Task 02 (State Logic), and Task 03 (Input/Raycast) have non-repeating step titles
+        final t0 = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(id: 't0', text: 'Create Grid Tile Actor (2h)'),
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+        );
+        final t1 = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(id: 't1', text: 'Implement State Machine (4h)'),
+          taskIndex: 1,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+        );
+        final t2 = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(id: 't2', text: 'Add Interaction Raycast (2h)'),
+          taskIndex: 2,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+        );
+        expect(t0.subSteps[0].shortTitle, isNot(equals(t1.subSteps[0].shortTitle)));
+        expect(t1.subSteps[0].shortTitle, isNot(equals(t2.subSteps[0].shortTitle)));
+        expect(t0.subSteps[1].shortTitle, isNot(equals(t1.subSteps[1].shortTitle)));
+        expect(t1.subSteps[1].shortTitle, isNot(equals(t2.subSteps[1].shortTitle)));
+        expect(t0.subSteps[2].shortTitle, isNot(equals(t1.subSteps[2].shortTitle)));
+        expect(t1.subSteps[2].shortTitle, isNot(equals(t2.subSteps[2].shortTitle)));
       },
     );
 
