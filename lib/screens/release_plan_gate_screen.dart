@@ -810,83 +810,83 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     });
                   },
                 ),
-              ],
-            ),
-          ),
 
-          // Pinned Bottom Step: Full Release Review
-          Material(
-            color: isFullReviewActive ? bgHover : bgRecessed,
-            child: InkWell(
-              key: const ValueKey('stage2_all_beats_chip'),
-              onTap: () {
-                setState(() {
-                  _isStepByBeatMode = false;
-                  _activeStage2Section = 'full_review';
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: borderSubtle),
-                    left: BorderSide(
-                      color: isFullReviewActive ? accentCyan : Colors.transparent,
-                      width: 3,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 30,
-                      child: Text(
-                        '◫',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: isFullReviewActive ? accentCyan : textSecondary,
+                // Last Item in Outline: Full Release Review
+                Material(
+                  color: isFullReviewActive ? bgHover : bgRecessed,
+                  child: InkWell(
+                    key: const ValueKey('stage2_all_beats_chip'),
+                    onTap: () {
+                      setState(() {
+                        _isStepByBeatMode = false;
+                        _activeStage2Section = 'full_review';
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: borderSubtle),
+                          left: BorderSide(
+                            color: isFullReviewActive ? accentCyan : Colors.transparent,
+                            width: 3,
+                          ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(
-                            'Full Release Review',
-                            style: GoogleFonts.inter(
-                              fontSize: 12.5,
-                              fontWeight: isFullReviewActive
-                                  ? FontWeight.w700
-                                  : FontWeight.w600,
-                              color: isFullReviewActive
-                                  ? textPrimary
-                                  : textSecondary,
+                          SizedBox(
+                            width: 30,
+                            child: Text(
+                              '◫',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: isFullReviewActive ? accentCyan : textSecondary,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 1.5),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Full Release Review',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: isFullReviewActive
+                                        ? FontWeight.w700
+                                        : FontWeight.w600,
+                                    color: isFullReviewActive
+                                        ? textPrimary
+                                        : textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 1.5),
+                                Text(
+                                  'All ${bp.beats.length} Beats & Scope Budget',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10.5,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           Text(
-                            'All ${bp.beats.length} Beats & Scope Budget',
-                            style: GoogleFonts.inter(
-                              fontSize: 10.5,
-                              color: textMuted,
+                            '${bp.totalIncludedHours}h',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: isFullReviewActive ? accentCyan : accentEmerald,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      '${bp.totalIncludedHours}h',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: isFullReviewActive ? accentCyan : accentEmerald,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],

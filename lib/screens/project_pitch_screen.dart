@@ -1894,19 +1894,17 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             ),
           ),
 
-          // Flat 9-Step Section List (Flush rows, 3px Cyan active left bar, zero nested boxes)
+          // Flat 10-Step Section List (`01`..`09` + `10 Full Concept Review` as the last item)
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 6),
               children: [
                 for (int i = 0; i < _sections.length; i++)
                   _buildOutlineSectionNode(draft, i),
+                _buildFinalReviewOutlineNode(verifiedCount: verifiedCount),
               ],
             ),
           ),
-
-          // Flush Bottom Step 10: Full Concept Review (Separated by 1px top hairline)
-          _buildFinalReviewOutlineNode(verifiedCount: verifiedCount),
         ],
       ),
     );
@@ -2020,7 +2018,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     final isActive = _currentStep == _sections.length;
     return Container(
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: borderSubtle)),
+        border: Border(
+          top: BorderSide(color: borderSubtle),
+          bottom: BorderSide(color: borderSubtle),
+        ),
       ),
       child: InkWell(
         key: const ValueKey('synthesize_concept_btn'),
