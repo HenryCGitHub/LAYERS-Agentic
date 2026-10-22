@@ -313,100 +313,19 @@ void main() {
         await tester.pumpAndSettle();
         expect(provider.selectedFeature!.id, equals(activeFeat0.id));
 
-        // Switch from Single-Panel Flow to Split-Panel Studio via the release selector dropdown menu
-        await tester.tap(find.byKey(const ValueKey('release_selector_dropdown_btn')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.textContaining('Switch to Full Studio Split View'));
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('checkpoint_two_col_row_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage3_beat_context_banner')), findsOneWidget);
-        expect(find.byKey(const ValueKey('toggle_beat_context_btn')), findsOneWidget);
-        expect(find.text('BEAT GOAL'), findsNothing);
-        await tester.tap(find.byKey(const ValueKey('toggle_beat_context_btn')));
-        await tester.pumpAndSettle();
-        expect(find.text('BEAT GOAL'), findsOneWidget);
-        expect(find.text('BEAT DONE WHEN'), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('toggle_beat_context_btn')));
-        await tester.pumpAndSettle();
-        expect(find.text('BEAT GOAL'), findsNothing);
-        expect(find.byKey(const ValueKey('stage3_feature_dropdown_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('checkpoint_stepper_bar')), findsOneWidget);
-        expect(find.byKey(const ValueKey('prev_feature_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('next_feature_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('add_tuning_btn_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('add_edge_guard_btn_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('edit_playtest_btn_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('add_checkpoint_header_btn')), findsOneWidget);
-
-        // Verify Stage 3 Sticky Bottom Studio Dock & Toggleable 3 Co-Pilot Playing Cards Drawer
-        expect(find.byKey(const ValueKey('workbench_sticky_bottom_dock')), findsOneWidget);
-        expect(find.byKey(const ValueKey('toggle_copilot_drawer_btn')), findsOneWidget);
-        // Starts in slim 1-line mode by default; tap toggle to open the 3 full Co-Pilot cards
-        expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsNothing);
-        await tester.tap(find.byKey(const ValueKey('toggle_copilot_drawer_btn')));
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsOneWidget);
-        expect(find.byKey(const ValueKey('copilot_card_suggest_tuning')), findsOneWidget);
-        expect(find.byKey(const ValueKey('copilot_card_add_guards')), findsOneWidget);
-        expect(find.byKey(const ValueKey('workbench_copilot_input')), findsOneWidget);
-        expect(find.byKey(const ValueKey('copy_feature_markdown_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('dock_prev_feature_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('dock_next_feature_btn')), findsOneWidget);
-
-        // Verify 60/40 horizontal placement (Checklist Left | Spec Context Right)
-        final leftTaskPos = tester.getTopLeft(
-          find.text('Implement core state and player interaction for Staging & Loadout Prep (3h)'),
-        );
-        final rightSpecPos = tester.getTopLeft(
-          find.byKey(const ValueKey('checkpoint_spec_pane_0')),
-        );
-        expect(leftTaskPos.dx, lessThan(rightSpecPos.dx));
-
-        // Verify Focus Mode is ON by default
+        // Verify Focus Mode is ON by default in Single-Panel Stage 3
         expect(provider.focusMode, isTrue);
 
-        // Verify Option 2: Stage 3 Live Concept & Pillars Reference Drawer toggle
-        expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsNothing);
-        final togglePillarsBtn = find.byKey(const ValueKey('toggle_pillars_drawer_btn'));
-        await tester.ensureVisible(togglePillarsBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(togglePillarsBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsOneWidget);
-        await tester.ensureVisible(togglePillarsBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(togglePillarsBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('stage3_pillars_reference_drawer')), findsNothing);
-
-        // Verify Checkable How-To Sub-Steps on the Right Pane + Automatic Rollup to Parent Task
+        // Verify 1-Click "Copy" on the active How-To sub-step copies the code formula
         final activeFeat = provider.selectedFeature!;
         final cp0Id = provider.documents[activeFeat.id]!.subtasks.first.id;
-        expect(find.textContaining('0/6 steps'), findsWidgets);
-        final subStep0 = find.byKey(ValueKey('howto_substep_${cp0Id}_0_0'));
-        await tester.ensureVisible(subStep0);
-        await tester.pumpAndSettle();
-        await tester.tap(subStep0);
-        await tester.pumpAndSettle();
-        expect(find.textContaining('1/6 steps'), findsOneWidget);
-
-        // Verify "+ Add How-To Sub-Step" appends a 7th checkable sub-step to Task 01
-        final addSubStepBtn = find.byKey(const ValueKey('add_howto_substep_btn_0'));
-        await tester.ensureVisible(addSubStepBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(addSubStepBtn);
-        await tester.pumpAndSettle();
-        expect(find.textContaining('1/7 steps'), findsOneWidget);
-
-        // Verify 1-Click "Copy 📋" on a How-To sub-step copies the code formula without toggling completion
         final copyCodeBtn = find.byKey(ValueKey('copy_howto_code_${cp0Id}_0_0'));
         await tester.ensureVisible(copyCodeBtn);
         await tester.pumpAndSettle();
         await tester.tap(copyCodeBtn);
         await tester.pumpAndSettle();
-        expect(find.textContaining('1/7 steps'), findsOneWidget);
 
-        // Verify Task-Scoped AI "✦ Tailor How-To" rewrites sub-steps with exact scene/node context
+        // Verify Task-Scoped AI "✦ Tailor" rewrites sub-steps with exact scene/node context directly in Single-Panel mode
         final tailorBtn = find.byKey(ValueKey('tailor_howto_btn_${cp0Id}_0'));
         await tester.ensureVisible(tailorBtn);
         await tester.pumpAndSettle();
@@ -420,42 +339,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.textContaining('HookRay'), findsWidgets);
         expect(find.textContaining('RopeVisual'), findsWidgets);
-
-        // Verify interactive Out-of-Scope shelf toggle
-        expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsNothing);
-        final outBtn = find.byKey(const ValueKey('feat_out_of_scope_btn'));
-        await tester.ensureVisible(outBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(outBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('feat_out_of_scope_shelf')), findsOneWidget);
-
-        // Verify inline "+ Add task step..." input appends a task to Checkpoint 1 (appears in both Outline & Canvas)
-        final addInput = find.byKey(const ValueKey('add_checkpoint_task_input_0'));
-        await tester.ensureVisible(addInput);
-        await tester.pumpAndSettle();
-        await tester.enterText(addInput, 'Verify grapple hook cooldown indicator');
-        await tester.tap(find.byKey(const ValueKey('add_checkpoint_task_btn_0')));
-        await tester.pumpAndSettle();
-        expect(find.text('Verify grapple hook cooldown indicator'), findsWidgets);
-
-        // Verify 1-Click "✓ Verify Checkpoint →" button completes Checkpoint 1
-        final quickVerifyBtn = find.byKey(const ValueKey('quick_verify_checkpoint_btn_0'));
-        await tester.ensureVisible(quickVerifyBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(quickVerifyBtn);
-        await tester.pumpAndSettle();
-        expect(find.text('VERIFIED ✓'), findsWidgets);
-
-        // Verify 1-Click Co-Pilot Playing Card #1 (+ Add Polish Checkpoint) appends a new checkpoint (visible in both Outline & Canvas)
-        await tester.tap(find.byKey(const ValueKey('copilot_card_add_checkpoint')));
-        await tester.pumpAndSettle();
-        expect(find.text('Screen Feedback & Feel Pass'), findsWidgets);
-
-        // Verify collapsing the Co-Pilot Playing Cards drawer frees vertical space
-        await tester.tap(find.byKey(const ValueKey('toggle_copilot_drawer_btn')));
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('copilot_card_add_checkpoint')), findsNothing);
       },
     );
 

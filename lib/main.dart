@@ -138,9 +138,9 @@ class WorkbenchShell extends StatelessWidget {
         ? '$doneFeatCount/${allFeats.length}'
         : (rel != null ? '${workbench.getDocumentProgress(rel.id)}%' : null);
 
-    final String? rawSpark = draft?.sparkIdea.trim() ?? workbench.activeProject?.title.trim();
+    final String? rawSpark = workbench.activeProject?.title.trim() ?? draft?.sparkIdea.trim();
     final String? activeProjectLabel = (rawSpark != null && rawSpark.isNotEmpty)
-        ? (rawSpark.length > 9 ? '${rawSpark.substring(0, 9)}…' : rawSpark)
+        ? (rawSpark.length > 22 ? '${rawSpark.substring(0, 22)}…' : rawSpark)
         : null;
     final savedProjects = workbench.savedProjects;
 
@@ -186,9 +186,50 @@ class WorkbenchShell extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       side: BorderSide(color: borderColor),
                     ),
-                    onSelected: (val) {
+                    onSelected: (val) async {
                       if (val == '__new_project__') {
                         workbench.createNewProject();
+                      } else if (val.startsWith('__rename__:')) {
+                        final projId = val.substring('__rename__:'.length);
+                        final proj = savedProjects.where((p) => p.id == projId).firstOrNull;
+                        if (proj == null) return;
+                        final ctrl = TextEditingController(text: proj.title);
+                        final newTitle = await showDialog<String>(
+                          context: context,
+                          builder: (rCtx) => AlertDialog(
+                            backgroundColor: bgSurface,
+                            title: Text(
+                              'Rename Project',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: textPrimary,
+                              ),
+                            ),
+                            content: TextField(
+                              controller: ctrl,
+                              autofocus: true,
+                              style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                              onSubmitted: (v) => Navigator.of(rCtx).pop(v),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(rCtx).pop(),
+                                child: const Text('Cancel'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
+                                child: const Text('Save'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (newTitle != null && newTitle.trim().isNotEmpty) {
+                          workbench.renameProject(projId, newTitle.trim());
+                        }
+                      } else if (val.startsWith('__delete__:')) {
+                        final projId = val.substring('__delete__:'.length);
+                        workbench.deleteProject(projId);
                       } else {
                         workbench.switchProject(val);
                       }
@@ -222,6 +263,39 @@ class WorkbenchShell extends StatelessWidget {
                                     color: p.id == workbench.activeProjectId
                                         ? textPrimary
                                         : textSecondary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: 'Rename Project',
+                                child: InkWell(
+                                  key: ValueKey('switcher_rename_${p.id}'),
+                                  onTap: () => Navigator.of(ctx).pop('__rename__:${p.id}'),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.edit_outlined,
+                                      size: 12.5,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Tooltip(
+                                message: 'Delete Project',
+                                child: InkWell(
+                                  key: ValueKey('switcher_delete_${p.id}'),
+                                  onTap: () => Navigator.of(ctx).pop('__delete__:${p.id}'),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.close_rounded,
+                                      size: 13,
+                                      color: AppTheme.accentRedFor(isDark),
+                                    ),
                                   ),
                                 ),
                               ),

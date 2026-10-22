@@ -777,28 +777,18 @@ class TierDocument {
   }
 
   bool get isFullyPopulated {
-    final requiredSections = FormSectionConfig.getConfigsForTier(
-      tier,
-      domain: projectDomain,
-    );
-    for (var config in requiredSections) {
-      final text = sections[config.id] ??
-          (config.id == 'scope' ? sections['work'] : null) ??
-          (config.id == 'work' ? sections['scope'] : null) ??
-          (config.id == 'tradeoffs' ? sections['pillars'] : null) ??
-          (config.id == 'pillars' ? sections['tradeoffs'] : null) ??
-          (config.id == 'highConcept'
-              ? (sections['highConcept'] ?? sections['pitch'] ?? sections['vision'])
-              : null) ??
-          ((config.id == 'engine' ||
-                  config.id == 'platforms' ||
-                  config.id == 'performance')
-              ? sections['meta']
-              : null) ??
-          '';
-      if (text.trim().isEmpty) return false;
+    if (tier == TierType.project) {
+      final hasConcept = (sections['highConcept'] ??
+              sections['pitch'] ??
+              sections['vision'] ??
+              sections['scope'] ??
+              '')
+          .trim()
+          .isNotEmpty;
+      return hasConcept;
     }
-    return true;
+    final hasScope = (sections['scope'] ?? sections['work'] ?? '').trim().isNotEmpty;
+    return hasScope;
   }
 
   ReleaseScope get releaseScope => ReleaseScope.fromDocument(this);

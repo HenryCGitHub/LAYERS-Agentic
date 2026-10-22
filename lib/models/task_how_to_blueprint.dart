@@ -1,0 +1,1521 @@
+import '../models/feature_state.dart';
+import '../models/tier_document.dart';
+
+/// Represents a single checkable "How-To" sub-step inside a Parent Task's walkthrough.
+class TaskHowToSubStep {
+  final Subtask subtask;
+  final String stepNumberLabel; // e.g., "STEP 1.1 · CREATE ASSET FILE"
+  final String shortTitle;      // e.g., "Create BP_GridTileActor"
+  final String instruction;     // Concrete implementation instruction
+  final String verifyResult;    // "✓ VERIFY BEFORE CHECKING [✓]" visual check
+  final String stepPath;        // e.g., "Content Browser → /Game/Blueprints"
+  final String codeFormula;     // Short code / formula / hierarchy snippet
+  final String explainConcept;  // Project-connected "🎯 Connects to your Spec & Next Step" note
+  final List<String> specChips; // Spec connection chips (e.g. ["Next: ...", "Spec: ..."])
+  final String quickFixPitfall; // Step-specific "🔧 Quick Fix / Common Pitfall" for the right footer
+  final int estimatedMinutes;   // Weighted minutes for this specific step (e.g., 15, 25, 65, 35)
+  final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m", "1.1h")
+  final bool isGuardStep;
+
+  const TaskHowToSubStep({
+    required this.subtask,
+    required this.stepNumberLabel,
+    this.shortTitle = '',
+    required this.instruction,
+    this.verifyResult = '',
+    this.stepPath = '',
+    required this.codeFormula,
+    this.explainConcept = '',
+    this.specChips = const [],
+    this.quickFixPitfall = '',
+    this.estimatedMinutes = 15,
+    this.etaLabel = '15m',
+    this.isGuardStep = false,
+  });
+}
+
+/// Synthesizes mechanic-specific scope bullets, tuning parameters, edge-case guards,
+/// and 60/40 Playable Checkpoint blueprints for any custom or Beat-derived feature title.
+class MechanicArchetypeProfile {
+  final String category; // 'grapple', 'movement', 'combat', 'farming', 'economy', 'building', 'ui', 'core'
+  final String goal;
+  final String doneWhen;
+  final List<String> inScope;
+  final List<String> outOfScope;
+  final List<String> tuningParams;
+  final List<String> edgeCases;
+  final String cp1Title;
+  final String cp1Playtest;
+  final List<String> cp1Tasks;
+  final String cp2Title;
+  final String cp2Playtest;
+  final List<String> cp2Tasks;
+
+  const MechanicArchetypeProfile({
+    required this.category,
+    required this.goal,
+    required this.doneWhen,
+    required this.inScope,
+    required this.outOfScope,
+    required this.tuningParams,
+    required this.edgeCases,
+    required this.cp1Title,
+    required this.cp1Playtest,
+    required this.cp1Tasks,
+    required this.cp2Title,
+    required this.cp2Playtest,
+    required this.cp2Tasks,
+  });
+
+  static String inferCategory(String text) {
+    final lower = text.toLowerCase();
+    if (lower.contains('grappl') ||
+        lower.contains('hook') ||
+        lower.contains('swing') ||
+        lower.contains('rope') ||
+        lower.contains('tether') ||
+        lower.contains('zipline')) {
+      return 'grapple';
+    }
+    if (lower.contains('dash') ||
+        lower.contains('slide') ||
+        lower.contains('jump') ||
+        lower.contains('wall') ||
+        lower.contains('sprint') ||
+        lower.contains('climb') ||
+        lower.contains('move') ||
+        lower.contains('locomotion') ||
+        lower.contains('parkour')) {
+      return 'movement';
+    }
+    if (lower.contains('shotgun') ||
+        lower.contains('weapon') ||
+        lower.contains('gun') ||
+        lower.contains('shoot') ||
+        lower.contains('fire') ||
+        lower.contains('attack') ||
+        lower.contains('combat') ||
+        lower.contains('slash') ||
+        lower.contains('enemy') ||
+        lower.contains('wave') ||
+        lower.contains('turret') ||
+        lower.contains('boss') ||
+        lower.contains('damage')) {
+      return 'combat';
+    }
+    if (lower.contains('crop') ||
+        lower.contains('farm') ||
+        lower.contains('plant') ||
+        lower.contains('harvest') ||
+        lower.contains('seed') ||
+        lower.contains('soil') ||
+        lower.contains('water') ||
+        lower.contains('forag')) {
+      return 'farming';
+    }
+    if (lower.contains('shop') ||
+        lower.contains('buy') ||
+        lower.contains('sell') ||
+        lower.contains('smelt') ||
+        lower.contains('furnace') ||
+        lower.contains('craft') ||
+        lower.contains('invent') ||
+        lower.contains('loot') ||
+        lower.contains('ore') ||
+        lower.contains('loadout') ||
+        lower.contains('upgrade')) {
+      return 'economy';
+    }
+    if (lower.contains('grid') ||
+        lower.contains('build') ||
+        lower.contains('place') ||
+        lower.contains('construct') ||
+        lower.contains('tile') ||
+        lower.contains('snap')) {
+      return 'building';
+    }
+    if (lower.contains('camera') ||
+        lower.contains('hud') ||
+        lower.contains('ui') ||
+        lower.contains('radar') ||
+        lower.contains('minimap') ||
+        lower.contains('menu') ||
+        lower.contains('medal') ||
+        lower.contains('score') ||
+        lower.contains('timer')) {
+      return 'ui';
+    }
+    return 'core';
+  }
+
+  static MechanicArchetypeProfile fromFeatureTitle(
+    String rawTitle, {
+    String? beatTitle,
+    String? beatDescription,
+  }) {
+    final clean = rawTitle.trim().isEmpty ? 'Core Mechanic' : rawTitle.trim();
+    final titleCat = inferCategory(clean);
+    final cat = titleCat != 'core'
+        ? titleCat
+        : inferCategory('$clean ${beatTitle ?? ''} ${beatDescription ?? ''}');
+
+    switch (cat) {
+      case 'grapple':
+        return MechanicArchetypeProfile(
+          category: 'grapple',
+          goal: 'Build $clean raycast targeting, tether pull velocity, and release momentum.',
+          doneWhen: 'Player fires $clean at valid anchors, swings/pulls smoothly at 60 FPS, and keeps momentum on release.',
+          inScope: [
+            'Anchor raycast check and tether line rendering for $clean',
+            'Pull/swing velocity impulse and release momentum transfer',
+          ],
+          outOfScope: [
+            'Multi-segment Verlet rope wrapping around complex meshes',
+          ],
+          tuningParams: const [
+            'hookMaxRange: 18.0 m',
+            'hookPullSpeed: 28.0 m/s',
+            'releaseBoostMultiplier: 1.25 x',
+          ],
+          edgeCases: const [
+            '[LOS BREAK GUARD] Detach tether cleanly if moving obstacle blocks line of sight',
+            '[MAX TENSION CLAMP] Clamp velocity on release so frame spikes never launch player out of bounds',
+          ],
+          cp1Title: '$clean Targeting & Pull Velocity',
+          cp1Playtest: 'Aim at anchor within hookMaxRange and fire -> player pulls toward anchor and releases with momentum.',
+          cp1Tasks: [
+            'Implement anchor raycast check and tether state entry for $clean (2h)',
+            'Apply hookPullSpeed velocity and releaseBoostMultiplier on detach (2h)',
+          ],
+          cp2Title: 'Tether Visual Line & Detach Guards',
+          cp2Playtest: 'Break line-of-sight mid-pull -> tether detaches cleanly with audio/visual cue and zero physics hitch.',
+          cp2Tasks: [
+            'Render active tether line and attach/detach audio-visual cues (1h)',
+            'Enforce line-of-sight break guard and velocity clamp for $clean (1h)',
+          ],
+        );
+
+      case 'movement':
+        return MechanicArchetypeProfile(
+          category: 'movement',
+          goal: 'Build responsive $clean input handling, velocity acceleration, and recovery timing.',
+          doneWhen: 'Player chains $clean smoothly across arena obstacles with zero input drop or wall-clip.',
+          inScope: [
+            'Directional input read, acceleration curve, and velocity impulse for $clean',
+            'Screen-feel feedback (FOV kick / dust particles) and cooldown recovery',
+          ],
+          outOfScope: [
+            'Procedural skeletal IK foot placement',
+          ],
+          tuningParams: const [
+            'moveMaxSpeed: 240.0 px/s',
+            'burstImpulseSpeed: 420.0 px/s',
+            'moveCooldownSec: 0.35 s',
+          ],
+          edgeCases: const [
+            '[CORNER SLIDE GUARD] Slide smoothly along wall normals without zeroing tangential velocity',
+            '[BUFFER WINDOW] Queue input pressed 0.10s before landing or cooldown expiry',
+          ],
+          cp1Title: '$clean Velocity & Physics Loop',
+          cp1Playtest: 'Trigger $clean while moving -> character accelerates to burstImpulseSpeed and slides cleanly along walls.',
+          cp1Tasks: [
+            'Bind directional input and velocity impulse math for $clean (2h)',
+            'Enforce wall-slide normal projection and cooldown recovery timer (2h)',
+          ],
+          cp2Title: '$clean Feel Cues & Input Buffer',
+          cp2Playtest: 'Chain $clean repeatedly -> verify 0.10s input buffer and crisp FOV/trail feedback.',
+          cp2Tasks: [
+            'Hook up motion trail / FOV kick and sound cue on $clean trigger (1h)',
+            'Verify input buffer window and mid-air transition guard (1h)',
+          ],
+        );
+
+      case 'combat':
+        return MechanicArchetypeProfile(
+          category: 'combat',
+          goal: 'Build $clean hit detection, damage/knockback application, and reload/cooldown pacing.',
+          doneWhen: 'Player engages targets with $clean, registers crisp hit-confirm feedback, and clears enemy waves reliably.',
+          inScope: [
+            'Hitbox / raycast detection, damage application, and knockback impulse for $clean',
+            'Muzzle / impact flash, hit-stop frame, and ammo / cooldown HUD readout',
+          ],
+          outOfScope: [
+            'limb-specific gore dismemberment physics',
+          ],
+          tuningParams: const [
+            'baseDamage: 25.0 hp',
+            'fireCooldownSec: 0.45 s',
+            'knockbackImpulse: 14.0 m/s',
+          ],
+          edgeCases: const [
+            '[HIT-ONCE GUARD] Single attack swing or projectile hit-reg applies damage exactly once per target ID',
+            '[RELOAD INTERRUPT] Dodging or swapping mid-reload cancels reload timer cleanly without ammo duplication',
+          ],
+          cp1Title: '$clean Hit Detection & Knockback',
+          cp1Playtest: 'Fire/trigger $clean at test target -> deducts baseDamage, applies knockbackImpulse, and respects fireCooldownSec.',
+          cp1Tasks: [
+            'Implement raycast/hitbox query and baseDamage application for $clean (2h)',
+            'Apply knockbackImpulse and enforce single-hit-per-target guard (2h)',
+          ],
+          cp2Title: 'Impact Feel & Cooldown Readout',
+          cp2Playtest: 'Rapid-fire $clean in arena -> verify hit-flash, audio punch, and clean reload/cooldown interrupt.',
+          cp2Tasks: [
+            'Hook up target hit-flash, impact SFX, and HUD ammo/cooldown bar (1h)',
+            'Verify reload/cooldown interrupt guard when switching states (1h)',
+          ],
+        );
+
+      case 'farming':
+        return MechanicArchetypeProfile(
+          category: 'farming',
+          goal: 'Build $clean plot interaction, growth stage timer progression, and harvest item yield.',
+          doneWhen: 'Player plants, grows, and harvests crops via $clean with clear stage visuals and inventory pickup.',
+          inScope: [
+            'Plot tile state machine (Empty -> Planted -> Growing -> Ready) for $clean',
+            'Growth tick timer, harvest pickup spawn, and plot reset',
+          ],
+          outOfScope: [
+            'Seasonal weather simulation and soil pH chemistry',
+          ],
+          tuningParams: const [
+            'growthStageDuration: 12.0 s',
+            'harvestYieldCount: 3 items',
+            'interactRadius: 1.8 m',
+          ],
+          edgeCases: const [
+            '[OCCUPIED PLOT GUARD] Prevent planting a second seed on an already planted tile',
+            '[FULL INVENTORY DROP] If player storage is full on harvest, spawn pickup item on ground instead of deleting yield',
+          ],
+          cp1Title: '$clean Plot State & Growth Timer',
+          cp1Playtest: 'Interact with empty plot -> plants seed, advances through growthStageDuration, and marks Ready.',
+          cp1Tasks: [
+            'Implement plot state machine and growthStageDuration tick timer for $clean (2h)',
+            'Enforce occupied-plot guard and interaction range check (1h)',
+          ],
+          cp2Title: 'Harvest Yield & Visual Stage Cues',
+          cp2Playtest: 'Harvest mature plot -> spawns harvestYieldCount items, plays pop cue, and resets plot to Empty.',
+          cp2Tasks: [
+            'Spawn harvestYieldCount items on harvest and update storage readout (1h)',
+            'Hook up stage sprite swap and full-inventory overflow drop guard (1h)',
+          ],
+        );
+
+      case 'economy':
+        return MechanicArchetypeProfile(
+          category: 'economy',
+          goal: 'Build $clean item transaction logic, resource count validation, and immediate UI inventory sync.',
+          doneWhen: 'Player executes $clean transactions with accurate resource deduction/addition and zero duplicate item bugs.',
+          inScope: [
+            'Resource requirement check, count delta math, and output grant for $clean',
+            'Slot highlight, transaction sound cue, and live counter readout',
+          ],
+          outOfScope: [
+            'Dynamic NPC supply-and-demand market inflation',
+          ],
+          tuningParams: const [
+            'transactionCostBase: 25 gold',
+            'processDurationSec: 2.0 s',
+            'stackMaxCapacity: 99 items',
+          ],
+          edgeCases: const [
+            '[INSUFFICIENT FUNDS GUARD] Block transaction and flash cost label red when resources < transactionCostBase',
+            '[STACK CAP CLAMP] Clamp slot count at stackMaxCapacity and spill remainder to next open slot',
+          ],
+          cp1Title: '$clean Transaction & Resource Math',
+          cp1Playtest: 'Trigger $clean with valid resources -> deducts cost, grants output, and updates inventory count.',
+          cp1Tasks: [
+            'Implement resource check and inventory delta math for $clean (2h)',
+            'Enforce insufficient-funds and stackMaxCapacity overflow guards (1h)',
+          ],
+          cp2Title: '$clean UI Readout & Audio Cues',
+          cp2Playtest: 'Attempt $clean both with and without enough resources -> verify confirm chime vs. red reject flash.',
+          cp2Tasks: [
+            'Wire live resource counter labels and slot highlight for $clean (1h)',
+            'Hook up transaction confirm SFX and insufficient-resource shake cue (1h)',
+          ],
+        );
+
+      case 'building':
+        return MechanicArchetypeProfile(
+          category: 'building',
+          goal: 'Build $clean grid coordinate snapping, placement collision check, and structure instantiation.',
+          doneWhen: 'Player previews ghost placement on the grid, validates clear cells, and places/removes structures cleanly.',
+          inScope: [
+            'World-to-grid coordinate snapping and cell occupancy lookup for $clean',
+            'Valid/invalid ghost preview tint and placement confirmation cue',
+          ],
+          outOfScope: [
+            'Structural physics collapse simulation',
+          ],
+          tuningParams: const [
+            'gridCellSize: 32.0 px',
+            'placeReachDistance: 4.5 tiles',
+            'refundRatio: 1.0 x',
+          ],
+          edgeCases: const [
+            '[OVERLAP GUARD] Block placement and tint ghost red when target cell is occupied or overlaps player collider',
+            '[BOUNDARY CLAMP] Reject grid coordinates outside valid build bounds',
+          ],
+          cp1Title: '$clean Grid Snapping & Cell Occupancy',
+          cp1Playtest: 'Move cursor across arena -> ghost snaps to gridCellSize steps and places structure on open cell.',
+          cp1Tasks: [
+            'Implement world-to-grid snapping and cell occupancy dictionary for $clean (2h)',
+            'Instantiate placed structure and block overlapping cells (1h)',
+          ],
+          cp2Title: 'Placement Ghost Tint & Removal Guard',
+          cp2Playtest: 'Hover over occupied cell -> ghost tints red and blocks click; right-click removes and refunds cleanly.',
+          cp2Tasks: [
+            'Wire green/red ghost preview shader and placement thud SFX (1h)',
+            'Enforce player-overlap guard and clean cell release on removal (1h)',
+          ],
+        );
+
+      case 'ui':
+        return MechanicArchetypeProfile(
+          category: 'ui',
+          goal: 'Build $clean state binding, smooth camera/HUD interpolation, and threshold notifications.',
+          doneWhen: 'Camera and HUD readouts for $clean update at 60 FPS in sync with gameplay state changes.',
+          inScope: [
+            'Event-driven HUD readout binding and smooth interpolation for $clean',
+            'Threshold pop animation and clean reset on round restart',
+          ],
+          outOfScope: [
+            'Custom remappable HUD layout editor',
+          ],
+          tuningParams: const [
+            'cameraFollowLerp: 14.0',
+            'hudPopScale: 1.18 x',
+            'readoutLerpSpeed: 10.0',
+          ],
+          edgeCases: const [
+            '[ARENA BOUND CLAMP] Clamp camera and off-screen indicators cleanly at level edges',
+            '[RAPID EVENT DEBOUNCE] Coalesce simultaneous state changes in the same frame without UI flicker',
+          ],
+          cp1Title: '$clean State Signal & Smooth Readout',
+          cp1Playtest: 'Trigger state change in arena -> $clean updates immediately with smooth lerp and zero frame hitch.',
+          cp1Tasks: [
+            'Subscribe $clean presenter to gameplay state signal and update readout (2h)',
+            'Apply cameraFollowLerp / readoutLerpSpeed smoothing and arena bound clamp (2h)',
+          ],
+          cp2Title: 'Threshold Callout & Reset Cleanup',
+          cp2Playtest: 'Cross target threshold and reset round -> badge animates once and resets cleanly.',
+          cp2Tasks: [
+            'Trigger hudPopScale callout animation and audio chime on threshold (1h)',
+            'Enforce rapid-event debounce and clean HUD reset on loop restart (1h)',
+          ],
+        );
+
+      default:
+        final descSuffix = (beatDescription != null && beatDescription.trim().isNotEmpty)
+            ? ' (${beatDescription.trim()})'
+            : '';
+        return MechanicArchetypeProfile(
+          category: 'core',
+          goal: 'Build playable $clean mechanics, state transitions, and player feedback$descSuffix.',
+          doneWhen: 'Playtester can execute $clean reliably at 60 FPS with immediate visual and audio confirmation.',
+          inScope: [
+            'Core player input, state transition logic, and active execution for $clean',
+            'Immediate on-screen visual/audio feedback and clean transition to next beat',
+          ],
+          outOfScope: [
+            'Final production art shaders and meta-progression unlocks for $clean',
+          ],
+          tuningParams: const [
+            'actionResponseWindow: 0.10 s',
+            'stateCooldownSec: 0.25 s',
+          ],
+          edgeCases: const [
+            '[INPUT GUARD] Rapid repeated inputs during active state transition cleanly without state lock',
+          ],
+          cp1Title: '$clean Core State & Controls',
+          cp1Playtest: 'Trigger $clean in the test arena -> state activates within actionResponseWindow and updates gameplay.',
+          cp1Tasks: [
+            'Implement player input trigger and state logic for $clean (2h)',
+            'Apply actionResponseWindow timing and stateCooldownSec recovery (1h)',
+          ],
+          cp2Title: '$clean Visual/Audio Cues & Guardrails',
+          cp2Playtest: 'Spam input during $clean transition -> feedback plays cleanly and state never locks up.',
+          cp2Tasks: [
+            'Hook up immediate visual indicator and audio cue for $clean (1h)',
+            'Enforce rapid-input state guard and clean reset on round restart (1h)',
+          ],
+        );
+    }
+  }
+}
+
+/// Resolves and caches the structured Parent Task metadata (`numLabel`, `layerTag`,
+/// `cleanTitle`, `durationChip`, `whereLocation`, `engineLabel`) and ensures each Parent Task has
+/// 6 checkable `How-To` sub-steps (`Subtask.children`) with automatic rollup and engine-aware code formulas.
+class TaskHowToBlueprint {
+  final String numLabel;      // "01", "02", ...
+  final String layerTag;      // "INPUT", "PHYSICS", "STATE", "FEEL", "UI"
+  final String cleanTitle;    // Task title without trailing "(2h)"
+  final String durationChip;  // Extracted "2h" or "1h"
+  final String whereLocation; // e.g. "Script: PlayerController._physics_process(delta)"
+  final String engineLabel;   // "GODOT 4", "UNITY C#", "UNREAL 5"
+  final List<TaskHowToSubStep> subSteps;
+
+  const TaskHowToBlueprint({
+    required this.numLabel,
+    required this.layerTag,
+    required this.cleanTitle,
+    required this.durationChip,
+    required this.whereLocation,
+    required this.engineLabel,
+    required this.subSteps,
+  });
+
+  static final RegExp _trailingDurationRe =
+      RegExp(r'\s*\(([\d\.]+\s*[hm])\)\s*$', caseSensitive: false);
+
+  /// Lightweight LRU-style memoization cache for `TaskHowToBlueprint.resolve`
+  /// so Outliner ETA rollups and Active Step Workspace renders do not re-run regexes
+  /// and object allocations multiple times per frame.
+  static final Map<String, ({int signature, TaskHowToBlueprint blueprint})>
+      _blueprintCache = {};
+
+  static void clearCache() => _blueprintCache.clear();
+
+  static String detectEngineLabel(String? engineHint) {
+    final lower = (engineHint ?? '').toLowerCase();
+    if (lower.contains('unity') || lower.contains('c#')) {
+      return 'UNITY C#';
+    }
+    if (lower.contains('unreal') || lower.contains('ue5') || lower.contains('c++')) {
+      return 'UNREAL 5';
+    }
+    return 'GODOT 4';
+  }
+
+  static String extractCleanTitle(String rawText) {
+    var cleaned = rawText.replaceAll(_trailingDurationRe, '').trim();
+    cleaned = cleaned
+        .replaceFirst(
+          RegExp(r'^\[(?:PREREQ|BUILD|HOOK|TEST|INPUT|STATE|PHYSICS|FEEL|UI)\]\s*',
+              caseSensitive: false),
+          '',
+        )
+        .trim();
+    return cleaned.isEmpty ? rawText.trim() : cleaned;
+  }
+
+  static String extractDurationChip(String rawText) {
+    final m = _trailingDurationRe.firstMatch(rawText);
+    if (m != null && m.group(1) != null) {
+      return m.group(1)!.replaceAll(' ', '');
+    }
+    return '3h';
+  }
+
+  /// Base effort weights (in minutes) across the 6 standard steps of a 3.0h (180m) task:
+  /// Step 1: 15m (Create / Open Asset)
+  /// Step 2: 25m (Add Components / Hierarchy)
+  /// Step 3: 15m (Place in Scene / Level)
+  /// Step 4: 25m (Expose Tuning Variables)
+  /// Step 5: 65m (Write Core Logic — ~1.1h)
+  /// Step 6: 35m (Add Guard & Playtest)
+  static const List<int> baseStepWeights180 = <int>[15, 25, 15, 25, 65, 35];
+
+  static int extractTaskTotalMinutes(String rawText) {
+    final m = _trailingDurationRe.firstMatch(rawText);
+    if (m != null && m.group(1) != null) {
+      final parsed = DurationHelper.parseToMinutes(m.group(1)!);
+      if (parsed > 0) return parsed;
+    }
+    return 180; // Default 3h = 180m
+  }
+
+  static List<int> computeWeightedStepMinutes(int totalSteps, int totalTaskMinutes) {
+    if (totalSteps <= 0) return const <int>[];
+    final safeTotal = totalTaskMinutes > 0 ? totalTaskMinutes : 180;
+    if (totalSteps == 6 && safeTotal == 180) {
+      return baseStepWeights180;
+    }
+    final rawWeights = List<int>.generate(
+      totalSteps,
+      (idx) => idx < baseStepWeights180.length ? baseStepWeights180[idx] : 20,
+    );
+    final weightSum = rawWeights.fold<int>(0, (sum, w) => sum + w);
+    if (weightSum <= 0) {
+      final each = (safeTotal / totalSteps).round();
+      return List<int>.filled(totalSteps, each > 0 ? each : 5);
+    }
+    final scaled = <int>[];
+    int allocated = 0;
+    for (int i = 0; i < totalSteps; i++) {
+      if (i == totalSteps - 1) {
+        final rem = safeTotal - allocated;
+        scaled.add(rem > 0 ? rem : 5);
+      } else {
+        final mins = ((rawWeights[i] / weightSum) * safeTotal).round();
+        final clamped = mins > 0 ? mins : 5;
+        scaled.add(clamped);
+        allocated += clamped;
+      }
+    }
+    return scaled;
+  }
+
+  static String formatStepEtaLabel(int minutes) {
+    if (minutes <= 0) return '0m';
+    if (minutes < 60) return '${minutes}m';
+    final hours = minutes / 60.0;
+    if ((hours - hours.roundToDouble()).abs() < 0.05) {
+      return '${hours.round()}h';
+    }
+    return '${hours.toStringAsFixed(1)}h';
+  }
+
+  static String formatRemainingHoursShort(int minutes) {
+    if (minutes <= 0) return '0h';
+    final hours = minutes / 60.0;
+    if ((hours - hours.roundToDouble()).abs() < 0.05) {
+      return '${hours.round()}h';
+    }
+    return '${hours.toStringAsFixed(1)}h';
+  }
+
+  int get totalTaskMinutes =>
+      subSteps.fold<int>(0, (sum, s) => sum + s.estimatedMinutes);
+
+  int get remainingTaskMinutes => subSteps.fold<int>(
+        0,
+        (sum, s) => sum + (s.subtask.completed ? 0 : s.estimatedMinutes),
+      );
+
+  static String inferLayerTag(String rawText, int taskIdx) {
+    final lower = rawText.toLowerCase();
+    if (lower.contains('input') ||
+        lower.contains('control') ||
+        lower.contains('key') ||
+        lower.contains('mouse') ||
+        lower.contains('aim') ||
+        lower.contains('strafe')) {
+      return 'INPUT';
+    }
+    if (lower.contains('physic') ||
+        lower.contains('velocity') ||
+        lower.contains('force') ||
+        lower.contains('speed') ||
+        lower.contains('gravity') ||
+        lower.contains('collision') ||
+        lower.contains('raycast') ||
+        lower.contains('movement')) {
+      return 'PHYSICS';
+    }
+    if (lower.contains('visual') ||
+        lower.contains('audio') ||
+        lower.contains('sfx') ||
+        lower.contains('vfx') ||
+        lower.contains('cue') ||
+        lower.contains('camera') ||
+        lower.contains('fov') ||
+        lower.contains('feel') ||
+        lower.contains('feedback') ||
+        lower.contains('anim')) {
+      return 'FEEL';
+    }
+    if (lower.contains('hud') ||
+        lower.contains('ui') ||
+        lower.contains('menu') ||
+        lower.contains('indicator') ||
+        lower.contains('readout') ||
+        lower.contains('badge')) {
+      return 'UI / HUD';
+    }
+    return taskIdx == 0 ? 'STATE' : (taskIdx == 1 ? 'FEEL' : 'LOGIC');
+  }
+
+  static String inferWhereLocation(
+    String cleanTitle,
+    String layerTag, {
+    String engineLabel = 'GODOT 4',
+  }) {
+    if (engineLabel == 'UNITY C#') {
+      switch (layerTag) {
+        case 'INPUT':
+          return 'MonoBehaviour: PlayerInputController.Update()';
+        case 'PHYSICS':
+          return 'MonoBehaviour: MechanicController.FixedUpdate()';
+        case 'FEEL':
+          return 'MonoBehaviour: FeedbackPresenter.LateUpdate()';
+        case 'UI / HUD':
+          return 'MonoBehaviour: GameHudOverlay.RefreshReadout()';
+        default:
+          return 'MonoBehaviour: CoreLoopStateController.FixedUpdate()';
+      }
+    }
+    if (engineLabel == 'UNREAL 5') {
+      switch (layerTag) {
+        case 'INPUT':
+          return 'ActorComponent: UPlayerInputComp::SetupPlayerInputComponent()';
+        case 'PHYSICS':
+          return 'ActorComponent: UMechanicComponent::TickComponent(DeltaTime)';
+        case 'FEEL':
+          return 'ActorComponent: UFeedbackPresenter::TriggerFeelCue()';
+        case 'UI / HUD':
+          return 'UserWidget: UGameHudWidget::UpdateStateReadout()';
+        default:
+          return 'ActorComponent: UCoreLoopStateComp::TickComponent(DeltaTime)';
+      }
+    }
+    switch (layerTag) {
+      case 'INPUT':
+        return 'Script: PlayerController._unhandled_input(event)';
+      case 'PHYSICS':
+        return 'Script: MechanicController._physics_process(delta)';
+      case 'FEEL':
+        return 'Scene: FeedbackPresenter & CameraController._process(delta)';
+      case 'UI / HUD':
+        return 'Scene: GameHudOverlay.update_state_readout()';
+      default:
+        return 'Script: CoreLoopStateController._physics_process(delta)';
+    }
+  }
+
+  static ({String pascalName, String snakeName}) deriveConcreteAssetName(
+    String rawText,
+  ) {
+    final clean = extractCleanTitle(rawText);
+    const stopWords = <String>{
+      'create',
+      'build',
+      'implement',
+      'add',
+      'wire',
+      'hook',
+      'up',
+      'setup',
+      'set',
+      'bind',
+      'apply',
+      'enforce',
+      'verify',
+      'test',
+      'the',
+      'and',
+      'for',
+      'with',
+      'in',
+      'on',
+      'to',
+      'of',
+      'a',
+      'an',
+      'core',
+      'state',
+      'player',
+      'interaction',
+      'mechanics',
+      'controls',
+      'logic',
+      'pass',
+      'stage',
+    };
+    final words = RegExp(r'[A-Za-z0-9]+')
+        .allMatches(clean)
+        .map((m) => m.group(0)!)
+        .where((w) => w.length > 1 && !stopWords.contains(w.toLowerCase()))
+        .toList();
+    final chosen = words.isNotEmpty
+        ? words.take(3).toList()
+        : <String>['Grid', 'Tile', 'Actor'];
+    if (!chosen.any((w) =>
+        w.toLowerCase() == 'actor' ||
+        w.toLowerCase() == 'controller' ||
+        w.toLowerCase() == 'node' ||
+        w.toLowerCase() == 'manager')) {
+      chosen.add('Actor');
+    }
+    final pascal = chosen
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join();
+    final snake = chosen.map((w) => w.toLowerCase()).join('_');
+    return (pascalName: pascal, snakeName: snake);
+  }
+
+  static int _computeTaskSignature({
+    required Subtask parentTask,
+    required FeatureStateNode checkpointNode,
+    required String? engineHint,
+    required bool unrealCppMode,
+  }) {
+    var hash = Object.hash(
+      parentTask.id,
+      parentTask.text,
+      parentTask.completed,
+      parentTask.children.length,
+      checkpointNode.id,
+      checkpointNode.name,
+      checkpointNode.trigger,
+      checkpointNode.tuningParams.join('|'),
+      checkpointNode.edgeCases.join('|'),
+      engineHint ?? '',
+      unrealCppMode,
+    );
+    for (final c in parentTask.children) {
+      hash = Object.hash(
+        hash,
+        c.id,
+        c.text,
+        c.completed,
+        c.specNotes,
+        c.codeSnippet,
+        c.codeTargetFile,
+      );
+    }
+    return hash;
+  }
+
+  /// Guarantees that `parentTask.children` contains 6 atomic, zero-assumption "LEGO / IKEA" sub-steps
+  /// (`Step X.1` through `Step X.6`) adapted to `engineHint` (`GODOT 4`, `UNITY C#`, `UNREAL 5`),
+  /// supporting Task 01 (create foundation asset) vs. Task 02+ (extend existing asset) and
+  /// Unreal 5 `Blueprint | C++` toggle (`unrealCppMode`).
+  static TaskHowToBlueprint resolve({
+    required Subtask parentTask,
+    required int taskIndex,
+    required FeatureStateNode checkpointNode,
+    String? engineHint,
+    bool unrealCppMode = false,
+  }) {
+    final cacheKey = '${checkpointNode.id}_${parentTask.id}_$taskIndex';
+    if (parentTask.children.length >= 6) {
+      final sig = _computeTaskSignature(
+        parentTask: parentTask,
+        checkpointNode: checkpointNode,
+        engineHint: engineHint,
+        unrealCppMode: unrealCppMode,
+      );
+      final cached = _blueprintCache[cacheKey];
+      if (cached != null && cached.signature == sig) {
+        return cached.blueprint;
+      }
+    }
+
+    final taskNum = taskIndex + 1;
+    final numLabel = taskNum.toString().padLeft(2, '0');
+    final cleanTitle = extractCleanTitle(parentTask.text);
+    final durationChip = extractDurationChip(parentTask.text);
+    final layerTag = inferLayerTag(parentTask.text, taskIndex);
+    final engineLabel = detectEngineLabel(engineHint);
+    final whereLocation = inferWhereLocation(
+      cleanTitle,
+      layerTag,
+      engineLabel: engineLabel,
+    );
+
+    final assetSource = checkpointNode.checklist.isNotEmpty
+        ? checkpointNode.checklist.first.text
+        : cleanTitle;
+    final asset = deriveConcreteAssetName('$assetSource ${checkpointNode.name}');
+    final pascalAsset = asset.pascalName;
+    final snakeAsset = asset.snakeName;
+    final bpAsset = 'BP_$pascalAsset';
+    final cppClass = 'A$pascalAsset';
+
+    final primaryVar = checkpointNode.tuningParams.isNotEmpty
+        ? checkpointNode.tuningParams[taskIndex % checkpointNode.tuningParams.length]
+        : 'responseTime: 0.12 s';
+    final primaryVarName = primaryVar.split(':').first.trim();
+    final primaryGuard = checkpointNode.edgeCases.isNotEmpty
+        ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
+        : '[STATE GUARD] Prevent duplicate trigger while active';
+    final isFoundationTask = taskIndex == 0;
+
+    ({
+      String stepHeader,
+      String shortTitle,
+      String instruction,
+      String verify,
+      String path,
+      String code,
+      String explain,
+    }) buildAtomicStepSpec(int stepIdx) {
+      // =======================================================================
+      // UNREAL 5 (Supports both Blueprint mode & C++ mode)
+      // =======================================================================
+      if (engineLabel == 'UNREAL 5') {
+        if (unrealCppMode) {
+          switch (stepIdx) {
+            case 0:
+              return (
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.1 · CREATE $cppClass C++ CLASS'
+                    : 'STEP $taskNum.1 · OPEN EXISTING $pascalAsset.h / .cpp',
+                shortTitle: isFoundationTask
+                    ? 'Create $cppClass C++ Class'
+                    : 'Open Existing $pascalAsset.cpp',
+                instruction: isFoundationTask
+                    ? 'In the Unreal Editor top menu, click Tools → New C++ Class... → choose Actor as the parent class → name it $pascalAsset and click Create Class.'
+                    : 'Open your existing $pascalAsset.h and $pascalAsset.cpp files (created in Task 01) in Visual Studio or Rider to extend them for "$cleanTitle".',
+                verify: isFoundationTask
+                    ? 'Visual Studio / Rider opens with $pascalAsset.h and $pascalAsset.cpp generated.'
+                    : '$pascalAsset.cpp is open in your IDE with no compile errors.',
+                path: 'Source/Project/$pascalAsset.h',
+                code: '#pragma once\n#include "CoreMinimal.h"\n#include "GameFramework/Actor.h"\n#include "$pascalAsset.generated.h"\n\nUCLASS()\nclass $cppClass : public AActor {\n  GENERATED_BODY()\npublic:\n  $cppClass();\n  EMechanicState ActiveState = EMechanicState::Idle;\n};',
+                explain: 'An AActor C++ class is the foundation object you can spawn or place inside a level.',
+              );
+            case 1:
+              return (
+                stepHeader: 'STEP $taskNum.2 · ATTACH MESH & COLLISION SUBOBJECTS',
+                shortTitle: 'Create Mesh & Collision Subobjects',
+                instruction:
+                    'Inside the $cppClass() constructor in $pascalAsset.cpp, instantiate a UStaticMeshComponent ("VisualMesh") and UBoxComponent ("InteractBox") and attach them to RootComponent.',
+                verify:
+                    'Live Coding (Ctrl+Alt+F11) compiles cleanly with VisualMesh and InteractBox attached under RootComponent.',
+                path: 'Source/Project/$pascalAsset.cpp :: $cppClass()',
+                code: '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>("VisualMesh");\n  VisualMesh->SetupAttachment(RootComponent);\n  InteractBox = CreateDefaultSubobject<UBoxComponent>("InteractBox");\n  InteractBox->InitBoxExtent(FVector(50.f, 50.f, 20.f));\n  InteractBox->SetupAttachment(RootComponent);\n}',
+                explain: 'CreateDefaultSubobject constructs the visible 3D mesh and the collision sensor box inside your C++ constructor.',
+              );
+            case 2:
+              return (
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.3 · COMPILE & PLACE IN LEVEL VIEWPORT'
+                    : 'STEP $taskNum.3 · SELECT INSTANCE IN LEVEL OUTLINER',
+                shortTitle: isFoundationTask
+                    ? 'Place $cppClass in Level'
+                    : 'Select $cppClass in Outliner',
+                instruction: isFoundationTask
+                    ? 'Press Ctrl+Alt+F11 (Live Coding) to compile, then open C++ Classes in the Content Browser and drag $pascalAsset into the Level Viewport at (0, 0, 0).'
+                    : 'Press Ctrl+Alt+F11 (Live Coding) and select your existing $pascalAsset instance in the Level Outliner to inspect its updated properties.',
+                verify:
+                    '$pascalAsset appears in the World Outliner at (0, 0, 0) with VisualMesh and InteractBox visible.',
+                path: 'Level Editor → Content Browser → C++ Classes → Viewport',
+                code: 'Instance: ${pascalAsset}_0 ($cppClass)\nTransform Location: FVector(0.f, 0.f, 0.f)',
+                explain: 'Dragging the C++ class into the Level Viewport spawns a physical instance in your playable scene.',
+              );
+            case 3:
+              return (
+                stepHeader: 'STEP $taskNum.4 · EXPOSE UPROPERTY TUNING VARIABLES',
+                shortTitle: 'Expose UPROPERTY $primaryVarName',
+                instruction:
+                    'In $pascalAsset.h under public:, declare $primaryVarName with UPROPERTY(EditAnywhere, BlueprintReadWrite) so designers can tune "$primaryVar" in the Details panel.',
+                verify:
+                    'After Live Coding, selecting the actor in the Level shows "$primaryVarName" inside the Details panel.',
+                path: 'Source/Project/$pascalAsset.h (UPROPERTY)',
+                code: 'UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tuning")\nfloat $primaryVarName = 1.0f; // $primaryVar\n\nUPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="State")\nbool bIsOccupied = false;',
+                explain: 'UPROPERTY(EditAnywhere) exposes a C++ variable to the Unreal Editor Details panel so you can tweak it without recompiling.',
+              );
+            case 4:
+              return (
+                stepHeader: 'STEP $taskNum.5 · IMPLEMENT OVERLAP / TICK LOGIC',
+                shortTitle: 'Implement $cleanTitle in C++',
+                instruction:
+                    'In $pascalAsset.cpp, implement the trigger and state interpolation for "$cleanTitle" using FMath::FInterpConstantTo driven by $primaryVarName.',
+                verify:
+                    'C++ method compiles cleanly and transitions ActiveState to EMechanicState::Active on trigger.',
+                path: 'Source/Project/$pascalAsset.cpp :: TickComponent / Overlap',
+                code: 'void $cppClass::ExecuteMechanicStep(float DeltaTime) {\n  if (bInputPressed && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n  }\n  CurrentVal = FMath::FInterpConstantTo(CurrentVal, TargetVal, DeltaTime, $primaryVarName);\n}',
+                explain: 'FMath::FInterpConstantTo smoothly steps your value each frame using DeltaTime so movement speed is frame-rate independent.',
+              );
+            default:
+              return (
+                stepHeader: 'STEP $taskNum.6 · ADD GUARD CHECK & PLAYTEST (ALT+P)',
+                shortTitle: 'Add Guard & Playtest (Alt+P)',
+                instruction:
+                    'Add a guard check at the top of your function to enforce "$primaryGuard", compile with Ctrl+Alt+F11, and press Play (Alt+P) to test in the viewport.',
+                verify:
+                    'Pressing Play (Alt+P) triggers "$cleanTitle" cleanly on screen and blocks duplicate triggers.',
+                path: 'Main Toolbar → Live Coding (Ctrl+Alt+F11) → Play (Alt+P)',
+                code: 'if (IsBoundaryBlocked() || CooldownTimer > 0.f) return; // Guard: $primaryGuard\nif (GEngine) {\n  GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, TEXT("$cleanTitle Active!"));\n}',
+                explain: 'The early-return guard prevents double-triggering or out-of-bounds states when the player spams input.',
+              );
+          }
+        } else {
+          // UNREAL 5 — Blueprint Mode (Default)
+          switch (stepIdx) {
+            case 0:
+              return (
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.1 · CREATE $bpAsset BLUEPRINT ASSET'
+                    : 'STEP $taskNum.1 · OPEN EXISTING $bpAsset BLUEPRINT',
+                shortTitle: isFoundationTask
+                    ? 'Create $bpAsset'
+                    : 'Open Existing $bpAsset',
+                instruction: isFoundationTask
+                    ? 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Actor, and name it $bpAsset.'
+                    : 'In the Content Browser (/Game/Blueprints), double-click your existing $bpAsset (created in Task 01) to open it for "$cleanTitle".',
+                verify: isFoundationTask
+                    ? 'A new blue-underlined Blueprint icon named $bpAsset appears inside /Game/Blueprints.'
+                    : 'The Blueprint Editor opens showing your existing $bpAsset components and Event Graph.',
+                path: 'Content Browser → /Game/Blueprints/$bpAsset',
+                code: 'Asset Name:   $bpAsset\nParent Class: Actor (AActor / EMechanicState::Active)',
+                explain: 'An Actor Blueprint is a visual container you can place in a level that holds 3D meshes, collision sensors, and Event Graph nodes.',
+              );
+            case 1:
+              return (
+                stepHeader: 'STEP $taskNum.2 · ATTACH VISUAL MESH & BOX COLLISION',
+                shortTitle: 'Attach Mesh & BoxCollision',
+                instruction:
+                    'Inside $bpAsset, look at the top-left Components panel and click + Add to attach a Static Mesh ("VisualMesh", set to Shape_Plane/Cube) and a Box Collision ("InteractBox").',
+                verify:
+                    'A visible 3D shape surrounded by an orange wireframe collision box appears in the central Viewport tab.',
+                path: '$bpAsset → Components Panel (Top-Left)',
+                code: '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)',
+                explain: 'Static Mesh makes the object visible to the player. Box Collision creates an invisible trigger zone so the game knows when the player overlaps or clicks it.',
+              );
+            case 2:
+              return (
+                stepHeader: isFoundationTask
+                    ? 'STEP $taskNum.3 · DRAG $bpAsset INTO LEVEL VIEWPORT'
+                    : 'STEP $taskNum.3 · VERIFY $bpAsset IN LEVEL OUTLINER',
+                shortTitle: isFoundationTask
+                    ? 'Drag into Level Viewport'
+                    : 'Select in Level Outliner',
+                instruction: isFoundationTask
+                    ? 'Click Compile & Save (top-left of $bpAsset), then switch to the main Level tab and drag $bpAsset from the Content Browser onto the floor at (0, 0, 0).'
+                    : 'Click Compile & Save, then select your existing $bpAsset instance in the Level Outliner on the right to verify the updated component.',
+                verify:
+                    '$bpAsset sits on the level floor and is listed inside the World Outliner panel.',
+                path: 'Main Level Viewport & World Outliner',
+                code: 'Instance: ${bpAsset}_0\nLocation: X = 0.0, Y = 0.0, Z = 0.0',
+                explain: 'A Blueprint in the Content Browser is just a template. Dragging it into the Level Viewport spawns an actual physical copy inside your game world.',
+              );
+            case 3:
+              return (
+                stepHeader: 'STEP $taskNum.4 · ADD & EXPOSE TUNING VARIABLES',
+                shortTitle: 'Add $primaryVarName Variable',
+                instruction:
+                    'In $bpAsset, find My Blueprint → Variables on the left and click + to add "$primaryVarName" (Float) and "bIsActive" (Boolean). Click the Eye Icon next to "$primaryVarName" to make it Instance Editable.',
+                verify:
+                    '"$primaryVarName" shows an open yellow Eye Icon and defaults to "$primaryVar" in the Details panel.',
+                path: '$bpAsset → My Blueprint → Variables → +',
+                code: '$primaryVarName : Float ($primaryVar)  [👁 Instance Editable]\nbIsActive      : Boolean = false      [👁 Instance Editable]',
+                explain: 'Variables store your mechanic\'s state and speed. Clicking the Eye Icon (Instance Editable) lets you tweak the value directly in the Level without reopening the Blueprint.',
+              );
+            case 4:
+              return (
+                stepHeader: 'STEP $taskNum.5 · WIRE EVENT GRAPH NODE CHAIN',
+                shortTitle: 'Wire Event Graph Logic',
+                instruction:
+                    'Open the Event Graph tab. Right-click InteractBox → Add Event → OnComponentBeginOverlap (or Input Action) → connect a Branch node → Set bIsActive = true and update using FMath::FInterpConstantTo ($primaryVarName).',
+                verify:
+                    'A white execution wire connects the red Event node through the Branch node to Set bIsActive = true.',
+                path: '$bpAsset → Event Graph Tab',
+                code: '[Event OnBeginOverlap (InteractBox)]\n   └──► [Branch: NOT bIsActive]\n           └──► (True) ──► [Set bIsActive = true]\n                           [FMath::FInterpConstantTo ($primaryVarName)]',
+                explain: 'The Event Graph is the visual brain of your Blueprint. Execution flows left-to-right along the white wire whenever the event fires.',
+              );
+            default:
+              return (
+                stepHeader: 'STEP $taskNum.6 · ADD GUARD & PLAYTEST (ALT+P)',
+                shortTitle: 'Connect Guard & Playtest (Alt+P)',
+                instruction:
+                    'Ensure your Branch node checks "$primaryGuard" before firing, connect a Print String ("$cleanTitle Active!") node to confirm, click Compile, and press Play (Alt+P).',
+                verify:
+                    'Pressing Play (Alt+P) and triggering the object prints "$cleanTitle Active!" in cyan text at the top-left of the viewport.',
+                path: 'Main Toolbar → Compile → Play (Alt+P)',
+                code: '// Guard: $primaryGuard\n[Branch: !IsBoundaryBlocked && Cooldown <= 0]\n   └──► (True) ──► [Print String: "$cleanTitle Active!"]',
+                explain: 'Checking the guard condition on the Branch node prevents the mechanic from double-firing or locking up when inputs are spammed.',
+              );
+          }
+        }
+      }
+
+      // =======================================================================
+      // UNITY C# (Strictly C# MonoBehaviour + GameObject Hierarchy)
+      // =======================================================================
+      if (engineLabel == 'UNITY C#') {
+        switch (stepIdx) {
+          case 0:
+            return (
+              stepHeader: isFoundationTask
+                  ? 'STEP $taskNum.1 · CREATE $pascalAsset.cs C# SCRIPT'
+                  : 'STEP $taskNum.1 · OPEN EXISTING $pascalAsset.cs SCRIPT',
+              shortTitle: isFoundationTask
+                  ? 'Create $pascalAsset.cs'
+                  : 'Open Existing $pascalAsset.cs',
+              instruction: isFoundationTask
+                  ? 'In the Project window (bottom panel), right-click inside Assets/Scripts → Create → C# Script, and name it $pascalAsset.'
+                  : 'In Assets/Scripts, double-click your existing $pascalAsset.cs script (from Task 01) to open it in your code editor for "$cleanTitle".',
+              verify: isFoundationTask
+                  ? '$pascalAsset.cs appears in Assets/Scripts with class $pascalAsset : MonoBehaviour.'
+                  : '$pascalAsset.cs is open in VS Code / Visual Studio / Rider.',
+              path: 'Project Window → Assets/Scripts/$pascalAsset.cs',
+              code: 'using UnityEngine;\n\npublic class $pascalAsset : MonoBehaviour {\n    private bool isActive = false;\n}',
+              explain: 'A MonoBehaviour C# script is a custom component you can attach to any GameObject in your Unity scene.',
+            );
+          case 1:
+            return (
+              stepHeader: 'STEP $taskNum.2 · CREATE GAMEOBJECT & ATTACH COLLIDER',
+              shortTitle: 'Add Mesh & BoxCollider',
+              instruction:
+                  'In the Hierarchy window (left), right-click → Create Empty → name it "$pascalAsset". In the Inspector, click Add Component to attach a MeshRenderer/SpriteRenderer, a BoxCollider (check Is Trigger), and your $pascalAsset script.',
+              verify:
+                  'Selecting $pascalAsset in the Scene view shows a green wireframe BoxCollider outline.',
+              path: 'Hierarchy → $pascalAsset → Inspector → Add Component',
+              code: '$pascalAsset (GameObject)\n ├─ VisualMesh      (MeshFilter + MeshRenderer / SpriteRenderer)\n ├─ InteractTrigger (BoxCollider: isTrigger = true)\n └─ $pascalAsset    (MonoBehaviour Script)',
+              explain: 'The Renderer draws the object on screen, the BoxCollider detects overlaps/clicks, and the Script runs your C# logic.',
+            );
+          case 2:
+            return (
+              stepHeader: isFoundationTask
+                  ? 'STEP $taskNum.3 · POSITION IN SCENE & SAVE PREFAB'
+                  : 'STEP $taskNum.3 · SELECT $pascalAsset IN SCENE HIERARCHY',
+              shortTitle: isFoundationTask
+                  ? 'Place in Scene at (0, 0, 0)'
+                  : 'Select in Scene Hierarchy',
+              instruction: isFoundationTask
+                  ? 'Select $pascalAsset in the Hierarchy, set its Transform Position to (0, 0, 0) in the Inspector, and drag it into Assets/Prefabs to save a reusable Prefab.'
+                  : 'Select your $pascalAsset instance in the Hierarchy so you can inspect the new fields in the Inspector.',
+              verify:
+                  '$pascalAsset sits at (0, 0, 0) in the Scene view with a blue Prefab icon in the Hierarchy.',
+              path: 'Hierarchy & Scene View → Transform (0, 0, 0)',
+              code: 'GameObject: $pascalAsset\nTransform.position = new Vector3(0f, 0f, 0f);',
+              explain: 'Saving your GameObject as a Prefab lets you place multiple copies across the level and update them all at once.',
+            );
+          case 3:
+            return (
+              stepHeader: 'STEP $taskNum.4 · EXPOSE [SerializeField] TUNING VARIABLES',
+              shortTitle: 'Add [SerializeField] $primaryVarName',
+              instruction:
+                  'At the top of $pascalAsset.cs inside the class body, add [SerializeField] private float $primaryVarName so you can tune "$primaryVar" directly in the Unity Inspector.',
+              verify:
+                  'Saving the script and clicking $pascalAsset in Unity shows "$primaryVarName" as an editable number field in the Inspector.',
+              path: 'Assets/Scripts/$pascalAsset.cs (Inspector Fields)',
+              code: '[Header("Tuning Parameters")]\n[SerializeField] private float $primaryVarName = 1.0f; // $primaryVar\n[SerializeField] private bool canTrigger = true;',
+              explain: '[SerializeField] exposes a private C# variable inside the Unity Inspector without making it public to other scripts.',
+            );
+          case 4:
+            return (
+              stepHeader: 'STEP $taskNum.5 · WRITE UPDATE / TRIGGER LOGIC IN C#',
+              shortTitle: 'Implement Update() / Trigger Logic',
+              instruction:
+                  'Inside $pascalAsset.cs, implement Update() / FixedUpdate() to read input with Input.GetButton("Fire1") and advance state using Time.fixedDeltaTime and $primaryVarName.',
+              verify:
+                  'Unity compiles the script in the bottom-right corner with zero Console errors.',
+              path: 'Assets/Scripts/$pascalAsset.cs :: FixedUpdate()',
+              code: 'private void FixedUpdate() {\n    if (Input.GetButton("Fire1") && canTrigger) {\n        isActive = true;\n        currentVal = Mathf.MoveTowards(currentVal, targetVal, $primaryVarName * Time.fixedDeltaTime);\n    }\n}',
+              explain: 'FixedUpdate() runs on a fixed physics clock, and multiplying by Time.fixedDeltaTime keeps speeds identical at any frame rate.',
+            );
+          default:
+            return (
+              stepHeader: 'STEP $taskNum.6 · ADD GUARD CHECK & PRESS PLAY (CTRL+P)',
+              shortTitle: 'Add Guard & Playtest (Ctrl+P)',
+              instruction:
+                  'Add an early return guard at the top of your method to enforce "$primaryGuard", save the script, and press the Play button (Ctrl+P) at the top of the Unity Editor.',
+              verify:
+                  'In Play Mode, triggering "$cleanTitle" logs confirmation in the Console and prevents duplicate triggers.',
+              path: 'Unity Top Toolbar → Play (Ctrl+P)',
+              code: 'if (!canTrigger || cooldownTimer > 0f) return; // Guard: $primaryGuard\nDebug.Log("$cleanTitle activated!");',
+              explain: 'The guard clause exits immediately if the mechanic is on cooldown or blocked, preventing state bugs when buttons are spammed.',
+            );
+        }
+      }
+
+      // =======================================================================
+      // DEFAULT: GODOT 4 (Strictly GDScript .gd + Scene .tscn Hierarchy)
+      // =======================================================================
+      switch (stepIdx) {
+        case 0:
+          return (
+            stepHeader: isFoundationTask
+                ? 'STEP $taskNum.1 · CREATE $snakeAsset.tscn & .gd SCRIPT'
+                : 'STEP $taskNum.1 · OPEN EXISTING $snakeAsset.gd SCRIPT',
+            shortTitle: isFoundationTask
+                ? 'Create $snakeAsset.tscn & .gd'
+                : 'Open Existing $snakeAsset.gd',
+            instruction: isFoundationTask
+                ? 'In the Scene dock (top-left), click + Other Node → select Node2D / CharacterBody2D → name it "$pascalAsset". Save the scene as res://scenes/$snakeAsset.tscn, then click the Attach Script icon to create res://scripts/$snakeAsset.gd.'
+                : 'In the FileSystem dock (bottom-left), double-click your existing res://scripts/$snakeAsset.gd script (from Task 01) to open it for "$cleanTitle".',
+            verify: isFoundationTask
+                ? '$pascalAsset appears in the Scene tree with a scroll icon next to it, and $snakeAsset.gd opens in the Script editor.'
+                : '$snakeAsset.gd is open in the central Script workspace.',
+            path: 'FileSystem → res://scripts/$snakeAsset.gd',
+            code: 'extends Node2D\nclass_name $pascalAsset\n\nvar is_active: bool = false',
+            explain: 'In Godot 4, every reusable game object is a Scene (.tscn) with a GDScript (.gd) attached to its root node.',
+          );
+        case 1:
+          return (
+            stepHeader: 'STEP $taskNum.2 · ADD VISUAL & COLLISION CHILD NODES',
+            shortTitle: 'Add Sprite2D & Area2D/CollisionShape2D',
+            instruction:
+                'Right-click the root "$pascalAsset" node in the Scene dock → + Add Child Node → add a Sprite2D (or ColorRect) named "Visual" and an Area2D with a CollisionShape2D (RectangleShape2D) named "HitBox".',
+            verify:
+                'The 2D Viewport shows your visible shape surrounded by a light-blue rectangle collision outline (no yellow warning triangle).',
+            path: 'Scene Dock (Top-Left) → $pascalAsset Hierarchy',
+            code: '$pascalAsset (Node2D / CharacterBody2D)\n ├─ Visual (Sprite2D / ColorRect: 64x64)\n └─ HitBox (Area2D)\n     └─ CollisionShape2D (RectangleShape2D)',
+            explain: 'Sprite2D/ColorRect makes the object visible on screen, while Area2D + CollisionShape2D lets Godot detect overlaps and clicks.',
+          );
+        case 2:
+          return (
+            stepHeader: isFoundationTask
+                ? 'STEP $taskNum.3 · INSTANCE SCENE IN MAIN LEVEL'
+                : 'STEP $taskNum.3 · SELECT $pascalAsset IN MAIN SCENE',
+            shortTitle: isFoundationTask
+                ? 'Instance in Main Scene'
+                : 'Select in Main Scene',
+            instruction: isFoundationTask
+                ? 'Press Ctrl+S to save $snakeAsset.tscn, switch to your Main level scene tab, and click the Chain-Link icon ("Instantiate Child Scene") to drop $snakeAsset.tscn into the level at (0, 0).'
+                : 'Switch to your Main level scene tab and select the $pascalAsset node to preview its updated Inspector properties.',
+            verify:
+                '$pascalAsset appears in the Main scene tree with a small movie-clapper / chain icon next to it.',
+            path: 'Main Scene Tab → Instantiate Child Scene (Ctrl+Shift+A)',
+            code: 'Instanced Node: $pascalAsset (res://scenes/$snakeAsset.tscn)\nposition = Vector2(0, 0)',
+            explain: 'Instantiating places a live copy of your scene inside the game level so you can see and test it when pressing Play.',
+          );
+        case 3:
+          return (
+            stepHeader: 'STEP $taskNum.4 · ADD @export TUNING VARIABLES IN GDSCRIPT',
+            shortTitle: 'Add @export var $primaryVarName',
+            instruction:
+                'At the top of $snakeAsset.gd, add @export var $primaryVarName: float = 1.0 so you can tune "$primaryVar" directly in the right-hand Inspector dock.',
+            verify:
+                'Selecting $pascalAsset in the Scene tree displays "$primaryVarName" at the top of the Inspector dock.',
+            path: 'res://scripts/$snakeAsset.gd (@export)',
+            code: '@export var $primaryVarName: float = 1.0 # $primaryVar\n@export var can_trigger: bool = true\nvar current_val: float = 0.0',
+            explain: '@export exposes a GDScript variable in the Godot Inspector dock so you can tweak numbers live without editing code.',
+          );
+        case 4:
+          return (
+            stepHeader: 'STEP $taskNum.5 · IMPLEMENT _physics_process(delta) LOGIC',
+            shortTitle: 'Write _physics_process(delta)',
+            instruction:
+                'Inside $snakeAsset.gd, add func _physics_process(delta: float) -> void: to check Input.is_action_pressed("primary_action") and step the value using move_toward and $primaryVarName.',
+            verify:
+                'The script editor shows zero red syntax errors at the bottom of the panel.',
+            path: 'res://scripts/$snakeAsset.gd :: _physics_process(delta)',
+            code: 'func _physics_process(delta: float) -> void:\n    if Input.is_action_pressed("primary_action") and can_trigger:\n        is_active = true\n        current_val = move_toward(current_val, target_val, $primaryVarName * delta)',
+            explain: '_physics_process(delta) runs 60 times per second in sync with physics, and move_toward smoothly transitions values without overshooting.',
+          );
+        default:
+          return (
+            stepHeader: 'STEP $taskNum.6 · ADD GUARD CHECK & PRESS PLAY (F5)',
+            shortTitle: 'Add Guard & Playtest (F5)',
+            instruction:
+                'Add a guard check at the top of _physics_process to enforce "$primaryGuard", add print("$cleanTitle Active!"), and press F5 (or the top-right Play button) to test.',
+            verify:
+                'The game window launches and triggering the action prints "$cleanTitle Active!" in the bottom Output panel.',
+            path: 'Top-Right Toolbar → Play Scene (F6) / Play Project (F5)',
+            code: 'if not can_trigger or cooldown_timer > 0.0:\n    return # Guard: $primaryGuard\nprint("$cleanTitle Active!")',
+            explain: 'The early-return guard stops the function immediately if the mechanic is blocked or on cooldown, preventing state lockups.',
+          );
+      }
+    }
+
+    if (parentTask.children.length < 6 &&
+        !parentTask.children.any((c) => c.codeTargetFile == 'custom_snippet')) {
+      final isParentCompleted = parentTask.completed;
+      final existingDone = <int, bool>{
+        for (int i = 0; i < parentTask.children.length; i++)
+          i: parentTask.children[i].completed,
+      };
+      parentTask.children = [
+        for (int sIdx = 0; sIdx < 6; sIdx++)
+          () {
+            final s = buildAtomicStepSpec(sIdx);
+            return Subtask(
+              id: '${parentTask.id}_sub_${sIdx + 1}',
+              text: s.stepHeader,
+              specNotes: s.instruction,
+              codeSnippet: s.code,
+              completed: existingDone[sIdx] ?? isParentCompleted,
+            );
+          }(),
+      ];
+    }
+
+    final totalTaskMinutes = extractTaskTotalMinutes(parentTask.text);
+    final stepMinutesList = computeWeightedStepMinutes(
+      parentTask.children.length,
+      totalTaskMinutes,
+    );
+
+    final targetAssetName = engineLabel == 'UNREAL 5'
+        ? (unrealCppMode ? cppClass : bpAsset)
+        : (engineLabel == 'UNITY C#'
+            ? '$pascalAsset.cs'
+            : '$snakeAsset.tscn');
+
+    ({
+      String explain,
+      List<String> chips,
+      String pitfall,
+    }) buildProjectSpecContext(int stepIdx) {
+      final nextStepTitle = stepIdx + 1 < 6
+          ? buildAtomicStepSpec(stepIdx + 1).shortTitle
+          : 'Verify Checkpoint & Continue';
+
+      switch (stepIdx) {
+        case 0:
+          return (
+            explain:
+                'Every step in this task builds inside $targetAssetName so ${checkpointNode.cleanStageTitle} stays modular and reusable across the level.',
+            chips: <String>[
+              'Asset: $targetAssetName',
+              'Next: $nextStepTitle',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Choose Actor (AActor) as the parent class so you can attach components and place $targetAssetName in the level.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Make sure the file name "$pascalAsset.cs" matches the class name "$pascalAsset" so Unity can attach it.'
+                    : 'Save the scene in res://scenes/ before attaching the script so node paths stay clean.'),
+          );
+        case 1:
+          return (
+            explain:
+                'Gives $targetAssetName both its visible shape and the collision trigger sensor needed for Step 5 logic.',
+            chips: <String>[
+              'Asset: $targetAssetName',
+              'Next: $nextStepTitle',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably.'
+                : (engineLabel == 'UNITY C#'
+                     ? 'Check the "Is Trigger" box on BoxCollider so the player does not physically snag on the sensor.'
+                     : 'Assign a RectangleShape2D resource inside CollisionShape2D to clear the yellow scene warning icon.'),
+          );
+        case 2:
+          return (
+            explain:
+                'Places a live $targetAssetName instance in the level so you can test "${checkpointNode.playtestCondition}" on screen.',
+            chips: <String>[
+              'Instance: $targetAssetName',
+              'Next: $nextStepTitle',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Click Compile & Save before dragging $targetAssetName into the viewport so the new mesh and collision box appear.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Reset Transform Position to (0, 0, 0) in the Inspector so $pascalAsset is not hidden off-camera.'
+                    : 'Use the Chain-Link icon (Ctrl+Shift+A) to instantiate $targetAssetName rather than copying raw nodes.'),
+          );
+        case 3:
+          return (
+            explain:
+                'Exposes "$primaryVar" on $targetAssetName so you can tune feel live in the editor without recompiling.',
+            chips: <String>[
+              'Spec Param: $primaryVar',
+              'Next: $nextStepTitle',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Click the Eye icon (Instance Editable) next to $primaryVarName so it appears in the Level Details panel.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Keep [SerializeField] above private float $primaryVarName so Unity serializes it in the Inspector.'
+                    : 'Save the script (Ctrl+S) after adding @export var $primaryVarName so the Inspector dock refreshes.'),
+          );
+        case 4:
+          return (
+            explain:
+                'Connects player trigger input on $targetAssetName to "$primaryVarName" so state updates smoothly every frame.',
+            chips: <String>[
+              'Drives: $primaryVar',
+              'Next: $nextStepTitle',
+            ],
+            pitfall: engineLabel == 'UNREAL 5'
+                ? 'Connect the white execution wire from the Branch (True) pin into your state update node.'
+                : (engineLabel == 'UNITY C#'
+                    ? 'Multiply by Time.fixedDeltaTime inside FixedUpdate() so speed stays identical at any frame rate.'
+                    : 'Multiply $primaryVarName by delta inside _physics_process(delta) for frame-rate independent motion.'),
+          );
+        default:
+          return (
+            explain:
+                'Enforces "$primaryGuard" on $targetAssetName and completes playable verification for "${checkpointNode.cleanStageTitle}".',
+            chips: <String>[
+              'Guard: $primaryGuard',
+              'Goal: ${checkpointNode.cleanStageTitle}',
+            ],
+            pitfall:
+                'Place the guard check at the very top of your function so blocked or cooldown inputs exit immediately ($primaryGuard).',
+          );
+      }
+    }
+
+    final resolvedSubs = <TaskHowToSubStep>[];
+    for (int i = 0; i < parentTask.children.length; i++) {
+      final child = parentTask.children[i];
+      final isCustomSnippet = child.codeTargetFile == 'custom_snippet';
+      final spec = buildAtomicStepSpec(i < 6 ? i : 5);
+      final projCtx = buildProjectSpecContext(i < 6 ? i : 5);
+      final stepMins = i < stepMinutesList.length ? stepMinutesList[i] : 20;
+      final stepEta = formatStepEtaLabel(stepMins);
+      final rawLabel = child.text.trim();
+      final stepLabel = isCustomSnippet
+          ? (rawLabel.toUpperCase().startsWith('STEP ')
+              ? rawLabel
+              : 'STEP $taskNum.${i + 1} · ${rawLabel.toUpperCase()}')
+          : (i < 6
+              ? spec.stepHeader
+              : 'STEP $taskNum.${i + 1} · ${rawLabel.toUpperCase()}');
+      final instruction = isCustomSnippet &&
+              child.specNotes != null &&
+              child.specNotes!.trim().isNotEmpty
+          ? child.specNotes!.trim()
+          : (i < 6
+              ? spec.instruction
+              : (child.specNotes != null && child.specNotes!.trim().isNotEmpty
+                  ? child.specNotes!.trim()
+                  : 'Implement and verify "$rawLabel" inside $whereLocation.'));
+      final code = isCustomSnippet &&
+              child.codeSnippet != null &&
+              child.codeSnippet!.trim().isNotEmpty
+          ? child.codeSnippet!.trim()
+          : (i < 6
+              ? spec.code
+              : (child.codeSnippet != null && child.codeSnippet!.trim().isNotEmpty
+                  ? child.codeSnippet!.trim()
+                  : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)'));
+      final shortTitle = (!isCustomSnippet && i < 6)
+          ? spec.shortTitle
+          : rawLabel.replaceFirst(
+              RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false),
+              '',
+            );
+
+      resolvedSubs.add(
+        TaskHowToSubStep(
+          subtask: child,
+          stepNumberLabel: stepLabel,
+          shortTitle: shortTitle,
+          instruction: instruction,
+          verifyResult: i < 6
+              ? spec.verify
+              : 'Verify "$shortTitle" responds cleanly in the active viewport.',
+          stepPath: i < 6 ? spec.path : whereLocation,
+          codeFormula: code,
+          explainConcept: i < 6
+              ? projCtx.explain
+              : 'Connects "$shortTitle" to "$primaryVar" and "$primaryGuard".',
+          specChips: projCtx.chips,
+          quickFixPitfall: projCtx.pitfall,
+          estimatedMinutes: stepMins,
+          etaLabel: stepEta,
+          isGuardStep: i == parentTask.children.length - 1 ||
+              stepLabel.toUpperCase().contains('GUARD'),
+        ),
+      );
+    }
+
+    final result = TaskHowToBlueprint(
+      numLabel: numLabel,
+      layerTag: layerTag,
+      cleanTitle: cleanTitle,
+      durationChip: durationChip,
+      whereLocation: whereLocation,
+      engineLabel: engineLabel,
+      subSteps: resolvedSubs,
+    );
+
+    if (_blueprintCache.length > 512) {
+      _blueprintCache.clear();
+    }
+    _blueprintCache[cacheKey] = (
+      signature: _computeTaskSignature(
+        parentTask: parentTask,
+        checkpointNode: checkpointNode,
+        engineHint: engineHint,
+        unrealCppMode: unrealCppMode,
+      ),
+      blueprint: result,
+    );
+    return result;
+  }
+
+  /// Tailors `parentTask.children` (Step X.1, X.2, X.3) to the developer's exact scene/node/script context
+  /// (e.g. "CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual") and marks each sub-step
+  /// with `codeTargetFile = 'custom_snippet'` so it persists across re-renders.
+  static void tailorSubStepsForContext({
+    required Subtask parentTask,
+    required int taskIndex,
+    required FeatureStateNode checkpointNode,
+    required String userContext,
+    String? engineHint,
+  }) {
+    resolve(
+      parentTask: parentTask,
+      taskIndex: taskIndex,
+      checkpointNode: checkpointNode,
+      engineHint: engineHint,
+    );
+
+    final taskNum = taskIndex + 1;
+    final cleanTitle = extractCleanTitle(parentTask.text);
+    final engineLabel = detectEngineLabel(engineHint);
+    final primaryVar = checkpointNode.tuningParams.isNotEmpty
+        ? checkpointNode.tuningParams[taskIndex % checkpointNode.tuningParams.length]
+        : 'responseTime: 0.12 s';
+    final primaryVarName = primaryVar.split(':').first.trim();
+    final primaryGuard = checkpointNode.edgeCases.isNotEmpty
+        ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
+        : '[STATE GUARD] Prevent duplicate trigger while active';
+
+    final stopWords = <String>{
+      'using',
+      'with',
+      'named',
+      'and',
+      'the',
+      'for',
+      'inside',
+      'from',
+      'into',
+      'node',
+      'script',
+      'class',
+      'component',
+      'scene',
+    };
+    final tokens = RegExp(r'[A-Za-z_][A-Za-z0-9_]{2,}')
+        .allMatches(userContext)
+        .map((m) => m.group(0)!)
+        .where((w) => !stopWords.contains(w.toLowerCase()))
+        .toList();
+
+    final primaryNode = tokens.isNotEmpty ? tokens.first : 'PlayerController';
+    final secondaryNode = tokens.length > 1 ? tokens[1] : primaryNode;
+    final tertiaryNode = tokens.length > 2 ? tokens[2] : secondaryNode;
+
+    String step1Code;
+    String step2Code;
+    String step3Code;
+
+    if (engineLabel == 'UNITY C#') {
+      step1Code =
+          '// Context: $userContext\nif (Input.GetButton("Fire1") && $secondaryNode != null && CanEnterState()) {\n    activeState = MechanicState.Active;\n}';
+      step2Code =
+          '$primaryNode.ExecuteStep($secondaryNode, $primaryVarName * Time.fixedDeltaTime);\n$tertiaryNode.SyncVisualState(activeState);';
+      step3Code =
+          'if (!$primaryNode.IsValidState($secondaryNode) || cooldownTimer > 0f) return; // Guard: $primaryGuard';
+    } else if (engineLabel == 'UNREAL 5') {
+      step1Code =
+          '// Context: $userContext\nif (bInputPressed && IsValid($secondaryNode) && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n}';
+      step2Code =
+          '$primaryNode->ExecuteStep($secondaryNode, DeltaTime * $primaryVarName);\n$tertiaryNode->SyncVisualState(ActiveState);';
+      step3Code =
+          'if (!$primaryNode->IsValidState($secondaryNode) || CooldownTimer > 0.f) return; // Guard: $primaryGuard';
+    } else {
+      step1Code =
+          '# Context: $userContext\nif Input.is_action_pressed("primary_action") and is_instance_valid($secondaryNode) and can_enter_state():\n    activeState = State.ACTIVE';
+      step2Code =
+          '$primaryNode.apply_mechanic_step($secondaryNode, $primaryVarName * delta)\n$tertiaryNode.sync_visual_state(activeState)';
+      step3Code =
+          'if not $primaryNode.is_valid_state($secondaryNode) or cooldownTimer > 0.0:\n    return # Guard: $primaryGuard';
+    }
+
+    if (parentTask.children.isNotEmpty) {
+      parentTask.children[0].text =
+          'STEP $taskNum.1 · BIND INPUT & VALIDATE ${secondaryNode.toUpperCase()} IN ${primaryNode.toUpperCase()}';
+      parentTask.children[0].specNotes =
+          'Inside $primaryNode, read player input and validate $secondaryNode before entering "$cleanTitle" ($userContext):';
+      parentTask.children[0].codeSnippet = step1Code;
+      parentTask.children[0].codeTargetFile = 'custom_snippet';
+    }
+    if (parentTask.children.length > 1) {
+      parentTask.children[1].text =
+          'STEP $taskNum.2 · APPLY ${primaryVarName.toUpperCase()} LOGIC ACROSS ${primaryNode.toUpperCase()} & ${tertiaryNode.toUpperCase()}';
+      parentTask.children[1].specNotes =
+          'Drive "$cleanTitle" on $primaryNode / $secondaryNode using inspector parameter $primaryVarName and update $tertiaryNode:';
+      parentTask.children[1].codeSnippet = step2Code;
+      parentTask.children[1].codeTargetFile = 'custom_snippet';
+    }
+    if (parentTask.children.length > 2) {
+      parentTask.children[2].text =
+          'STEP $taskNum.3 · ENFORCE GUARD CHECK ON ${secondaryNode.toUpperCase()}';
+      parentTask.children[2].specNotes =
+          'Guard $primaryNode / $secondaryNode against invalid state or rapid re-triggers to satisfy "$primaryGuard":';
+      parentTask.children[2].codeSnippet = step3Code;
+      parentTask.children[2].codeTargetFile = 'custom_snippet';
+    }
+    _blueprintCache.remove('${checkpointNode.id}_${parentTask.id}_$taskIndex');
+  }
+}

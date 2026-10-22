@@ -22,7 +22,8 @@ class ReleasePlanGateScreen extends StatefulWidget {
   State<ReleasePlanGateScreen> createState() => _ReleasePlanGateScreenState();
 }
 
-class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
+class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
+    with WorkbenchThemeMixin {
   final TextEditingController _releaseChatController = TextEditingController();
   final Set<String> _expandedFeatureIds = {};
   final Map<String, TextEditingController> _newBeatFeatureControllers = {};
@@ -30,21 +31,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   bool _isStepByBeatMode = true;
   int _activeBeatIndex = 0;
 
-  bool get _isDark => widget.workbench.isDark;
-  Color get _bgBase => AppTheme.bgBaseFor(_isDark);
-  Color get _bgSurface => AppTheme.bgSurfaceFor(_isDark);
-  Color get _bgRecessed => AppTheme.bgSurfaceRecessedFor(_isDark);
-  Color get _bgHover => AppTheme.bgSurfaceHoverFor(_isDark);
-  Color get _borderSubtle => AppTheme.borderSubtleFor(_isDark);
-  Color get _borderBright => AppTheme.borderBrightFor(_isDark);
-  Color get _textPrimary => AppTheme.textPrimaryFor(_isDark);
-  Color get _textSecondary => AppTheme.textSecondaryFor(_isDark);
-  Color get _textMuted => AppTheme.textMutedFor(_isDark);
-  Color get _focalAccent => AppTheme.focalAccentFor(_isDark);
-  Color get _focalAccentFg => AppTheme.focalAccentFgFor(_isDark);
-  Color get _accentEmerald => AppTheme.accentGreenFor(_isDark);
-  Color get _accentCrimson => AppTheme.accentRedFor(_isDark);
-  Color get _accentAmber => AppTheme.accentAmberFor(_isDark);
+  @override
+  bool get isDark => widget.workbench.isDark;
 
   TextEditingController _controllerForBeat(String beatId) {
     return _newBeatFeatureControllers.putIfAbsent(
@@ -74,18 +62,18 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     final bp = widget.workbench.releaseBlueprint;
     if (bp == null) {
       return Container(
-        color: _bgBase,
+        color: bgBase,
         child: Center(
           child: Text(
             'No active Release Blueprint.',
-            style: GoogleFonts.inter(color: _textMuted),
+            style: GoogleFonts.inter(color: textMuted),
           ),
         ),
       );
     }
 
     return Container(
-      color: _bgBase,
+      color: bgBase,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -137,16 +125,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             margin: EdgeInsets.only(bottom: interventions.isNotEmpty ? 8 : 0),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: _bgSurface,
+              color: bgSurface,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _accentEmerald.withValues(alpha: 0.42)),
+              border: Border.all(color: accentEmerald.withValues(alpha: 0.42)),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _accentEmerald.withValues(alpha: 0.14),
+                    color: accentEmerald.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -154,7 +142,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
-                      color: _accentEmerald,
+                      color: accentEmerald,
                     ),
                   ),
                 ),
@@ -166,7 +154,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
                       fontSize: 11.5,
-                      color: _textSecondary,
+                      color: textSecondary,
                     ),
                   ),
                 ),
@@ -177,7 +165,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     'Dismiss ×',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
-                      color: _textMuted,
+                      color: textMuted,
                     ),
                   ),
                 ),
@@ -194,13 +182,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
 
   Widget _buildInterventionBanner(AgentIntervention item, int index) {
     final color = item.severity == 'crimson'
-        ? _accentCrimson
-        : (item.severity == 'emerald' ? _accentEmerald : _accentAmber);
+        ? accentCrimson
+        : (item.severity == 'emerald' ? accentEmerald : accentAmber);
     return Container(
       key: ValueKey('stage2_intervention_$index'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: _bgSurface,
+        color: bgSurface,
         borderRadius: BorderRadius.circular(7),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
@@ -231,7 +219,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: _textPrimary,
+                    color: textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -239,7 +227,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   item.reason,
                   style: GoogleFonts.inter(
                     fontSize: 11.5,
-                    color: _textSecondary,
+                    color: textSecondary,
                   ),
                 ),
               ],
@@ -250,7 +238,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             key: ValueKey('stage2_apply_intervention_btn_$index'),
             style: ElevatedButton.styleFrom(
               backgroundColor: color,
-              foregroundColor: _bgBase,
+              foregroundColor: bgBase,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               shape: RoundedRectangleBorder(
@@ -278,8 +266,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     return ElevatedButton(
       key: key,
       style: ElevatedButton.styleFrom(
-        backgroundColor: _focalAccent,
-        foregroundColor: _focalAccentFg,
+        backgroundColor: focalAccent,
+        foregroundColor: focalAccentFg,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(
@@ -309,11 +297,11 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
 
     return Container(
       key: const ValueKey('release_plan_gate_banner'),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
       decoration: BoxDecoration(
-        color: _bgSurface,
+        color: bgSurface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _borderBright),
+        border: Border.all(color: borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -333,30 +321,22 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       Text(
                         'STAGE 2 · RELEASE PLAN GATE',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                          color: _accentAmber,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: accentAmber,
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _bgRecessed,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: _borderSubtle),
-                        ),
-                        child: Text(
-                          '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Included · ${bp.totalDeferredFeatures} Deferred',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: _textSecondary,
-                          ),
+                      Text(
+                        '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Included · ${bp.totalDeferredFeatures} Deferred',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       InkWell(
                         key: const ValueKey('stage2_view_mode_toggle_btn'),
                         onTap: () {
@@ -371,12 +351,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: _bgRecessed,
+                            color: bgRecessed,
                             borderRadius: BorderRadius.circular(5),
                             border: Border.all(
                               color: _isStepByBeatMode
-                                  ? _borderBright
-                                  : _borderSubtle,
+                                  ? borderBright
+                                  : borderSubtle,
                             ),
                           ),
                           child: Text(
@@ -385,8 +365,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                 : '◫ Full Blueprint',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: _textPrimary,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
                             ),
                           ),
                         ),
@@ -400,7 +380,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.4,
-                      color: _textPrimary,
+                      color: textPrimary,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -408,7 +388,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     'Review the proposed Core Loop Beats & Playable Features below. Uncheck any feature to defer it to Out of Scope.',
                     style: GoogleFonts.inter(
                       fontSize: 12.5,
-                      color: _textSecondary,
+                      color: textSecondary,
                     ),
                   ),
                 ],
@@ -416,15 +396,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               _buildPrimaryApproveButton(bp),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           // Live Visual Scope & Hour Budget Bar
           Container(
             key: const ValueKey('release_hour_budget_bar'),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: _bgRecessed,
+              color: bgRecessed,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _borderSubtle),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -438,7 +417,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
-                        color: _textSecondary,
+                        color: textSecondary,
                       ),
                     ),
                     Text(
@@ -447,23 +426,23 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           : '${includedHours}h Included · 0h Deferred',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: _accentEmerald,
+                        fontWeight: FontWeight.w700,
+                        color: accentEmerald,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 5),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(999),
                   child: Container(
-                    height: 6,
-                    color: _bgSurface,
+                    height: 5,
+                    color: bgSurface,
                     child: FractionallySizedBox(
                       alignment: Alignment.centerLeft,
                       widthFactor: ratio,
                       child: Container(
-                        color: _accentEmerald,
+                        color: accentEmerald,
                       ),
                     ),
                   ),
@@ -476,7 +455,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           _buildCalloutBar(
             badgeLabel: 'GOAL',
             statement: bp.goal,
-            accentColor: _focalAccent,
+            accentColor: focalAccent,
             highlightMetrics: false,
           ),
           const SizedBox(height: 8),
@@ -484,7 +463,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           _buildCalloutBar(
             badgeLabel: 'DONE WHEN',
             statement: bp.doneWhen,
-            accentColor: _accentEmerald,
+            accentColor: accentEmerald,
             highlightMetrics: true,
           ),
         ],
@@ -500,9 +479,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: _bgRecessed,
+        color: bgRecessed,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _borderSubtle),
+        border: Border.all(color: borderSubtle),
       ),
       clipBehavior: Clip.antiAlias,
       child: IntrinsicHeight(
@@ -525,13 +504,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: highlightMetrics
-                            ? _accentEmerald.withValues(alpha: 0.12)
-                            : _bgSurface,
+                            ? accentEmerald.withValues(alpha: 0.12)
+                            : bgSurface,
                         borderRadius: BorderRadius.circular(3),
                         border: Border.all(
                           color: highlightMetrics
-                              ? _accentEmerald.withValues(alpha: 0.45)
-                              : _borderBright,
+                              ? accentEmerald.withValues(alpha: 0.45)
+                              : borderBright,
                         ),
                       ),
                       child: Text(
@@ -539,7 +518,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
-                          color: highlightMetrics ? _accentEmerald : _textSecondary,
+                          color: highlightMetrics ? accentEmerald : textSecondary,
                         ),
                       ),
                     ),
@@ -553,7 +532,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w500,
                                 height: 1.45,
-                                color: _textPrimary,
+                                color: textPrimary,
                               ),
                             ),
                     ),
@@ -587,16 +566,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 2),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(
-              color: _accentEmerald.withValues(alpha: 0.14),
+              color: accentEmerald.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: _accentEmerald.withValues(alpha: 0.42)),
+              border: Border.all(color: accentEmerald.withValues(alpha: 0.42)),
             ),
             child: Text(
               metricText,
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
-                color: _textPrimary,
+                color: textPrimary,
               ),
             ),
           ),
@@ -615,7 +594,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           fontSize: 13.5,
           fontWeight: FontWeight.w500,
           height: 1.45,
-          color: _textPrimary,
+          color: textPrimary,
         ),
         children: spans,
       ),
@@ -626,9 +605,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
       decoration: BoxDecoration(
-        color: _bgRecessed,
+        color: bgRecessed,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _borderSubtle),
+        border: Border.all(color: borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -638,9 +617,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                 decoration: BoxDecoration(
-                  color: _bgSurface,
+                  color: bgSurface,
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: _borderBright),
+                  border: Border.all(color: borderBright),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -650,7 +629,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _accentAmber,
+                        color: accentAmber,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -659,7 +638,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
-                        color: _textPrimary,
+                        color: textPrimary,
                       ),
                     ),
                   ],
@@ -672,7 +651,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: _textPrimary,
+                    color: textPrimary,
                   ),
                 ),
               ),
@@ -688,7 +667,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   decoration: BoxDecoration(
                     border: Border(
                       left: BorderSide(
-                        color: msg.isUser ? _accentAmber : _accentEmerald,
+                        color: msg.isUser ? accentAmber : accentEmerald,
                         width: 2,
                       ),
                     ),
@@ -697,7 +676,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     '${msg.isUser ? "You" : "Agent"}: ${msg.text}',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
-                      color: _textSecondary,
+                      color: textSecondary,
                     ),
                   ),
                 ),
@@ -710,9 +689,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _bgSurface,
+                    color: bgSurface,
                     borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: _borderSubtle),
+                    border: Border.all(color: borderSubtle),
                   ),
                   child: Row(
                     children: [
@@ -721,7 +700,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: _textSecondary,
+                          color: textSecondary,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -731,14 +710,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           controller: _releaseChatController,
                           style: GoogleFonts.inter(
                             fontSize: 13,
-                            color: _textPrimary,
+                            color: textPrimary,
                           ),
                           decoration: InputDecoration(
                             hintText:
                                 'Tell the Agent how to refine this Release Plan (e.g., "Add a wall-run feature to Beat 1", "Defer Beat 4")...',
                             hintStyle: GoogleFonts.inter(
                               fontSize: 12.5,
-                              color: _textMuted,
+                              color: textMuted,
                             ),
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
@@ -759,9 +738,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 key: const ValueKey('send_release_chat_btn'),
                 onPressed: widget.workbench.isAgentBusy ? null : _submitReleaseChat,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: _textPrimary,
-                  backgroundColor: _bgSurface,
-                  side: BorderSide(color: _borderBright),
+                  foregroundColor: textPrimary,
+                  backgroundColor: bgSurface,
+                  side: BorderSide(color: borderBright),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(5),
@@ -791,7 +770,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: _borderSubtle),
+          bottom: BorderSide(color: borderSubtle),
         ),
       ),
       child: Wrap(
@@ -808,7 +787,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: _textSecondary.withValues(alpha: 0.85),
+                  color: textSecondary.withValues(alpha: 0.85),
                 ),
               ),
               const SizedBox(width: 8),
@@ -819,7 +798,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     fontSize: 13.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
-                    color: _textPrimary,
+                    color: textPrimary,
                   ),
                 ),
               ),
@@ -831,7 +810,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
-                color: _textSecondary,
+                color: textSecondary,
               ),
             ),
         ],
@@ -871,7 +850,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           padding: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: _borderSubtle),
+              bottom: BorderSide(color: borderSubtle),
             ),
           ),
           child: Wrap(
@@ -888,7 +867,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: _textSecondary.withValues(alpha: 0.85),
+                      color: textSecondary.withValues(alpha: 0.85),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -898,7 +877,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.5,
-                      color: _textPrimary,
+                      color: textPrimary,
                     ),
                   ),
                 ],
@@ -913,7 +892,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
-                      color: _textSecondary,
+                      color: textSecondary,
                     ),
                   ),
                   InkWell(
@@ -927,9 +906,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                       decoration: BoxDecoration(
-                        color: _bgSurface,
+                        color: bgSurface,
                         borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: _borderBright),
+                        border: Border.all(color: borderBright),
                       ),
                       child: Text(
                         _collapseQuestions
@@ -938,7 +917,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,
-                          color: _textPrimary,
+                          color: textPrimary,
                         ),
                       ),
                     ),
@@ -954,9 +933,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           key: const ValueKey('answered_decisions_strip'),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: _bgSurface,
+            color: bgSurface,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: _borderSubtle),
+            border: Border.all(color: borderSubtle),
           ),
           child: Wrap(
             spacing: 8,
@@ -968,7 +947,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 9.5,
                   fontWeight: FontWeight.w800,
-                  color: _accentEmerald,
+                  color: accentEmerald,
                 ),
               ),
               for (int qIdx = 0; qIdx < bp.questions.length; qIdx++)
@@ -991,10 +970,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: _bgRecessed,
+                          color: bgRecessed,
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: _borderSubtle,
+                            color: borderSubtle,
                           ),
                         ),
                         child: Text(
@@ -1002,7 +981,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: _textPrimary,
+                            color: textPrimary,
                           ),
                         ),
                       ),
@@ -1019,9 +998,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               margin: EdgeInsets.only(bottom: qIdx < bp.questions.length - 1 ? 12 : 0),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: _bgRecessed,
+                color: bgRecessed,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: _borderSubtle),
+                border: Border.all(color: borderSubtle),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1035,7 +1014,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           style: AppTheme.displayFont(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: _textPrimary,
+                            color: textPrimary,
                           ),
                         ),
                       ),
@@ -1045,7 +1024,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,
-                          color: _accentEmerald,
+                          color: accentEmerald,
                         ),
                       ),
                     ],
@@ -1113,7 +1092,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     final parsed = _splitQuestionOption(optionText, optIdx);
 
     return Material(
-      color: isSelected ? _bgHover : _bgSurface,
+      color: isSelected ? bgHover : bgSurface,
       borderRadius: BorderRadius.circular(7),
       child: InkWell(
         key: ValueKey('release_question_card_${qIdx}_$optIdx'),
@@ -1127,7 +1106,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(7),
             border: Border.all(
-              color: isSelected ? _textPrimary : _borderSubtle,
+              color: isSelected ? textPrimary : borderSubtle,
               width: isSelected ? 1.5 : 1.0,
             ),
           ),
@@ -1147,9 +1126,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: isSelected ? _focalAccent : Colors.transparent,
+                          color: isSelected ? focalAccent : Colors.transparent,
                           border: Border.all(
-                            color: isSelected ? _focalAccent : _textMuted,
+                            color: isSelected ? focalAccent : textMuted,
                             width: 1.4,
                           ),
                         ),
@@ -1159,7 +1138,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                 height: 5,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: _focalAccentFg,
+                                  color: focalAccentFg,
                                 ),
                               )
                             : null,
@@ -1168,10 +1147,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _accentEmerald.withValues(alpha: 0.14),
+                            color: accentEmerald.withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(3),
                             border: Border.all(
-                              color: _accentEmerald.withValues(alpha: 0.42),
+                              color: accentEmerald.withValues(alpha: 0.42),
                             ),
                           ),
                           child: Text(
@@ -1179,7 +1158,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 8.5,
                               fontWeight: FontWeight.w700,
-                              color: _accentEmerald,
+                              color: accentEmerald,
                             ),
                           ),
                         )
@@ -1187,16 +1166,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _bgRecessed,
+                            color: bgRecessed,
                             borderRadius: BorderRadius.circular(3),
-                            border: Border.all(color: _borderSubtle),
+                            border: Border.all(color: borderSubtle),
                           ),
                           child: Text(
                             'OPTION 0${optIdx + 1}',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 8.5,
                               fontWeight: FontWeight.w700,
-                              color: _textSecondary,
+                              color: textSecondary,
                             ),
                           ),
                         ),
@@ -1208,7 +1187,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     style: AppTheme.displayFont(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: _textPrimary,
+                      color: textPrimary,
                     ),
                   ),
                   const SizedBox(height: 5),
@@ -1217,7 +1196,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 12.5,
                       height: 1.5,
-                      color: _textSecondary,
+                      color: textSecondary,
                     ),
                   ),
                 ],
@@ -1251,9 +1230,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           key: const ValueKey('stage2_beat_jump_bar'),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: _bgSurface,
+            color: bgSurface,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: _borderSubtle),
+            border: Border.all(color: borderSubtle),
           ),
           child: Wrap(
             alignment: WrapAlignment.spaceBetween,
@@ -1280,13 +1259,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: (_isStepByBeatMode && _activeBeatIndex == bIdx)
-                              ? _bgHover
-                              : _bgRecessed,
+                              ? bgHover
+                              : bgRecessed,
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: (_isStepByBeatMode && _activeBeatIndex == bIdx)
-                                ? _borderBright
-                                : _borderSubtle,
+                                ? borderBright
+                                : borderSubtle,
                             width: (_isStepByBeatMode && _activeBeatIndex == bIdx)
                                 ? 1.3
                                 : 1.0,
@@ -1300,8 +1279,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                 ? FontWeight.w800
                                 : FontWeight.w600,
                             color: (_isStepByBeatMode && _activeBeatIndex == bIdx)
-                                ? _textPrimary
-                                : _textSecondary,
+                                ? textPrimary
+                                : textSecondary,
                           ),
                         ),
                       ),
@@ -1323,16 +1302,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                   decoration: BoxDecoration(
-                    color: _bgRecessed,
+                    color: bgRecessed,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _borderSubtle),
+                    border: Border.all(color: borderSubtle),
                   ),
                   child: Text(
                     allSpecsExpanded ? 'Collapse All Specs ▴' : 'Expand All Specs ▾',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
                       fontWeight: FontWeight.w700,
-                      color: _textSecondary,
+                      color: textSecondary,
                     ),
                   ),
                 ),
@@ -1363,9 +1342,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: _bgSurface,
+                            color: bgSurface,
                             borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: _borderSubtle),
+                            border: Border.all(color: borderSubtle),
                           ),
                           child: Text(
                             safeIdx > 0
@@ -1374,7 +1353,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: safeIdx > 0 ? _textSecondary : _textMuted,
+                              color: safeIdx > 0 ? textSecondary : textMuted,
                             ),
                           ),
                         ),
@@ -1384,7 +1363,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: _textSecondary,
+                          color: textSecondary,
                         ),
                       ),
                       InkWell(
@@ -1396,10 +1375,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: _bgSurface,
+                            color: bgSurface,
                             borderRadius: BorderRadius.circular(5),
                             border: Border.all(
-                              color: _borderBright,
+                              color: borderBright,
                             ),
                           ),
                           child: Text(
@@ -1409,7 +1388,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
-                              color: _textPrimary,
+                              color: textPrimary,
                             ),
                           ),
                         ),
@@ -1430,7 +1409,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   Container(
                     width: 2,
                     height: 10,
-                    color: _borderBright,
+                    color: borderBright,
                   ),
                 ],
               ),
@@ -1459,9 +1438,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _bgRecessed,
+        color: bgRecessed,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _borderSubtle),
+        border: Border.all(color: borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1483,7 +1462,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         ? Icons.check_box_rounded
                         : Icons.check_box_outline_blank_rounded,
                     size: 17,
-                    color: allIncluded ? _accentEmerald : _textMuted,
+                    color: allIncluded ? accentEmerald : textMuted,
                   ),
                 ),
               ),
@@ -1492,10 +1471,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 2.5),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _bgSurface,
+                  color: bgSurface,
                   borderRadius: BorderRadius.circular(3),
                   border: Border.all(
-                    color: _borderBright,
+                    color: borderBright,
                   ),
                 ),
                 child: Text(
@@ -1503,7 +1482,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
-                    color: _textPrimary,
+                    color: textPrimary,
                   ),
                 ),
               ),
@@ -1521,23 +1500,23 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                             style: AppTheme.displayFont(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: _textPrimary,
+                              color: textPrimary,
                             ),
                           ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _bgSurface,
+                            color: bgSurface,
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: _borderSubtle),
+                            border: Border.all(color: borderSubtle),
                           ),
                           child: Text(
                             '${beat.includedFeatures.length} Features · ${beat.totalIncludedHours}h',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: _textSecondary,
+                              color: textSecondary,
                             ),
                           ),
                         ),
@@ -1548,7 +1527,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       beat.goal,
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
-                        color: _textSecondary,
+                        color: textSecondary,
                       ),
                     ),
                   ],
@@ -1621,13 +1600,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
             decoration: BoxDecoration(
-              color: _bgSurface,
+              color: bgSurface,
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: _borderSubtle),
+              border: Border.all(color: borderSubtle),
             ),
             child: Row(
               children: [
-                Icon(Icons.add_rounded, size: 15, color: _textMuted),
+                Icon(Icons.add_rounded, size: 15, color: textMuted),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
@@ -1636,7 +1615,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     onSubmitted: (_) => submitNewBeatFeature(),
                     style: GoogleFonts.inter(
                       fontSize: 12,
-                      color: _textPrimary,
+                      color: textPrimary,
                     ),
                     decoration: InputDecoration(
                       isDense: true,
@@ -1646,7 +1625,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           'Add playable feature to $beatCode (e.g., Slide Boost & Cancel)...',
                       hintStyle: GoogleFonts.inter(
                         fontSize: 11.5,
-                        color: _textMuted,
+                        color: textMuted,
                       ),
                     ),
                   ),
@@ -1662,7 +1641,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: _textPrimary,
+                        color: textPrimary,
                       ),
                     ),
                   ),
@@ -1692,10 +1671,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: isIncluded ? _bgSurface : _bgRecessed.withValues(alpha: 0.5),
+        color: isIncluded ? bgSurface : bgRecessed.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: isIncluded ? _borderBright : _borderSubtle,
+          color: isIncluded ? borderBright : borderSubtle,
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1723,7 +1702,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           ? Icons.check_box_rounded
                           : Icons.check_box_outline_blank_rounded,
                       size: 16,
-                      color: isIncluded ? _accentEmerald : _textMuted,
+                      color: isIncluded ? accentEmerald : textMuted,
                     ),
                   ),
                 ),
@@ -1748,7 +1727,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                               style: AppTheme.displayFont(
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
-                                color: isIncluded ? _textPrimary : _textMuted,
+                                color: isIncluded ? textPrimary : textMuted,
                               ).copyWith(
                                 decoration: isIncluded
                                     ? TextDecoration.none
@@ -1763,10 +1742,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                 vertical: 1.5,
                               ),
                               decoration: BoxDecoration(
-                                color: _bgRecessed,
+                                color: bgRecessed,
                                 borderRadius: BorderRadius.circular(3),
                                 border: Border.all(
-                                  color: _borderSubtle,
+                                  color: borderSubtle,
                                 ),
                               ),
                               child: Text(
@@ -1774,7 +1753,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 8.5,
                                   fontWeight: FontWeight.w700,
-                                  color: _textSecondary,
+                                  color: textSecondary,
                                 ),
                               ),
                             ),
@@ -1786,10 +1765,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                   vertical: 1.5,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: _accentEmerald.withValues(alpha: 0.12),
+                                  color: accentEmerald.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(3),
                                   border: Border.all(
-                                    color: _accentEmerald.withValues(alpha: 0.4),
+                                    color: accentEmerald.withValues(alpha: 0.4),
                                   ),
                                 ),
                                 child: Text(
@@ -1797,7 +1776,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 8.5,
                                     fontWeight: FontWeight.w800,
-                                    color: _accentEmerald,
+                                    color: accentEmerald,
                                   ),
                                 ),
                               ),
@@ -1811,7 +1790,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             height: 1.45,
-                            color: isIncluded ? _textSecondary : _textMuted,
+                            color: isIncluded ? textSecondary : textMuted,
                           ),
                         ),
                       ],
@@ -1836,13 +1815,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: isExpanded
-                            ? _bgHover
-                            : _bgRecessed,
+                            ? bgHover
+                            : bgRecessed,
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
                           color: isExpanded
-                              ? _borderBright
-                              : _borderSubtle,
+                              ? borderBright
+                              : borderSubtle,
                         ),
                       ),
                       child: Text(
@@ -1850,7 +1829,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,
-                          color: isExpanded ? _textPrimary : _textSecondary,
+                          color: isExpanded ? textPrimary : textSecondary,
                         ),
                       ),
                     ),
@@ -1864,16 +1843,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                     decoration: BoxDecoration(
-                      color: _bgRecessed,
+                      color: bgRecessed,
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: _borderSubtle),
+                      border: Border.all(color: borderSubtle),
                     ),
                     child: Text(
                       'Edit ✎',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
-                        color: _textSecondary,
+                        color: textSecondary,
                       ),
                     ),
                   ),
@@ -1887,17 +1866,17 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                     decoration: BoxDecoration(
                       color: !isIncluded
-                          ? _accentCrimson.withValues(alpha: 0.12)
+                          ? accentCrimson.withValues(alpha: 0.12)
                           : (feat.lifecycle == FeatureLifecycleStatus.stable
-                              ? _accentEmerald.withValues(alpha: 0.12)
-                              : _bgRecessed),
+                              ? accentEmerald.withValues(alpha: 0.12)
+                              : bgRecessed),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
                         color: !isIncluded
-                            ? _accentCrimson.withValues(alpha: 0.42)
+                            ? accentCrimson.withValues(alpha: 0.42)
                             : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                ? _accentEmerald.withValues(alpha: 0.42)
-                                : _borderSubtle),
+                                ? accentEmerald.withValues(alpha: 0.42)
+                                : borderSubtle),
                       ),
                     ),
                     child: Text(
@@ -1912,10 +1891,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: !isIncluded
-                            ? _accentCrimson
+                            ? accentCrimson
                             : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                ? _accentEmerald
-                                : _textPrimary),
+                                ? accentEmerald
+                                : textPrimary),
                       ),
                     ),
                   ),
@@ -1928,8 +1907,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               key: ValueKey('inspect_feat_drawer_${feat.id}'),
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               decoration: BoxDecoration(
-                color: _bgRecessed,
-                border: Border(top: BorderSide(color: _borderSubtle)),
+                color: bgRecessed,
+                border: Border(top: BorderSide(color: borderSubtle)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1939,10 +1918,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: _accentEmerald.withValues(alpha: 0.14),
+                          color: accentEmerald.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(3),
                           border: Border.all(
-                            color: _accentEmerald.withValues(alpha: 0.4),
+                            color: accentEmerald.withValues(alpha: 0.4),
                           ),
                         ),
                         child: Text(
@@ -1950,7 +1929,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 8.5,
                             fontWeight: FontWeight.w800,
-                            color: _accentEmerald,
+                            color: accentEmerald,
                           ),
                         ),
                       ),
@@ -1961,7 +1940,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           style: GoogleFonts.inter(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: _textPrimary,
+                            color: textPrimary,
                           ),
                         ),
                       ),
@@ -1977,9 +1956,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           width: 320,
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: _bgSurface,
+                            color: bgSurface,
                             borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: _borderSubtle),
+                            border: Border.all(color: borderSubtle),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1993,7 +1972,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w800,
-                                        color: _textPrimary,
+                                        color: textPrimary,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -2004,7 +1983,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 8.5,
                                       fontWeight: FontWeight.w800,
-                                      color: _textSecondary,
+                                      color: textSecondary,
                                     ),
                                   ),
                                 ],
@@ -2014,7 +1993,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                                 feat.checkpoints[cIdx].playtestCriteria,
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
-                                  color: _textSecondary,
+                                  color: textSecondary,
                                 ),
                               ),
                             ],
@@ -2033,10 +2012,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: _bgSurface,
+                              color: bgSurface,
                               borderRadius: BorderRadius.circular(3),
                               border: Border.all(
-                                color: _borderSubtle,
+                                color: borderSubtle,
                               ),
                             ),
                             child: Text(
@@ -2044,7 +2023,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w700,
-                                color: _textPrimary,
+                                color: textPrimary,
                               ),
                             ),
                           ),
@@ -2052,17 +2031,17 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: _bgSurface,
+                              color: bgSurface,
                               borderRadius: BorderRadius.circular(3),
                               border: Border.all(
-                                color: _borderSubtle,
+                                color: borderSubtle,
                               ),
                             ),
                             child: Text(
                               '⚠ $e',
                               style: GoogleFonts.inter(
                                 fontSize: 10,
-                                color: _textSecondary,
+                                color: textSecondary,
                               ),
                             ),
                           ),
@@ -2088,27 +2067,27 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     switch (feat.lifecycle) {
       case FeatureLifecycleStatus.stable:
         label = 'STABLE · ${feat.originVersion} ✓';
-        textColor = _accentEmerald;
-        bgColor = _accentEmerald.withValues(alpha: 0.14);
-        borderColor = _accentEmerald.withValues(alpha: 0.42);
+        textColor = accentEmerald;
+        bgColor = accentEmerald.withValues(alpha: 0.14);
+        borderColor = accentEmerald.withValues(alpha: 0.42);
         break;
       case FeatureLifecycleStatus.upgrade:
         label = '${feat.originVersion} → $releaseVersionTag';
-        textColor = _accentAmber;
-        bgColor = _accentAmber.withValues(alpha: 0.14);
-        borderColor = _accentAmber.withValues(alpha: 0.42);
+        textColor = accentAmber;
+        bgColor = accentAmber.withValues(alpha: 0.14);
+        borderColor = accentAmber.withValues(alpha: 0.42);
         break;
       case FeatureLifecycleStatus.superseded:
         label = 'SUPERSEDED (${feat.originVersion})';
-        textColor = _textMuted;
-        bgColor = _bgRecessed;
-        borderColor = _borderSubtle;
+        textColor = textMuted;
+        bgColor = bgRecessed;
+        borderColor = borderSubtle;
         break;
       case FeatureLifecycleStatus.newFeature:
         label = 'NEW $releaseVersionTag';
-        textColor = _textSecondary;
-        bgColor = _bgRecessed;
-        borderColor = _borderSubtle;
+        textColor = textSecondary;
+        bgColor = bgRecessed;
+        borderColor = borderSubtle;
         break;
     }
 
@@ -2156,12 +2135,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: _bgRecessed.withValues(alpha: 0.55),
+          color: bgRecessed.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: isDeferredFeat
-                ? _accentAmber.withValues(alpha: 0.38)
-                : _borderSubtle,
+                ? accentAmber.withValues(alpha: 0.38)
+                : borderSubtle,
           ),
         ),
         child: Row(
@@ -2170,10 +2149,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: _accentCrimson.withValues(alpha: 0.12),
+                color: accentCrimson.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(3),
                 border: Border.all(
-                  color: _accentCrimson.withValues(alpha: 0.42),
+                  color: accentCrimson.withValues(alpha: 0.42),
                 ),
               ),
               child: Text(
@@ -2181,7 +2160,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
-                  color: _accentCrimson,
+                  color: accentCrimson,
                 ),
               ),
             ),
@@ -2193,8 +2172,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                   fontSize: 12.5,
                   fontWeight: isDeferredFeat ? FontWeight.w600 : FontWeight.w400,
                   color: isDeferredFeat
-                      ? _textPrimary
-                      : _textSecondary.withValues(alpha: 0.85),
+                      ? textPrimary
+                      : textSecondary.withValues(alpha: 0.85),
                 ),
               ),
             ),
@@ -2211,16 +2190,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: _bgSurface,
+                    color: bgSurface,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _borderBright),
+                    border: Border.all(color: borderBright),
                   ),
                   child: Text(
                     '+ Restore',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
                       fontWeight: FontWeight.w700,
-                      color: _accentEmerald,
+                      color: accentEmerald,
                     ),
                   ),
                 ),
@@ -2295,8 +2274,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     return Container(
       key: const ValueKey('release_sticky_bottom_dock'),
       decoration: BoxDecoration(
-        color: _bgSurface,
-        border: Border(top: BorderSide(color: _borderBright)),
+        color: bgSurface,
+        border: Border(top: BorderSide(color: borderBright)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Center(
@@ -2329,9 +2308,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: _textPrimary,
-                          backgroundColor: _bgRecessed,
-                          side: BorderSide(color: _borderSubtle),
+                          foregroundColor: textPrimary,
+                          backgroundColor: bgRecessed,
+                          side: BorderSide(color: borderSubtle),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 12,
@@ -2348,9 +2327,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: _bgRecessed,
+                          color: bgRecessed,
                           borderRadius: BorderRadius.circular(5),
-                          border: Border.all(color: _borderSubtle),
+                          border: Border.all(color: borderSubtle),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -2358,7 +2337,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                             Icon(
                               Icons.check_circle_outline_rounded,
                               size: 13,
-                              color: _accentEmerald,
+                              color: accentEmerald,
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -2366,7 +2345,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
-                                color: _textSecondary,
+                                color: textSecondary,
                               ),
                             ),
                           ],
@@ -2406,17 +2385,17 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
     final action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _bgSurface,
+        backgroundColor: bgSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: _borderBright),
+          side: BorderSide(color: borderBright),
         ),
         title: Text(
           'Edit Proposed Feature',
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.w800,
-            color: _textPrimary,
+            color: textPrimary,
           ),
         ),
         content: SizedBox(
@@ -2490,7 +2469,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: _accentCrimson,
+                color: accentCrimson,
               ),
             ),
           ),
@@ -2500,14 +2479,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               'Cancel',
               style: GoogleFonts.inter(
                 fontSize: 12,
-                color: _textSecondary,
+                color: textSecondary,
               ),
             ),
           ),
           ElevatedButton(
             key: const ValueKey('save_stage2_feat_btn'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _accentEmerald,
+              backgroundColor: accentEmerald,
               foregroundColor: Colors.white,
               elevation: 0,
             ),
@@ -2601,7 +2580,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           style: GoogleFonts.jetBrainsMono(
             fontSize: 9.5,
             fontWeight: FontWeight.w800,
-            color: _textMuted,
+            color: textMuted,
           ),
         ),
         const SizedBox(height: 4),
@@ -2610,8 +2589,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
           controller: controller,
           maxLines: maxLines,
           style: mono
-              ? GoogleFonts.jetBrainsMono(fontSize: 12, color: _textPrimary)
-              : GoogleFonts.inter(fontSize: 12.5, color: _textPrimary),
+              ? GoogleFonts.jetBrainsMono(fontSize: 12, color: textPrimary)
+              : GoogleFonts.inter(fontSize: 12.5, color: textPrimary),
           decoration: InputDecoration(
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
@@ -2619,10 +2598,10 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen> {
               vertical: 9,
             ),
             filled: true,
-            fillColor: _bgRecessed,
+            fillColor: bgRecessed,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(5),
-              borderSide: BorderSide(color: _borderSubtle),
+              borderSide: BorderSide(color: borderSubtle),
             ),
           ),
         ),

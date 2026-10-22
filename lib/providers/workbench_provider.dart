@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../agents/gemini_agent_client.dart';
@@ -58,6 +59,10 @@ class WorkbenchProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    for (final timer in _persistTimers.values) {
+      timer.cancel();
+    }
+    _persistTimers.clear();
     _authService.removeListener(_onAuthStateChanged);
     _firestoreService.stopRealtimeSync();
     super.dispose();
@@ -583,11 +588,25 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  void _persistDocument(TierDocument doc) {
-    LocalVaultService.saveDocument(doc);
-    final user = _authService.currentUser;
-    if (user != null) {
-      _firestoreService.saveDocument(uid: user.uid, doc: doc);
+  final Map<String, Timer> _persistTimers = {};
+
+  void _persistDocument(TierDocument doc, {bool debounce = false}) {
+    _persistTimers.remove(doc.id)?.cancel();
+    void writeNow() {
+      LocalVaultService.saveDocument(doc);
+      final user = _authService.currentUser;
+      if (user != null) {
+        _firestoreService.saveDocument(uid: user.uid, doc: doc);
+      }
+    }
+
+    if (debounce && enableAutoLoad) {
+      _persistTimers[doc.id] = Timer(const Duration(milliseconds: 250), () {
+        _persistTimers.remove(doc.id);
+        writeNow();
+      });
+    } else {
+      writeNow();
     }
   }
 
@@ -2372,7 +2391,7 @@ Return ONLY a JSON object with this exact schema:
     final feat = documents[featureId];
     if (feat == null) return;
     FeatureStateNode.saveStatesToDocument(feat, states);
-    _persistDocument(feat);
+    _persistDocument(feat, debounce: true);
     notifyListeners();
   }
 

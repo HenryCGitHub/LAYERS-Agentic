@@ -1082,6 +1082,27 @@ class AppTypography {
       );
 }
 
+/// Shared DRY theme color getters for screen State classes (`ProjectPitchScreen`,
+/// `ReleasePlanGateScreen`, `ReleaseWorkbenchScreen`).
+mixin WorkbenchThemeMixin {
+  bool get isDark;
+
+  Color get bgBase => AppTheme.bgBaseFor(isDark);
+  Color get bgSurface => AppTheme.bgSurfaceFor(isDark);
+  Color get bgRecessed => AppTheme.bgSurfaceRecessedFor(isDark);
+  Color get bgHover => AppTheme.bgSurfaceHoverFor(isDark);
+  Color get borderSubtle => AppTheme.borderSubtleFor(isDark);
+  Color get borderBright => AppTheme.borderBrightFor(isDark);
+  Color get textPrimary => AppTheme.textPrimaryFor(isDark);
+  Color get textSecondary => AppTheme.textSecondaryFor(isDark);
+  Color get textMuted => AppTheme.textMutedFor(isDark);
+  Color get focalAccent => AppTheme.focalAccentFor(isDark);
+  Color get focalAccentFg => AppTheme.focalAccentFgFor(isDark);
+  Color get accentEmerald => AppTheme.accentGreenFor(isDark);
+  Color get accentCrimson => AppTheme.accentRedFor(isDark);
+  Color get accentAmber => AppTheme.accentAmberFor(isDark);
+}
+
 /// Paints a true CSS-equivalent `inset 0 3px 6px, inset 2px 0 4px` inner cavity occlusion shadow
 /// inside a rounded rectangle when an element is pushed into its socket.
 class _InnerSocketShadowPainter extends CustomPainter {
