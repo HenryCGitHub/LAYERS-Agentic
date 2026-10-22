@@ -94986,7 +94986,8 @@ k=A.Y(3)
 o=A.Z(h,A.ap(A.a([n,B.co,A.a9(A.a([l,A.aK(!1,k,!0,new A.aO(B.I0,A.l("+ New Project",h,h,h,h,A.R().$3$color$fontSize$fontWeight(i.gl()?B.O:B.P,9.5,B.n),h,h),h),h,!0,h,h,B.a0a,h,h,h,h,new A.ayt(i),h,h,h,h)],m),B.r,B.a6,B.i,0)],m),B.F,h,B.f,B.i),B.h,h,h,new A.a3(h,h,new A.aC(B.e,B.e,new A.S(o,1,B.j,-1),B.e),h,h,h,B.p),h,h,h,h,B.Hm,h,h,h)
 n=A.a([],m)
 for(j=0;j<9;++j)n.push(i.a7v(a,j))
-return A.Z(h,A.ap(A.a([o,A.bf(A.aP6(n,B.p8),1),i.a7c(f)],m),B.F,h,B.f,B.i),B.h,h,h,new A.a3(g,h,new A.aC(B.e,new A.S(q,1,B.j,-1),new A.S(p,1,B.j,-1),B.e),h,h,h,B.p),h,h,B.a0w,h,h,h,h,h)},
+n.push(i.a7c(f))
+return A.Z(h,A.ap(A.a([o,A.bf(A.aP6(n,B.p8),1)],m),B.F,h,B.f,B.i),B.h,h,h,new A.a3(g,h,new A.aC(B.e,new A.S(q,1,B.j,-1),new A.S(p,1,B.j,-1),B.e),h,h,h,B.p),h,h,B.a0w,h,h,h,h,h)},
 aiH(a,b){var s
 switch(b){case 0:return B.b.F(a.d).length===0?"Draft":"Locked"
 case 1:s=a.e
@@ -95021,7 +95022,7 @@ m=t.p
 o=A.a([q,p,B.Y,new A.dN(B.Dx,A.l(g,k,1,B.am,k,A.R().$3$color$fontSize$fontWeight(n,10,o),k,k),k)],m)
 if(h)B.c.H(o,A.a([B.b5,A.l("\u2713",k,k,k,k,A.R().$3$color$fontSize$fontWeight(l.gl()?B.C:B.D,10.5,B.v),k,k)],m))
 return A.aK(!1,k,!0,A.Z(k,A.a9(o,B.r,B.f,B.i,0),B.h,k,k,new A.a3(s,k,new A.aC(B.e,B.e,B.e,new A.S(r,3,B.j,-1)),k,k,k,B.p),k,k,k,k,B.Hl,k,k,k),k,!0,k,k,new A.a5("step_node_"+b,t.O),k,k,k,k,new A.ayu(l,b),k,k,k,k)},
-a7c(a){var s,r,q,p,o,n=this,m=null,l=n.r===9,k=n.gl()?B.y:B.x
+a7c(a){var s,r,q,p,o,n=this,m=null,l=n.r===9,k=n.gl()?B.y:B.x,j=n.gl()?B.y:B.x
 if(l)s=(n.gl()?B.C:B.D).b6(0.1)
 else s=B.R
 if(l)r=n.gl()?B.C:B.D
@@ -95032,7 +95033,7 @@ q=A.cq(A.l("10",m,m,m,m,A.R().$3$color$fontSize$fontWeight(q,10.5,B.v),m,m),m,24
 p=A.l("Full Concept Review",m,m,m,m,A.a0().$3$color$fontSize$fontWeight(n.gl()?B.u:B.t,12,B.n),m,m)
 o=t.p
 p=A.bf(A.ap(A.a([p,A.l("Inspect all 9 sections ("+a+"/9)",m,m,m,m,A.R().$2$color$fontSize(n.gl()?B.L:B.B,9.5),m,m)],o),B.S,m,B.f,B.i),1)
-return A.Z(m,A.aK(!1,m,!0,A.Z(m,A.a9(A.a([q,p,A.l("READY \u2192",m,m,m,m,A.R().$3$color$fontSize$fontWeight(n.gl()?B.C:B.D,10,B.v),m,m)],o),B.r,B.f,B.i,0),B.h,m,m,new A.a3(s,m,new A.aC(B.e,B.e,B.e,new A.S(r,3,B.j,-1)),m,m,m,B.p),m,m,m,m,B.Hk,m,m,m),m,!0,m,m,B.a0Q,m,m,m,m,new A.axU(n),m,m,m,m),B.h,m,m,new A.a3(m,m,new A.aC(new A.S(k,1,B.j,-1),B.e,B.e,B.e),m,m,m,B.p),m,m,m,m,m,m,m,m)},
+return A.Z(m,A.aK(!1,m,!0,A.Z(m,A.a9(A.a([q,p,A.l("READY \u2192",m,m,m,m,A.R().$3$color$fontSize$fontWeight(n.gl()?B.C:B.D,10,B.v),m,m)],o),B.r,B.f,B.i,0),B.h,m,m,new A.a3(s,m,new A.aC(B.e,B.e,B.e,new A.S(r,3,B.j,-1)),m,m,m,B.p),m,m,m,m,B.Hk,m,m,m),m,!0,m,m,B.a0Q,m,m,m,m,new A.axU(n),m,m,m,m),B.h,m,m,new A.a3(m,m,new A.aC(new A.S(k,1,B.j,-1),B.e,new A.S(j,1,B.j,-1),B.e),m,m,m,B.p),m,m,m,m,m,m,m,m)},
 k7(a,b,c){var s=$.aB(),r=this.c
 r.toString
 A.kk(new A.azl(this,c,new A.db(new A.c8(a,B.bz,B.aC),s),b),r,t.H)},
@@ -96324,7 +96325,6 @@ k=""+p+" alert"+k
 p=k}if(o)o=g.gl()?B.C:B.D
 else o=g.gl()?B.b_:B.aZ
 q.push(g.Eg("\ud83d\udee1",n,a2,new A.aAz(g),B.a0N,"Producer Scope Guard",o,p))
-q=A.bf(A.aP6(q,B.bK),1)
 if(a3)p=g.gl()?B.cf:B.ct
 else p=g.gl()?B.E:B.M
 o=g.gl()?B.y:B.x
@@ -96342,7 +96342,8 @@ j=A.bf(A.ap(A.a([j,B.TI,A.l("All "+i+" Beats & Scope Budget",f,f,f,f,A.a0().$2$c
 i=a4.ghK()
 if(a3)h=g.gl()?B.O:B.P
 else h=g.gl()?B.C:B.D
-return A.Z(f,A.ap(A.a([e,q,A.fG(B.ab,!0,f,A.aK(!1,f,!0,A.Z(f,A.a9(A.a([k,j,A.l(""+i+"h",f,f,f,f,A.R().$3$color$fontSize$fontWeight(h,10,B.v),f,f)],m),B.r,B.f,B.i,0),B.h,f,f,new A.a3(f,f,new A.aC(new A.S(o,1,B.j,-1),B.e,B.e,new A.S(n,3,B.j,-1)),f,f,f,B.p),f,f,f,f,B.dB,f,f,f),f,!0,f,f,B.a0z,f,f,f,f,new A.aAA(g),f,f,f,f),B.h,p,0,f,f,f,f,f,B.bf)],m),B.F,f,B.f,B.i),B.h,f,f,new A.a3(b,f,new A.aC(B.e,new A.S(s,1,B.j,-1),new A.S(r,1,B.j,-1),B.e),f,f,f,B.p),f,f,B.a0C,f,f,f,f,f)},
+q.push(A.fG(B.ab,!0,f,A.aK(!1,f,!0,A.Z(f,A.a9(A.a([k,j,A.l(""+i+"h",f,f,f,f,A.R().$3$color$fontSize$fontWeight(h,10,B.v),f,f)],m),B.r,B.f,B.i,0),B.h,f,f,new A.a3(f,f,new A.aC(B.e,B.e,new A.S(o,1,B.j,-1),new A.S(n,3,B.j,-1)),f,f,f,B.p),f,f,f,f,B.dB,f,f,f),f,!0,f,f,B.a0z,f,f,f,f,new A.aAA(g),f,f,f,f),B.h,p,0,f,f,f,f,f,B.bf))
+return A.Z(f,A.ap(A.a([e,A.bf(A.aP6(q,B.bK),1)],m),B.F,f,B.f,B.i),B.h,f,f,new A.a3(b,f,new A.aC(B.e,new A.S(s,1,B.j,-1),new A.S(r,1,B.j,-1),B.e),f,f,f,B.p),f,f,B.a0C,f,f,f,f,f)},
 Eg(a,b,c,d,e,f,g,h){var s,r,q,p,o,n,m=this,l=null
 if(c)s=m.gl()?B.cf:B.ct
 else s=B.R
