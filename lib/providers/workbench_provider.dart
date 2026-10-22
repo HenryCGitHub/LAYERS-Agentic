@@ -961,11 +961,62 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set of intervention IDs explicitly marked "Keep in Scope ✓" / dismissed by the user.
+  final Set<String> _keptInterventionIds = {};
+
+  /// Marks a Producer Scope-Guard or Concept Critic intervention as intentionally kept in scope.
+  void keepAgentIntervention(AgentIntervention intervention) {
+    _keptInterventionIds.add(intervention.id);
+    final featTitle =
+        intervention.payload['featureTitle']?.toString() ?? intervention.title;
+    _recordAgentTrace(AgentRunTrace(
+      agentRole: 'Producer Scope Guard',
+      userGoal: 'Keep in Scope: $featTitle',
+      reasoning:
+          'Explicitly approved keeping "$featTitle" in active release scope.',
+      toolCalls: [
+        AgentToolCall(
+          toolName: 'keep_feature_in_scope',
+          targetTitle: featTitle,
+          summary: 'Kept "$featTitle" in active scope ✓',
+        ),
+      ],
+    ));
+    notifyListeners();
+  }
+
+  /// Marks all current Stage 2 Producer Scope-Guard alerts as kept in scope.
+  void keepAllStage2Interventions() {
+    final current = stage2Interventions;
+    if (current.isEmpty) return;
+    for (final item in current) {
+      _keptInterventionIds.add(item.id);
+    }
+    _recordAgentTrace(AgentRunTrace(
+      agentRole: 'Producer Scope Guard',
+      userGoal: 'Keep All ${current.length} Flagged Items in Scope',
+      reasoning:
+          'Approved keeping all ${current.length} flagged scope items in active release scope.',
+      toolCalls: [
+        for (final item in current)
+          AgentToolCall(
+            toolName: 'keep_feature_in_scope',
+            targetTitle:
+                item.payload['featureTitle']?.toString() ?? item.title,
+            summary: 'Kept in active scope ✓',
+          ),
+      ],
+    ));
+    notifyListeners();
+  }
+
   /// 0-Token Autonomous Concept Critic Interventions for Stage 1 (`ProjectConceptBlueprint`).
   List<AgentIntervention> get stage1Interventions {
     final draft = _conceptDraft;
     if (draft == null) return const [];
-    return WorkspaceAgentOrchestrator.auditConceptBlueprint(draft);
+    return WorkspaceAgentOrchestrator.auditConceptBlueprint(draft)
+        .where((i) => !_keptInterventionIds.contains(i.id))
+        .toList();
   }
 
   /// 0-Token Autonomous Producer Scope-Guard Interventions for Stage 2 (`Release Plan Gate`).
@@ -975,7 +1026,7 @@ class WorkbenchProvider extends ChangeNotifier {
     return WorkspaceAgentOrchestrator.auditReleaseBlueprint(
       blueprint: bp,
       concept: _conceptDraft,
-    );
+    ).where((i) => !_keptInterventionIds.contains(i.id)).toList();
   }
 
   /// 0-Token Autonomous Producer & Engine Architect Interventions for Stage 3 (`Active Release Workbench`).

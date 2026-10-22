@@ -72,12 +72,17 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
   }
 
   Widget _buildActiveStage2SectionWorkspace(ReleaseBlueprint bp) {
+    final interventions = widget.workbench.stage2Interventions;
     if (!_isStepByBeatMode || _activeStage2Section == 'full_review') {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildGateBanner(bp),
           const SizedBox(height: 18),
+          if (interventions.isNotEmpty) ...[
+            _buildScopeGuardSection(bp),
+            const SizedBox(height: 22),
+          ],
           if (bp.questions.isNotEmpty) ...[
             _buildReleaseQuestionsSection(bp),
             const SizedBox(height: 22),
@@ -202,6 +207,52 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 InkWell(
                   key: const ValueKey('stage2_queued_next_btn'),
                   onTap: () => setState(() {
+                    _activeStage2Section = 'scope_guard';
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Text(
+                      'Next Section: Producer Scope Guard →',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: accentCyan,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      case 'scope_guard':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildScopeGuardSection(bp),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                InkWell(
+                  onTap: () => setState(() {
+                    _activeStage2Section = 'queued';
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Text(
+                      '‹ Prev Section: Queued & Cuts',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  key: const ValueKey('stage2_scope_guard_next_btn'),
+                  onTap: () => setState(() {
                     _isStepByBeatMode = false;
                     _activeStage2Section = 'full_review';
                   }),
@@ -304,23 +355,131 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
   }
 
   Widget _buildStage2AgentStrip() {
-    final interventions = widget.workbench.stage2Interventions;
     final trace = widget.workbench.lastAgentTrace;
 
-    if ((trace == null || trace.toolCalls.isEmpty) && interventions.isEmpty) {
+    if (trace == null || trace.toolCalls.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        key: const ValueKey('stage2_agent_trace_banner'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: bgSurface,
+          border: Border(
+            left: BorderSide(color: accentEmerald, width: 3),
+            bottom: BorderSide(color: borderSubtle),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              'AGENT TRACE · ${trace.agentRole.toUpperCase()}',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                color: accentEmerald,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${trace.toolCalls.map((c) => "⚙ ${c.toolName}").join(" · ")} — ${trace.reasoning}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  color: textSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => widget.workbench.clearLastAgentTrace(),
+              child: Text(
+                'Dismiss ×',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  color: textMuted,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScopeGuardSection(ReleaseBlueprint bp) {
+    final interventions = widget.workbench.stage2Interventions;
+    return Container(
+      key: const ValueKey('stage2_scope_guard_section'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (trace != null && trace.toolCalls.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: borderSubtle)),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  '🛡 PRODUCER SCOPE GUARD',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.7,
+                    color: interventions.isEmpty ? accentEmerald : accentAmber,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    interventions.isEmpty
+                        ? 'All ${bp.releaseVersionTag} scope & budget guardrails passing ✓'
+                        : '${interventions.length} scope/budget recommendation${interventions.length == 1 ? "" : "s"} — Keep in Scope ✓ or Defer ✦',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: textSecondary,
+                    ),
+                  ),
+                ),
+                if (interventions.length > 1)
+                  InkWell(
+                    key: const ValueKey('stage2_keep_all_interventions_btn'),
+                    onTap: () => widget.workbench.keepAllStage2Interventions(),
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: accentEmerald.withValues(alpha: 0.6),
+                        ),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        'Keep All in Scope ✓',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: accentEmerald,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (interventions.isEmpty)
             Container(
-              key: const ValueKey('stage2_agent_trace_banner'),
-              margin: EdgeInsets.only(bottom: interventions.isNotEmpty ? 8 : 0),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: bgSurface,
                 border: Border(
@@ -331,9 +490,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
               child: Row(
                 children: [
                   Text(
-                    'AGENT TRACE · ${trace.agentRole.toUpperCase()}',
+                    '✓',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
+                      fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: accentEmerald,
                     ),
@@ -341,33 +500,21 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${trace.toolCalls.map((c) => "⚙ ${c.toolName}").join(" · ")} — ${trace.reasoning}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      'No unresolved Out-of-Scope conflicts or oversized (>8h) features in ${bp.releaseVersionTag}.',
                       style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () => widget.workbench.clearLastAgentTrace(),
-                    child: Text(
-                      'Dismiss ×',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        color: textMuted,
+                        fontSize: 13,
+                        color: textPrimary,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-          for (int i = 0; i < interventions.length; i++) ...[
-            _buildInterventionBanner(interventions[i], i),
-            if (i < interventions.length - 1) const SizedBox(height: 8),
-          ],
+            )
+          else
+            for (int i = 0; i < interventions.length; i++) ...[
+              _buildInterventionBanner(interventions[i], i),
+              if (i < interventions.length - 1) const SizedBox(height: 8),
+            ],
         ],
       ),
     );
@@ -379,7 +526,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
         : (item.severity == 'emerald' ? accentEmerald : accentAmber);
     return Container(
       key: ValueKey('stage2_intervention_$index'),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: bgSurface,
         border: Border(
@@ -422,25 +569,52 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
             ),
           ),
           const SizedBox(width: 12),
-          ElevatedButton(
-            key: ValueKey('stage2_apply_intervention_btn_$index'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: color,
-              foregroundColor: bgBase,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                key: ValueKey('stage2_keep_intervention_btn_$index'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: accentEmerald,
+                  side: BorderSide(color: accentEmerald.withValues(alpha: 0.65)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: () => widget.workbench.keepAgentIntervention(item),
+                child: Text(
+                  'Keep in Scope ✓',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-            ),
-            onPressed: () => widget.workbench.applyAgentIntervention(item),
-            child: Text(
-              item.actionLabel,
-              style: GoogleFonts.inter(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
+              const SizedBox(width: 8),
+              ElevatedButton(
+                key: ValueKey('stage2_apply_intervention_btn_$index'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: bgBase,
+                  elevation: 0,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: () => widget.workbench.applyAgentIntervention(item),
+                child: Text(
+                  item.actionLabel,
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -475,13 +649,16 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     );
   }
 
-  // ── De-Boxed Flush Flat Section Stepper (`01 Goal & Budget`, `02 Priorities`, `B01..B0N`, `↪ Queued`, `◫ Full Release Review`) ─
+  // ── De-Boxed Flush Flat Section Stepper (`01 Goal & Budget`, `02 Priorities`, `B01..B0N`, `↪ Queued`, `🛡 Scope Guard`, `◫ Full Release Review`) ─
   Widget _buildLeftReleaseOutlinerRail(ReleaseBlueprint bp) {
     final nextVer = _nextReleaseVersionTag(bp.releaseVersionTag);
+    final interventions = widget.workbench.stage2Interventions;
     final isGoalActive = _isStepByBeatMode && _activeStage2Section == 'goal';
     final isQuestionsActive =
         _isStepByBeatMode && _activeStage2Section == 'questions';
     final isQueuedActive = _isStepByBeatMode && _activeStage2Section == 'queued';
+    final isScopeGuardActive =
+        _isStepByBeatMode && _activeStage2Section == 'scope_guard';
     final isFullReviewActive =
         !_isStepByBeatMode || _activeStage2Section == 'full_review';
 
@@ -607,6 +784,29 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     setState(() {
                       _isStepByBeatMode = true;
                       _activeStage2Section = 'queued';
+                    });
+                  },
+                ),
+
+                // 🛡 Dedicated Producer Scope Guard Section
+                _buildFlushStepperRow(
+                  rowKey: const ValueKey('stage2_step_scope_guard'),
+                  code: '🛡',
+                  codeColor: interventions.isEmpty
+                      ? accentEmerald
+                      : accentAmber,
+                  title: 'Producer Scope Guard',
+                  trailingText: interventions.isEmpty
+                      ? '✓ Clean'
+                      : '${interventions.length} alert${interventions.length == 1 ? "" : "s"}',
+                  trailingColor: interventions.isEmpty
+                      ? accentEmerald
+                      : accentCrimson,
+                  isActive: isScopeGuardActive,
+                  onTap: () {
+                    setState(() {
+                      _isStepByBeatMode = true;
+                      _activeStage2Section = 'scope_guard';
                     });
                   },
                 ),
