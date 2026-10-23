@@ -766,6 +766,30 @@ void main() {
         expect(targetFeat.estimatedHours, 6);
         expect(targetFeat.tuningParams, contains('grapplePullSpeed: 32.0 m/s'));
 
+        // Verify Stage 2 inline Release Goal/Done When and Epic edit + Add Epic
+        provider.updateReleaseBlueprintGoalAndDoneWhen(
+          goal: 'Build a tight 3-minute grapple arena loop.',
+        );
+        expect(
+          provider.releaseBlueprint!.goal,
+          'Build a tight 3-minute grapple arena loop.',
+        );
+        provider.updateProposedBeatInBlueprint(
+          beatId: firstBeat.id,
+          title: 'Loadout & Rig Selection',
+        );
+        expect(firstBeat.title, 'Loadout & Rig Selection');
+        final initialEpicCount = provider.releaseBlueprint!.beats.length;
+        final addedBeatId = provider.addProposedBeatToBlueprint(
+          title: 'Boss Shield Break',
+        );
+        expect(addedBeatId, isNotNull);
+        expect(provider.releaseBlueprint!.beats.length, initialEpicCount + 1);
+        expect(
+          provider.releaseBlueprint!.beats.last.features.first.title,
+          'Boss Shield Break Mechanics & Controls',
+        );
+
         await provider.approveAndExecuteReleasePlan();
         final stage3Feats = provider.featuresForBeat(
           provider.activeReleaseBeats.first.id,

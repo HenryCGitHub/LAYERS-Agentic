@@ -611,51 +611,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             ];
           }
           break;
-        case 3:
-          final pillarValue = optionText.contains(':')
-              ? optionText
-              : 'Core Focus: $optionText';
-          if (d.designPillars.isNotEmpty) {
-            d.designPillars[0] = pillarValue;
-          } else {
-            d.designPillars = [pillarValue];
-          }
-          break;
-        case 4:
-          if (bodyAfterColon.toLowerCase().contains(' over ')) {
-            if (d.tradeOffs.isNotEmpty) {
-              d.tradeOffs[0] = bodyAfterColon;
-            } else {
-              d.tradeOffs = [bodyAfterColon];
-            }
-          }
-          break;
-        case 5:
-          // Parse arrow-separated beats if the option describes a loop sequence,
-          // otherwise preserve the concept's existing beats and adjust Beat 1!
-          if (bodyAfterColon.contains('→')) {
-            final steps = bodyAfterColon
-                .split('→')
-                .map((s) => s.trim())
-                .where((s) => s.isNotEmpty)
-                .toList();
-            if (steps.length >= 3) {
-              d.coreLoopBeats = [
-                for (final step in steps)
-                  step.contains(':')
-                      ? step
-                      : '$step: Execute $step for ${d.title}',
-              ];
-            }
-          }
-          break;
-        case 6:
-          if (d.exclusions.isNotEmpty) {
-            d.exclusions[0] = bodyAfterColon;
-          } else {
-            d.exclusions = [bodyAfterColon];
-          }
-          break;
         case 7:
           d.doneWhen = bodyAfterColon;
           break;
@@ -915,6 +870,73 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     });
   }
 
+  KeyEventResult _handleStage1KeyEvent(
+    KeyEvent event,
+    ProjectConceptBlueprint draft,
+  ) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus?.context?.widget is EditableText) {
+      return KeyEventResult.ignored;
+    }
+
+    final isMetaOrCtrl = HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed;
+    final key = event.logicalKey;
+
+    if (isMetaOrCtrl && key == LogicalKeyboardKey.enter) {
+      if (_currentStep < _sections.length) {
+        setState(() {
+          for (int i = 0; i < _sections.length; i++) {
+            _visitedSteps.add(i);
+          }
+          _currentStep = _sections.length;
+        });
+      } else if (!widget.workbench.isAgentBusy) {
+        widget.workbench.openReleasePlanGate();
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.arrowLeft && _currentStep > 0) {
+      _goToStep(_currentStep - 1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight &&
+        _currentStep < _sections.length) {
+      _goToStep(_currentStep + 1);
+      return KeyEventResult.handled;
+    }
+
+    if (_currentStep < _sections.length) {
+      final opts = _optionsForSection(draft, _currentStep);
+      int? optIdx;
+      if (key == LogicalKeyboardKey.digit1 && opts.isNotEmpty) optIdx = 0;
+      if (key == LogicalKeyboardKey.digit2 && opts.length > 1) optIdx = 1;
+      if (key == LogicalKeyboardKey.digit3 && opts.length > 2) optIdx = 2;
+      if (optIdx != null) {
+        _selectSectionOption(draft, _currentStep, optIdx);
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _promptEditProjectTitle(ProjectConceptBlueprint draft) {
+    _showDirectSectionTextEditDialog(
+      title: 'Rename Project Title',
+      initialText: draft.title,
+      onSave: (val) {
+        final activeId = widget.workbench.activeProjectId;
+        if (activeId != null) {
+          widget.workbench.renameProject(activeId, val);
+        } else {
+          widget.workbench.updateConceptDraft((d) => d.title = val);
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = widget.workbench.conceptDraft;
@@ -944,56 +966,60 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     }
 
     // Step 1B / 1C: Unified Left Outliner Sidebar (308px) + Focused Co-Design Canvas
-    return Container(
-      key: const ValueKey('concept_interview_card'),
-      color: bgBase,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 780;
-          final mainCanvasColumn = Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1100),
-                      child: _currentStep < _sections.length
-                          ? _buildFocusedSectionWorkspace(draft, _currentStep)
-                          : _buildFullReviewWorkspace(draft),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (_, event) => _handleStage1KeyEvent(event, draft),
+      child: Container(
+        key: const ValueKey('concept_interview_card'),
+        color: bgBase,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 780;
+            final mainCanvasColumn = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1100),
+                        child: _currentStep < _sections.length
+                            ? _buildFocusedSectionWorkspace(draft, _currentStep)
+                            : _buildFullReviewWorkspace(draft),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              _buildConceptStickyBottomDock(draft),
-            ],
-          );
+                _buildConceptStickyBottomDock(draft),
+              ],
+            );
 
-          if (!isWide) {
-            return Column(
+            if (!isWide) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 220,
+                    child: _buildLeftConceptOutlinerRail(draft),
+                  ),
+                  Expanded(child: mainCanvasColumn),
+                ],
+              );
+            }
+
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
-                  height: 220,
+                  width: 280,
                   child: _buildLeftConceptOutlinerRail(draft),
                 ),
                 Expanded(child: mainCanvasColumn),
               ],
             );
-          }
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: 280,
-                child: _buildLeftConceptOutlinerRail(draft),
-              ),
-              Expanded(child: mainCanvasColumn),
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -1700,14 +1726,34 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        draft.title.trim().isEmpty ? 'Concept Blueprint' : draft.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
+                      child: InkWell(
+                        key: const ValueKey('stage1_rename_project_title_btn'),
+                        onTap: () => _promptEditProjectTitle(draft),
+                        borderRadius: BorderRadius.circular(3),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                draft.title.trim().isEmpty
+                                    ? 'Concept Blueprint'
+                                    : draft.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 11,
+                              color: textMuted,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -2885,7 +2931,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                     }),
                   ),
         );
-      case 5: // 06 Core Loop — Connected Beat Cycle Rows + Inline Add/Remove
+      case 5: // 06 Core Loop — Connected Beat Cycle Rows + Inline Add/Remove/Reorder
         return _buildIndexedRows(
           prefix: 'BEAT',
           items: draft.coreLoopBeats,
@@ -2895,6 +2941,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             next[i] = val;
             d.coreLoopBeats = next;
           }),
+          onReorderItem: (!isReadOnlySummary && draft.coreLoopBeats.length > 1)
+              ? (oldIdx, newIdx) => widget.workbench.updateConceptDraft((d) {
+                    if (newIdx < 0 || newIdx >= d.coreLoopBeats.length) return;
+                    final next = List<String>.from(d.coreLoopBeats);
+                    final moved = next.removeAt(oldIdx);
+                    next.insert(newIdx, moved);
+                    d.coreLoopBeats = next;
+                  })
+              : null,
           onDeleteItem: (!isReadOnlySummary && draft.coreLoopBeats.length > 1)
               ? (i) => widget.workbench.updateConceptDraft((d) {
                     final next = List<String>.from(d.coreLoopBeats)..removeAt(i);
@@ -3363,6 +3418,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     required List<String> items,
     required bool isCoreLoop,
     void Function(int index, String newValue)? onEditItem,
+    void Function(int oldIndex, int newIndex)? onReorderItem,
     void Function(int index)? onDeleteItem,
     VoidCallback? onAddItem,
   }) {
@@ -3408,8 +3464,49 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                     Expanded(
                       child: _buildFormattedLeadInText(items[i]),
                     ),
+                    if (onReorderItem != null && items.length > 1) ...[
+                      const SizedBox(width: 6),
+                      InkWell(
+                        key: ValueKey('core_loop_move_up_$i'),
+                        onTap: i > 0 ? () => onReorderItem(i, i - 1) : null,
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                          child: Text(
+                            '↑',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: i > 0
+                                  ? textSecondary
+                                  : textMuted.withValues(alpha: 0.3),
+                            ),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        key: ValueKey('core_loop_move_down_$i'),
+                        onTap: i < items.length - 1
+                            ? () => onReorderItem(i, i + 1)
+                            : null,
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                          child: Text(
+                            '↓',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: i < items.length - 1
+                                  ? textSecondary
+                                  : textMuted.withValues(alpha: 0.3),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (onDeleteItem != null) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       InkWell(
                         onTap: () => onDeleteItem(i),
                         borderRadius: BorderRadius.circular(3),
@@ -3911,12 +4008,16 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '${draft.title} — Complete Project Concept Blueprint',
-                      style: AppTheme.displayFont(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: textPrimary,
+                    InkWell(
+                      onTap: () => _promptEditProjectTitle(draft),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Text(
+                        '${draft.title} — Complete Project Concept Blueprint',
+                        style: AppTheme.displayFont(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 3),

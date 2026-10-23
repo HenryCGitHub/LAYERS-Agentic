@@ -1145,20 +1145,32 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
             ),
           ),
           const SizedBox(height: 14),
-          // GOAL Callout Left-Bar Blockquote
+          // GOAL Callout Left-Bar Blockquote (Click to Edit)
           _buildCalloutBar(
             badgeLabel: 'GOAL',
             statement: bp.goal,
             accentColor: accentCyan,
             highlightMetrics: false,
+            onTap: () => _showEditReleaseCalloutDialog(
+              title: 'Edit Release Goal',
+              initialValue: bp.goal,
+              onSave: (val) => widget.workbench
+                  .updateReleaseBlueprintGoalAndDoneWhen(goal: val),
+            ),
           ),
           const SizedBox(height: 12),
-          // DONE WHEN Callout Left-Bar Blockquote with Metric Highlighting
+          // DONE WHEN Callout Left-Bar Blockquote with Metric Highlighting (Click to Edit)
           _buildCalloutBar(
             badgeLabel: 'DONE WHEN',
             statement: bp.doneWhen,
             accentColor: accentEmerald,
             highlightMetrics: true,
+            onTap: () => _showEditReleaseCalloutDialog(
+              title: 'Edit Release Done When',
+              initialValue: bp.doneWhen,
+              onSave: (val) => widget.workbench
+                  .updateReleaseBlueprintGoalAndDoneWhen(doneWhen: val),
+            ),
           ),
         ],
       ),
@@ -1170,49 +1182,68 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     required String statement,
     required Color accentColor,
     required bool highlightMetrics,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.only(left: 14, top: 4, bottom: 4, right: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: accentColor,
-            width: 3,
-          ),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 78,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                badgeLabel,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  color: accentColor,
-                ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.only(left: 14, top: 4, bottom: 4, right: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: accentColor,
+                width: 3,
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: highlightMetrics
-                ? buildMetricHighlightedRichText(statement)
-                : Text(
-                    statement,
-                    style: GoogleFonts.inter(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
-                      height: 1.48,
-                      color: textPrimary,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 78,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    badgeLabel,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: accentColor,
                     ),
                   ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: highlightMetrics
+                    ? buildMetricHighlightedRichText(statement)
+                    : Text(
+                        statement,
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500,
+                          height: 1.48,
+                          color: textPrimary,
+                        ),
+                      ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Icon(
+                    Icons.edit_outlined,
+                    size: 12,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1853,28 +1884,48 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                       ),
                     ),
                   ),
-                  if (_isStepByBeatMode)
-                    InkWell(
-                      key: const ValueKey('stage2_view_mode_toggle_btn'),
-                      onTap: () {
-                        setState(() {
-                          _isStepByBeatMode = false;
-                          _activeStage2Section = 'full_review';
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
-                        child: Text(
-                          '◫ Full Blueprint',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: textPrimary,
-                          ),
+                  InkWell(
+                    key: const ValueKey('stage2_add_epic_btn'),
+                    onTap: _showAddEpicDialog,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+                      child: Text(
+                        '+ Add Epic',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: accentEmerald,
                         ),
                       ),
                     ),
+                  ),
+                  InkWell(
+                    key: const ValueKey('stage2_epics_view_mode_toggle_btn'),
+                    onTap: () {
+                      setState(() {
+                        if (_isStepByBeatMode) {
+                          _isStepByBeatMode = false;
+                          _activeStage2Section = 'full_review';
+                        } else {
+                          _isStepByBeatMode = true;
+                          _activeStage2Section = 'beats';
+                        }
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+                      child: Text(
+                        _isStepByBeatMode ? '◫ Full Blueprint' : '▯ Step-by-Epic',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -1933,15 +1984,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         onTap: safeIdx < bp.beats.length - 1
                             ? () => setState(() => _activeBeatIndex = safeIdx + 1)
                             : () => setState(() {
-                                  _isStepByBeatMode = false;
-                                  _activeStage2Section = 'full_review';
+                                  _activeStage2Section = 'queued';
                                 }),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                           child: Text(
                             safeIdx < bp.beats.length - 1
                                 ? 'Next Epic: E${(safeIdx + 2).toString().padLeft(2, '0')} ${bp.beats[safeIdx + 1].title} →'
-                                : 'View Full Blueprint ◫ →',
+                                : 'Next: Out of Scope & $nextVer →',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w800,
@@ -2046,6 +2096,24 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                                   ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                key: ValueKey('edit_epic_btn_${beat.id}'),
+                                onTap: () => _showEditEpicDialog(beat),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                  child: Text(
+                                    'Edit ✎',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                             ],
                           ),
                         ),
@@ -2901,6 +2969,230 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     );
   }
 
+  Future<void> _showEditReleaseCalloutDialog({
+    required String title,
+    required String initialValue,
+    required void Function(String) onSave,
+  }) async {
+    final ctrl = TextEditingController(text: initialValue);
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 480,
+          child: _buildDialogField(
+            label: title.toUpperCase(),
+            controller: ctrl,
+            fieldKey: const ValueKey('edit_release_callout_input'),
+            maxLines: 3,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text(
+              'Save',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (saved != null && saved.trim().isNotEmpty) {
+      onSave(saved.trim());
+    }
+  }
+
+  Future<void> _showEditEpicDialog(ProposedBeatBlueprint beat) async {
+    final titleCtrl = TextEditingController(text: beat.title);
+    final goalCtrl = TextEditingController(text: beat.goal);
+    final doneWhenCtrl = TextEditingController(text: beat.doneWhen);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          'Edit Epic',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildDialogField(
+                label: 'EPIC TITLE',
+                controller: titleCtrl,
+                fieldKey: const ValueKey('edit_epic_title_input'),
+              ),
+              const SizedBox(height: 10),
+              _buildDialogField(
+                label: 'EPIC GOAL (1 SENTENCE)',
+                controller: goalCtrl,
+                fieldKey: const ValueKey('edit_epic_goal_input'),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 10),
+              _buildDialogField(
+                label: 'DONE WHEN',
+                controller: doneWhenCtrl,
+                fieldKey: const ValueKey('edit_epic_done_when_input'),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('save_edit_epic_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Save Epic',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true && mounted) {
+      widget.workbench.updateProposedBeatInBlueprint(
+        beatId: beat.id,
+        title: titleCtrl.text,
+        goal: goalCtrl.text,
+        doneWhen: doneWhenCtrl.text,
+      );
+    }
+  }
+
+  Future<void> _showAddEpicDialog() async {
+    final titleCtrl = TextEditingController();
+    final goalCtrl = TextEditingController();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          'Add Core Loop Epic',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildDialogField(
+                label: 'EPIC TITLE (E.G., BOSS ARENA CLIMAX)',
+                controller: titleCtrl,
+                fieldKey: const ValueKey('add_epic_title_input'),
+              ),
+              const SizedBox(height: 10),
+              _buildDialogField(
+                label: 'EPIC GOAL (OPTIONAL)',
+                controller: goalCtrl,
+                fieldKey: const ValueKey('add_epic_goal_input'),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_add_epic_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Add Epic',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true && mounted && titleCtrl.text.trim().isNotEmpty) {
+      final newBeatId = widget.workbench.addProposedBeatToBlueprint(
+        title: titleCtrl.text,
+        goal: goalCtrl.text,
+      );
+      if (newBeatId != null && widget.workbench.releaseBlueprint != null) {
+        setState(() {
+          _activeBeatIndex =
+              widget.workbench.releaseBlueprint!.beats.length - 1;
+          _activeStage2Section = 'beats';
+        });
+      }
+    }
+  }
+
   Future<void> _showEditProposedFeatureDialog(
     String beatId,
     ProposedFeatureBlueprint feat,
@@ -2915,6 +3207,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     final cpCtrl = TextEditingController(text: cpLines);
     final tuningCtrl = TextEditingController(
       text: feat.tuningParams.join(', '),
+    );
+    final edgeCtrl = TextEditingController(
+      text: feat.edgeCases.join('\n'),
     );
 
     final action = await showDialog<String>(
@@ -2991,6 +3286,14 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   fieldKey: const ValueKey('edit_feat_tuning_input'),
                   mono: true,
                 ),
+                const SizedBox(height: 10),
+                _buildDialogField(
+                  label: 'EDGE-CASE GUARDS (1 PER LINE)',
+                  controller: edgeCtrl,
+                  fieldKey: const ValueKey('edit_feat_edge_cases_input'),
+                  maxLines: 2,
+                  mono: true,
+                ),
               ],
             ),
           ),
@@ -3053,14 +3356,39 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+    final parsedEdges = edgeCtrl.text
+        .split('\n')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
 
     final rawTaskLines = cpCtrl.text
         .split('\n')
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
+    final tasksWereModified = cpCtrl.text.trim() != cpLines.trim();
+
     final updatedCheckpoints = <ProposedCheckpointBlueprint>[];
-    if (rawTaskLines.isNotEmpty) {
+    if (feat.checkpoints.length > 1 && !tasksWereModified) {
+      // Preserve multi-checkpoint breakdown intact while syncing updated tuning & edge guards
+      for (int cIdx = 0; cIdx < feat.checkpoints.length; cIdx++) {
+        final existingCp = feat.checkpoints[cIdx];
+        updatedCheckpoints.add(
+          ProposedCheckpointBlueprint(
+            title: existingCp.title,
+            playtestCriteria: cIdx == 0 && doneWhenCtrl.text.trim().isNotEmpty
+                ? doneWhenCtrl.text.trim()
+                : existingCp.playtestCriteria,
+            tasks: existingCp.tasks,
+            coveredScope: existingCp.coveredScope,
+            tuningParams: parsedTuning,
+            edgeCases: parsedEdges.isNotEmpty ? parsedEdges : existingCp.edgeCases,
+            releaseVersion: existingCp.releaseVersion,
+          ),
+        );
+      }
+    } else if (rawTaskLines.isNotEmpty) {
       final firstCp = feat.checkpoints.isNotEmpty ? feat.checkpoints.first : null;
       updatedCheckpoints.add(
         ProposedCheckpointBlueprint(
@@ -3071,10 +3399,27 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           tasks: rawTaskLines,
           coveredScope: firstCp?.coveredScope ?? feat.inScope,
           tuningParams: parsedTuning,
-          edgeCases: firstCp?.edgeCases ?? feat.edgeCases,
+          edgeCases: parsedEdges.isNotEmpty
+              ? parsedEdges
+              : (firstCp?.edgeCases ?? feat.edgeCases),
           releaseVersion: firstCp?.releaseVersion ?? feat.originVersion,
         ),
       );
+      // Preserve any secondary checkpoints if they existed
+      for (int cIdx = 1; cIdx < feat.checkpoints.length; cIdx++) {
+        final extraCp = feat.checkpoints[cIdx];
+        updatedCheckpoints.add(
+          ProposedCheckpointBlueprint(
+            title: extraCp.title,
+            playtestCriteria: extraCp.playtestCriteria,
+            tasks: extraCp.tasks,
+            coveredScope: extraCp.coveredScope,
+            tuningParams: parsedTuning,
+            edgeCases: parsedEdges.isNotEmpty ? parsedEdges : extraCp.edgeCases,
+            releaseVersion: extraCp.releaseVersion,
+          ),
+        );
+      }
     }
 
     widget.workbench.updateProposedFeatureInBeat(
@@ -3087,6 +3432,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       checkpoints:
           updatedCheckpoints.isNotEmpty ? updatedCheckpoints : feat.checkpoints,
       tuningParams: parsedTuning,
+      edgeCases: parsedEdges,
     );
   }
 

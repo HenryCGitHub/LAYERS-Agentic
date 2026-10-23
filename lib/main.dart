@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+import 'models/feature_state.dart';
 import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
 import 'screens/project_pitch_screen.dart';
@@ -71,7 +72,7 @@ class WorkbenchShell extends StatelessWidget {
       );
       for (int i = 0; i < bp.beats.length; i++) {
         final b = bp.beats[i];
-        sb.writeln('\n### Beat ${i + 1}: ${b.title}');
+        sb.writeln('\n### Epic ${i + 1}: ${b.title}');
         for (final f in b.features) {
           final status = f.included ? 'INCLUDED (${f.estimatedHours}h)' : 'DEFERRED';
           sb.writeln('- **${f.title}** [$status]: ${f.goal}');
@@ -81,11 +82,29 @@ class WorkbenchShell extends StatelessWidget {
     if (rel != null) {
       final relProgress = workbench.getDocumentProgress(rel.id);
       sb.writeln('\n## Stage 3: Active Release Workbench (${rel.title} · $relProgress% Verified)');
-      for (final beat in workbench.activeReleaseBeats) {
+      final beats = workbench.activeReleaseBeats;
+      for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+        final beat = beats[bIdx];
+        sb.writeln('\n### Epic ${bIdx + 1}: ${beat.title}');
         final feats = workbench.featuresForBeat(beat.id);
         for (final feat in feats) {
           final p = workbench.getDocumentProgress(feat.id);
           sb.writeln('- **${feat.title}** ($p% verified · ${feat.estimatedDuration})');
+          final states = FeatureStateNode.getStatesForDocument(feat);
+          for (final cp in states) {
+            final cpDone = cp.isCompleted ? '✓' : '○';
+            sb.writeln('  - [$cpDone] **${cp.cleanStageTitle}** — *${cp.playtestCondition}*');
+            if (cp.tuningParams.isNotEmpty) {
+              sb.writeln('    - Tuning: `${cp.tuningParams.join(', ')}`');
+            }
+            if (cp.edgeCases.isNotEmpty) {
+              sb.writeln('    - Guards: ${cp.edgeCases.join(' · ')}');
+            }
+            for (final task in cp.checklist) {
+              final tDone = task.completed ? 'x' : ' ';
+              sb.writeln('    - [$tDone] ${task.text}');
+            }
+          }
         }
       }
     }

@@ -1099,6 +1099,26 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 );
                               },
                             ),
+                          if (isCpActive)
+                            InkWell(
+                              key: ValueKey('outline_add_task_btn_${cpNode.id}'),
+                              onTap: () => _showAddBuildTaskDialog(
+                                feat,
+                                states,
+                                cpIdx,
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
+                                child: Text(
+                                  '+ Add Build Task...',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentCyan.withValues(alpha: 0.85),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                   ],
@@ -2208,18 +2228,48 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              Text(
-                                '${selectedHowTo.numLabel} · ${selectedHowTo.cleanTitle}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.3,
-                                  color: textPrimary,
-                                ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '${selectedHowTo.numLabel} · ${selectedHowTo.cleanTitle}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.3,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Tooltip(
+                                    message: 'Rename Build Task',
+                                    child: InkWell(
+                                      key: ValueKey(
+                                        'edit_active_task_title_btn_${node.id}_$selectedTaskIdx',
+                                      ),
+                                      onTap: () => _showEditBuildTaskTitleDialog(
+                                        feat,
+                                        states,
+                                        selectedParentTask,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Icon(
+                                          Icons.edit_outlined,
+                                          size: 14,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 7),
                               Wrap(
-                                spacing: 12,
+                                spacing: 10,
                                 runSpacing: 6,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
@@ -2243,8 +2293,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       ],
                                     ),
                                   ),
-                                  if (tuningItems.isNotEmpty)
-                                    Container(
+                                  InkWell(
+                                    key: ValueKey(
+                                      'task_sheet_tuning_chip_${node.id}',
+                                    ),
+                                    onTap: () =>
+                                        _showEditCheckpointTuningAndGuardsDialog(
+                                      feat,
+                                      states,
+                                      node,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
                                         vertical: 2.5,
@@ -2256,7 +2316,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        '⚙ ${tuningItems.join(' · ')}',
+                                        tuningItems.isNotEmpty
+                                            ? '⚙ ${tuningItems.join(' · ')}'
+                                            : '⚙ + Add Tuning',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 10.5,
                                           fontWeight: FontWeight.w700,
@@ -2264,6 +2326,39 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                         ),
                                       ),
                                     ),
+                                  ),
+                                  InkWell(
+                                    key: ValueKey(
+                                      'task_sheet_guards_chip_${node.id}',
+                                    ),
+                                    onTap: () =>
+                                        _showEditCheckpointTuningAndGuardsDialog(
+                                      feat,
+                                      states,
+                                      node,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: accentAmber.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '⚠ ${node.edgeCases.length} Guard${node.edgeCases.length == 1 ? '' : 's'}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: accentAmber,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ],
@@ -3146,28 +3241,350 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
           )
         : const SizedBox.shrink();
 
-    final checklistPane = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          key: ValueKey('checkpoint_spec_pane_$index'),
-          child: pinnedActiveStepWindow,
-        ),
-      ],
-    );
+    if (isCollapsed) {
+      return const SizedBox.shrink();
+    }
 
     return Container(
+      key: ValueKey('checkpoint_single_col_$index'),
       margin: const EdgeInsets.only(bottom: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!isCollapsed)
-            Container(
-              key: ValueKey('checkpoint_single_col_$index'),
-              child: checklistPane,
+      child: Container(
+        key: ValueKey('checkpoint_spec_pane_$index'),
+        child: pinnedActiveStepWindow,
+      ),
+    );
+  }
+
+  Future<void> _showAddBuildTaskDialog(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    int cpIdx,
+  ) async {
+    final ctrl = TextEditingController();
+    final hoursCtrl = TextEditingController(text: '2');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          'Add Build Task to Checkpoint ${cpIdx + 1}',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 460,
+          child: Row(
+            children: [
+              Expanded(
+                flex: 4,
+                child: TextField(
+                  key: const ValueKey('add_stage3_task_title_input'),
+                  controller: ctrl,
+                  autofocus: true,
+                  style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'e.g., Implement wall-jump impulse & SFX cue',
+                    hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
+                    filled: true,
+                    fillColor: bgRecessed,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: borderSubtle),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 1,
+                child: TextField(
+                  key: const ValueKey('add_stage3_task_hours_input'),
+                  controller: hoursCtrl,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 13,
+                    color: textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Hours',
+                    labelStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: textMuted,
+                    ),
+                    filled: true,
+                    fillColor: bgRecessed,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: borderSubtle),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
             ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_add_stage3_task_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentCyan,
+              foregroundColor: const Color(0xFF06131F),
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Add Task',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
         ],
       ),
     );
+
+    if (saved == true &&
+        mounted &&
+        ctrl.text.trim().isNotEmpty &&
+        cpIdx >= 0 &&
+        cpIdx < states.length) {
+      final hrs = int.tryParse(hoursCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 2;
+      final cpNode = states[cpIdx];
+      final newTask = Subtask(
+        id: 'task_${DateTime.now().millisecondsSinceEpoch}',
+        text: '${ctrl.text.trim()} (${hrs}h)',
+        completed: false,
+      );
+      cpNode.checklist.add(newTask);
+      final newIdx = cpNode.checklist.length - 1;
+      TaskHowToBlueprint.resolve(
+        parentTask: newTask,
+        taskIndex: newIdx,
+        checkpointNode: cpNode,
+        engineHint: widget.workbench.conceptDraft?.techSpec.join(' '),
+        unrealCppMode: _unrealCppMode,
+      );
+      widget.workbench.updateFeatureStates(feat.id, states);
+      setState(() {
+        _manualCheckpointFocusIndex = cpIdx;
+        _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
+        _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+      });
+    }
+  }
+
+  Future<void> _showEditBuildTaskTitleDialog(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    Subtask parentTask,
+  ) async {
+    final ctrl = TextEditingController(text: parentTask.text);
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          'Rename Build Task',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: TextField(
+            key: const ValueKey('edit_stage3_task_title_input'),
+            controller: ctrl,
+            autofocus: true,
+            style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: bgRecessed,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: borderSubtle),
+              ),
+            ),
+            onSubmitted: (v) => Navigator.of(ctx).pop(v),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('save_stage3_task_title_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text(
+              'Save',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (saved != null && saved.trim().isNotEmpty && mounted) {
+      parentTask.text = saved.trim();
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
+  }
+
+  Future<void> _showEditCheckpointTuningAndGuardsDialog(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureStateNode node,
+  ) async {
+    final tuningCtrl = TextEditingController(
+      text: node.tuningParams.join(', '),
+    );
+    final guardsCtrl = TextEditingController(
+      text: node.edgeCases.join('\n'),
+    );
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          'Edit Checkpoint Tuning & Edge Guards',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'TUNING PARAMETERS (COMMA SEPARATED)',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  color: accentViolet,
+                ),
+              ),
+              const SizedBox(height: 5),
+              TextField(
+                key: const ValueKey('edit_stage3_tuning_input'),
+                controller: tuningCtrl,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12,
+                  color: textPrimary,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: bgRecessed,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: borderSubtle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'EDGE-CASE GUARDS (1 PER LINE)',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  color: accentAmber,
+                ),
+              ),
+              const SizedBox(height: 5),
+              TextField(
+                key: const ValueKey('edit_stage3_guards_input'),
+                controller: guardsCtrl,
+                maxLines: 3,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12,
+                  color: textPrimary,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: bgRecessed,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: borderSubtle),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('save_stage3_tuning_guards_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Save Spec',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true && mounted) {
+      node.tuningParams = tuningCtrl.text
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      node.edgeCases = guardsCtrl.text
+          .split('\n')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      widget.workbench.updateFeatureStates(feat.id, states);
+    }
   }
 }

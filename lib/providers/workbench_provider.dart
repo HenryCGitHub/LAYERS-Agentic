@@ -1728,31 +1728,6 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Step 1B -> 1C: User completes the multiple-choice Concept Interview to generate the Project Blueprint.
-  Future<void> completeConceptInterview() async {
-    final draft = _conceptDraft;
-    if (draft == null) return;
-
-    _isAgentBusy = true;
-    _agentProgressStep =
-        'Synthesizing Project Concept Blueprint ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
-    notifyListeners();
-
-    try {
-      await ProjectConceptAgent.synthesizeFromInterview(
-        draft,
-        apiKey: _apiKey,
-        modelName: _conversationModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      _commitConceptToVault(draft);
-    } finally {
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-      notifyListeners();
-    }
-  }
-
   void _commitConceptToVault(ProjectConceptBlueprint draft) {
     final projId = _activeProjectId ?? 'proj_main';
     final existingProj = documents[projId];
@@ -2212,6 +2187,86 @@ class WorkbenchProvider extends ChangeNotifier {
         return;
       }
     }
+  }
+
+  /// Updates the active Release Blueprint's top-level `goal` or `doneWhen` in Stage 2 (`Release Plan Gate`).
+  void updateReleaseBlueprintGoalAndDoneWhen({
+    String? goal,
+    String? doneWhen,
+  }) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    if (goal != null && goal.trim().isNotEmpty) {
+      bp.goal = goal.trim();
+    }
+    if (doneWhen != null && doneWhen.trim().isNotEmpty) {
+      bp.doneWhen = doneWhen.trim();
+    }
+    _syncActiveProjectMetadata();
+    notifyListeners();
+  }
+
+  /// Updates a proposed Epic's (`ProposedBeatBlueprint`) title, goal, or doneWhen inline in Stage 2.
+  void updateProposedBeatInBlueprint({
+    required String beatId,
+    String? title,
+    String? goal,
+    String? doneWhen,
+  }) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    for (final beat in bp.beats) {
+      if (beat.id == beatId) {
+        if (title != null && title.trim().isNotEmpty) {
+          beat.title = title.trim();
+        }
+        if (goal != null && goal.trim().isNotEmpty) {
+          beat.goal = goal.trim();
+        }
+        if (doneWhen != null && doneWhen.trim().isNotEmpty) {
+          beat.doneWhen = doneWhen.trim();
+        }
+        _syncActiveProjectMetadata();
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  /// Appends a new proposed Epic (`ProposedBeatBlueprint`) with a starter Playable Feature in Stage 2
+  /// and returns the new Epic's `id`.
+  String? addProposedBeatToBlueprint({
+    required String title,
+    String? goal,
+    String? doneWhen,
+  }) {
+    final bp = _releaseBlueprint;
+    final cleanTitle = title.trim();
+    if (bp == null || cleanTitle.isEmpty) return null;
+    _pushAgentUndoSnapshot();
+
+    final epicNum = bp.beats.length + 1;
+    final beatId =
+        'beat_${epicNum}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+    final effectiveGoal = (goal != null && goal.trim().isNotEmpty)
+        ? goal.trim()
+        : 'Build the playable $cleanTitle mechanics and connect them to the ${bp.releaseVersionTag} core loop.';
+    final effectiveDoneWhen = (doneWhen != null && doneWhen.trim().isNotEmpty)
+        ? doneWhen.trim()
+        : 'Playtester executes $cleanTitle in the test arena with clear visual/audio feedback and zero state soft-locks.';
+
+    final newBeat = ProposedBeatBlueprint(
+      id: beatId,
+      title: cleanTitle,
+      goal: effectiveGoal,
+      doneWhen: effectiveDoneWhen,
+      features: <ProposedFeatureBlueprint>[],
+    );
+    bp.beats.add(newBeat);
+    addProposedFeatureToBeat(beatId, '$cleanTitle Mechanics & Controls');
+    _syncActiveProjectMetadata();
+    notifyListeners();
+    return beatId;
   }
 
   /// Logs a Playtest Issue on a Checkpoint in Stage 3 (`Release Workbench`):
