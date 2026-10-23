@@ -1012,7 +1012,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 308,
+                width: 280,
                 child: _buildLeftConceptOutlinerRail(draft),
               ),
               Expanded(child: mainCanvasColumn),

@@ -285,7 +285,16 @@ void main() {
         expect(nextBtnBefore.onTap, isNull);
         expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
         expect(find.text('✓ VERIFY BEFORE CHECKING [✓]'), findsOneWidget);
-        expect(find.text('🎯 CONNECTS TO YOUR SPEC & NEXT STEP'), findsOneWidget);
+        expect(
+          find.byKey(ValueKey('one_click_complete_next_btn_$secondCp0NodeId')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            ValueKey('task_sheet_step_row_${secondCp0NodeId}_0_1'),
+          ),
+          findsOneWidget,
+        );
 
         // Tap the simple square Checkmark Box [✓] to mark Step 1 done in place and unlock Next →
         final markDoneFinder = find.byKey(
