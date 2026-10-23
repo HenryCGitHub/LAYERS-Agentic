@@ -602,7 +602,7 @@ Return ONLY a JSON object with this exact schema:
           options: const [
             '(Recommended) Keep Verified Features Stable: Keep verified features STABLE (0h) and only add delta checkpoints where needed',
             'Re-Tune Movement & Combat: Re-tune all v0.1 movement parameters alongside new v0.2 content',
-            'Expand All Beats Equally: Add one new polish checkpoint to every existing Beat in v0.2',
+            'Expand All Epics Equally: Add one new polish checkpoint to every existing Epic in v0.2',
           ],
         ),
       ],
@@ -652,7 +652,7 @@ Return ONLY a JSON object with this exact schema:
     for (int bIdx = 0; bIdx < rawBeats.length; bIdx++) {
       final bMap = rawBeats[bIdx];
       if (bMap is! Map) continue;
-      final bTitle = (bMap['title'] ?? 'Beat ${bIdx + 1}').toString().trim();
+      final bTitle = (bMap['title'] ?? 'Epic ${bIdx + 1}').toString().trim();
       final bGoal = (bMap['goal'] ?? '').toString().trim();
       final bDone = (bMap['doneWhen'] ?? '').toString().trim();
       final rawFeats = bMap['features'];
@@ -1166,7 +1166,7 @@ class ReleaseExecutorAgent {
       if (includedFeats.isEmpty) continue;
 
       beatTitles.add(beatBp.title);
-      onProgress?.call('Syncing Core Loop Beat ${bIdx + 1}: ${beatBp.title}...');
+      onProgress?.call('Syncing Core Loop Epic ${bIdx + 1}: ${beatBp.title}...');
       await Future<void>.delayed(const Duration(milliseconds: 40));
 
       final existingBeat = existingDocuments[beatBp.id] ??

@@ -1917,12 +1917,12 @@ class WorkbenchProvider extends ChangeNotifier {
           agentRole: '3-Agent Release Pipeline',
           userGoal: 'Plan ${bp.releaseTitle}',
           reasoning:
-              'Systems Designer drafted ${bp.beats.length} Beats ($totalFeats Features) → Producer Scope Critic checked ${bp.explicitExclusions.length} exclusions → Engine Architect bound tuning & guards.',
+              'Systems Designer drafted ${bp.beats.length} Epics ($totalFeats Features) → Producer Scope Critic checked ${bp.explicitExclusions.length} exclusions → Engine Architect bound tuning & guards.',
           toolCalls: [
             AgentToolCall(
               toolName: 'draft_release_beats',
               targetTitle: bp.releaseVersionTag,
-              summary: 'Generated ${bp.beats.length} Core Loop Beats & $totalFeats Playable Features (${bp.totalIncludedHours}h)',
+              summary: 'Generated ${bp.beats.length} Core Loop Epics & $totalFeats Playable Features (${bp.totalIncludedHours}h)',
             ),
             AgentToolCall(
               toolName: 'audit_scope_exclusions',
@@ -2628,14 +2628,14 @@ Return ONLY a JSON object with this schema:
         final beatLabel = beatNames[i];
         final newRelDoc = TierDocument(
           id: newRelId,
-          title: 'v0.$newIndex: MVP Beat ${i + 1} ($beatLabel) - MVP',
+          title: 'v0.$newIndex: MVP Epic ${i + 1} ($beatLabel) - MVP',
           tier: TierType.release,
           parentId: proj.id,
           sections: {
             'releaseScope': ReleaseScope.mvp.name,
             'phase': ProductionPhase.mvp.name,
             'scope':
-                'Goal: Build and connect MVP systems for Beat ${i + 1} ($beatLabel).\n\nIn Scope:\n• $beatLabel\n\nDone When: Beat ${i + 1} is playable end-to-end inside the rough representative level.',
+                'Goal: Build and connect MVP systems for Epic ${i + 1} ($beatLabel).\n\nIn Scope:\n• $beatLabel\n\nDone When: Epic ${i + 1} is playable end-to-end inside the rough representative level.',
           },
         );
         documents[newRelId] = newRelDoc;
@@ -2664,7 +2664,7 @@ Return ONLY a JSON object with this schema:
           'releaseScope': ReleaseScope.verticalSlice.name,
           'phase': ProductionPhase.verticalSlice.name,
           'scope':
-              'Goal: Combine all completed MVP Beats into 1 fully polished Gold Standard level.\n\nIn Scope:\n• Final art, audio, UI, and game-feel pass on the representative level\n\nDone When: Playtester completes the polished Vertical Slice level at shippable quality.',
+              'Goal: Combine all completed MVP Epics into 1 fully polished Gold Standard level.\n\nIn Scope:\n• Final art, audio, UI, and game-feel pass on the representative level\n\nDone When: Playtester completes the polished Vertical Slice level at shippable quality.',
         },
       );
       documents[newRelId] = newRelDoc;

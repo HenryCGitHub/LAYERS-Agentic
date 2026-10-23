@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/tier_document.dart';
-import '../../data/initial_vault.dart';
 import '../local_vault_service.dart';
 import 'vault_storage_interface.dart';
 
@@ -17,11 +16,8 @@ class VaultStorageWebImpl implements VaultStorageBackend {
 
       String? activeDocumentId;
       String? apiKey;
-      String? llmProvider;
       String? modelName;
       String? thinkingLevel;
-      int aiDetailLevel = 3;
-      List<String>? expandedTreeNodes;
       String? themeMode;
 
       final settingsRaw = prefs.getString(_keySettings);
@@ -29,18 +25,9 @@ class VaultStorageWebImpl implements VaultStorageBackend {
         final Map<String, dynamic> settings = jsonDecode(settingsRaw);
         activeDocumentId = settings['activeDocumentId'] as String?;
         apiKey = settings['apiKey'] as String?;
-        llmProvider = settings['llmProvider'] as String?;
-        modelName = settings["modelName"] as String?;
-        thinkingLevel = settings["thinkingLevel"] as String?;
+        modelName = settings['modelName'] as String?;
+        thinkingLevel = settings['thinkingLevel'] as String?;
         themeMode = settings['themeMode'] as String?;
-        if (settings['aiDetailLevel'] is int) {
-          aiDetailLevel = (settings['aiDetailLevel'] as int).clamp(1, 5);
-        }
-        if (settings['expandedTreeNodes'] is List) {
-          expandedTreeNodes = (settings['expandedTreeNodes'] as List)
-              .map((e) => e.toString())
-              .toList();
-        }
       }
 
       final docIds = prefs.getStringList(_keyDocIds) ?? [];
@@ -57,22 +44,12 @@ class VaultStorageWebImpl implements VaultStorageBackend {
         }
       }
 
-      if (docsMap.isEmpty) {
-        for (final doc in initialVaultDocuments.values) {
-          await saveDocument(doc);
-        }
-        return loadVaultData();
-      }
-
       return VaultLoadResult(
         documents: docsMap,
         activeDocumentId: activeDocumentId,
         apiKey: apiKey,
-        llmProvider: llmProvider,
         modelName: modelName,
         thinkingLevel: thinkingLevel,
-        aiDetailLevel: aiDetailLevel,
-        expandedTreeNodes: expandedTreeNodes,
         themeMode: themeMode,
       );
     } catch (_) {
@@ -84,26 +61,17 @@ class VaultStorageWebImpl implements VaultStorageBackend {
   Future<void> saveSettings({
     required String activeDocumentId,
     String? apiKey,
-    String? llmProvider,
     String? modelName,
     String? thinkingLevel,
-    int aiDetailLevel = 3,
-    List<String>? expandedTreeNodes,
     String? themeMode,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      List<String> currentExpanded = [];
       String? currentThemeMode;
       final existingRaw = prefs.getString(_keySettings);
       if (existingRaw != null) {
         try {
           final Map<String, dynamic> settings = jsonDecode(existingRaw);
-          if (settings['expandedTreeNodes'] is List) {
-            currentExpanded = (settings['expandedTreeNodes'] as List)
-                .map((e) => e.toString())
-                .toList();
-          }
           currentThemeMode = settings['themeMode'] as String?;
         } catch (_) {}
       }
@@ -114,11 +82,8 @@ class VaultStorageWebImpl implements VaultStorageBackend {
             'version': '2.0.0',
             'activeDocumentId': activeDocumentId,
             'apiKey': apiKey ?? '',
-            'llmProvider': llmProvider ?? 'gemini',
-            'modelName': modelName ?? 'gemini-3.8-flash',
-            'thinkingLevel': thinkingLevel ?? 'low',
-            'aiDetailLevel': aiDetailLevel,
-            'expandedTreeNodes': expandedTreeNodes ?? currentExpanded,
+            'modelName': modelName ?? 'gemini-flash-latest',
+            'thinkingLevel': thinkingLevel ?? 'LOW',
             'themeMode': themeMode ?? currentThemeMode ?? 'dark',
           }));
     } catch (_) {}
@@ -147,12 +112,6 @@ class VaultStorageWebImpl implements VaultStorageBackend {
       docIds.remove(id);
       await prefs.setStringList(_keyDocIds, docIds.toList());
     } catch (_) {}
-  }
-
-  @override
-  Future<void> startDiskWatcher(
-      void Function(TierDocument updatedDoc) onDocChangedOnDisk) async {
-    // Web local storage doesn't require background filesystem stream
   }
 }
 

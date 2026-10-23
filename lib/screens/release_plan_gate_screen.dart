@@ -121,7 +121,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   child: Text(
                     bp.questions.isNotEmpty
                         ? 'Next Section: 02 Playtest Priorities →'
-                        : 'Next Section: B01 →',
+                        : 'Next Section: E01 →',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
@@ -165,7 +165,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                     child: Text(
-                      'Next Section: B01 ${bp.beats.isNotEmpty ? bp.beats.first.title : "Beats"} →',
+                      'Next Section: E01 ${bp.beats.isNotEmpty ? bp.beats.first.title : "Epics"} →',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
@@ -195,7 +195,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                     child: Text(
-                      '‹ Prev Section: B${bp.beats.length.toString().padLeft(2, '0')}',
+                      '‹ Prev Section: E${bp.beats.length.toString().padLeft(2, '0')}',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -1330,7 +1330,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                           ),
                           decoration: InputDecoration(
                             hintText:
-                                'Tell the Agent how to refine this Release Plan (e.g., "Add a wall-run feature to Beat 1", "Defer Beat 4")...',
+                                'Tell the Agent how to refine this Release Plan (e.g., "Add a wall-run feature to Epic 1", "Defer Epic 4")...',
                             hintStyle: GoogleFonts.inter(
                               fontSize: 12.5,
                               color: textMuted,
@@ -2583,14 +2583,49 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                '↪ OUT OF SCOPE FEATURES · PLANNED FOR ${nextVer.toUpperCase()} RELEASE',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  color: accentAmber,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '↪ OUT OF SCOPE FEATURES · PLANNED FOR ${nextVer.toUpperCase()} RELEASE',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                        color: accentAmber,
+                      ),
+                    ),
+                  ),
+                  if (deferredItems.length > 1)
+                    InkWell(
+                      key: const ValueKey('restore_all_deferred_feats_btn'),
+                      onTap: () {
+                        for (final item in deferredItems) {
+                          widget.workbench.toggleProposedFeatureScope(
+                            item.beatId,
+                            item.featId,
+                            true,
+                          );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        child: Text(
+                          '+ Include All (${deferredItems.length}) in ${bp.releaseVersionTag}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: accentEmerald,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 6),
               if (deferredItems.isEmpty)
@@ -2605,90 +2640,97 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   ),
                 ),
               for (final item in deferredItems)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: borderSubtle),
-                    ),
+                InkWell(
+                  onTap: () => widget.workbench.toggleProposedFeatureScope(
+                    item.beatId,
+                    item.featId,
+                    true,
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          '${item.epicCode} · ${nextVer.toUpperCase()} ↪',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: accentAmber,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '${item.epicCode} · ${nextVer.toUpperCase()} ↪',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: accentAmber,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.text,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimary,
-                              ),
-                            ),
-                            if (item.goal.isNotEmpty) ...[
-                              const SizedBox(height: 2),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                item.goal,
+                                item.text,
                                 style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: textMuted,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
                                 ),
                               ),
+                              if (item.goal.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  item.goal,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          '${item.hours}h',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: textSecondary,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      InkWell(
-                        key: ValueKey('restore_deferred_feat_${item.featId}'),
-                        onTap: () => widget.workbench.toggleProposedFeatureScope(
-                          item.beatId,
-                          item.featId,
-                          true,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            '+ Keep in ${bp.releaseVersionTag}',
+                            '${item.hours}h',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: accentEmerald,
+                              fontWeight: FontWeight.w700,
+                              color: textSecondary,
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        InkWell(
+                          key: ValueKey('restore_deferred_feat_${item.featId}'),
+                          onTap: () => widget.workbench.toggleProposedFeatureScope(
+                            item.beatId,
+                            item.featId,
+                            true,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              '+ Keep in ${bp.releaseVersionTag}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: accentEmerald,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
             ],

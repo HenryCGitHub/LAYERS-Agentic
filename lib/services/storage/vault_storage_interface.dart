@@ -6,15 +6,10 @@ abstract class VaultStorageBackend {
   Future<void> saveSettings({
     required String activeDocumentId,
     String? apiKey,
-    String? llmProvider,
     String? modelName,
     String? thinkingLevel,
-    int aiDetailLevel = 3,
-    List<String>? expandedTreeNodes,
     String? themeMode,
   });
   Future<void> saveDocument(TierDocument doc);
   Future<void> deleteDocument(String id);
-  Future<void> startDiskWatcher(
-      void Function(TierDocument updatedDoc) onDocChangedOnDisk);
 }

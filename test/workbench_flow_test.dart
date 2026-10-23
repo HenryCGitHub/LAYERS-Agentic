@@ -370,6 +370,13 @@ void main() {
         await tester.tap(copyCodeBtn);
         await tester.pumpAndSettle();
 
+        // Verify 1-Click "⧉ Copy All Code" in the Task Sheet header copies all task code snippets
+        final copyAllCodeBtn = find.byKey(ValueKey('copy_all_task_code_btn_${cp0Id}_0'));
+        await tester.ensureVisible(copyAllCodeBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(copyAllCodeBtn);
+        await tester.pumpAndSettle();
+
         // Verify Task-Scoped AI "✦ Tailor" rewrites sub-steps with exact scene/node context directly in Single-Panel mode
         final tailorBtn = find.byKey(ValueKey('tailor_howto_btn_${cp0Id}_0'));
         await tester.ensureVisible(tailorBtn);

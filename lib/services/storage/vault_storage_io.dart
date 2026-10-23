@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:async';
 import 'package:path_provider/path_provider.dart';
 import '../../models/tier_document.dart';
-import '../../data/initial_vault.dart';
 import '../local_vault_service.dart';
 import 'vault_storage_interface.dart';
 
@@ -37,11 +36,8 @@ class VaultStorageImpl implements VaultStorageBackend {
     try {
       String? activeDocumentId;
       String? apiKey;
-      String? llmProvider;
       String? modelName;
       String? thinkingLevel;
-      int aiDetailLevel = 3;
-      List<String>? expandedTreeNodes;
       String? themeMode;
 
       final settingsFile = await _getSettingsFile();
@@ -50,18 +46,9 @@ class VaultStorageImpl implements VaultStorageBackend {
         final Map<String, dynamic> settings = jsonDecode(raw);
         activeDocumentId = settings['activeDocumentId'] as String?;
         apiKey = settings['apiKey'] as String?;
-        llmProvider = settings['llmProvider'] as String?;
-        modelName = settings["modelName"] as String?;
-        thinkingLevel = settings["thinkingLevel"] as String?;
+        modelName = settings['modelName'] as String?;
+        thinkingLevel = settings['thinkingLevel'] as String?;
         themeMode = settings['themeMode'] as String?;
-        if (settings['aiDetailLevel'] is int) {
-          aiDetailLevel = (settings['aiDetailLevel'] as int).clamp(1, 5);
-        }
-        if (settings['expandedTreeNodes'] is List) {
-          expandedTreeNodes = (settings['expandedTreeNodes'] as List)
-              .map((e) => e.toString())
-              .toList();
-        }
       }
 
       final docsDir = await _getDocumentsDir();
@@ -81,22 +68,12 @@ class VaultStorageImpl implements VaultStorageBackend {
         }
       }
 
-      if (docsMap.isEmpty) {
-        for (final doc in initialVaultDocuments.values) {
-          await saveDocument(doc);
-        }
-        return loadVaultData();
-      }
-
       return VaultLoadResult(
         documents: docsMap,
         activeDocumentId: activeDocumentId,
         apiKey: apiKey,
-        llmProvider: llmProvider,
         modelName: modelName,
         thinkingLevel: thinkingLevel,
-        aiDetailLevel: aiDetailLevel,
-        expandedTreeNodes: expandedTreeNodes,
         themeMode: themeMode,
       );
     } catch (_) {
@@ -108,26 +85,17 @@ class VaultStorageImpl implements VaultStorageBackend {
   Future<void> saveSettings({
     required String activeDocumentId,
     String? apiKey,
-    String? llmProvider,
     String? modelName,
     String? thinkingLevel,
-    int aiDetailLevel = 3,
-    List<String>? expandedTreeNodes,
     String? themeMode,
   }) async {
     try {
       final file = await _getSettingsFile();
-      List<String> currentExpanded = [];
       String? currentThemeMode;
       if (await file.exists()) {
         try {
           final raw = await file.readAsString();
           final Map<String, dynamic> settings = jsonDecode(raw);
-          if (settings['expandedTreeNodes'] is List) {
-            currentExpanded = (settings['expandedTreeNodes'] as List)
-                .map((e) => e.toString())
-                .toList();
-          }
           currentThemeMode = settings['themeMode'] as String?;
         } catch (_) {}
       }
@@ -136,25 +104,18 @@ class VaultStorageImpl implements VaultStorageBackend {
         'version': '2.0.0',
         'activeDocumentId': activeDocumentId,
         'apiKey': apiKey ?? '',
-        'llmProvider': llmProvider ?? 'gemini',
-        'modelName': modelName ?? 'gemini-3.8-flash',
-        'thinkingLevel': thinkingLevel ?? 'low',
-        'aiDetailLevel': aiDetailLevel,
-        'expandedTreeNodes': expandedTreeNodes ?? currentExpanded,
+        'modelName': modelName ?? 'gemini-flash-latest',
+        'thinkingLevel': thinkingLevel ?? 'LOW',
         'themeMode': themeMode ?? currentThemeMode ?? 'dark',
       }));
     } catch (_) {}
   }
 
-  static final Map<String, String> _lastWrittenContent = {};
-
   @override
   Future<void> saveDocument(TierDocument doc) async {
     try {
       final file = await _docFile(doc.id);
-      final jsonStr = jsonEncode(doc.toJson());
-      _lastWrittenContent[doc.id] = jsonStr;
-      await file.writeAsString(jsonStr);
+      await file.writeAsString(jsonEncode(doc.toJson()));
     } catch (_) {}
   }
 
@@ -163,37 +124,6 @@ class VaultStorageImpl implements VaultStorageBackend {
     try {
       final file = await _docFile(id);
       if (await file.exists()) await file.delete();
-    } catch (_) {}
-  }
-
-  static StreamSubscription<FileSystemEvent>? _diskSubscription;
-
-  @override
-  Future<void> startDiskWatcher(
-      void Function(TierDocument updatedDoc) onDocChangedOnDisk) async {
-    try {
-      await _diskSubscription?.cancel();
-      final docsDir = await _getDocumentsDir();
-      if (!await docsDir.exists()) return;
-
-      _diskSubscription = docsDir.watch().listen((event) async {
-        if (event.type == FileSystemEvent.modify ||
-            event.type == FileSystemEvent.create) {
-          final path = event.path;
-          if (path.endsWith('.json')) {
-            try {
-              final file = File(path);
-              if (await file.exists()) {
-                final raw = await file.readAsString();
-                final json = jsonDecode(raw) as Map<String, dynamic>;
-                final doc = TierDocument.fromJson(json);
-                if (_lastWrittenContent[doc.id] == raw) return;
-                onDocChangedOnDisk(doc);
-              }
-            } catch (_) {}
-          }
-        }
-      });
     } catch (_) {}
   }
 }
