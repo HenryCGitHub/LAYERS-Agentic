@@ -2255,7 +2255,7 @@ class WorkbenchProvider extends ChangeNotifier {
     return newTaskIndex;
   }
 
-  /// Tailors all 6 checkable How-To sub-steps (`Step X.1` through `Step X.6`) for a specific
+  /// Tailors the checkable How-To sub-steps (`Step X.1` through `Step X.N`) for a specific
   /// Parent Task in Stage 3 using either Gemini AI (`gemini-flash-latest`) or deterministic
   /// Scene/Node context injection when offline.
   Future<void> tailorTaskHowToSubSteps({
@@ -2298,39 +2298,14 @@ Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
-Rewrite all 6 checkable How-To Sub-Steps (Step $taskNum.1 Where/Setup, Step $taskNum.2 Variables & State, Step $taskNum.3 Core Logic with Tuning Variable, Step $taskNum.4 Edge-Case Guard Check, Step $taskNum.5 Signal/Input Wiring, Step $taskNum.6 Viewport Playtest) specifically using the developer's node/script names from "$cleanContext".
-Return ONLY a JSON object with this exact schema:
+Break this task down into the exact number of checkable How-To Sub-Steps (Step $taskNum.1 through Step $taskNum.N — e.g., 3 steps for a simple hook/guard task or up to 10+ steps for a complex multi-part mechanic) specifically using the developer's node/script names from "$cleanContext".
+Return ONLY a JSON object with this schema:
 {
   "subSteps": [
     {
       "title": "STEP $taskNum.1 · SHORT LITERAL SUB-STEP TITLE",
       "instruction": "1-sentence literal instruction referencing the user's exact nodes/scripts",
       "codeFormula": "2-3 lines of $engineLabel code using the user's node/script names"
-    },
-    {
-      "title": "STEP $taskNum.2 · SHORT LITERAL SUB-STEP TITLE",
-      "instruction": "1-sentence literal instruction declaring variables/state",
-      "codeFormula": "2-3 lines of $engineLabel code declaring exported variables"
-    },
-    {
-      "title": "STEP $taskNum.3 · SHORT LITERAL SUB-STEP TITLE",
-      "instruction": "1-sentence literal instruction applying the tuning variable",
-      "codeFormula": "2-3 lines of $engineLabel code applying the tuning variable"
-    },
-    {
-      "title": "STEP $taskNum.4 · SHORT LITERAL GUARD TITLE",
-      "instruction": "1-sentence literal instruction enforcing the edge-case guard",
-      "codeFormula": "1-2 lines of $engineLabel guard check code"
-    },
-    {
-      "title": "STEP $taskNum.5 · SHORT LITERAL WIRING TITLE",
-      "instruction": "1-sentence literal instruction wiring input/signals",
-      "codeFormula": "2-3 lines of $engineLabel signal or input binding code"
-    },
-    {
-      "title": "STEP $taskNum.6 · SHORT LITERAL PLAYTEST TITLE",
-      "instruction": "1-sentence literal instruction verifying behavior in viewport",
-      "codeFormula": "1-2 lines of $engineLabel debug log or assertion code"
     }
   ]
 }
@@ -2344,22 +2319,35 @@ Return ONLY a JSON object with this exact schema:
       );
       final rawSubs = json?['subSteps'];
       if (rawSubs is List && rawSubs.isNotEmpty) {
-        for (int i = 0; i < rawSubs.length && i < parentTask.children.length; i++) {
+        final newChildren = <Subtask>[];
+        for (int i = 0; i < rawSubs.length; i++) {
           final item = rawSubs[i];
           if (item is Map) {
             final t = (item['title'] ?? '').toString().trim();
             final instr = (item['instruction'] ?? '').toString().trim();
             final code = (item['codeFormula'] ?? '').toString().trim();
-            if (t.isNotEmpty) parentTask.children[i].text = t;
-            if (instr.isNotEmpty) parentTask.children[i].specNotes = instr;
-            if (code.isNotEmpty) {
-              parentTask.children[i].codeSnippet = code;
-              parentTask.children[i].codeTargetFile = 'custom_snippet';
-            }
+            final prevDone = i < parentTask.children.length
+                ? parentTask.children[i].completed
+                : parentTask.completed;
+            newChildren.add(
+              Subtask(
+                id: '${parentTask.id}_sub_${i + 1}',
+                text: t.isNotEmpty
+                    ? t
+                    : 'STEP $taskNum.${i + 1} · IMPLEMENT STEP ${i + 1}',
+                specNotes: instr,
+                codeSnippet: code,
+                codeTargetFile: 'custom_snippet',
+                completed: prevDone,
+              ),
+            );
           }
         }
-        updateFeatureStates(featureId, states);
-        return;
+        if (newChildren.isNotEmpty) {
+          parentTask.children = newChildren;
+          updateFeatureStates(featureId, states);
+          return;
+        }
       }
     }
 

@@ -279,11 +279,13 @@ void main() {
         expect(find.byKey(const ValueKey('outline_release_eta_summary')), findsOneWidget);
 
         // Verify Next → starts locked (onTap == null) while Step 1 is unchecked
+        final secondTask0Steps =
+            provider.documents[secondFeat.id]!.subtasks.first.children.first.children.length;
         final nextBtnBefore = tester.widget<InkWell>(
           find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
         );
         expect(nextBtnBefore.onTap, isNull);
-        expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'), findsOneWidget);
         expect(find.text('✓ VERIFY BEFORE CHECKING [✓]'), findsOneWidget);
         expect(
           find.byKey(ValueKey('one_click_complete_next_btn_$secondCp0NodeId')),
@@ -305,7 +307,7 @@ void main() {
         await tester.tap(markDoneFinder);
         await tester.pumpAndSettle();
         expect(provider.selectedFeature!.id, equals(secondFeat.id));
-        expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'), findsOneWidget);
         final nextBtnAfter = tester.widget<InkWell>(
           find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
         );
@@ -319,7 +321,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(nextBtnFinder);
         await tester.pumpAndSettle();
-        expect(find.textContaining('STEP 2 OF 6 · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'), findsOneWidget);
 
         // Verify clicking the task chevron in the Outliner expands Task 02 for peeking without losing Step 2 in the workspace
         final task1ChevronFinder = find.byKey(
@@ -328,7 +330,7 @@ void main() {
         if (task1ChevronFinder.evaluate().isNotEmpty) {
           await tester.tap(task1ChevronFinder);
           await tester.pumpAndSettle();
-          expect(find.textContaining('STEP 2 OF 6 · ~'), findsOneWidget);
+          expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'), findsOneWidget);
         }
 
         // Verify the compact Previous Step (←) button steps back to Step 1
@@ -340,7 +342,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(prevBtnFinder);
         await tester.pumpAndSettle();
-        expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'), findsOneWidget);
 
         // Verify the Left Outline stops cleanly at the Task level (no duplicate 4th-level step rows)
         expect(
@@ -611,6 +613,60 @@ void main() {
         expect(t1.subSteps[1].shortTitle, isNot(equals(t2.subSteps[1].shortTitle)));
         expect(t0.subSteps[2].shortTitle, isNot(equals(t1.subSteps[2].shortTitle)));
         expect(t1.subSteps[2].shortTitle, isNot(equals(t2.subSteps[2].shortTitle)));
+
+        // Verify dynamic step scaling (compact 3-step guard, 4-step feel, 5-step single-clause extension, and 10+ step complex mechanic)
+        expect(t0.subSteps.length, 6);
+        expect(t1.subSteps.length, 7); // 4h heavy task includes extra tuning parameter step
+        expect(t2.subSteps.length, 5); // 2h single-clause extension task
+
+        final tGuard = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(
+            id: 't_guard',
+            text: 'Enforce line-of-sight break guard (1h)',
+          ),
+          taskIndex: 1,
+          checkpointNode: cp,
+          engineHint: 'Godot 4.3 GDScript 2D',
+        );
+        expect(tGuard.subSteps.length, 3);
+
+        final tFeel = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(
+            id: 't_feel',
+            text: 'Hook up impact flash and audio cue (1h)',
+          ),
+          taskIndex: 1,
+          checkpointNode: cp,
+          engineHint: 'Godot 4.3 GDScript 2D',
+        );
+        expect(tFeel.subSteps.length, 4);
+
+        final richCp = FeatureStateNode(
+          id: 'cp_rich',
+          name: 'Stage 1: Grapple Physics & Momentum',
+          trigger: 'Verify full grapple swing and release loop.',
+          tuningParams: const [
+            'hook_range: 18 m',
+            'pull_speed: 28 m/s',
+            'swing_damping: 0.92',
+          ],
+          edgeCases: const [
+            '[LOS GUARD] Detach on obstacle block',
+            '[TENSION CLAMP] Clamp velocity on frame spike',
+            '[COOLDOWN GUARD] Lock out re-fire during detach',
+          ],
+        );
+        final tComplex = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(
+            id: 't_complex',
+            text:
+                'Implement anchor raycast, tether state entry, pull impulse, swing arc damping, and release momentum boost (4h)',
+          ),
+          taskIndex: 0,
+          checkpointNode: richCp,
+          engineHint: 'Godot 4.3 GDScript 2D',
+        );
+        expect(tComplex.subSteps.length, greaterThanOrEqualTo(10));
       },
     );
 

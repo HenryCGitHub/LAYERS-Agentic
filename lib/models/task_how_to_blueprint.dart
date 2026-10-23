@@ -768,10 +768,31 @@ class TaskHowToBlueprint {
     return hash;
   }
 
-  /// Guarantees that `parentTask.children` contains 6 atomic, zero-assumption "LEGO / IKEA" sub-steps
-  /// (`Step X.1` through `Step X.6`) adapted to `engineHint` (`GODOT 4`, `UNITY C#`, `UNREAL 5`),
-  /// supporting Task 01 (create foundation asset) vs. Task 02+ (extend existing asset) and
-  /// Unreal 5 `Blueprint | C++` toggle (`unrealCppMode`).
+  static List<String> extractActionClauses(String cleanTitle) {
+    final rawParts = cleanTitle.split(
+      RegExp(
+        r'\s*(?:,|;|->|\+|\band\b|\bthen\b|&)\s*',
+        caseSensitive: false,
+      ),
+    );
+    final clauses = <String>[];
+    for (final part in rawParts) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) continue;
+      final wordCount = trimmed.split(RegExp(r'\s+')).length;
+      if (wordCount >= 2 || clauses.isEmpty) {
+        clauses.add(trimmed);
+      } else if (clauses.isNotEmpty) {
+        clauses[clauses.length - 1] = '${clauses.last} and $trimmed';
+      }
+    }
+    return clauses.isEmpty ? <String>[cleanTitle] : clauses;
+  }
+
+  /// Dynamically resolves `parentTask.children` into `1..N` atomic, zero-assumption "LEGO / IKEA" sub-steps
+  /// (`Step X.1` through `Step X.N`) adapted to `engineHint` (`GODOT 4`, `UNITY C#`, `UNREAL 5`),
+  /// scaling down to 3–4 steps for compact feel/guard tasks or up to 10+ steps for multi-clause,
+  /// multi-parameter, and multi-guard mechanics, while supporting Unreal 5 `Blueprint | C++` toggle (`unrealCppMode`).
   static TaskHowToBlueprint resolve({
     required Subtask parentTask,
     required int taskIndex,
@@ -780,7 +801,7 @@ class TaskHowToBlueprint {
     bool unrealCppMode = false,
   }) {
     final cacheKey = '${checkpointNode.id}_${parentTask.id}_$taskIndex';
-    if (parentTask.children.length >= 6) {
+    if (parentTask.children.isNotEmpty) {
       final sig = _computeTaskSignature(
         parentTask: parentTask,
         checkpointNode: checkpointNode,
@@ -1385,33 +1406,9 @@ class TaskHowToBlueprint {
       }
     }
 
-    if (parentTask.children.length < 6 &&
-        !parentTask.children.any((c) => c.codeTargetFile == 'custom_snippet')) {
-      final isParentCompleted = parentTask.completed;
-      final existingDone = <int, bool>{
-        for (int i = 0; i < parentTask.children.length; i++)
-          i: parentTask.children[i].completed,
-      };
-      parentTask.children = [
-        for (int sIdx = 0; sIdx < 6; sIdx++)
-          () {
-            final s = buildAtomicStepSpec(sIdx);
-            return Subtask(
-              id: '${parentTask.id}_sub_${sIdx + 1}',
-              text: s.stepHeader,
-              specNotes: s.instruction,
-              codeSnippet: s.code,
-              completed: existingDone[sIdx] ?? isParentCompleted,
-            );
-          }(),
-      ];
-    }
-
     final totalTaskMinutes = extractTaskTotalMinutes(parentTask.text);
-    final stepMinutesList = computeWeightedStepMinutes(
-      parentTask.children.length,
-      totalTaskMinutes,
-    );
+    final clauses = extractActionClauses(cleanTitle);
+    final lowerTitle = cleanTitle.toLowerCase();
 
     final targetAssetName = engineLabel == 'UNREAL 5'
         ? (unrealCppMode ? cppClass : bpAsset)
@@ -1421,22 +1418,15 @@ class TaskHowToBlueprint {
 
     ({
       String explain,
-      List<String> chips,
+      String primaryChip,
       String pitfall,
-    }) buildProjectSpecContext(int stepIdx) {
-      final nextStepTitle = stepIdx + 1 < 6
-          ? buildAtomicStepSpec(stepIdx + 1).shortTitle
-          : 'Verify Checkpoint & Continue';
-
-      switch (stepIdx) {
+    }) buildPhaseSpecContext(int phaseIdx) {
+      switch (phaseIdx) {
         case 0:
           return (
             explain:
                 'Every step in this task builds inside $targetAssetName so ${checkpointNode.cleanStageTitle} stays modular and reusable across the level.',
-            chips: <String>[
-              'Asset: $targetAssetName',
-              'Next: $nextStepTitle',
-            ],
+            primaryChip: 'Asset: $targetAssetName',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Choose Actor (AActor) as the parent class so you can attach components and place $targetAssetName in the level.'
                 : (engineLabel == 'UNITY C#'
@@ -1446,11 +1436,8 @@ class TaskHowToBlueprint {
         case 1:
           return (
             explain:
-                'Gives $targetAssetName both its visible shape and the collision trigger sensor needed for Step 5 logic.',
-            chips: <String>[
-              'Asset: $targetAssetName',
-              'Next: $nextStepTitle',
-            ],
+                'Gives $targetAssetName both its visible shape and the collision trigger sensor needed for core logic.',
+            primaryChip: 'Asset: $targetAssetName',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably.'
                 : (engineLabel == 'UNITY C#'
@@ -1461,10 +1448,7 @@ class TaskHowToBlueprint {
           return (
             explain:
                 'Places a live $targetAssetName instance in the level so you can test "${checkpointNode.playtestCondition}" on screen.',
-            chips: <String>[
-              'Instance: $targetAssetName',
-              'Next: $nextStepTitle',
-            ],
+            primaryChip: 'Instance: $targetAssetName',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Click Compile & Save before dragging $targetAssetName into the viewport so the new mesh and collision box appear.'
                 : (engineLabel == 'UNITY C#'
@@ -1475,10 +1459,7 @@ class TaskHowToBlueprint {
           return (
             explain:
                 'Exposes "$primaryVar" on $targetAssetName so you can tune feel live in the editor without recompiling.',
-            chips: <String>[
-              'Spec Param: $primaryVar',
-              'Next: $nextStepTitle',
-            ],
+            primaryChip: 'Spec Param: $primaryVar',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Click the Eye icon (Instance Editable) next to $primaryVarName so it appears in the Level Details panel.'
                 : (engineLabel == 'UNITY C#'
@@ -1489,10 +1470,7 @@ class TaskHowToBlueprint {
           return (
             explain:
                 'Connects player trigger input on $targetAssetName to "$primaryVarName" so state updates smoothly every frame.',
-            chips: <String>[
-              'Drives: $primaryVar',
-              'Next: $nextStepTitle',
-            ],
+            primaryChip: 'Drives: $primaryVar',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Connect the white execution wire from the Branch (True) pin into your state update node.'
                 : (engineLabel == 'UNITY C#'
@@ -1503,22 +1481,235 @@ class TaskHowToBlueprint {
           return (
             explain:
                 'Enforces "$primaryGuard" on $targetAssetName and completes playable verification for "${checkpointNode.cleanStageTitle}".',
-            chips: <String>[
-              'Guard: $primaryGuard',
-              'Goal: ${checkpointNode.cleanStageTitle}',
-            ],
+            primaryChip: 'Guard: $primaryGuard',
             pitfall:
                 'Place the guard check at the very top of your function so blocked or cooldown inputs exit immediately ($primaryGuard).',
           );
       }
     }
 
+    // Build the dynamic sequence of step specifications (can scale from 3 steps to 10+ steps)
+    final dynamicSpecs = <({
+      String stepHeader,
+      String shortTitle,
+      String instruction,
+      String verify,
+      String path,
+      String code,
+      String explain,
+      String primaryChip,
+      String pitfall,
+    })>[];
+
+    void addPhaseStep(int phaseIdx) {
+      final rawSpec = buildAtomicStepSpec(phaseIdx);
+      final rawCtx = buildPhaseSpecContext(phaseIdx);
+      dynamicSpecs.add((
+        stepHeader: rawSpec.stepHeader,
+        shortTitle: rawSpec.shortTitle,
+        instruction: rawSpec.instruction,
+        verify: rawSpec.verify,
+        path: rawSpec.path,
+        code: rawSpec.code,
+        explain: rawCtx.explain,
+        primaryChip: rawCtx.primaryChip,
+        pitfall: rawCtx.pitfall,
+      ));
+    }
+
+    final isCompactGuardTask = totalTaskMinutes <= 60 &&
+        clauses.length <= 2 &&
+        (lowerTitle.startsWith('verify ') ||
+            lowerTitle.startsWith('enforce ') ||
+            lowerTitle.contains('guard') ||
+            lowerTitle.contains('interrupt') ||
+            lowerTitle.contains('buffer') ||
+            lowerTitle.contains('clamp'));
+
+    final isCompactFeelOrUiTask = !isCompactGuardTask &&
+        totalTaskMinutes <= 60 &&
+        clauses.length <= 2 &&
+        (layerTag == 'FEEL' ||
+            layerTag == 'UI / HUD' ||
+            lowerTitle.startsWith('hook up ') ||
+            lowerTitle.startsWith('wire ') ||
+            lowerTitle.startsWith('render ') ||
+            lowerTitle.startsWith('trigger ') ||
+            lowerTitle.startsWith('spawn '));
+
+    final isSingleClauseExtensionTask = !isFoundationTask &&
+        !isCompactGuardTask &&
+        !isCompactFeelOrUiTask &&
+        totalTaskMinutes <= 120 &&
+        clauses.length <= 1;
+
+    if (isCompactGuardTask) {
+      // Compact 3-step guard/verification flow
+      addPhaseStep(0);
+      addPhaseStep(3);
+      addPhaseStep(5);
+    } else if (isCompactFeelOrUiTask) {
+      // Compact 4-step feel/UI cue flow
+      addPhaseStep(0);
+      addPhaseStep(2);
+      addPhaseStep(4);
+      addPhaseStep(5);
+    } else if (isSingleClauseExtensionTask) {
+      // Focused 5-step extension flow
+      addPhaseStep(0);
+      addPhaseStep(1);
+      addPhaseStep(2);
+      addPhaseStep(3);
+      addPhaseStep(5);
+    } else {
+      // Core foundation or multi-clause mechanic flow (starts with phases 0..4, expands dynamically for extra clauses/params/guards, ends with phase 5)
+      addPhaseStep(0);
+      addPhaseStep(1);
+      addPhaseStep(2);
+      addPhaseStep(3);
+      addPhaseStep(4);
+
+      // 1. Add a dedicated step for every additional action clause beyond the first 2
+      for (int cIdx = 2; cIdx < clauses.length; cIdx++) {
+        final clauseText = clauses[cIdx];
+        final clauseIdent = clauseText
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+            .replaceAll(RegExp(r'^_+|_+$'), '');
+        final safeMethod = clauseIdent.isEmpty ? 'step_${cIdx + 1}' : clauseIdent;
+        dynamicSpecs.add((
+          stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · IMPLEMENT ${clauseText.toUpperCase()}',
+          shortTitle: 'Implement $clauseText',
+          instruction:
+              'In $targetAssetName, add the dedicated handler for "$clauseText" and connect it to the active state loop.',
+          verify:
+              'Triggering "$clauseText" in the editor updates $targetAssetName state with zero errors.',
+          path: whereLocation,
+          code: engineLabel == 'UNREAL 5'
+              ? (unrealCppMode
+                  ? 'void $cppClass::Execute_$safeMethod(float DeltaTime) {\n  // Clause: $clauseText\n  ApplyStateDelta(DeltaTime * $primaryVarName);\n}'
+                  : '[Custom Event: Execute_$safeMethod]\n   └──► [Apply State Delta ($primaryVarName)] // $clauseText')
+              : (engineLabel == 'UNITY C#'
+                  ? 'private void Execute_$safeMethod() {\n    // Clause: $clauseText\n    ApplyStateDelta($primaryVarName * Time.fixedDeltaTime);\n}'
+                  : 'func _execute_$safeMethod(delta: float) -> void:\n    # Clause: $clauseText\n    apply_state_delta($primaryVarName * delta)'),
+          explain:
+              'Isolating "$clauseText" into its own step keeps complex multi-part mechanics easy to test and debug.',
+          primaryChip: 'Clause: $clauseText',
+          pitfall:
+              'Verify "$clauseText" only runs when $targetAssetName is in a valid active state.',
+        ));
+      }
+
+      // 2. When a task is multi-clause (>= 3 clauses) or heavy (> 180m), also emit dedicated steps for each extra tuning parameter and guard
+      final expandSpecItems = clauses.length >= 3 || totalTaskMinutes > 180;
+      if (expandSpecItems) {
+        for (int tIdx = 1; tIdx < checkpointNode.tuningParams.length; tIdx++) {
+          final extraTune = checkpointNode.tuningParams[tIdx];
+          final extraVarName = extraTune
+              .split(':')
+              .first
+              .trim()
+              .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+          dynamicSpecs.add((
+            stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · WIRE TUNING PARAMETER ${extraVarName.toUpperCase()}',
+            shortTitle: 'Wire Tuning: $extraVarName',
+            instruction:
+                'Expose "$extraTune" on $targetAssetName and bind $extraVarName into the active mechanic calculation.',
+            verify:
+                '"$extraVarName" is editable in the Inspector and modulates "$cleanTitle" live.',
+            path: whereLocation,
+            code: engineLabel == 'UNREAL 5'
+                ? 'UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tuning")\nfloat $extraVarName = 1.0f; // $extraTune'
+                : (engineLabel == 'UNITY C#'
+                    ? '[SerializeField] private float $extraVarName = 1.0f; // $extraTune'
+                    : '@export var $extraVarName: float = 1.0 # $extraTune'),
+            explain:
+                'Binds checkpoint tuning parameter "$extraTune" directly to $targetAssetName for live playtest balancing.',
+            primaryChip: 'Spec Param: $extraTune',
+            pitfall:
+                'Clamp $extraVarName > 0 so zero or negative inspector inputs cannot divide by zero.',
+          ));
+        }
+
+        for (int gIdx = 1; gIdx < checkpointNode.edgeCases.length; gIdx++) {
+          final extraGuard = checkpointNode.edgeCases[gIdx];
+          final shortGuard = extraGuard
+              .replaceFirst(RegExp(r'^\[[^\]]+\]\s*'), '')
+              .trim();
+          dynamicSpecs.add((
+            stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · ENFORCE ${extraGuard.toUpperCase()}',
+            shortTitle: 'Guard: $shortGuard',
+            instruction:
+                'Add an explicit guard check on $targetAssetName to enforce "$extraGuard" before state mutation.',
+            verify:
+                'Stress-testing "$shortGuard" in the viewport blocks invalid transitions cleanly.',
+            path: whereLocation,
+            code: engineLabel == 'UNREAL 5'
+                ? 'if (!ValidateGuard_${gIdx + 1}()) return; // $extraGuard'
+                : (engineLabel == 'UNITY C#'
+                    ? 'if (!ValidateGuard_${gIdx + 1}()) return; // $extraGuard'
+                    : 'if not _validate_guard_${gIdx + 1}():\n    return # $extraGuard'),
+            explain:
+                'Protects $targetAssetName against edge case: "$extraGuard".',
+            primaryChip: 'Guard: $extraGuard',
+            pitfall:
+                'Run "$extraGuard" before applying velocity or state changes so cancelled frames leave no side effects.',
+          ));
+        }
+      }
+
+      addPhaseStep(5);
+    }
+
+    // Normalize step numbering headers ("STEP X.1", "STEP X.2", ... "STEP X.N") across all dynamicSpecs
+    for (int idx = 0; idx < dynamicSpecs.length; idx++) {
+      final raw = dynamicSpecs[idx];
+      final suffix = raw.stepHeader.replaceFirst(
+        RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false),
+        '',
+      );
+      dynamicSpecs[idx] = (
+        stepHeader: 'STEP $taskNum.${idx + 1} · $suffix',
+        shortTitle: raw.shortTitle,
+        instruction: raw.instruction,
+        verify: raw.verify,
+        path: raw.path,
+        code: raw.code,
+        explain: raw.explain,
+        primaryChip: raw.primaryChip,
+        pitfall: raw.pitfall,
+      );
+    }
+
+    if (parentTask.children.isEmpty &&
+        !parentTask.children.any((c) => c.codeTargetFile == 'custom_snippet')) {
+      final isParentCompleted = parentTask.completed;
+      parentTask.children = [
+        for (int sIdx = 0; sIdx < dynamicSpecs.length; sIdx++)
+          () {
+            final s = dynamicSpecs[sIdx];
+            return Subtask(
+              id: '${parentTask.id}_sub_${sIdx + 1}',
+              text: s.stepHeader,
+              specNotes: s.instruction,
+              codeSnippet: s.code,
+              completed: isParentCompleted,
+            );
+          }(),
+      ];
+    }
+
+    final stepMinutesList = computeWeightedStepMinutes(
+      parentTask.children.length,
+      totalTaskMinutes,
+    );
+
     final resolvedSubs = <TaskHowToSubStep>[];
     for (int i = 0; i < parentTask.children.length; i++) {
       final child = parentTask.children[i];
       final isCustomSnippet = child.codeTargetFile == 'custom_snippet';
-      final spec = buildAtomicStepSpec(i < 6 ? i : 5);
-      final projCtx = buildProjectSpecContext(i < 6 ? i : 5);
+      final hasDynamicSpec = i < dynamicSpecs.length;
+      final spec = hasDynamicSpec ? dynamicSpecs[i] : dynamicSpecs.last;
       final stepMins = i < stepMinutesList.length ? stepMinutesList[i] : 20;
       final stepEta = formatStepEtaLabel(stepMins);
       final rawLabel = child.text.trim();
@@ -1526,14 +1717,14 @@ class TaskHowToBlueprint {
           ? (rawLabel.toUpperCase().startsWith('STEP ')
               ? rawLabel
               : 'STEP $taskNum.${i + 1} · ${rawLabel.toUpperCase()}')
-          : (i < 6
+          : (hasDynamicSpec
               ? spec.stepHeader
               : 'STEP $taskNum.${i + 1} · ${rawLabel.toUpperCase()}');
       final instruction = isCustomSnippet &&
               child.specNotes != null &&
               child.specNotes!.trim().isNotEmpty
           ? child.specNotes!.trim()
-          : (i < 6
+          : (hasDynamicSpec
               ? spec.instruction
               : (child.specNotes != null && child.specNotes!.trim().isNotEmpty
                   ? child.specNotes!.trim()
@@ -1542,17 +1733,37 @@ class TaskHowToBlueprint {
               child.codeSnippet != null &&
               child.codeSnippet!.trim().isNotEmpty
           ? child.codeSnippet!.trim()
-          : (i < 6
+          : (hasDynamicSpec
               ? spec.code
               : (child.codeSnippet != null && child.codeSnippet!.trim().isNotEmpty
                   ? child.codeSnippet!.trim()
                   : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)'));
-      final shortTitle = (!isCustomSnippet && i < 6)
+      final shortTitle = (!isCustomSnippet && hasDynamicSpec)
           ? spec.shortTitle
           : rawLabel.replaceFirst(
               RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false),
               '',
             );
+
+      String nextStepTitle = 'Verify Checkpoint & Continue';
+      if (i + 1 < parentTask.children.length) {
+        final nextChild = parentTask.children[i + 1];
+        final nextCustom = nextChild.codeTargetFile == 'custom_snippet';
+        nextStepTitle = (!nextCustom && i + 1 < dynamicSpecs.length)
+            ? dynamicSpecs[i + 1].shortTitle
+            : nextChild.text.trim().replaceFirst(
+                  RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false),
+                  '',
+                );
+      }
+
+      final isLastStep = i == parentTask.children.length - 1;
+      final chips = <String>[
+        spec.primaryChip,
+        isLastStep
+            ? 'Goal: ${checkpointNode.cleanStageTitle}'
+            : 'Next: $nextStepTitle',
+      ];
 
       resolvedSubs.add(
         TaskHowToSubStep(
@@ -1560,20 +1771,19 @@ class TaskHowToBlueprint {
           stepNumberLabel: stepLabel,
           shortTitle: shortTitle,
           instruction: instruction,
-          verifyResult: i < 6
+          verifyResult: (!isCustomSnippet && hasDynamicSpec)
               ? spec.verify
               : 'Verify "$shortTitle" responds cleanly in the active viewport.',
-          stepPath: i < 6 ? spec.path : whereLocation,
+          stepPath: (!isCustomSnippet && hasDynamicSpec) ? spec.path : whereLocation,
           codeFormula: code,
-          explainConcept: i < 6
-              ? projCtx.explain
+          explainConcept: (!isCustomSnippet && hasDynamicSpec)
+              ? spec.explain
               : 'Connects "$shortTitle" to "$primaryVar" and "$primaryGuard".',
-          specChips: projCtx.chips,
-          quickFixPitfall: projCtx.pitfall,
+          specChips: chips,
+          quickFixPitfall: spec.pitfall,
           estimatedMinutes: stepMins,
           etaLabel: stepEta,
-          isGuardStep: i == parentTask.children.length - 1 ||
-              stepLabel.toUpperCase().contains('GUARD'),
+          isGuardStep: isLastStep || stepLabel.toUpperCase().contains('GUARD'),
         ),
       );
     }
@@ -1684,53 +1894,47 @@ class TaskHowToBlueprint {
           'if not $primaryNode.is_valid_state($secondaryNode) or cooldownTimer > 0.0:\n    return # Guard: $primaryGuard';
     }
 
-    if (parentTask.children.isNotEmpty) {
-      parentTask.children[0].text =
-          'STEP $taskNum.1 · BIND INPUT & VALIDATE ${secondaryNode.toUpperCase()} IN ${primaryNode.toUpperCase()}';
-      parentTask.children[0].specNotes =
-          'Inside $primaryNode, read player input and validate $secondaryNode before entering "$cleanTitle" ($userContext):';
-      parentTask.children[0].codeSnippet = step1Code;
-      parentTask.children[0].codeTargetFile = 'custom_snippet';
-    }
-    if (parentTask.children.length > 1) {
-      parentTask.children[1].text =
-          'STEP $taskNum.2 · APPLY ${primaryVarName.toUpperCase()} LOGIC ACROSS ${primaryNode.toUpperCase()} & ${tertiaryNode.toUpperCase()}';
-      parentTask.children[1].specNotes =
-          'Drive "$cleanTitle" on $primaryNode / $secondaryNode using inspector parameter $primaryVarName and update $tertiaryNode:';
-      parentTask.children[1].codeSnippet = step2Code;
-      parentTask.children[1].codeTargetFile = 'custom_snippet';
-    }
-    if (parentTask.children.length > 2) {
-      parentTask.children[2].text =
-          'STEP $taskNum.3 · SYNC ${tertiaryNode.toUpperCase()} VISUAL STATE FROM ${primaryNode.toUpperCase()}';
-      parentTask.children[2].specNotes =
-          'Update $tertiaryNode visual feedback whenever $primaryNode / $secondaryNode changes state:';
-      parentTask.children[2].codeSnippet = step2Code;
-      parentTask.children[2].codeTargetFile = 'custom_snippet';
-    }
-    if (parentTask.children.length > 3) {
-      parentTask.children[3].text =
-          'STEP $taskNum.4 · EXPOSE ${primaryVarName.toUpperCase()} ON ${primaryNode.toUpperCase()}';
-      parentTask.children[3].specNotes =
-          'Expose $primaryVarName on $primaryNode so you can tune $secondaryNode and $tertiaryNode live in the editor:';
-      parentTask.children[3].codeSnippet = step2Code;
-      parentTask.children[3].codeTargetFile = 'custom_snippet';
-    }
-    if (parentTask.children.length > 4) {
-      parentTask.children[4].text =
-          'STEP $taskNum.5 · STEP ${secondaryNode.toUpperCase()} INTERPOLATION IN ${primaryNode.toUpperCase()}';
-      parentTask.children[4].specNotes =
-          'Advance $secondaryNode and $tertiaryNode each physics tick inside $primaryNode using $primaryVarName:';
-      parentTask.children[4].codeSnippet = step2Code;
-      parentTask.children[4].codeTargetFile = 'custom_snippet';
-    }
-    if (parentTask.children.length > 5) {
-      parentTask.children[5].text =
-          'STEP $taskNum.6 · ENFORCE GUARD CHECK ON ${secondaryNode.toUpperCase()} & PLAYTEST';
-      parentTask.children[5].specNotes =
-          'Guard $primaryNode / $secondaryNode against invalid state or rapid re-triggers to satisfy "$primaryGuard":';
-      parentTask.children[5].codeSnippet = step3Code;
-      parentTask.children[5].codeTargetFile = 'custom_snippet';
+    for (int idx = 0; idx < parentTask.children.length; idx++) {
+      final isFirst = idx == 0;
+      final isLast = idx == parentTask.children.length - 1;
+      if (isFirst) {
+        parentTask.children[idx].text =
+            'STEP $taskNum.1 · BIND INPUT & VALIDATE ${secondaryNode.toUpperCase()} IN ${primaryNode.toUpperCase()}';
+        parentTask.children[idx].specNotes =
+            'Inside $primaryNode, read player input and validate $secondaryNode before entering "$cleanTitle" ($userContext):';
+        parentTask.children[idx].codeSnippet = step1Code;
+      } else if (isLast) {
+        parentTask.children[idx].text =
+            'STEP $taskNum.${idx + 1} · ENFORCE GUARD CHECK ON ${secondaryNode.toUpperCase()} & PLAYTEST';
+        parentTask.children[idx].specNotes =
+            'Guard $primaryNode / $secondaryNode against invalid state or rapid re-triggers to satisfy "$primaryGuard":';
+        parentTask.children[idx].codeSnippet = step3Code;
+      } else if (idx == 1) {
+        parentTask.children[idx].text =
+            'STEP $taskNum.2 · APPLY ${primaryVarName.toUpperCase()} LOGIC ACROSS ${primaryNode.toUpperCase()} & ${tertiaryNode.toUpperCase()}';
+        parentTask.children[idx].specNotes =
+            'Drive "$cleanTitle" on $primaryNode / $secondaryNode using inspector parameter $primaryVarName and update $tertiaryNode:';
+        parentTask.children[idx].codeSnippet = step2Code;
+      } else if (idx == 2) {
+        parentTask.children[idx].text =
+            'STEP $taskNum.3 · SYNC ${tertiaryNode.toUpperCase()} VISUAL STATE FROM ${primaryNode.toUpperCase()}';
+        parentTask.children[idx].specNotes =
+            'Update $tertiaryNode visual feedback whenever $primaryNode / $secondaryNode changes state:';
+        parentTask.children[idx].codeSnippet = step2Code;
+      } else if (idx == 3) {
+        parentTask.children[idx].text =
+            'STEP $taskNum.4 · EXPOSE ${primaryVarName.toUpperCase()} ON ${primaryNode.toUpperCase()}';
+        parentTask.children[idx].specNotes =
+            'Expose $primaryVarName on $primaryNode so you can tune $secondaryNode and $tertiaryNode live in the editor:';
+        parentTask.children[idx].codeSnippet = step2Code;
+      } else {
+        parentTask.children[idx].text =
+            'STEP $taskNum.${idx + 1} · STEP ${secondaryNode.toUpperCase()} INTERPOLATION IN ${primaryNode.toUpperCase()}';
+        parentTask.children[idx].specNotes =
+            'Advance $secondaryNode and $tertiaryNode each physics tick inside $primaryNode using $primaryVarName:';
+        parentTask.children[idx].codeSnippet = step2Code;
+      }
+      parentTask.children[idx].codeTargetFile = 'custom_snippet';
     }
     _blueprintCache.remove('${checkpointNode.id}_${parentTask.id}_$taskIndex');
   }
