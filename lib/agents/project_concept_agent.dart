@@ -305,11 +305,12 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
     }
 
     final fallbackQuestions = _defaultQuestionsForSpark(cleanSpark);
+    final shortSpark = _shortSparkPhrase(cleanSpark, shortTitle);
     return ProjectConceptBlueprint(
       title: shortTitle,
       sparkIdea: cleanSpark,
       questions: fallbackQuestions,
-      goal: 'Build a playable $shortTitle prototype centered on $cleanSpark with immediate game feel.',
+      goal: 'Build a playable $shortTitle prototype centered on $shortSpark with immediate game feel.',
       gameSpec: _defaultGameSpec(),
       techSpec: _defaultTechSpec(),
       designPillars: _defaultDesignPillars(),
@@ -599,20 +600,30 @@ Return ONLY a JSON object with this schema:
     String userMsg,
     String modelUsed,
   ) {
-    final lower = userMsg.toLowerCase();
+    // Strip any section prefix `[Section 01 Goal]` or meta-instruction wrapper if present
+    var cleanTurn = userMsg
+        .replaceFirst(RegExp(r'^\[Section\s+\d+\s+[^\]]+\]\s*', caseSensitive: false), '')
+        .trim();
+    final choiceMatch = RegExp(r'to apply this choice:\s*"([^"]+)"', caseSensitive: false)
+        .firstMatch(cleanTurn);
+    if (choiceMatch != null) {
+      cleanTurn = choiceMatch.group(1)!.trim();
+    }
+
+    final lower = cleanTurn.toLowerCase();
     final updated = <String>[];
 
     if (lower.contains('exclude') ||
         lower.contains('cut') ||
         lower.contains('remove') ||
         lower.contains('out of scope')) {
-      draft.exclusions.add(userMsg);
+      draft.exclusions.add(cleanTurn);
       updated.add('Exclusions');
     } else if (lower.contains('pillar')) {
-      draft.designPillars.add(userMsg);
+      draft.designPillars.add(cleanTurn);
       updated.add('Design Pillars');
     } else if (lower.contains('over ')) {
-      draft.tradeOffs.add(userMsg);
+      draft.tradeOffs.add(cleanTurn);
       updated.add('Trade-Offs');
     } else if (lower.contains('godot') ||
         lower.contains('unity') ||
@@ -621,10 +632,10 @@ Return ONLY a JSON object with this schema:
       if (draft.techSpec.isEmpty) {
         draft.techSpec = _defaultTechSpec();
       }
-      draft.techSpec[0] = userMsg;
+      draft.techSpec[0] = cleanTurn;
       updated.add('Tech Spec');
     } else if (lower.contains('title') || lower.startsWith('rename')) {
-      final cleanedTitle = userMsg
+      final cleanedTitle = cleanTurn
           .replaceFirst(RegExp(r'^(rename|change title|title)\s*(to|:)?\s*', caseSensitive: false), '')
           .trim();
       if (cleanedTitle.isNotEmpty) {
@@ -632,22 +643,33 @@ Return ONLY a JSON object with this schema:
         updated.add('Title');
       }
     } else {
-      draft.goal =
-          'Build a ${draft.title} prototype focused on "$userMsg" with responsive controls and clear feedback.';
+      final colonIdx = cleanTurn.indexOf(':');
+      final cleanBody = (colonIdx > 0 && colonIdx < 48 && colonIdx < cleanTurn.length - 1)
+          ? cleanTurn.substring(colonIdx + 1).trim()
+          : cleanTurn;
+      if (cleanBody.toLowerCase().startsWith('build ') ||
+          cleanBody.toLowerCase().startsWith('test ') ||
+          cleanBody.toLowerCase().startsWith('focus ') ||
+          cleanBody.toLowerCase().startsWith('include ')) {
+        draft.goal = cleanBody.endsWith('.') ? cleanBody : '$cleanBody.';
+      } else {
+        draft.goal =
+            'Build a ${draft.title} prototype focused on $cleanBody with responsive controls and clear feedback.';
+      }
       if (lower.contains('2d') || lower.contains('3d') || lower.contains('top-down')) {
         if (draft.gameSpec.isNotEmpty) {
-          draft.gameSpec[0] = userMsg;
+          draft.gameSpec[0] = cleanTurn;
           updated.add('Game Spec');
         }
         if (draft.techSpec.isNotEmpty) {
-          draft.techSpec[0] = userMsg;
+          draft.techSpec[0] = cleanTurn;
           updated.add('Tech Spec');
         }
       }
       if (draft.coreLoopBeats.isNotEmpty) {
-        draft.coreLoopBeats[0] = 'Core Focus: $userMsg';
+        draft.coreLoopBeats[0] = 'Core Focus: $cleanBody';
       } else {
-        draft.coreLoopBeats.add('Core Focus: $userMsg');
+        draft.coreLoopBeats.add('Core Focus: $cleanBody');
       }
       updated.addAll(['Goal', 'Core Loop']);
     }
@@ -851,6 +873,23 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
     return input.replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '').trim();
   }
 
+  /// Extracts a concise phrase from `spark` by stripping any ` — ...` or ` (...)` expansion suffix.
+  static String _shortSparkPhrase(String spark, String fallbackTitle) {
+    var base = spark.trim();
+    final dashIdx = base.indexOf(' — ');
+    if (dashIdx > 0) {
+      base = base.substring(0, dashIdx).trim();
+    }
+    final parenIdx = base.indexOf(' (');
+    if (parenIdx > 0) {
+      base = base.substring(0, parenIdx).trim();
+    }
+    if (base.isEmpty || base.length > 72) {
+      return fallbackTitle;
+    }
+    return base;
+  }
+
   static String _derivePunchyTitle(String spark) {
     const stopWords = {
       'the', 'and', 'with', 'for', 'game', 'about', 'fast', 'that', 'also',
@@ -989,11 +1028,12 @@ Synthesize these exact choices into a cohesive Project Concept JSON object using
     String spark,
     String title,
   ) {
+    final shortSpark = _shortSparkPhrase(spark, title);
     return {
       'goal': [
-        'Single-Arena Loop: Build a playable $title prototype centered on $spark in a single test arena',
-        'Prep + Arena Loop: Include an interactive prep & staging zone before entering the core $title gameplay loop',
-        'Controls & Feel First: Focus v0.1 on the primary $title player controls and core mechanic feel first',
+        'Single-Arena Loop: Build a playable $title prototype centered on $shortSpark in a single test arena.',
+        'Prep + Arena Loop: Build a $title prototype with an interactive prep zone before entering the core gameplay loop.',
+        'Controls & Feel First: Build a focused $title v0.1 prototype proving primary player controls and core mechanic feel first.',
       ],
       'gameSpec': [
         '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Singleplayer · Single-Screen Arena',

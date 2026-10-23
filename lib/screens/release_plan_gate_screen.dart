@@ -1670,46 +1670,22 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
+                  const SizedBox(height: 8),
+                  Builder(
+                    builder: (context) {
                       final opts = bp.questions[qIdx].options;
-                      final isWide = constraints.maxWidth >= 680;
-                      if (!isWide) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
-                              _buildQuestionOptionCard(
-                                question: bp.questions[qIdx],
-                                qIdx: qIdx,
-                                optIdx: optIdx,
-                                optionText: opts[optIdx],
-                                isFirst: optIdx == 0,
-                              ),
-                              if (optIdx < opts.length - 1) const SizedBox(height: 8),
-                            ],
-                          ],
-                        );
-                      }
-                      return IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (int optIdx = 0; optIdx < opts.length; optIdx++) ...[
-                              Expanded(
-                                child: _buildQuestionOptionCard(
-                                  question: bp.questions[qIdx],
-                                  qIdx: qIdx,
-                                  optIdx: optIdx,
-                                  optionText: opts[optIdx],
-                                  isFirst: optIdx == 0,
-                                ),
-                              ),
-                              if (optIdx < opts.length - 1) const SizedBox(width: 10),
-                            ],
-                          ],
-                        ),
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (int optIdx = 0; optIdx < opts.length; optIdx++)
+                            _buildQuestionOptionCard(
+                              question: bp.questions[qIdx],
+                              qIdx: qIdx,
+                              optIdx: optIdx,
+                              optionText: opts[optIdx],
+                              isFirst: optIdx == 0,
+                            ),
+                        ],
                       );
                     },
                   ),
@@ -1733,77 +1709,107 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     final parsed = _splitQuestionOption(optionText, optIdx);
 
     return Material(
-      color: isSelected ? bgHover : bgSurface,
-      borderRadius: BorderRadius.circular(6),
+      color: isSelected ? bgHover.withValues(alpha: 0.45) : Colors.transparent,
       child: InkWell(
         key: ValueKey('release_question_card_${qIdx}_$optIdx'),
         onTap: () => widget.workbench.selectReleaseQuestionOption(
           question.id,
           optionText,
         ),
-        borderRadius: BorderRadius.circular(6),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.fromLTRB(isSelected ? 13 : 8, 13, 8, 13),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
             border: Border(
-              left: BorderSide(
-                color: isSelected ? accentEmerald : borderSubtle,
-                width: 3,
-              ),
-              top: BorderSide(color: borderSubtle),
-              right: BorderSide(color: borderSubtle),
+              left: isSelected
+                  ? BorderSide(color: accentCyan, width: 3)
+                  : BorderSide.none,
               bottom: BorderSide(color: borderSubtle),
             ),
           ),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isSelected ? '☑ SELECTED' : '☐ OPTION 0${optIdx + 1}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: isSelected ? accentEmerald : textSecondary,
-                        ),
-                      ),
-                      if (isFirst)
+              // Unified Radio Circle Indicator (Aligned with Stage 1 single-select options)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Container(
+                  width: 15,
+                  height: 15,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isSelected ? accentCyan : Colors.transparent,
+                    border: Border.all(
+                      color: isSelected ? accentCyan : textMuted,
+                      width: 1.4,
+                    ),
+                  ),
+                  child: isSelected
+                      ? Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: bgBase,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 10,
+                      runSpacing: 4,
+                      children: [
                         Text(
-                          'RECOMMENDED',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: accentCyan,
+                          parsed.title,
+                          style: AppTheme.displayFont(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    parsed.title,
-                    style: AppTheme.displayFont(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: textPrimary,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              isFirst ? 'RECOMMENDED' : 'OPTION 0${optIdx + 1}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: isFirst ? accentCyan : textSecondary,
+                              ),
+                            ),
+                            if (isSelected)
+                              Text(
+                                ' · SELECTED',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: accentEmerald,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    parsed.description,
-                    style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      height: 1.5,
-                      color: textSecondary,
+                    const SizedBox(height: 4),
+                    Text(
+                      parsed.description,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        height: 1.48,
+                        color: textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
