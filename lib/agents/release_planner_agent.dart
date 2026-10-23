@@ -12,9 +12,13 @@ import 'gemini_agent_client.dart';
 /// - Cohesive Playable Features (`ProposedFeatureBlueprint`) with pre-mapped
 ///   60/40 Playable Checkpoints, Scope, Tuning Parameters, and Edge Cases.
 class ReleasePlannerAgent {
+  static final RegExp _releaseVersionRegex =
+      RegExp(r'(v\d+\.\d+(?:\.\d+)?)', caseSensitive: false);
+  static final RegExp _bulletStripRegex = RegExp(r'^[•\-\*\s]+');
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+
   static String extractReleaseVersionTag(String releaseTitle) {
-    final match = RegExp(r'(v\d+\.\d+(?:\.\d+)?)', caseSensitive: false)
-        .firstMatch(releaseTitle);
+    final match = _releaseVersionRegex.firstMatch(releaseTitle);
     if (match != null) {
       return match.group(1)!.toLowerCase();
     }
@@ -1109,7 +1113,7 @@ Return ONLY a JSON object with this schema:
   }
 
   static String _extractBeatTitle(String rawBullet, {required String fallback}) {
-    final cleaned = rawBullet.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim();
+    final cleaned = rawBullet.replaceFirst(_bulletStripRegex, '').trim();
     if (cleaned.isEmpty) return fallback;
     if (cleaned.contains(':')) {
       final prefix = cleaned.split(':')[0].trim();
@@ -1117,7 +1121,7 @@ Return ONLY a JSON object with this schema:
         return prefix;
       }
     }
-    final words = cleaned.split(RegExp(r'\s+')).take(4).join(' ');
+    final words = cleaned.split(_whitespaceRegex).take(4).join(' ');
     return words.isNotEmpty ? words : fallback;
   }
 }
@@ -1128,6 +1132,7 @@ Return ONLY a JSON object with this schema:
 ///   checkpoints from `v0.1` remain intact when re-planning or evolving to `v0.2+`.
 /// - Stamps newly added Checkpoints (`FeatureStateNode`) with `releaseVersion`.
 class ReleaseExecutorAgent {
+  static final RegExp _bulletStripRegex = RegExp(r'^[•\-\*\s]+');
   static Future<List<TierDocument>> executeBlueprint({
     required TierDocument releaseDoc,
     required ReleaseBlueprint blueprint,
@@ -1256,7 +1261,7 @@ class ReleaseExecutorAgent {
         final existingTuning = existingFeat != null
             ? (existingFeat.sections['tuning'] ?? '')
                 .split('\n')
-                .map((s) => s.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim())
+                .map((s) => s.replaceFirst(_bulletStripRegex, '').trim())
                 .where((s) => s.isNotEmpty)
             : const Iterable<String>.empty();
         final mergedTuning = <String>{
@@ -1267,7 +1272,7 @@ class ReleaseExecutorAgent {
         final existingEdges = existingFeat != null
             ? (existingFeat.sections['edge_cases'] ?? '')
                 .split('\n')
-                .map((s) => s.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim())
+                .map((s) => s.replaceFirst(_bulletStripRegex, '').trim())
                 .where((s) => s.isNotEmpty)
             : const Iterable<String>.empty();
         final mergedEdges = <String>{

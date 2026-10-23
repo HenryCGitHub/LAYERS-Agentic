@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
 import 'screens/project_pitch_screen.dart';
 import 'screens/release_plan_gate_screen.dart';
@@ -193,40 +194,7 @@ class WorkbenchShell extends StatelessWidget {
                         final projId = val.substring('__rename__:'.length);
                         final proj = savedProjects.where((p) => p.id == projId).firstOrNull;
                         if (proj == null) return;
-                        final ctrl = TextEditingController(text: proj.title);
-                        final newTitle = await showDialog<String>(
-                          context: context,
-                          builder: (rCtx) => AlertDialog(
-                            backgroundColor: bgSurface,
-                            title: Text(
-                              'Rename Project',
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: textPrimary,
-                              ),
-                            ),
-                            content: TextField(
-                              controller: ctrl,
-                              autofocus: true,
-                              style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
-                              onSubmitted: (v) => Navigator.of(rCtx).pop(v),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(rCtx).pop(),
-                                child: const Text('Cancel'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
-                                child: const Text('Save'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (newTitle != null && newTitle.trim().isNotEmpty) {
-                          workbench.renameProject(projId, newTitle.trim());
-                        }
+                        await _promptRenameProjectDialog(context, proj);
                       } else if (val.startsWith('__delete__:')) {
                         final projId = val.substring('__delete__:'.length);
                         workbench.deleteProject(projId);
@@ -378,17 +346,7 @@ class WorkbenchShell extends StatelessWidget {
                       label: '1. Concept',
                       badge: stage1Badge,
                       stage: WorkbenchStage.projectPitch,
-                      activeStage: workbench.currentStage,
                       isCompleted: bp != null || allFeats.isNotEmpty,
-                      activeDotColor: accentAmber,
-                      completedColor: accentEmerald,
-                      textPrimary: textPrimary,
-                      textSecondary: textSecondary,
-                      textMuted: textMuted,
-                      bgActive: AppTheme.bgSurfaceHoverFor(isDark),
-                      bgRecessed: AppTheme.bgSurfaceRecessedFor(isDark),
-                      borderSubtle: AppTheme.borderSubtleFor(isDark),
-                      borderBright: AppTheme.borderBrightFor(isDark),
                       onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
                     ),
                     Padding(
@@ -405,17 +363,7 @@ class WorkbenchShell extends StatelessWidget {
                       label: '2. Release Plan',
                       badge: stage2Badge,
                       stage: WorkbenchStage.releasePlanGate,
-                      activeStage: workbench.currentStage,
                       isCompleted: allFeats.isNotEmpty,
-                      activeDotColor: accentAmber,
-                      completedColor: accentEmerald,
-                      textPrimary: textPrimary,
-                      textSecondary: textSecondary,
-                      textMuted: textMuted,
-                      bgActive: AppTheme.bgSurfaceHoverFor(isDark),
-                      bgRecessed: AppTheme.bgSurfaceRecessedFor(isDark),
-                      borderSubtle: AppTheme.borderSubtleFor(isDark),
-                      borderBright: AppTheme.borderBrightFor(isDark),
                       onTap: workbench.releaseBlueprint != null
                           ? () => workbench.setStage(WorkbenchStage.releasePlanGate)
                           : null,
@@ -434,17 +382,7 @@ class WorkbenchShell extends StatelessWidget {
                       label: '3. Workbench',
                       badge: stage3Badge,
                       stage: WorkbenchStage.releaseWorkbench,
-                      activeStage: workbench.currentStage,
                       isCompleted: workbench.isActiveReleaseComplete,
-                      activeDotColor: accentAmber,
-                      completedColor: accentEmerald,
-                      textPrimary: textPrimary,
-                      textSecondary: textSecondary,
-                      textMuted: textMuted,
-                      bgActive: AppTheme.bgSurfaceHoverFor(isDark),
-                      bgRecessed: AppTheme.bgSurfaceRecessedFor(isDark),
-                      borderSubtle: AppTheme.borderSubtleFor(isDark),
-                      borderBright: AppTheme.borderBrightFor(isDark),
                       onTap: workbench.activeReleaseBeats.isNotEmpty
                           ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
                           : null,
@@ -873,39 +811,7 @@ class WorkbenchShell extends StatelessWidget {
                                   child: InkWell(
                                     key: ValueKey('vault_rename_${p.id}'),
                                     onTap: () async {
-                                      final ctrl = TextEditingController(text: p.title);
-                                      final newTitle = await showDialog<String>(
-                                        context: ctx,
-                                        builder: (rCtx) => AlertDialog(
-                                          backgroundColor: bgSurface,
-                                          title: Text(
-                                            'Rename Project',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w700,
-                                              color: textPrimary,
-                                            ),
-                                          ),
-                                          content: TextField(
-                                            controller: ctrl,
-                                            autofocus: true,
-                                            style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
-                                            onSubmitted: (val) => Navigator.of(rCtx).pop(val),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(rCtx).pop(),
-                                              child: const Text('Cancel'),
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
-                                              child: const Text('Save'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                      if (newTitle != null && newTitle.trim().isNotEmpty) {
-                                        workbench.renameProject(p.id, newTitle.trim());
+                                      if (await _promptRenameProjectDialog(ctx, p)) {
                                         setModalState(() {});
                                       }
                                     },
@@ -1487,25 +1393,71 @@ class WorkbenchShell extends StatelessWidget {
     );
   }
 
+  Future<bool> _promptRenameProjectDialog(
+    BuildContext context,
+    TierDocument proj,
+  ) async {
+    final isDark = workbench.isDark;
+    final bgSurface = AppTheme.bgSurfaceFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final ctrl = TextEditingController(text: proj.title);
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (rCtx) => AlertDialog(
+        backgroundColor: bgSurface,
+        title: Text(
+          'Rename Project',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: textPrimary,
+          ),
+        ),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+          onSubmitted: (v) => Navigator.of(rCtx).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(rCtx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (newTitle != null && newTitle.trim().isNotEmpty) {
+      workbench.renameProject(proj.id, newTitle.trim());
+      return true;
+    }
+    return false;
+  }
+
   Widget _buildStagePill({
     required String label,
     String? badge,
     required WorkbenchStage stage,
-    required WorkbenchStage activeStage,
     required bool isCompleted,
-    required Color activeDotColor,
-    required Color completedColor,
-    required Color textPrimary,
-    required Color textSecondary,
-    required Color textMuted,
-    required Color bgActive,
-    required Color bgRecessed,
-    required Color borderSubtle,
-    required Color borderBright,
     VoidCallback? onTap,
   }) {
-    final isActive = stage == activeStage;
+    final isDark = workbench.isDark;
+    final isActive = stage == workbench.currentStage;
     final isCheckBadge = badge == '✓';
+    final activeDotColor = AppTheme.focalAccentFor(isDark);
+    final completedColor = AppTheme.accentGreenFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final bgActive = AppTheme.bgSurfaceHoverFor(isDark);
+    final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
+    final borderSubtle = AppTheme.borderSubtleFor(isDark);
+    final borderBright = AppTheme.borderBrightFor(isDark);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(5),

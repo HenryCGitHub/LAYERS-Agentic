@@ -468,6 +468,22 @@ class TaskHowToBlueprint {
 
   static final RegExp _trailingDurationRe =
       RegExp(r'\s*\(([\d\.]+\s*[hm])\)\s*$', caseSensitive: false);
+  static final RegExp _leadingTagRe = RegExp(
+    r'^\[(?:PREREQ|BUILD|HOOK|TEST|INPUT|STATE|PHYSICS|FEEL|UI)\]\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _identifierWordRegex = RegExp(r'[A-Za-z0-9]+');
+  static final RegExp _clauseSplitRegex = RegExp(
+    r'\s*(?:,|;|->|\+|\band\b|\bthen\b|&)\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static final RegExp _nonLowerAlnumRegex = RegExp(r'[^a-z0-9]+');
+  static final RegExp _trimUnderscoresRegex = RegExp(r'^_+|_+$');
+  static final RegExp _nonIdentCharRegex = RegExp(r'[^a-zA-Z0-9_]');
+  static final RegExp _leadingBracketTagRegex = RegExp(r'^\[[^\]]+\]\s*');
+  static final RegExp _stepHeaderPrefixRegex =
+      RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false);
 
   /// Lightweight LRU-style memoization cache for `TaskHowToBlueprint.resolve`
   /// so Outliner ETA rollups and Active Step Workspace renders do not re-run regexes
@@ -490,13 +506,7 @@ class TaskHowToBlueprint {
 
   static String extractCleanTitle(String rawText) {
     var cleaned = rawText.replaceAll(_trailingDurationRe, '').trim();
-    cleaned = cleaned
-        .replaceFirst(
-          RegExp(r'^\[(?:PREREQ|BUILD|HOOK|TEST|INPUT|STATE|PHYSICS|FEEL|UI)\]\s*',
-              caseSensitive: false),
-          '',
-        )
-        .trim();
+    cleaned = cleaned.replaceFirst(_leadingTagRe, '').trim();
     return cleaned.isEmpty ? rawText.trim() : cleaned;
   }
 
@@ -713,7 +723,7 @@ class TaskHowToBlueprint {
       'pass',
       'stage',
     };
-    final words = RegExp(r'[A-Za-z0-9]+')
+    final words = _identifierWordRegex
         .allMatches(clean)
         .map((m) => m.group(0)!)
         .where((w) => w.length > 1 && !stopWords.contains(w.toLowerCase()))
@@ -769,17 +779,12 @@ class TaskHowToBlueprint {
   }
 
   static List<String> extractActionClauses(String cleanTitle) {
-    final rawParts = cleanTitle.split(
-      RegExp(
-        r'\s*(?:,|;|->|\+|\band\b|\bthen\b|&)\s*',
-        caseSensitive: false,
-      ),
-    );
+    final rawParts = cleanTitle.split(_clauseSplitRegex);
     final clauses = <String>[];
     for (final part in rawParts) {
       final trimmed = part.trim();
       if (trimmed.isEmpty) continue;
-      final wordCount = trimmed.split(RegExp(r'\s+')).length;
+      final wordCount = trimmed.split(_whitespaceRegex).length;
       if (wordCount >= 2 || clauses.isEmpty) {
         clauses.add(trimmed);
       } else if (clauses.isNotEmpty) {
@@ -1574,8 +1579,8 @@ class TaskHowToBlueprint {
         final clauseText = clauses[cIdx];
         final clauseIdent = clauseText
             .toLowerCase()
-            .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-            .replaceAll(RegExp(r'^_+|_+$'), '');
+            .replaceAll(_nonLowerAlnumRegex, '_')
+            .replaceAll(_trimUnderscoresRegex, '');
         final safeMethod = clauseIdent.isEmpty ? 'step_${cIdx + 1}' : clauseIdent;
         dynamicSpecs.add((
           stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · IMPLEMENT ${clauseText.toUpperCase()}',
@@ -1609,7 +1614,7 @@ class TaskHowToBlueprint {
               .split(':')
               .first
               .trim()
-              .replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+              .replaceAll(_nonIdentCharRegex, '_');
           dynamicSpecs.add((
             stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · WIRE TUNING PARAMETER ${extraVarName.toUpperCase()}',
             shortTitle: 'Wire Tuning: $extraVarName',
@@ -1634,7 +1639,7 @@ class TaskHowToBlueprint {
         for (int gIdx = 1; gIdx < checkpointNode.edgeCases.length; gIdx++) {
           final extraGuard = checkpointNode.edgeCases[gIdx];
           final shortGuard = extraGuard
-              .replaceFirst(RegExp(r'^\[[^\]]+\]\s*'), '')
+              .replaceFirst(_leadingBracketTagRegex, '')
               .trim();
           dynamicSpecs.add((
             stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · ENFORCE ${extraGuard.toUpperCase()}',
@@ -1664,10 +1669,7 @@ class TaskHowToBlueprint {
     // Normalize step numbering headers ("STEP X.1", "STEP X.2", ... "STEP X.N") across all dynamicSpecs
     for (int idx = 0; idx < dynamicSpecs.length; idx++) {
       final raw = dynamicSpecs[idx];
-      final suffix = raw.stepHeader.replaceFirst(
-        RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false),
-        '',
-      );
+      final suffix = raw.stepHeader.replaceFirst(_stepHeaderPrefixRegex, '');
       dynamicSpecs[idx] = (
         stepHeader: 'STEP $taskNum.${idx + 1} · $suffix',
         shortTitle: raw.shortTitle,
@@ -1740,10 +1742,7 @@ class TaskHowToBlueprint {
                   : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)'));
       final shortTitle = (!isCustomSnippet && hasDynamicSpec)
           ? spec.shortTitle
-          : rawLabel.replaceFirst(
-              RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false),
-              '',
-            );
+          : rawLabel.replaceFirst(_stepHeaderPrefixRegex, '');
 
       String nextStepTitle = 'Verify Checkpoint & Continue';
       if (i + 1 < parentTask.children.length) {
@@ -1751,10 +1750,7 @@ class TaskHowToBlueprint {
         final nextCustom = nextChild.codeTargetFile == 'custom_snippet';
         nextStepTitle = (!nextCustom && i + 1 < dynamicSpecs.length)
             ? dynamicSpecs[i + 1].shortTitle
-            : nextChild.text.trim().replaceFirst(
-                  RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false),
-                  '',
-                );
+            : nextChild.text.trim().replaceFirst(_stepHeaderPrefixRegex, '');
       }
 
       final isLastStep = i == parentTask.children.length - 1;

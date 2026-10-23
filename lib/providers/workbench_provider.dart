@@ -567,9 +567,7 @@ class WorkbenchProvider extends ChangeNotifier {
         _selectedBeatId = matchedBeat.id;
         _selectedFeatureId = matchedFeat.id;
       } else {
-        _selectedBeatId = beats.first.id;
-        final feats = featuresForBeat(_selectedBeatId!);
-        _selectedFeatureId = feats.isNotEmpty ? feats.first.id : null;
+        _selectFirstIncompleteFeatureInActiveRelease();
       }
     } else {
       _selectedBeatId = null;
@@ -1293,6 +1291,38 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
+  String? get _activeEngineHint =>
+      _conceptDraft?.techSpec.join(' ') ?? activeProject?.sections['tech_spec'];
+
+  String get _activeEngineLabel =>
+      TaskHowToBlueprint.detectEngineLabel(_activeEngineHint);
+
+  void _selectFirstIncompleteFeatureInActiveRelease() {
+    final beats = activeReleaseBeats;
+    if (beats.isEmpty) return;
+    TierDocument? firstActiveBeat;
+    TierDocument? firstActiveFeat;
+    for (final b in beats) {
+      for (final f in featuresForBeat(b.id)) {
+        if (getDocumentProgress(f.id) < 100) {
+          firstActiveBeat = b;
+          firstActiveFeat = f;
+          break;
+        }
+      }
+      if (firstActiveFeat != null) break;
+    }
+    _selectedBeatId = (firstActiveBeat ?? beats.first).id;
+    final feats = featuresForBeat(_selectedBeatId!);
+    _selectedFeatureId =
+        (firstActiveFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
+  }
+
+  static bool _isStretchCandidateFeature(ProposedFeatureBlueprint f) =>
+      f.id == 'feat_1_3' ||
+      (f.id.endsWith('_2') && f.id != 'feat_1_2') ||
+      f.title.toLowerCase().contains('bonus');
+
   /// Runs the Stage 3 Agentic Co-Pilot (`[ASK AGENT]` bar & Co-Pilot Cards) using
   /// low-token surgical Workspace Tool Calls (`WorkspaceAgentOrchestrator.runStage3CoPilotTools`).
   Future<AgentRunTrace> runStage3AgentCoPilot({
@@ -1302,9 +1332,7 @@ class WorkbenchProvider extends ChangeNotifier {
     required String directive,
   }) async {
     _pushAgentUndoSnapshot();
-    final engineHint = _conceptDraft?.techSpec.join(' ') ??
-        activeProject?.sections['tech_spec'];
-    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final engineLabel = _activeEngineLabel;
     final releaseVer = activeRelease?.sections['versionTag'] ?? 'v0.1';
     final allReleaseFeats = <TierDocument>[
       for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
@@ -1437,9 +1465,7 @@ class WorkbenchProvider extends ChangeNotifier {
     TierDocument featureDoc,
     List<FeatureStateNode> states,
   ) {
-    final engineHint = _conceptDraft?.techSpec.join(' ') ??
-        activeProject?.sections['tech_spec'];
-    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final engineLabel = _activeEngineLabel;
     final bundle = WorkspaceAgentOrchestrator.generateFeatureScriptBundle(
       featureDoc: featureDoc,
       states: states,
@@ -1469,9 +1495,7 @@ class WorkbenchProvider extends ChangeNotifier {
     required int checkpointIndex,
   }) {
     _pushAgentUndoSnapshot();
-    final engineHint = _conceptDraft?.techSpec.join(' ') ??
-        activeProject?.sections['tech_spec'];
-    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final engineLabel = _activeEngineLabel;
     final result = WorkspaceAgentOrchestrator.simulateCheckpointPlaytest(
       featureDoc: featureDoc,
       states: states,
@@ -1800,25 +1824,7 @@ class WorkbenchProvider extends ChangeNotifier {
       _activeReleaseId = releaseId;
       _releaseViewFilter = 'active';
       _currentStage = WorkbenchStage.releaseWorkbench;
-      final beats = activeReleaseBeats;
-      if (beats.isNotEmpty) {
-        TierDocument? firstActiveBeat;
-        TierDocument? firstActiveFeat;
-        for (final b in beats) {
-          for (final f in featuresForBeat(b.id)) {
-            if (getDocumentProgress(f.id) < 100) {
-              firstActiveBeat = b;
-              firstActiveFeat = f;
-              break;
-            }
-          }
-          if (firstActiveFeat != null) break;
-        }
-        _selectedBeatId = (firstActiveBeat ?? beats.first).id;
-        final feats = featuresForBeat(_selectedBeatId!);
-        _selectedFeatureId =
-            (firstActiveFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
-      }
+      _selectFirstIncompleteFeatureInActiveRelease();
       _syncActiveProjectMetadata();
       notifyListeners();
       return;
@@ -2021,10 +2027,7 @@ class WorkbenchProvider extends ChangeNotifier {
             for (final b in bp.beats) {
               for (final f in b.features) {
                 if (!f.isSuperseded) {
-                  final isStretchCandidate = f.id == 'feat_1_3' ||
-                      (f.id.endsWith('_2') && f.id != 'feat_1_2') ||
-                      f.title.toLowerCase().contains('bonus');
-                  f.included = !isStretchCandidate;
+                  f.included = !_isStretchCandidateFeature(f);
                 }
               }
             }
@@ -2057,10 +2060,7 @@ class WorkbenchProvider extends ChangeNotifier {
           } else if (lower.contains('lean')) {
             for (final b in bp.beats) {
               for (final f in b.features) {
-                final isStretchCandidate = f.id == 'feat_1_3' ||
-                    (f.id.endsWith('_2') && f.id != 'feat_1_2') ||
-                    f.title.toLowerCase().contains('bonus');
-                if (isStretchCandidate) {
+                if (_isStretchCandidateFeature(f)) {
                   f.included = false;
                 }
               }
@@ -2235,9 +2235,7 @@ class WorkbenchProvider extends ChangeNotifier {
     final cpNode = states[checkpointIndex];
     final newTaskIndex = cpNode.checklist.length;
     final taskNum = newTaskIndex + 1;
-    final engineHint = _conceptDraft?.techSpec.join(' ') ??
-        activeProject?.sections['tech_spec'];
-    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final engineLabel = _activeEngineLabel;
     final isUnity = engineLabel.contains('Unity');
     final isUnreal = engineLabel.contains('Unreal');
     final primaryTune = cpNode.tuningParams.isNotEmpty
@@ -2331,9 +2329,8 @@ class WorkbenchProvider extends ChangeNotifier {
     if (taskIndex < 0 || taskIndex >= cpNode.checklist.length) return;
     final parentTask = cpNode.checklist[taskIndex];
     final featDoc = documents[featureId];
-    final engineHint = _conceptDraft?.techSpec.join(' ') ??
-        activeProject?.sections['tech_spec'];
-    final engineLabel = TaskHowToBlueprint.detectEngineLabel(engineHint);
+    final engineHint = _activeEngineHint;
+    final engineLabel = _activeEngineLabel;
     final taskNum = taskIndex + 1;
 
     // Ensure children are initialized first
@@ -2450,25 +2447,7 @@ Return ONLY a JSON object with this schema:
       _syncActiveProjectMetadata();
 
       // Auto-select the first Feature that has incomplete checkpoints (or Beat 1 / Feature 1)
-      final beats = activeReleaseBeats;
-      if (beats.isNotEmpty) {
-        TierDocument? firstActiveBeat;
-        TierDocument? firstActiveFeat;
-        for (final b in beats) {
-          for (final f in featuresForBeat(b.id)) {
-            if (getDocumentProgress(f.id) < 100) {
-              firstActiveBeat = b;
-              firstActiveFeat = f;
-              break;
-            }
-          }
-          if (firstActiveFeat != null) break;
-        }
-        _selectedBeatId = (firstActiveBeat ?? beats.first).id;
-        final feats = featuresForBeat(_selectedBeatId!);
-        _selectedFeatureId =
-            (firstActiveFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
-      }
+      _selectFirstIncompleteFeatureInActiveRelease();
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;

@@ -2975,7 +2975,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             ),
           ),
           child: highlightMetrics
-              ? _buildMetricHighlightedRichText(statement)
+              ? buildMetricHighlightedRichText(
+                  statement,
+                  usePill: true,
+                  fontSize: 15,
+                  height: 1.58,
+                )
               : Text(
                   statement,
                   style: GoogleFonts.inter(
@@ -2986,69 +2991,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   ),
                 ),
         ),
-      ),
-    );
-  }
-
-  /// Wraps quantitative playtest targets (e.g., `10-minute`, `3 escalating waves`, `40 enemies`, `60 FPS`)
-  /// in bold inline pills so QA metrics pop immediately inside `08 Done When`.
-  Widget _buildMetricHighlightedRichText(String statement) {
-    final metricRegex = RegExp(
-      r'\b(\d+(?:[\.\-]\d+)?(?:\s*(?:minute|minutes|min|second|seconds|sec|s|FPS|fps|key|keys|waves|wave|enemies|enemy|rooms|room|players|player|ms|%))?)\b',
-      caseSensitive: false,
-    );
-    final spans = <InlineSpan>[];
-    int lastEnd = 0;
-
-    for (final match in metricRegex.allMatches(statement)) {
-      if (match.start > lastEnd) {
-        spans.add(
-          TextSpan(
-            text: statement.substring(lastEnd, match.start),
-          ),
-        );
-      }
-      final metricText = match.group(0)!;
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-            decoration: BoxDecoration(
-              color: accentEmerald.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: accentEmerald.withValues(alpha: 0.42),
-              ),
-            ),
-            child: Text(
-              metricText,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: textPrimary,
-              ),
-            ),
-          ),
-        ),
-      );
-      lastEnd = match.end;
-    }
-
-    if (lastEnd < statement.length) {
-      spans.add(TextSpan(text: statement.substring(lastEnd)));
-    }
-
-    return RichText(
-      text: TextSpan(
-        style: GoogleFonts.inter(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          height: 1.58,
-          color: textPrimary,
-        ),
-        children: spans,
       ),
     );
   }

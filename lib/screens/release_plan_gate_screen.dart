@@ -1201,7 +1201,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           const SizedBox(width: 10),
           Expanded(
             child: highlightMetrics
-                ? _buildMetricHighlightedRichText(statement)
+                ? buildMetricHighlightedRichText(statement)
                 : Text(
                     statement,
                     style: GoogleFonts.inter(
@@ -1213,49 +1213,6 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildMetricHighlightedRichText(String statement) {
-    final metricRegex = RegExp(
-      r'\b(\d+(?:[\.\-]\d+)?(?:\s*(?:minute|minutes|min|second|seconds|sec|s|FPS|fps|key|keys|waves|wave|enemies|enemy|rooms|room|players|player|times|time|ms|%))?)\b',
-      caseSensitive: false,
-    );
-    final spans = <InlineSpan>[];
-    int lastEnd = 0;
-
-    for (final match in metricRegex.allMatches(statement)) {
-      if (match.start > lastEnd) {
-        spans.add(TextSpan(text: statement.substring(lastEnd, match.start)));
-      }
-      final metricText = match.group(0)!;
-      spans.add(
-        TextSpan(
-          text: metricText,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w800,
-            color: accentEmerald,
-          ),
-        ),
-      );
-      lastEnd = match.end;
-    }
-
-    if (lastEnd < statement.length) {
-      spans.add(TextSpan(text: statement.substring(lastEnd)));
-    }
-
-    return RichText(
-      text: TextSpan(
-        style: GoogleFonts.inter(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w500,
-          height: 1.48,
-          color: textPrimary,
-        ),
-        children: spans,
       ),
     );
   }
