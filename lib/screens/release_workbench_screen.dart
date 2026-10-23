@@ -41,7 +41,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Set<String> _expandedHowToTaskKeys = {};
   final Set<String> _collapsedOutlineFeatureIds = {};
   final Set<String> _expandedOutlineFeatureIds = {};
-  final Set<String> _expandedOutlineTaskKeys = {};
   final Set<String> _collapsedOutlineTaskKeys = {};
   final Map<String, int> _lastOutlineTapMsByKey = {};
   bool _unrealCppMode = false;
@@ -69,29 +68,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     } else {
       _collapsedOutlineFeatureIds.remove(featId);
       _expandedOutlineFeatureIds.add(featId);
-    }
-  }
-
-  bool _isTaskExpandedInOutline(
-    String taskKey, {
-    required bool isTaskActive,
-    required bool isTaskCompleted,
-  }) {
-    if (_expandedOutlineTaskKeys.contains(taskKey)) return true;
-    if (_collapsedOutlineTaskKeys.contains(taskKey)) return false;
-    return isTaskActive && !isTaskCompleted;
-  }
-
-  void _toggleTaskExpandedInOutline(
-    String taskKey, {
-    required bool currentlyExpanded,
-  }) {
-    if (currentlyExpanded) {
-      _expandedOutlineTaskKeys.remove(taskKey);
-      _collapsedOutlineTaskKeys.add(taskKey);
-    } else {
-      _collapsedOutlineTaskKeys.remove(taskKey);
-      _expandedOutlineTaskKeys.add(taskKey);
     }
   }
 
@@ -840,388 +816,121 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   bp.remainingTaskMinutes,
                                 );
                                 final taskKey = '${cpNode.id}_$tIdx';
-                                final isTaskExpanded = _isTaskExpandedInOutline(
-                                  taskKey,
-                                  isTaskActive: isTaskActive,
-                                  isTaskCompleted: task.completed,
-                                );
-                                int activeSubIdx =
-                                    _selectedSubStepIndexByTask[taskKey] ??
-                                        task.children.indexWhere(
-                                          (c) => !c.completed,
-                                        );
-                                if (activeSubIdx < 0 ||
-                                    activeSubIdx >= bp.subSteps.length) {
-                                  activeSubIdx = 0;
-                                }
+                                final doneSubCount = bp.subSteps
+                                    .where((s) => s.subtask.completed)
+                                    .length;
+                                final totalSubCount = bp.subSteps.length;
+                                final taskSymbol = task.completed
+                                    ? '✓'
+                                    : (isTaskActive ? '●' : '○');
 
-                                return Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    InkWell(
-                                      key: ValueKey(
-                                        'outline_task_${cpNode.id}_$tIdx',
-                                      ),
-                                      onTap: () {
-                                        final isDouble =
-                                            _isDoubleClickOnOutlineItem(
-                                          'task_$taskKey',
-                                        );
-                                        setState(() {
-                                          _manualCheckpointFocusIndex = cpIdx;
-                                          _selectedTaskIndexByCheckpoint[
-                                              cpNode.id] = tIdx;
-                                          _expandedHowToTaskKeys
-                                            ..clear()
-                                            ..add(taskKey);
-                                          if (isDouble) {
-                                            _toggleTaskExpandedInOutline(
-                                              taskKey,
-                                              currentlyExpanded: isTaskExpanded,
-                                            );
-                                          } else {
-                                            _collapsedOutlineTaskKeys
-                                                .remove(taskKey);
-                                          }
-                                        });
-                                        if (widget.workbench.selectedFeatureId !=
-                                            feat.id) {
-                                          widget.workbench
-                                              .selectFeature(feat.id);
-                                        }
-                                      },
-                                      child: Container(
-                                        padding: EdgeInsets.fromLTRB(
-                                          isTaskActive ? 8 : 10,
-                                          5.5,
-                                          6,
-                                          5.5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          border: isTaskActive
-                                              ? Border(
-                                                  left: BorderSide(
-                                                    color: isFixTask
-                                                        ? accentCrimson
-                                                        : accentCyan,
-                                                    width: 2,
-                                                  ),
-                                                )
-                                              : null,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            InkWell(
-                                              key: ValueKey(
-                                                'outline_task_chevron_${cpNode.id}_$tIdx',
-                                              ),
-                                              onTap: () {
-                                                setState(() {
-                                                  _toggleTaskExpandedInOutline(
-                                                    taskKey,
-                                                    currentlyExpanded:
-                                                        isTaskExpanded,
-                                                  );
-                                                });
-                                              },
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              child: SizedBox(
-                                                width: 14,
-                                                height: 16,
-                                                child: Center(
-                                                  child: Text(
-                                                    task.completed &&
-                                                            !isTaskExpanded
-                                                        ? '✓'
-                                                        : (isTaskExpanded
-                                                            ? '▾'
-                                                            : '▸'),
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 9.5,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: task.completed
-                                                          ? accentEmerald
-                                                          : (isFixTask
-                                                              ? accentCrimson
-                                                              : (isTaskActive
-                                                                  ? accentCyan
-                                                                  : textMuted)),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                '${bp.numLabel} · ${bp.cleanTitle}',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 11.5,
-                                                  fontWeight: isTaskActive &&
-                                                          !task.completed
-                                                      ? FontWeight.w700
-                                                      : FontWeight.w500,
-                                                  color: task.completed
-                                                      ? textMuted.withValues(
-                                                          alpha: 0.5,
-                                                        )
-                                                      : (isFixTask
-                                                          ? accentCrimson
-                                                          : (isTaskActive
-                                                              ? textPrimary
-                                                              : textSecondary)),
-                                                  decoration: task.completed
-                                                      ? TextDecoration
-                                                          .lineThrough
-                                                      : TextDecoration.none,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              taskRemLabel,
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 9.5,
-                                                fontWeight: isTaskActive
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w500,
-                                                color: task.completed
-                                                    ? accentEmerald.withValues(
-                                                        alpha: 0.65,
-                                                      )
-                                                    : (isTaskActive
-                                                        ? accentCyan
-                                                        : textMuted),
-                                                decoration: task.completed
-                                                    ? TextDecoration.lineThrough
-                                                    : TextDecoration.none,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                return InkWell(
+                                  key: ValueKey(
+                                    'outline_task_${cpNode.id}_$tIdx',
+                                  ),
+                                  onTap: () {
+                                    setState(() {
+                                      _manualCheckpointFocusIndex = cpIdx;
+                                      _selectedTaskIndexByCheckpoint[
+                                          cpNode.id] = tIdx;
+                                      _expandedHowToTaskKeys
+                                        ..clear()
+                                        ..add(taskKey);
+                                    });
+                                    if (widget.workbench.selectedFeatureId !=
+                                        feat.id) {
+                                      widget.workbench.selectFeature(feat.id);
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.fromLTRB(
+                                      isTaskActive ? 8 : 10,
+                                      6,
+                                      8,
+                                      6,
                                     ),
-                                    if (isTaskExpanded &&
-                                        bp.subSteps.isNotEmpty)
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 4),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            for (int sIdx = 0;
-                                                sIdx < bp.subSteps.length;
-                                                sIdx++)
-                                              Builder(
-                                                builder: (context) {
-                                                  final step =
-                                                      bp.subSteps[sIdx];
-                                                  final isStepActive =
-                                                      isTaskActive &&
-                                                          sIdx == activeSubIdx;
-                                                  final stepDone =
-                                                      step.subtask.completed;
-                                                  final leafSymbol = stepDone
-                                                      ? '✓'
-                                                      : (isStepActive
-                                                          ? '●'
-                                                          : '○');
-
-                                                  return InkWell(
-                                                    key: ValueKey(
-                                                      'outline_step_${cpNode.id}_${tIdx}_$sIdx',
-                                                    ),
-                                                    onTap: () {
-                                                      final isDouble =
-                                                          _isDoubleClickOnOutlineItem(
-                                                        'step_${cpNode.id}_${tIdx}_$sIdx',
-                                                      );
-                                                      setState(() {
-                                                        _manualCheckpointFocusIndex =
-                                                            cpIdx;
-                                                        _selectedTaskIndexByCheckpoint[
-                                                            cpNode.id] = tIdx;
-                                                        _selectedSubStepIndexByTask[
-                                                            taskKey] = sIdx;
-                                                        _expandedHowToTaskKeys
-                                                          ..clear()
-                                                          ..add(taskKey);
-                                                        if (isDouble) {
-                                                          step.subtask
-                                                                  .completed =
-                                                              !step.subtask
-                                                                  .completed;
-                                                          task.completed = task
-                                                                  .children
-                                                                  .isNotEmpty &&
-                                                              task.children
-                                                                  .every(
-                                                                (c) =>
-                                                                    c.completed,
-                                                              );
-                                                        }
-                                                      });
-                                                      if (isDouble) {
-                                                        widget.workbench
-                                                            .updateFeatureStates(
-                                                          feat.id,
-                                                          states,
-                                                        );
-                                                      }
-                                                      if (widget.workbench
-                                                              .selectedFeatureId !=
-                                                          feat.id) {
-                                                        widget.workbench
-                                                            .selectFeature(
-                                                          feat.id,
-                                                        );
-                                                      }
-                                                    },
-                                                    child: Container(
-                                                      padding: EdgeInsets
-                                                          .fromLTRB(
-                                                        isStepActive ? 18 : 20,
-                                                        4.5,
-                                                        8,
-                                                        4.5,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: isStepActive
-                                                            ? accentCyan
-                                                                .withValues(
-                                                                alpha: 0.06,
-                                                              )
-                                                            : Colors
-                                                                .transparent,
-                                                        border: isStepActive
-                                                            ? Border(
-                                                                left:
-                                                                    BorderSide(
-                                                                  color:
-                                                                      accentCyan,
-                                                                  width: 2,
-                                                                ),
-                                                              )
-                                                            : null,
-                                                      ),
-                                                      child: Row(
-                                                        children: [
-                                                          Offstage(
-                                                            offstage: true,
-                                                            child: InkWell(
-                                                              key: ValueKey(
-                                                                'outline_step_chk_${cpNode.id}_${tIdx}_$sIdx',
-                                                              ),
-                                                              onTap: () {
-                                                                setState(() {
-                                                                  step.subtask
-                                                                          .completed =
-                                                                      !step
-                                                                          .subtask
-                                                                          .completed;
-                                                                  task.completed = task
-                                                                          .children
-                                                                          .isNotEmpty &&
-                                                                      task.children
-                                                                          .every(
-                                                                        (c) => c
-                                                                            .completed,
-                                                                      );
-                                                                });
-                                                                widget.workbench
-                                                                    .updateFeatureStates(
-                                                                  feat.id,
-                                                                  states,
-                                                                );
-                                                              },
-                                                              child:
-                                                                  const SizedBox
-                                                                      .shrink(),
-                                                            ),
-                                                          ),
-                                                          SizedBox(
-                                                            width: 13,
-                                                            child: Text(
-                                                              leafSymbol,
-                                                              textAlign:
-                                                                  TextAlign
-                                                                      .center,
-                                                              style: GoogleFonts
-                                                                  .jetBrainsMono(
-                                                                fontSize: 9.5,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w800,
-                                                                color: stepDone
-                                                                    ? accentEmerald
-                                                                    : (isStepActive
-                                                                        ? accentCyan
-                                                                        : textMuted
-                                                                            .withValues(
-                                                                            alpha:
-                                                                                0.65,
-                                                                          )),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          const SizedBox(
-                                                            width: 6,
-                                                          ),
-                                                          Expanded(
-                                                            child: Text(
-                                                              step.shortTitle
-                                                                      .isNotEmpty
-                                                                  ? step
-                                                                      .shortTitle
-                                                                  : step
-                                                                      .stepNumberLabel,
-                                                              style: GoogleFonts
-                                                                  .inter(
-                                                                fontSize: 11.5,
-                                                                fontWeight: isStepActive &&
-                                                                        !stepDone
-                                                                    ? FontWeight
-                                                                        .w700
-                                                                    : FontWeight
-                                                                        .w400,
-                                                                color: stepDone
-                                                                    ? textMuted
-                                                                        .withValues(
-                                                                        alpha:
-                                                                            0.5,
-                                                                      )
-                                                                    : (isStepActive
-                                                                        ? textPrimary
-                                                                        : textSecondary),
-                                                                decoration: stepDone
-                                                                    ? TextDecoration
-                                                                        .lineThrough
-                                                                    : TextDecoration
-                                                                        .none,
-                                                              ),
-                                                              maxLines: 1,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
+                                    decoration: BoxDecoration(
+                                      color: isTaskActive
+                                          ? accentCyan.withValues(alpha: 0.08)
+                                          : Colors.transparent,
+                                      border: isTaskActive
+                                          ? Border(
+                                              left: BorderSide(
+                                                color: isFixTask
+                                                    ? accentCrimson
+                                                    : accentCyan,
+                                                width: 2,
                                               ),
-                                          ],
+                                            )
+                                          : null,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 14,
+                                          child: Text(
+                                            taskSymbol,
+                                            textAlign: TextAlign.center,
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: task.completed
+                                                  ? accentEmerald
+                                                  : (isFixTask
+                                                      ? accentCrimson
+                                                      : (isTaskActive
+                                                          ? accentCyan
+                                                          : textMuted)),
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                  ],
+                                        const SizedBox(width: 5),
+                                        Expanded(
+                                          child: Text(
+                                            '${bp.numLabel} · ${bp.cleanTitle}',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11.5,
+                                              fontWeight: isTaskActive &&
+                                                      !task.completed
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                              color: task.completed
+                                                  ? textMuted.withValues(
+                                                      alpha: 0.5,
+                                                    )
+                                                  : (isFixTask
+                                                      ? accentCrimson
+                                                      : (isTaskActive
+                                                          ? textPrimary
+                                                          : textSecondary)),
+                                              decoration: task.completed
+                                                  ? TextDecoration.lineThrough
+                                                  : TextDecoration.none,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '$doneSubCount/$totalSubCount · $taskRemLabel',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 9.5,
+                                            fontWeight: isTaskActive
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: task.completed
+                                                ? accentEmerald.withValues(
+                                                    alpha: 0.65,
+                                                  )
+                                                : (isTaskActive
+                                                    ? accentCyan
+                                                    : textMuted),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 );
                               },
                             ),

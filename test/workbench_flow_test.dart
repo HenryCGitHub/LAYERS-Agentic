@@ -342,9 +342,12 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.textContaining('STEP 1 OF 6 · ~'), findsOneWidget);
 
-        // Tap Step 1 in the Left Outline and uncheck it via the workspace Checkmark Box [✓] to restore clean state, then select Feature 1
-        await tester.tap(find.byKey(ValueKey('outline_step_${secondCp0NodeId}_0_0')));
-        await tester.pumpAndSettle();
+        // Verify the Left Outline stops cleanly at the Task level (no duplicate 4th-level step rows)
+        expect(
+          find.byKey(ValueKey('outline_step_${secondCp0NodeId}_0_0')),
+          findsNothing,
+        );
+        // Uncheck Step 1 via the workspace Checkmark Box [✓] to restore clean state, then select Feature 1
         await tester.ensureVisible(markDoneFinder);
         await tester.pumpAndSettle();
         await tester.tap(markDoneFinder);
