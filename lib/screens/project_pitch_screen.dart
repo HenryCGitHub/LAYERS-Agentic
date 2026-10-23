@@ -137,9 +137,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       numLabel: '06',
       optionKey: 'coreLoop',
       shortTitle: 'Core Loop',
-      title: 'In Scope: Core Loop Beats',
-      purpose: 'The sequential playable beats that make up the complete game loop.',
-      question: 'How should the playable core loop Beats flow from start to reset?',
+      title: 'In Scope: Core Gameplay Loop',
+      purpose: 'Repeatable player gameplay loop used to define the Epics and Features in Stage 2.',
+      question: 'How should the playable core loop flow from start to reset?',
       isMultiSelect: true,
       options: [
         'Complete 4-Beat Loop: Staging & Prep → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',

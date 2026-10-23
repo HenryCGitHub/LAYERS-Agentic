@@ -98,9 +98,11 @@ $numberedCoreLoopSummary
 ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
 
 STRICT NAMING & ARCHITECTURE RULES:
-1. 1-TO-1 STAGE 1 CORE LOOP → STAGE 2 BEATS & PLAYABLE FEATURES CONTINUITY:
-   - You MUST preserve and map EVERY Stage 1 Core Loop Beat (`BEAT-01` through `BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) into a corresponding Beat (`beats` array entry) in this Release Blueprint! NEVER drop or collapse Stage 1 Core Loop Beats down to 2 or 3 beats.
-   - Under each Beat, generate the cohesive Playable Features (`1–3 Features per Beat`) that build the actual gameplay systems needed to playtest that Beat on screen in $versionTag (including prep/staging zones, active mechanics, shop/upgrade menus, or loop reset when part of that Beat).
+1. 1-TO-1 STAGE 1 CORE LOOP → STAGE 2 EPICS & PLAYABLE FEATURES CONTINUITY:
+   - Use the Stage 1 Core Loop steps (`BEAT-01` through `BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) to define the corresponding Epics (`beats` array entries `E01..E0${coreLoopItems.length}`) required to make the loop work! NEVER drop or collapse Stage 1 Core Loop steps down to 2 or 3 epics.
+   - Under EACH Epic, generate BOTH:
+     * `1–2` In-Scope Playable Features (`"included": true`) that build the essential gameplay mechanics needed to playtest that Epic on screen in $versionTag, AND
+     * `1` Out-of-Scope / Next-Release Candidate Feature (`"included": false`) that belongs to that Epic but can wait for the next release so the developer can decide inside each Epic what to keep in $versionTag vs. defer to the next release.
    - No artificial "30-second" loop time limit: a core loop takes whatever natural duration fits "${projectDoc.title}".
 2. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
    - Every Beat, Feature, and Checkpoint `title` MUST use plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Greybox Test Room").
@@ -365,6 +367,14 @@ Return ONLY a JSON object with this exact schema:
                 ],
               ),
             ],
+          )
+        else
+          _buildNextReleaseCandidateFeature(
+            beatNum: beatNum,
+            beatTitle: beatTitle,
+            beatDesc: beatDesc,
+            versionTag: versionTag,
+            featId: 'feat_${beatNum}_${i == 0 ? 3 : 2}',
           ),
       ];
 
@@ -758,6 +768,17 @@ Return ONLY a JSON object with this exact schema:
       }
 
       if (features.isNotEmpty) {
+        if (!features.any((f) => !f.included)) {
+          features.add(
+            _buildNextReleaseCandidateFeature(
+              beatNum: bIdx + 1,
+              beatTitle: bTitle,
+              beatDesc: bGoal,
+              versionTag: versionTag,
+              featId: 'feat_${bIdx + 1}_${features.length + 1}_deferred',
+            ),
+          );
+        }
         beats.add(
           ProposedBeatBlueprint(
             id: (bMap['id'] ?? 'beat_${bIdx + 1}').toString(),
@@ -928,9 +949,9 @@ Return ONLY a JSON object with this schema:
       }
     }
 
-    // Offline / deterministic fallback: also support "Add <Feature> [to Beat N]" commands
+    // Offline / deterministic fallback: also support "Add <Feature> [to Beat/Epic N]" commands
     final addMatch = RegExp(
-      r'^(?:add|include|create)\s+(?:a\s+|an\s+)?(.+?)(?:\s+feature)?(?:\s+(?:to|in)\s+beat\s*(\d+))?$',
+      r'^(?:add|include|create)\s+(?:a\s+|an\s+)?(.+?)(?:\s+feature)?(?:\s+(?:to|in)\s+(?:beat|epic)\s*(\d+))?$',
       caseSensitive: false,
     ).firstMatch(cleanMsg);
 
@@ -1005,6 +1026,86 @@ Return ONLY a JSON object with this schema:
       ),
     );
     return blueprint;
+  }
+
+  /// Builds an Epic-specific Out-of-Scope / Next-Release Candidate Feature (`included: false`)
+  /// so every Epic (`E01..E0N`) in Stage 2 displays both its In-Scope release features and
+  /// a concrete stretch/next-release feature that the user can toggle in or keep queued for next release.
+  static ProposedFeatureBlueprint _buildNextReleaseCandidateFeature({
+    required int beatNum,
+    required String beatTitle,
+    required String beatDesc,
+    required String versionTag,
+    required String featId,
+  }) {
+    final cat = MechanicArchetypeProfile.inferCategory('$beatTitle $beatDesc');
+    final String candidateTitle;
+    switch (cat) {
+      case 'grapple':
+        candidateTitle = '$beatTitle Multi-Anchor Zipline';
+        break;
+      case 'movement':
+        candidateTitle = '$beatTitle Air-Dash & Vault Cancel';
+        break;
+      case 'combat':
+        candidateTitle = '$beatTitle Alt-Fire & Parry Counter';
+        break;
+      case 'farming':
+        candidateTitle = '$beatTitle Auto-Watering Sprinklers';
+        break;
+      case 'economy':
+        candidateTitle = '$beatTitle Loadout Presets & Reroll';
+        break;
+      case 'building':
+        candidateTitle = '$beatTitle Multi-Tile Blueprint Copy';
+        break;
+      case 'ui':
+        candidateTitle = '$beatTitle Split-Time Delta Overlay';
+        break;
+      default:
+        const suffixes = <String>[
+          'Loadout Presets & Quick-Swap',
+          'Combo Chain & Speed Boost',
+          'Secondary Hazard & Counter',
+          'Bonus Multiplier & Risk Tier',
+          'Upgrade Reroll & Compare',
+          'Mastery Challenge & Split Timer',
+        ];
+        final suffix = suffixes[(beatNum - 1) % suffixes.length];
+        candidateTitle = '$beatTitle: $suffix';
+    }
+
+    final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+      candidateTitle,
+      beatTitle: beatTitle,
+      beatDescription: beatDesc,
+    );
+
+    return ProposedFeatureBlueprint(
+      id: featId,
+      title: candidateTitle,
+      goal: archetype.goal,
+      doneWhen: archetype.doneWhen,
+      estimatedHours: 4,
+      included: false,
+      lifecycle: FeatureLifecycleStatus.newFeature,
+      originVersion: versionTag,
+      inScope: archetype.inScope,
+      outOfScope: archetype.outOfScope,
+      tuningParams: archetype.tuningParams,
+      edgeCases: archetype.edgeCases,
+      checkpoints: [
+        ProposedCheckpointBlueprint(
+          title: archetype.cp1Title,
+          playtestCriteria: archetype.cp1Playtest,
+          releaseVersion: versionTag,
+          tasks: archetype.cp1Tasks,
+          coveredScope: [archetype.inScope.first],
+          tuningParams: archetype.tuningParams,
+          edgeCases: [archetype.edgeCases.first],
+        ),
+      ],
+    );
   }
 
   static String _extractBeatTitle(String rawBullet, {required String fallback}) {

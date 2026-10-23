@@ -767,12 +767,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   ),
                 ),
 
-                // ↪ Queued for Next Release & Cuts
+                // ↪ Out of Scope & Planned for Next Release
                 _buildFlushStepperRow(
                   rowKey: const ValueKey('stage2_step_queued'),
                   code: '↪',
                   codeColor: accentAmber,
-                  title: 'Queued for $nextVer & Cuts',
+                  title: 'Out of Scope & $nextVer',
                   trailingText: bp.totalDeferredFeatures > 0
                       ? '+${bp.totalDeferredFeatures}f · ${bp.totalDeferredHours}h'
                       : '${bp.explicitExclusions.length} cuts',
@@ -864,7 +864,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                                 ),
                                 const SizedBox(height: 1.5),
                                 Text(
-                                  'All ${bp.beats.length} Beats & Scope Budget',
+                                  'All ${bp.beats.length} Epics & Scope Budget',
                                   style: GoogleFonts.inter(
                                     fontSize: 10.5,
                                     color: textMuted,
@@ -971,15 +971,17 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     final isSelectedBeat = _isStepByBeatMode &&
         _activeStage2Section == 'beat' &&
         _activeBeatIndex == bIdx;
-    final beatNum = 'B${(bIdx + 1).toString().padLeft(2, '0')}';
+    final beatNum = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
     final hasIncluded = beat.includedFeatures.isNotEmpty;
+    final deferredCount = beat.deferredFeatures.length;
 
     return _buildFlushStepperRow(
       rowKey: ValueKey('stage2_beat_chip_$bIdx'),
       code: beatNum,
       title: beat.title,
-      trailingText:
-          '${beat.includedFeatures.length}f · ${beat.totalIncludedHours}h',
+      trailingText: deferredCount > 0
+          ? '${beat.includedFeatures.length} in · +$deferredCount · ${beat.totalIncludedHours}h'
+          : '${beat.includedFeatures.length}f · ${beat.totalIncludedHours}h',
       trailingColor: hasIncluded ? accentEmerald : textMuted,
       isActive: isSelectedBeat,
       onTap: () {
@@ -1036,7 +1038,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          '${bp.beats.length} Beats · ${bp.totalIncludedFeatures} Included · ${bp.totalDeferredFeatures} Queued for $nextVer',
+                          '${bp.beats.length} Epics · ${bp.totalIncludedFeatures} Included · ${bp.totalDeferredFeatures} Queued for $nextVer',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -1074,7 +1076,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     child: Text(
                       _isStepByBeatMode
-                          ? '▯ Step-by-Beat'
+                          ? '▯ Step-by-Epic'
                           : '◫ Full Blueprint',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
@@ -1847,7 +1849,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'STAGE 2 · CORE LOOP BEATS & PLAYABLE FEATURES',
+                    'STAGE 2 · CORE LOOP EPICS & PLAYABLE FEATURES',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
@@ -1951,7 +1953,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                           child: Text(
                             safeIdx > 0
-                                ? '‹ Prev Beat: B${safeIdx.toString().padLeft(2, '0')} ${bp.beats[safeIdx - 1].title}'
+                                ? '‹ Prev Epic: E${safeIdx.toString().padLeft(2, '0')} ${bp.beats[safeIdx - 1].title}'
                                 : '‹ Prev: Playtest Priorities',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
@@ -1962,7 +1964,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         ),
                       ),
                       Text(
-                        'BEAT ${safeIdx + 1} OF ${bp.beats.length}',
+                        'EPIC ${safeIdx + 1} OF ${bp.beats.length}',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
@@ -1981,7 +1983,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                           child: Text(
                             safeIdx < bp.beats.length - 1
-                                ? 'Next Beat: B${(safeIdx + 2).toString().padLeft(2, '0')} ${bp.beats[safeIdx + 1].title} →'
+                                ? 'Next Epic: E${(safeIdx + 2).toString().padLeft(2, '0')} ${bp.beats[safeIdx + 1].title} →'
                                 : 'View Full Blueprint ◫ →',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10.5,
@@ -2011,8 +2013,11 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     ProposedBeatBlueprint beat,
     int beatIndex,
   ) {
-    final beatCode = 'BEAT·${(beatIndex + 1).toString().padLeft(2, '0')}';
+    final beatCode = 'EPIC·${(beatIndex + 1).toString().padLeft(2, '0')}';
+    final nextVer = _nextReleaseVersionTag(bp.releaseVersionTag);
     final activeFeatures = beat.features.where((f) => !f.isSuperseded).toList();
+    final includedInEpic = beat.features.where((f) => f.included || f.isSuperseded).toList();
+    final deferredInEpic = beat.deferredFeatures;
     final allIncluded = activeFeatures.isNotEmpty && activeFeatures.every((f) => f.included);
     final beatCtrl = _controllerForBeat(beat.id);
 
@@ -2026,7 +2031,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Open Editorial Beat Header with 1px Bottom Hairline
+        // Open Editorial Epic Header with 1px Bottom Hairline
         Container(
           padding: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -2088,7 +2093,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                           ),
                         ),
                         Text(
-                          '${beat.includedFeatures.length} Features · ${beat.totalIncludedHours}h',
+                          deferredInEpic.isNotEmpty
+                              ? '${beat.includedFeatures.length} in ${bp.releaseVersionTag} · ${deferredInEpic.length} for $nextVer · ${beat.totalIncludedHours}h'
+                              : '${beat.includedFeatures.length} Features · ${beat.totalIncludedHours}h',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -2112,12 +2119,51 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           ),
         ),
 
-        // Open Hairline-Divided Feature Rows (No Outer 4-Sided Card Boxes)
-        for (int fIdx = 0; fIdx < beat.features.length; fIdx++)
-          _buildFeatureToggleRow(bp, beat, beat.features[fIdx]),
+        // 1. In-Scope Features for Current Release
+        for (final feat in includedInEpic)
+          _buildFeatureToggleRow(bp, beat, feat),
+
+        // 2. Out-of-Scope / Planned for Next Release Features right inside the Epic
+        if (deferredInEpic.isNotEmpty) ...[
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+            decoration: BoxDecoration(
+              color: bgRecessed.withValues(alpha: 0.55),
+              border: Border(
+                left: BorderSide(color: accentAmber, width: 3),
+                bottom: BorderSide(color: borderSubtle),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '↪ OUT OF SCOPE IN THIS EPIC · PLANNED FOR ${nextVer.toUpperCase()} (${deferredInEpic.length})',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: accentAmber,
+                  ),
+                ),
+                Text(
+                  'Check box to include in ${bp.releaseVersionTag}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final feat in deferredInEpic)
+            _buildFeatureToggleRow(bp, beat, feat),
+        ],
 
         const SizedBox(height: 10),
-        // Inline "+ Add Feature to Beat" input bar
+        // Inline "+ Add Feature to Epic" input bar
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
@@ -2531,13 +2577,27 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
 
   Widget _buildOutOfScopeSummarySection(ReleaseBlueprint bp) {
     final nextVer = _nextReleaseVersionTag(bp.releaseVersionTag);
-    final deferredItems = <({String text, String beatId, String featId})>[];
-    for (final beat in bp.beats) {
+    final deferredItems = <({
+      String text,
+      String epicCode,
+      String epicTitle,
+      String goal,
+      int hours,
+      String beatId,
+      String featId,
+    })>[];
+    for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+      final beat = bp.beats[bIdx];
+      final epicCode = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
       for (final deferred in beat.deferredFeatures) {
-        final label = '${deferred.title} (queued from ${beat.title})';
-        if (!deferredItems.any((it) => it.text == label)) {
+        final label = '${deferred.title} ($epicCode · ${beat.title})';
+        if (!deferredItems.any((it) => it.featId == deferred.id)) {
           deferredItems.add((
             text: label,
+            epicCode: epicCode,
+            epicTitle: beat.title,
+            goal: deferred.goal,
+            hours: deferred.estimatedHours,
             beatId: beat.id,
             featId: deferred.id,
           ));
@@ -2550,12 +2610,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       children: [
         _buildSectionHeader(
           numLabel: '↪',
-          title: 'Queued for $nextVer & Permanent Exclusions',
+          title: 'Out of Scope & Planned for $nextVer',
           trailingMeta:
-              '${deferredItems.length} Queued · ${bp.explicitExclusions.length} Cuts',
+              '${deferredItems.length} Planned for $nextVer · ${bp.explicitExclusions.length} Cuts',
         ),
         const SizedBox(height: 14),
-        // Open 3px Amber Left-Bar Section: Saved for Next Release Gate
+        // Open 3px Amber Left-Bar Section: Out of Scope Features Planned for Next Release
         Container(
           padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
           decoration: BoxDecoration(
@@ -2567,7 +2627,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '↪ SAVED FOR ${nextVer.toUpperCase()} RELEASE GATE (NOT DELETED)',
+                '↪ OUT OF SCOPE FEATURES · PLANNED FOR ${nextVer.toUpperCase()} RELEASE',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
@@ -2580,7 +2640,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Text(
-                    'All proposed features are currently included in ${bp.releaseVersionTag}. Uncheck any feature in a Beat to queue it for $nextVer.',
+                    'All proposed features are currently included in ${bp.releaseVersionTag}. Uncheck any feature inside an Epic to plan it for $nextVer.',
                     style: GoogleFonts.inter(
                       fontSize: 12.5,
                       color: textMuted,
@@ -2589,30 +2649,61 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 ),
               for (final item in deferredItems)
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(color: borderSubtle),
                     ),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'QUEUED FOR ${nextVer.toUpperCase()} ↪',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: accentAmber,
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          '${item.epicCode} · ${nextVer.toUpperCase()} ↪',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: accentAmber,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.text,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimary,
+                              ),
+                            ),
+                            if (item.goal.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                item.goal,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: textMuted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          item.text,
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: textPrimary,
+                          '${item.hours}h',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: textSecondary,
                           ),
                         ),
                       ),
@@ -2631,7 +2722,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                             vertical: 4,
                           ),
                           child: Text(
-                            '+ Restore',
+                            '+ Keep in ${bp.releaseVersionTag}',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
@@ -2786,7 +2877,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              '$includedBeatsCount Beats · ${bp.totalIncludedFeatures} Features · ~${bp.totalIncludedHours}h selected',
+                              '$includedBeatsCount Epics · ${bp.totalIncludedFeatures} Features · ~${bp.totalIncludedHours}h selected',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,

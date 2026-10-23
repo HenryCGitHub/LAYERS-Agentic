@@ -263,84 +263,261 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                         if (value == '__evolve__') {
                           widget.workbench.advanceToNextRelease();
                         } else if (value == '__replan__') {
-                          widget.workbench.openReleasePlanGate(releaseId: rel.id);
+                          widget.workbench.reopenCurrentReleasePlanGate();
                         } else if (value.startsWith('rel:')) {
                           final targetId = value.substring(4);
-                          widget.workbench.openReleasePlanGate(releaseId: targetId);
+                          widget.workbench.selectActiveRelease(targetId);
                         } else {
                           widget.workbench.setReleaseViewFilter(value);
                         }
                       },
-                      itemBuilder: (context) => [
-                        PopupMenuItem<String>(
-                          value: 'active',
-                          child: Text(
-                            '● Active: ${rel.title} ($relProgress%)',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ),
-                        PopupMenuItem<String>(
-                          value: 'all',
-                          child: Text(
-                            '🌳 All Live Game Features ($activeVer)',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ),
-                        if (archivedFeats.isNotEmpty)
+                      itemBuilder: (context) {
+                        final queuedDeferredCount = widget.workbench.releaseBlueprint?.beats
+                                .fold<int>(0, (sum, b) => sum + b.deferredFeatures.length) ??
+                            0;
+                        return [
                           PopupMenuItem<String>(
-                            value: 'archived',
+                            enabled: false,
+                            height: 24,
                             child: Text(
-                              '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: textSecondary,
+                              'RELEASES · SWITCH OR PLAN',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.0,
+                                color: textMuted,
                               ),
                             ),
                           ),
-                        const PopupMenuDivider(),
-                        for (final r in releases)
+                          for (int rIdx = 0; rIdx < releases.length; rIdx++)
+                            PopupMenuItem<String>(
+                              value: 'rel:${releases[rIdx].id}',
+                              child: Builder(
+                                builder: (context) {
+                                  final r = releases[rIdx];
+                                  final isCurrent = r.id == rel.id;
+                                  final isBuilt = r.childrenIds.isNotEmpty;
+                                  final rVer = r.sections['versionTag'] ??
+                                      (r.title.contains(':')
+                                          ? r.title.split(':').first.trim()
+                                          : 'v0.${rIdx + 1}');
+                                  final rScopeLabel = r.releaseScope.label;
+                                  final rProg = widget.workbench.getDocumentProgress(r.id);
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isCurrent
+                                          ? accentCyan.withValues(alpha: 0.08)
+                                          : Colors.transparent,
+                                      border: Border(
+                                        left: BorderSide(
+                                          color: isCurrent
+                                              ? accentCyan
+                                              : Colors.transparent,
+                                          width: 3,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Flexible(
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    isCurrent
+                                                        ? '● '
+                                                        : (isBuilt ? '✓ ' : '◌ '),
+                                                    style: GoogleFonts.jetBrainsMono(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: isCurrent
+                                                          ? accentCyan
+                                                          : (isBuilt
+                                                              ? accentEmerald
+                                                              : accentAmber),
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    '$rVer ',
+                                                    style: GoogleFonts.jetBrainsMono(
+                                                      fontSize: 11.5,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: isCurrent
+                                                          ? accentCyan
+                                                          : textPrimary,
+                                                    ),
+                                                  ),
+                                                  Flexible(
+                                                    child: Text(
+                                                      rScopeLabel,
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 11.5,
+                                                        fontWeight: isCurrent
+                                                            ? FontWeight.w700
+                                                            : FontWeight.w500,
+                                                        color: isCurrent
+                                                            ? textPrimary
+                                                            : textSecondary,
+                                                      ),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            if (isCurrent)
+                                              Text(
+                                                '$relProgress% · $releaseRemHoursStr left',
+                                                style: GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: accentEmerald,
+                                                ),
+                                              )
+                                            else if (isBuilt)
+                                              Text(
+                                                '$rProg%',
+                                                style: GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: rProg >= 100
+                                                      ? accentEmerald
+                                                      : textMuted,
+                                                ),
+                                              )
+                                            else
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: accentAmber.withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: accentAmber.withValues(alpha: 0.35),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  'Plan Gate →',
+                                                  style: GoogleFonts.jetBrainsMono(
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: accentAmber,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        if (!isBuilt && queuedDeferredCount > 0) ...[
+                                          const SizedBox(height: 3),
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 14),
+                                            child: Text(
+                                              '↪ $queuedDeferredCount Features queued from $activeVer',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: accentAmber,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          if (archivedFeats.isNotEmpty) ...[
+                            const PopupMenuDivider(),
+                            PopupMenuItem<String>(
+                              value: 'archived',
+                              child: Text(
+                                '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                          const PopupMenuDivider(),
                           PopupMenuItem<String>(
-                            value: 'rel:${r.id}',
+                            enabled: false,
+                            height: 24,
                             child: Text(
-                              '${r.id == rel.id ? "▸ " : "  "}${r.title}',
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                fontWeight:
-                                    r.id == rel.id ? FontWeight.w700 : FontWeight.w500,
-                                color: textPrimary,
+                              'STAGE 2 · RELEASE PLAN GATE',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.0,
+                                color: textMuted,
                               ),
                             ),
                           ),
-                        const PopupMenuDivider(),
-                        PopupMenuItem<String>(
-                          value: '__replan__',
-                          child: Text(
-                            '✎ Edit ${rel.title} Scope in Plan Gate',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: textPrimary,
+                          PopupMenuItem<String>(
+                            value: '__replan__',
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '✎ Edit $activeVer Scope in Gate',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Stage 2',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                        PopupMenuItem<String>(
-                          value: '__evolve__',
-                          child: Text(
-                            '+ Evolve to Next Release Milestone ✦',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: accentEmerald,
+                          PopupMenuItem<String>(
+                            value: '__evolve__',
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '+ Plan Next Release Milestone',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentEmerald,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Stage 2 ✦',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentEmerald,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
+                        ];
+                      },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 2,
@@ -486,7 +663,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           children: [
                             Expanded(
                               child: Text(
-                                beat.title.split(':').last.split('—').last.trim().toUpperCase(),
+                                'E${(bIdx + 1).toString().padLeft(2, '0')} · ${beat.title.split(':').last.split('—').last.trim().toUpperCase()}',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w800,

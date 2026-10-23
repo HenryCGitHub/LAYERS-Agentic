@@ -398,6 +398,10 @@ void main() {
 
         // Plan & Execute v0.1 (deferring a feature in Beat 2 to verify automatic carryover into v0.2!)
         await provider.openReleasePlanGate();
+        for (final epic in provider.releaseBlueprint!.beats) {
+          expect(epic.deferredFeatures, isNotEmpty);
+        }
+        final v1RelId = provider.activeRelease!.id;
         final v1Beat2 = provider.releaseBlueprint!.beats[1];
         provider.addProposedFeatureToBeat(v1Beat2.id, 'Slide Boost & Cancel');
         final deferredSlideFeat = v1Beat2.features.last;
@@ -408,6 +412,13 @@ void main() {
         );
         expect(deferredSlideFeat.included, isFalse);
         await provider.approveAndExecuteReleasePlan();
+
+        // Re-opening current Release Plan Gate preserves the existing ReleaseBlueprint in Stage 2
+        await provider.reopenCurrentReleasePlanGate();
+        expect(provider.currentStage, WorkbenchStage.releasePlanGate);
+        expect(provider.releaseBlueprint!.releaseDocId, v1RelId);
+        await provider.approveAndExecuteReleasePlan();
+        expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
 
         final v1Beats = provider.activeReleaseBeats;
         // All 7 Stage 1 Core Loop Beats carry into Stage 2 & Stage 3!
@@ -439,6 +450,11 @@ void main() {
         await provider.approveAndExecuteReleasePlan();
         final evolvedFeat = provider.documents[v1FirstFeat.id]!;
         expect(evolvedFeat.sections['lifecycle'], 'upgrade');
+
+        // Selecting an already-built release (v0.1) in the Stage 3 dropdown switches in-place without kicking back to Stage 2
+        await provider.selectActiveRelease(v1RelId);
+        expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
+        expect(provider.activeRelease!.id, v1RelId);
       },
     );
 

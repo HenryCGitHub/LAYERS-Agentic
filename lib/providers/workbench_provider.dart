@@ -1791,6 +1791,56 @@ class WorkbenchProvider extends ChangeNotifier {
     _syncActiveProjectMetadata();
   }
 
+  /// Switches the Stage 3 Workbench in-place to an already-built Release (`rel.childrenIds.isNotEmpty`),
+  /// or opens Stage 2 (`Release Plan Gate`) if the target Release has not been planned/built yet.
+  Future<void> selectActiveRelease(String releaseId) async {
+    final targetRel = documents[releaseId];
+    if (targetRel == null) return;
+    if (targetRel.childrenIds.isNotEmpty) {
+      _activeReleaseId = releaseId;
+      _releaseViewFilter = 'active';
+      _currentStage = WorkbenchStage.releaseWorkbench;
+      final beats = activeReleaseBeats;
+      if (beats.isNotEmpty) {
+        TierDocument? firstActiveBeat;
+        TierDocument? firstActiveFeat;
+        for (final b in beats) {
+          for (final f in featuresForBeat(b.id)) {
+            if (getDocumentProgress(f.id) < 100) {
+              firstActiveBeat = b;
+              firstActiveFeat = f;
+              break;
+            }
+          }
+          if (firstActiveFeat != null) break;
+        }
+        _selectedBeatId = (firstActiveBeat ?? beats.first).id;
+        final feats = featuresForBeat(_selectedBeatId!);
+        _selectedFeatureId =
+            (firstActiveFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
+      }
+      _syncActiveProjectMetadata();
+      notifyListeners();
+      return;
+    }
+    await openReleasePlanGate(releaseId: releaseId);
+  }
+
+  /// Re-opens Stage 2 (`Release Plan Gate`) for the currently active Release using the existing
+  /// `ReleaseBlueprint` if available, or plans it if none exists.
+  Future<void> reopenCurrentReleasePlanGate() async {
+    final activeRelId = _activeReleaseId;
+    if (_releaseBlueprint != null &&
+        activeRelId != null &&
+        _releaseBlueprint!.releaseDocId == activeRelId) {
+      _currentStage = WorkbenchStage.releasePlanGate;
+      _syncActiveProjectMetadata();
+      notifyListeners();
+      return;
+    }
+    await openReleasePlanGate(releaseId: activeRelId);
+  }
+
   /// Step 1C -> Stage 2: Lock in the Project Concept and open the Release Plan Gate for the active Release.
   Future<void> openReleasePlanGate({String? releaseId}) async {
     if (_conceptDraft != null && _activeProjectId == null) {
@@ -1971,7 +2021,10 @@ class WorkbenchProvider extends ChangeNotifier {
             for (final b in bp.beats) {
               for (final f in b.features) {
                 if (!f.isSuperseded) {
-                  f.included = !f.title.toLowerCase().contains('bonus');
+                  final isStretchCandidate = f.id == 'feat_1_3' ||
+                      (f.id.endsWith('_2') && f.id != 'feat_1_2') ||
+                      f.title.toLowerCase().contains('bonus');
+                  f.included = !isStretchCandidate;
                 }
               }
             }
@@ -2004,7 +2057,10 @@ class WorkbenchProvider extends ChangeNotifier {
           } else if (lower.contains('lean')) {
             for (final b in bp.beats) {
               for (final f in b.features) {
-                if (f.title.toLowerCase().contains('bonus')) {
+                final isStretchCandidate = f.id == 'feat_1_3' ||
+                    (f.id.endsWith('_2') && f.id != 'feat_1_2') ||
+                    f.title.toLowerCase().contains('bonus');
+                if (isStretchCandidate) {
                   f.included = false;
                 }
               }

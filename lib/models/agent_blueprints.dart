@@ -104,7 +104,7 @@ enum ProductionPhase {
   mvp(
     label: 'PHASE 2 · MVP RELEASES',
     shortName: 'MVP Track',
-    summary: 'Build 1 focused MVP Release for each proven Core Loop Beat.',
+    summary: 'Build 1 focused MVP Release for each proven Core Loop Epic.',
     unlockCondition: 'Unlocks after Prototype completes',
   ),
   verticalSlice(

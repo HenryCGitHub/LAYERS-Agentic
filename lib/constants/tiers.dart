@@ -57,7 +57,7 @@ enum TierType {
   String get descriptionTooltip => switch (this) {
         TierType.project => 'Project: Root game workspace',
         TierType.release => 'Release: Target ship milestone',
-        TierType.epic => 'Epic: Playable Loop Beat',
+        TierType.epic => 'Epic: Core Gameplay Loop Epic',
         TierType.feature => 'Feature: Playable mechanic & deliverable',
       };
 
