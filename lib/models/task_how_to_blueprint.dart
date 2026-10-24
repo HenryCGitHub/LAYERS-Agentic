@@ -1101,9 +1101,9 @@ class TaskHowToBlueprint {
                         ? 'Bind $primaryVarName to State Transition'
                         : 'Add Target Hover Highlight Cue'),
                 instruction:
-                    'In $pascalAsset.h under public:, declare $primaryVarName with UPROPERTY(EditAnywhere, BlueprintReadWrite) so designers can tune "$primaryVar" in the Details panel.',
+                    'In $pascalAsset.h under public:, declare $primaryVarName with UPROPERTY(EditAnywhere, BlueprintReadWrite) so designers can tune $primaryVarName in the Details panel.',
                 verify:
-                    'After Live Coding, selecting the actor in the Level shows "$primaryVarName" inside the Details panel.',
+                    'After Live Coding, selecting $cppClass in the Level shows $primaryVarName as an editable field inside the Details panel.',
                 path: 'Source/Project/$pascalAsset.h (UPROPERTY)',
                 code: 'UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tuning")\nfloat $primaryVarName = 1.0f; // $primaryVar\n\nUPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="State")\nbool bIsOccupied = false;',
                 explain: 'UPROPERTY(EditAnywhere) exposes a C++ variable to the Unreal Editor Details panel so you can tweak it without recompiling.',
@@ -1119,7 +1119,7 @@ class TaskHowToBlueprint {
                 instruction:
                     'In $pascalAsset.cpp, implement the trigger and state interpolation for "$cleanTitle" using FMath::FInterpConstantTo driven by $primaryVarName.',
                 verify:
-                    'C++ method compiles cleanly and transitions ActiveState to EMechanicState::Active on trigger.',
+                    'Triggering $cppClass in Play mode updates ActiveState smoothly using $primaryVarName.',
                 path: 'Source/Project/$pascalAsset.cpp :: TickComponent / Overlap',
                 code: 'void $cppClass::ExecuteMechanicStep(float DeltaTime) {\n  if (bInputPressed && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n  }\n  CurrentVal = FMath::FInterpConstantTo(CurrentVal, TargetVal, DeltaTime, $primaryVarName);\n}',
                 explain: 'FMath::FInterpConstantTo smoothly steps your value each frame using DeltaTime so movement speed is frame-rate independent.',
@@ -1251,12 +1251,12 @@ class TaskHowToBlueprint {
                         ? 'Bind $primaryVarName to Transition Speed'
                         : 'Add Target Hover Highlight Cue'),
                 instruction:
-                    'In $bpAsset, find My Blueprint → Variables on the left and click + to add "$primaryVarName" (Float) and "bIsActive" (Boolean). Click the Eye Icon next to "$primaryVarName" to make it Instance Editable.',
+                    'In $bpAsset, find My Blueprint → Variables on the left and click + to add $primaryVarName (Float) and bIsActive (Boolean). Click the Eye Icon next to $primaryVarName to make it Instance Editable.',
                 verify:
-                    '"$primaryVarName" shows an open yellow Eye Icon and defaults to "$primaryVar" in the Details panel.',
+                    'Select $bpAsset in the Level and confirm $primaryVarName is editable inside the Details panel.',
                 path: '$bpAsset → My Blueprint → Variables → +',
                 code: '$primaryVarName : Float ($primaryVar)  [👁 Instance Editable]\nbIsActive      : Boolean = false      [👁 Instance Editable]',
-                explain: 'Variables store your mechanic\'s state and speed. Clicking the Eye Icon (Instance Editable) lets you tweak the value directly in the Level without reopening the Blueprint.',
+                explain: 'Variables store your mechanic\'s state and speed. Clicking the Eye Icon (Instance Editable) lets you tweak $primaryVarName directly in the Level without reopening the Blueprint.',
               );
             case 4:
               return (
@@ -1267,9 +1267,9 @@ class TaskHowToBlueprint {
                         ? 'Step State with Interpolation Logic'
                         : 'Connect Cooldown & Range Check'),
                 instruction:
-                    'Open the Event Graph tab. Right-click InteractBox → Add Event → OnComponentBeginOverlap (or Input Action) → connect a Branch node → Set bIsActive = true and update using FMath::FInterpConstantTo ($primaryVarName).',
+                    'Open the Event Graph tab. Right-click InteractBox → Add Event → OnComponentBeginOverlap (or Input Action) → connect a Branch node → Set bIsActive = true and update the active state using $primaryVarName.',
                 verify:
-                    'A white execution wire connects the red Event node through the Branch node to Set bIsActive = true.',
+                    'Walk into $bpAsset in Play mode and confirm the overlap event updates the active state driven by $primaryVarName.',
                 path: '$bpAsset → Event Graph Tab',
                 code: '[Event OnBeginOverlap (InteractBox)]\n   └──► [Branch: NOT bIsActive]\n           └──► (True) ──► [Set bIsActive = true]\n                           [FMath::FInterpConstantTo ($primaryVarName)]',
                 explain: 'The Event Graph is the visual brain of your Blueprint. Execution flows left-to-right along the white wire whenever the event fires.',
@@ -1382,9 +1382,9 @@ class TaskHowToBlueprint {
                       ? 'Bind $primaryVarName to Transition Speed'
                       : 'Add Target Hover Highlight Cue'),
               instruction:
-                  'At the top of $pascalAsset.cs inside the class body, add [SerializeField] private float $primaryVarName so you can tune "$primaryVar" directly in the Unity Inspector.',
+                  'At the top of $pascalAsset.cs inside the class body, add [SerializeField] private float $primaryVarName so you can tune $primaryVarName directly in the Unity Inspector.',
               verify:
-                  'Saving the script and clicking $pascalAsset in Unity shows "$primaryVarName" as an editable number field in the Inspector.',
+                  'Saving the script and clicking $pascalAsset in Unity shows $primaryVarName as an editable number field in the Inspector.',
               path: 'Assets/Scripts/$pascalAsset.cs (Inspector Fields)',
               code: '[Header("Tuning Parameters")]\n[SerializeField] private float $primaryVarName = 1.0f; // $primaryVar\n[SerializeField] private bool canTrigger = true;',
               explain: '[SerializeField] exposes a private C# variable inside the Unity Inspector without making it public to other scripts.',
@@ -1400,7 +1400,7 @@ class TaskHowToBlueprint {
               instruction:
                   'Inside $pascalAsset.cs, implement Update() / FixedUpdate() to read input with Input.GetButton("Fire1") and advance state using Time.fixedDeltaTime and $primaryVarName.',
               verify:
-                  'Unity compiles the script in the bottom-right corner with zero Console errors.',
+                  'Triggering $pascalAsset in Play Mode steps the active value smoothly using $primaryVarName.',
               path: 'Assets/Scripts/$pascalAsset.cs :: FixedUpdate()',
               code: 'private void FixedUpdate() {\n    if (Input.GetButton("Fire1") && canTrigger) {\n        isActive = true;\n        currentVal = Mathf.MoveTowards(currentVal, targetVal, $primaryVarName * Time.fixedDeltaTime);\n    }\n}',
               explain: 'FixedUpdate() runs on a fixed physics clock, and multiplying by Time.fixedDeltaTime keeps speeds identical at any frame rate.',
@@ -1511,12 +1511,12 @@ class TaskHowToBlueprint {
                     ? 'Bind $primaryVarName to Transition Speed'
                     : 'Add Target Hover Highlight Cue'),
             instruction:
-                'At the top of $snakeAsset.gd, add @export var $primaryVarName: float = 1.0 so you can tune "$primaryVar" directly in the right-hand Inspector dock.',
+                'At the top of $snakeAsset.gd, add @export var $primaryVarName: float = 1.0 so you can tune $primaryVarName directly in the right-hand Inspector dock.',
             verify:
-                'Selecting $pascalAsset in the Scene tree displays "$primaryVarName" at the top of the Inspector dock.',
+                'Selecting $pascalAsset in the Scene tree displays $primaryVarName as an editable field at the top of the Inspector dock.',
             path: 'res://scripts/$snakeAsset.gd (@export)',
             code: '@export var $primaryVarName: float = 1.0 # $primaryVar\n@export var can_trigger: bool = true\nvar current_val: float = 0.0',
-            explain: '@export exposes a GDScript variable in the Godot Inspector dock so you can tweak numbers live without editing code.',
+            explain: '@export exposes a GDScript variable in the Godot Inspector dock so you can tweak $primaryVarName live without editing code.',
           );
         case 4:
           return (
@@ -1529,7 +1529,7 @@ class TaskHowToBlueprint {
             instruction:
                 'Inside $snakeAsset.gd, add func _physics_process(delta: float) -> void: to check Input.is_action_pressed("primary_action") and step the value using move_toward and $primaryVarName.',
             verify:
-                'The script editor shows zero red syntax errors at the bottom of the panel.',
+                'Triggering $pascalAsset in the scene steps the active value smoothly using $primaryVarName.',
             path: 'res://scripts/$snakeAsset.gd :: _physics_process(delta)',
             code: 'func _physics_process(delta: float) -> void:\n    if Input.is_action_pressed("primary_action") and can_trigger:\n        is_active = true\n        current_val = move_toward(current_val, target_val, $primaryVarName * delta)',
             explain: '_physics_process(delta) runs 60 times per second in sync with physics, and move_toward smoothly transitions values without overshooting.',
@@ -1547,7 +1547,7 @@ class TaskHowToBlueprint {
                     ? 'Add Invalid-State Transition Guard'
                     : 'Playtest Full Loop in Viewport (F5)'),
             instruction:
-                'Add a guard check at the top of _physics_process to enforce "$primaryGuard", add print("$cleanTitle Active!"), and press F5 (or the top-right Play button) to test.',
+                'Add a guard check at the top of _physics_process to enforce $primaryGuard, add print("$cleanTitle Active!"), and press F5 (or the top-right Play button) to test.',
             verify:
                 'The game window launches and triggering the action prints "$cleanTitle Active!" in the bottom Output panel.',
             path: 'Top-Right Toolbar → Play Scene (F6) / Play Project (F5)',
@@ -1609,7 +1609,7 @@ class TaskHowToBlueprint {
         case 3:
           return (
             explain:
-                'Exposes "$primaryVar" on $targetAssetName so you can tune feel live in the editor without recompiling.',
+                'Exposes $primaryVarName on $targetAssetName so you can tune gameplay feel live in the editor without recompiling.',
             primaryChip: 'Spec Param: $primaryVar',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Click the Eye icon (Instance Editable) next to $primaryVarName so it appears in the Level Details panel.'
@@ -1620,7 +1620,7 @@ class TaskHowToBlueprint {
         case 4:
           return (
             explain:
-                'Connects player trigger input on $targetAssetName to "$primaryVarName" so state updates smoothly every frame.',
+                'Connects player trigger input on $targetAssetName to $primaryVarName so the active state updates smoothly every frame.',
             primaryChip: 'Drives: $primaryVar',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Connect the white execution wire from the Branch (True) pin into your state update node.'
@@ -1631,7 +1631,7 @@ class TaskHowToBlueprint {
         default:
           return (
             explain:
-                'Enforces "$primaryGuard" on $targetAssetName and completes playable verification for "${checkpointNode.cleanStageTitle}".',
+                'Enforces $primaryGuard on $targetAssetName and completes playable verification for "${checkpointNode.cleanStageTitle}".',
             primaryChip: 'Guard: $primaryGuard',
             pitfall:
                 'Place the guard check at the very top of your function so blocked or cooldown inputs exit immediately ($primaryGuard).',
@@ -1765,9 +1765,9 @@ class TaskHowToBlueprint {
             stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · WIRE TUNING PARAMETER ${extraVarName.toUpperCase()}',
             shortTitle: 'Wire Tuning: $extraVarName',
             instruction:
-                'Expose "$extraTune" on $targetAssetName and bind $extraVarName into the active mechanic calculation.',
+                'Expose $extraVarName on $targetAssetName and pass $extraVarName into the active mechanic calculation.',
             verify:
-                '"$extraVarName" is editable in the Inspector and modulates "$cleanTitle" live.',
+                'Select $targetAssetName in the editor and confirm $extraVarName updates the active behavior live in Play mode.',
             path: whereLocation,
             code: engineLabel == 'UNREAL 5'
                 ? 'UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tuning")\nfloat $extraVarName = 1.0f; // $extraTune'
@@ -1775,7 +1775,7 @@ class TaskHowToBlueprint {
                     ? '[SerializeField] private float $extraVarName = 1.0f; // $extraTune'
                     : '@export var $extraVarName: float = 1.0 # $extraTune'),
             explain:
-                'Binds checkpoint tuning parameter "$extraTune" directly to $targetAssetName for live playtest balancing.',
+                'Connects $extraVarName directly to $targetAssetName so you can balance gameplay feel live.',
             primaryChip: 'Spec Param: $extraTune',
             pitfall:
                 'Clamp $extraVarName > 0 so zero or negative inspector inputs cannot divide by zero.',
@@ -1791,9 +1791,9 @@ class TaskHowToBlueprint {
             stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · ENFORCE ${extraGuard.toUpperCase()}',
             shortTitle: 'Guard: $shortGuard',
             instruction:
-                'Add an explicit guard check on $targetAssetName to enforce "$extraGuard" before state mutation.',
+                'Add an explicit guard check on $targetAssetName before state mutation to enforce $extraGuard.',
             verify:
-                'Stress-testing "$shortGuard" in the viewport blocks invalid transitions cleanly.',
+                'Stress-testing $shortGuard in the viewport blocks invalid state transitions cleanly.',
             path: whereLocation,
             code: engineLabel == 'UNREAL 5'
                 ? 'if (!ValidateGuard_${gIdx + 1}()) return; // $extraGuard'
@@ -1801,10 +1801,10 @@ class TaskHowToBlueprint {
                     ? 'if (!ValidateGuard_${gIdx + 1}()) return; // $extraGuard'
                     : 'if not _validate_guard_${gIdx + 1}():\n    return # $extraGuard'),
             explain:
-                'Protects $targetAssetName against edge case: "$extraGuard".',
+                'Protects $targetAssetName against edge case: $extraGuard.',
             primaryChip: 'Guard: $extraGuard',
             pitfall:
-                'Run "$extraGuard" before applying velocity or state changes so cancelled frames leave no side effects.',
+                'Run $extraGuard before applying velocity or state changes so cancelled frames leave no side effects.',
           ));
         }
       }

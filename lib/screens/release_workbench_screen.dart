@@ -2573,15 +2573,38 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                     ),
                                     const SizedBox(height: 14),
 
-                                    // 1. DO: Clear Action Instruction
-                                    Text(
-                                      activeSubStep.instruction,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 15,
-                                        height: 1.65,
-                                        color: textPrimary,
+                                    // 1. DO: Clear Action Instruction (with colored font syntax highlighting for variables, guards & assets)
+                                    Text.rich(
+                                      _buildSemanticStepSpan(
+                                        text: activeSubStep.instruction,
+                                        baseStyle: GoogleFonts.inter(
+                                          fontSize: 15,
+                                          height: 1.65,
+                                          color: textPrimary,
+                                        ),
+                                        tuningItems: tuningItems,
+                                        edgeItems: edgeItems,
+                                        isCodeBlock: false,
                                       ),
                                     ),
+                                    if (activeSubStep.explainConcept
+                                        .trim()
+                                        .isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Text.rich(
+                                        _buildSemanticStepSpan(
+                                          text: activeSubStep.explainConcept,
+                                          baseStyle: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            height: 1.5,
+                                            color: textSecondary,
+                                          ),
+                                          tuningItems: tuningItems,
+                                          edgeItems: edgeItems,
+                                          isCodeBlock: false,
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(height: 18),
 
                                     // 2. COPY / CONFIGURE: Single Recessed Code / Blueprint Block
@@ -2741,14 +2764,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                               horizontal: 16,
                                               vertical: 14,
                                             ),
-                                            child: Text(
-                                              activeSubStep.codeFormula,
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 12.5,
-                                                height: 1.6,
-                                                color: isDark
-                                                    ? const Color(0xFFE5E7EB)
-                                                    : textPrimary,
+                                            child: Text.rich(
+                                              _buildSemanticStepSpan(
+                                                text: activeSubStep.codeFormula,
+                                                baseStyle:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 12.5,
+                                                  height: 1.6,
+                                                  color: isDark
+                                                      ? const Color(0xFFE5E7EB)
+                                                      : textPrimary,
+                                                ),
+                                                tuningItems: tuningItems,
+                                                edgeItems: edgeItems,
+                                                isCodeBlock: true,
                                               ),
                                             ),
                                           ),
@@ -2804,12 +2833,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                                     ),
                                                   ),
                                                   const SizedBox(height: 3),
-                                                  Text(
-                                                    activeSubStep.verifyResult,
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 13,
-                                                      height: 1.45,
-                                                      color: textPrimary,
+                                                  Text.rich(
+                                                    _buildSemanticStepSpan(
+                                                      text: activeSubStep
+                                                          .verifyResult,
+                                                      baseStyle:
+                                                          GoogleFonts.inter(
+                                                        fontSize: 13,
+                                                        height: 1.45,
+                                                        color: textPrimary,
+                                                      ),
+                                                      tuningItems: tuningItems,
+                                                      edgeItems: edgeItems,
+                                                      isCodeBlock: false,
                                                     ),
                                                   ),
                                                   const SizedBox(height: 4),
@@ -2903,153 +2939,94 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             ],
                           ),
 
-                          // 4. Compact Bottom GOAL & PLAYTEST Reference Strip
+                          // 4. Pure 50/50 Side-by-Side FEATURE GOAL | PLAYTEST CHECK Bottom Dock
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 28,
-                              vertical: 12,
-                            ),
                             decoration: BoxDecoration(
                               color: bgRecessed,
                               border: Border(
                                 top: BorderSide(color: borderSubtle),
                               ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 12,
-                                  runSpacing: 6,
-                                  children: [
-                                    RichText(
-                                      key: ValueKey(
-                                        'task_sheet_feature_goal_${node.id}',
+                            child: IntrinsicHeight(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 28,
+                                        vertical: 12,
                                       ),
-                                      text: TextSpan(
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          color: textSecondary,
-                                          height: 1.4,
+                                      child: Column(
+                                        key: ValueKey(
+                                          'task_sheet_feature_goal_${node.id}',
                                         ),
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          TextSpan(
-                                            text: 'GOAL: ',
+                                          Text(
+                                            'FEATURE GOAL',
                                             style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 10.5,
+                                              fontSize: 10,
                                               fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.6,
                                               color: accentCyan,
                                             ),
                                           ),
-                                          TextSpan(text: featureGoalText),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            featureGoalText,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12.5,
+                                              color: textSecondary,
+                                              height: 1.45,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 4,
-                                      children: [
-                                        InkWell(
-                                          key: ValueKey(
-                                            'task_sheet_tuning_chip_${node.id}',
-                                          ),
-                                          onTap: () =>
-                                              _showEditCheckpointTuningAndGuardsDialog(
-                                            feat,
-                                            states,
-                                            node,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2.5,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: accentViolet.withValues(
-                                                alpha: 0.12,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              tuningItems.isNotEmpty
-                                                  ? '⚙ ${tuningItems.join(' · ')}'
-                                                  : '⚙ + Add Tuning',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                                color: accentViolet,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        InkWell(
-                                          key: ValueKey(
-                                            'task_sheet_guards_chip_${node.id}',
-                                          ),
-                                          onTap: () =>
-                                              _showEditCheckpointTuningAndGuardsDialog(
-                                            feat,
-                                            states,
-                                            node,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2.5,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: accentAmber.withValues(
-                                                alpha: 0.12,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              '⚠ ${edgeItems.length} Guard${edgeItems.length == 1 ? '' : 's'}',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                                color: accentAmber,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                RichText(
-                                  key: ValueKey(
-                                    'task_sheet_playtest_check_${node.id}',
                                   ),
-                                  text: TextSpan(
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      color: textMuted,
-                                      height: 1.4,
-                                    ),
-                                    children: [
-                                      TextSpan(
-                                        text: 'PLAYTEST: ',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: accentEmerald,
-                                        ),
+                                  Container(
+                                    width: 1,
+                                    color: borderSubtle,
+                                  ),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 28,
+                                        vertical: 12,
                                       ),
-                                      TextSpan(text: resolvedPlaytestCheck),
-                                    ],
+                                      child: Column(
+                                        key: ValueKey(
+                                          'task_sheet_playtest_check_${node.id}',
+                                        ),
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'PLAYTEST CHECK',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.6,
+                                              color: accentEmerald,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            resolvedPlaytestCheck,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12.5,
+                                              color: textSecondary,
+                                              height: 1.45,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -3100,6 +3077,30 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           ),
                           InkWell(
                             key: ValueKey(
+                              'task_sheet_tuning_chip_${node.id}',
+                            ),
+                            onTap: () =>
+                                _showEditCheckpointTuningAndGuardsDialog(
+                              feat,
+                              states,
+                              node,
+                            ),
+                            child: const SizedBox(width: 4, height: 1),
+                          ),
+                          InkWell(
+                            key: ValueKey(
+                              'task_sheet_guards_chip_${node.id}',
+                            ),
+                            onTap: () =>
+                                _showEditCheckpointTuningAndGuardsDialog(
+                              feat,
+                              states,
+                              node,
+                            ),
+                            child: const SizedBox(width: 4, height: 1),
+                          ),
+                          InkWell(
+                            key: ValueKey(
                               'edit_active_task_title_btn_${node.id}_$selectedTaskIdx',
                             ),
                             onTap: () => _showEditBuildTaskTitleDialog(
@@ -3138,7 +3139,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       activeSubStepIdx,
                                     )
                                 : null,
-                            child: const SizedBox(width: 4, height: 1),
+                                child: const SizedBox(width: 4, height: 1),
                           ),
                           InkWell(
                             key: ValueKey(
@@ -3187,6 +3188,121 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         key: ValueKey('checkpoint_spec_pane_$index'),
         child: pinnedActiveStepWindow,
       ),
+    );
+  }
+
+  /// Styles Tuning Variable Names (Violet), Guard Rules (Amber), and Concrete Assets/Components (Cyan)
+  /// directly inline using colored monospace font (`JetBrains Mono`, `FontWeight.w700`, zero boxes).
+  TextSpan _buildSemanticStepSpan({
+    required String text,
+    required TextStyle baseStyle,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+    required bool isCodeBlock,
+  }) {
+    if (text.isEmpty) {
+      return TextSpan(text: '', style: baseStyle);
+    }
+
+    final tokenKindByLiteral = <String, String>{};
+
+    // 1. Tuning variable identifiers & full tuning specs -> 'tune' (Violet)
+    for (final rawTune in tuningItems) {
+      final trimmed = rawTune.trim();
+      if (trimmed.isNotEmpty) {
+        tokenKindByLiteral[trimmed] = 'tune';
+        final varName = trimmed.split(':').first.trim();
+        if (varName.length >= 3) {
+          tokenKindByLiteral[varName] = 'tune';
+        }
+      }
+    }
+
+    // 2. Guard rules & guard function identifiers -> 'guard' (Amber)
+    final bracketPrefix = RegExp(r'^\[[^\]]+\]\s*');
+    for (final rawGuard in edgeItems) {
+      final trimmed = rawGuard.trim();
+      if (trimmed.isNotEmpty) {
+        tokenKindByLiteral[trimmed] = 'guard';
+        final stripped = trimmed.replaceFirst(bracketPrefix, '').trim();
+        if (stripped.length >= 6) {
+          tokenKindByLiteral[stripped] = 'guard';
+        }
+      }
+    }
+    for (final guardIdent in const [
+      'ValidateGuard_1()',
+      'ValidateGuard_2()',
+      'ValidateGuard_3()',
+      '_validate_guard_1()',
+      '_validate_guard_2()',
+      '_validate_guard_3()',
+      'IsBoundaryBlocked()',
+      '!IsBoundaryBlocked',
+    ]) {
+      tokenKindByLiteral[guardIdent] = 'guard';
+    }
+
+    // 3. Concrete asset & component names -> 'asset' (Cyan)
+    final assetRegex = RegExp(
+      r'\b(?:BP_[A-Za-z0-9_]+|A[A-Z][A-Za-z0-9_]+Actor|[A-Za-z0-9_]+\.(?:uasset|tscn|gd|cs|h|cpp)|InteractBox|VisualMesh|DefaultSceneRoot|InteractTrigger|HitBox|CollisionShape2D|BoxCollider)\b',
+    );
+    for (final m in assetRegex.allMatches(text)) {
+      final matchStr = m.group(0)!;
+      tokenKindByLiteral.putIfAbsent(matchStr, () => 'asset');
+    }
+
+    if (tokenKindByLiteral.isEmpty) {
+      return TextSpan(text: text, style: baseStyle);
+    }
+
+    final sortedTokens = tokenKindByLiteral.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    final pattern = sortedTokens.map(RegExp.escape).join('|');
+    final combinedRegex = RegExp(pattern);
+
+    final baseFontSize = baseStyle.fontSize ?? 14.0;
+    final monoSize = isCodeBlock ? baseFontSize : baseFontSize * 0.93;
+
+    final spans = <InlineSpan>[];
+    int cursor = 0;
+    for (final match in combinedRegex.allMatches(text)) {
+      if (match.start > cursor) {
+        spans.add(
+          TextSpan(
+            text: text.substring(cursor, match.start),
+          ),
+        );
+      }
+      final matchedText = match.group(0)!;
+      final kind = tokenKindByLiteral[matchedText] ?? 'asset';
+      final Color tokenColor = kind == 'tune'
+          ? accentViolet
+          : (kind == 'guard' ? accentAmber : accentCyan);
+      spans.add(
+        TextSpan(
+          text: matchedText,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: monoSize,
+            fontWeight: FontWeight.w700,
+            color: tokenColor,
+            height: baseStyle.height,
+          ),
+        ),
+      );
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      spans.add(
+        TextSpan(
+          text: text.substring(cursor),
+        ),
+      );
+    }
+
+    return TextSpan(
+      style: baseStyle,
+      children: spans,
     );
   }
 
