@@ -74,141 +74,39 @@ class ProjectConceptAgent {
     String modelName = 'gemini-flash-latest',
     String thinkingLevel = 'LOW',
   }) async {
-    final cleanSpark = rawSpark.trim().isEmpty
-        ? 'High-speed grappling hook parkour roguelite'
-        : rawSpark.trim();
+    final cleanSpark = ProjectConceptBlueprint.normalizeCommonTypos(
+      rawSpark.trim().isEmpty
+          ? 'High-speed grappling hook parkour roguelite'
+          : rawSpark.trim(),
+    );
     final shortTitle = _derivePunchyTitle(cleanSpark);
 
+    // Compact prompt (~480 input tokens vs ~1,450+ tokens; zero 31x $cleanSpark repetition; no legacy questions array)
     final prompt = '''
-You are an expert indie game design producer interviewing a developer about their new game idea.
-The developer pitched this spark idea: "$cleanSpark"
+You are an indie game producer creating a Stage 1 Concept Blueprint for this spark idea:
+"$cleanSpark"
 
-STRICT NAMING & WORDING RULES:
-1. PLAIN FUNCTIONAL GAME-DEV NAMING (NO THEMATIC / LORE WORDING):
-   - Use simple, literal, everyday game-dev words for all Beats, Release titles, and descriptions (e.g., "Crop Farming & Storage", "Shop Buy & Sell", "Arena Wave Combat").
-   - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline", "Ordinance").
-2. BANNED BUZZWORDS:
-   - Never use corporate filler ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly"). Start goals with concrete verbs like "Build..." or "Test...".
-3. DESIGN PILLARS (CORE PLAYER EXPERIENCE):
-   - Design pillars name the core experiences the game must create and how it should make the player feel—NOT how it is built.
-   - A pillar is NOT a feature ("has a skill tree") and NOT a genre ("a roguelike"); it is the experience those things exist to hold up (e.g., "Every run teaches you something new", "Crashes and recoveries feel just as fun as clean speed").
-4. TRADE-OFFS (PRIORITIZE X OVER Y):
-   - Provide explicit "X over Y" priority rules so production knows what to protect when mechanics conflict (e.g., "Instant arcade response over realistic physics simulation").
-5. COMPLETE SEQUENTIAL CORE LOOP BEATS (NO ARTIFICIAL TIME LIMIT):
-   - Decompose the complete playable game loop into sequential Beats from start to finish (a game's core loop can take 30 seconds, 5 minutes, or 20 minutes depending on the genre—never force an artificial 30-second limit).
-   - Include prep/staging areas, active gameplay beats, shop/upgrade/inventory menus, and loop resolution/reset whenever they are genuinely part of this game's loop.
-   - Give each distinct player action, system interaction, escalation step, resource/reward step, and loop reset its own separate Beat (`Beat Name: Observable player action and system response`) instead of bundling multiple mechanics into a single line.
-6. PROTOTYPE-FIRST RELEASE FOCUS:
-   - In Stage 1, only define the Phase 1 Prototype release(s) needed to prove the Core Game Loop in greybox. Later phases (MVP Releases per Beat, Vertical Slice, Full Production) are unlocked after the Prototype completes.
+${GeminiAgentClient.compactStyleRules}
+- Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) covering the full loop from entry/prep to reset.
+- Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
 
-Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, literal game-dev terminology (include as many items in each array as this specific game concept genuinely needs):
+Return ONLY valid JSON:
 {
-  "title": "A simple, clear working title fitting '$cleanSpark'",
-  "gameSpec": [
-    "Camera View (e.g., 2D Top-Down or 3D First-Person)",
-    "Controls (e.g., Twin-Stick WASD + Aim or Mouse + WASD)",
-    "Player Mode (e.g., Singleplayer)",
-    "Arena Structure (e.g., Single-Screen Wave Arena)"
-  ],
-  "techSpec": [
-    "Engine (e.g., Godot 4 (2D) or Unity 6)",
-    "Platform (e.g., PC (Steam / Desktop))",
-    "Asset Pipeline (e.g., 2D Sprites + Particles or Low-Poly 3D)",
-    "Network / Save (e.g., Offline-Only Local Save)"
-  ],
-  "designPillars": [
-    "Experiential pillar describing how the game makes the player feel (never a feature or genre)",
-    "..."
-  ],
-  "tradeOffs": [
-    "Explicit X over Y priority rule",
-    "..."
-  ],
-  "questions": [
-    {
-      "id": "q_perspective",
-      "question": "Plain, direct question asking about camera perspective, movement speed, and control feel for '$cleanSpark'",
-      "options": [
-        "(Recommended) Specific perspective + control scheme option in plain game-dev terms",
-        "Alternative perspective + control scheme option in plain game-dev terms"
-      ]
-    },
-    {
-      "id": "q_loop",
-      "question": "Plain, direct question asking how the core mechanics of '$cleanSpark' connect in a playable loop",
-      "options": [
-        "(Recommended) Concrete gameplay loop option in plain game-dev terms",
-        "Alternative gameplay loop option in plain game-dev terms"
-      ]
-    },
-    {
-      "id": "q_milestone",
-      "question": "What should we build and test first in the Phase 1 Greybox Prototype?",
-      "options": [
-        "(Recommended) Specific v0.1 prototype sandbox goal in plain game-dev terms",
-        "Alternative v0.1 prototype sandbox goal in plain game-dev terms"
-      ]
-    }
-  ],
+  "title": "Short 2-3 word title",
+  "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
+  "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
+  "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
+  "designPillars": ["Experiential pillar 1", "Experiential pillar 2", "Experiential pillar 3"],
+  "tradeOffs": ["X over Y rule 1", "X over Y rule 2", "X over Y rule 3"],
+  "coreLoopBeats": ["Beat Name: Literal action and response", "..."],
+  "exclusions": ["Prototype exclusion 1", "Prototype exclusion 2", "Prototype exclusion 3"],
+  "doneWhen": "Concrete playtest completion condition",
+  "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"],
   "sectionOptions": {
-    "goal": [
-      "Short Card Title: Specific v0.1 prototype goal option 1 for '$cleanSpark'",
-      "Short Card Title: Specific v0.1 prototype goal option 2 for '$cleanSpark'",
-      "Short Card Title: Specific v0.1 prototype goal option 3 for '$cleanSpark'"
-    ],
-    "gameSpec": [
-      "Camera · Controls · Mode · Level Layout option 1 tailored to '$cleanSpark'",
-      "Camera · Controls · Mode · Level Layout option 2 tailored to '$cleanSpark'",
-      "Camera · Controls · Mode · Level Layout option 3 tailored to '$cleanSpark'"
-    ],
-    "techSpec": [
-      "Engine · Platform · Asset Pipeline · Save option 1 tailored to '$cleanSpark'",
-      "Engine · Platform · Asset Pipeline · Save option 2 tailored to '$cleanSpark'",
-      "Engine · Platform · Asset Pipeline · Save option 3 tailored to '$cleanSpark'"
-    ],
-    "designPillars": [
-      "Short Pillar Title: Player experience focus option 1 tailored to '$cleanSpark'",
-      "Short Pillar Title: Player experience focus option 2 tailored to '$cleanSpark'",
-      "Short Pillar Title: Player experience focus option 3 tailored to '$cleanSpark'"
-    ],
-    "tradeOffs": [
-      "Short Priority Title: Explicit X over Y trade-off option 1 tailored to '$cleanSpark'",
-      "Short Priority Title: Explicit X over Y trade-off option 2 tailored to '$cleanSpark'",
-      "Short Priority Title: Explicit X over Y trade-off option 3 tailored to '$cleanSpark'"
-    ],
-    "coreLoop": [
-      "Short Loop Title: Beat 1 → Beat 2 → Beat 3 → Beat 4 tailored to '$cleanSpark'",
-      "Short Loop Title: Alternative loop beat sequence tailored to '$cleanSpark'",
-      "Short Loop Title: Third loop beat sequence tailored to '$cleanSpark'"
-    ],
-    "exclusions": [
-      "Short Cut Title: Prototype scope-cut option 1 tailored to '$cleanSpark'",
-      "Short Cut Title: Prototype scope-cut option 2 tailored to '$cleanSpark'",
-      "Short Cut Title: Prototype scope-cut option 3 tailored to '$cleanSpark'"
-    ],
-    "doneWhen": [
-      "Short Verification Title: Observable playtest verification option 1 tailored to '$cleanSpark'",
-      "Short Verification Title: Observable playtest verification option 2 tailored to '$cleanSpark'",
-      "Short Verification Title: Observable playtest verification option 3 tailored to '$cleanSpark'"
-    ],
-    "prototypeRelease": [
-      "Single v0.1 Greybox: Single Greybox Prototype (v0.1) proving the complete '$cleanSpark' core loop",
-      "Two-Step v0.1 → v0.2: v0.1 Core Mechanics Sandbox → v0.2 Full '$cleanSpark' Loop"
-    ]
-  },
-  "goal": "Plain-English sentence starting with 'Build...' stating what mechanics are being built and why (zero corporate buzzwords or thematic fluff).",
-  "coreLoopBeats": [
-    "Plain Beat Name: Literal player action and mechanic",
-    "..."
-  ],
-  "exclusions": [
-    "Specific scope-creep feature to exclude from the Prototype",
-    "..."
-  ],
-  "doneWhen": "Clear practical condition for when a playtester can complete the Prototype loop.",
-  "releaseTrainTitles": [
-    "v0.1: [Plain Functional Prototype Name, e.g. Core Movement & Game Loop] - Prototype"
-  ]
+    "goal": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."],
+    "designPillars": ["Title 1: Experience...", "Title 2: Experience...", "Title 3: Experience..."],
+    "coreLoop": ["Title 1: Beat A → Beat B → Beat C → Beat D", "Title 2: ...", "Title 3: ..."]
+  }
 }
 ''';
 
@@ -221,17 +119,9 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
     );
 
     if (json != null) {
-      final qList = (json['questions'] as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .map(AgentQuestion.fromJson)
-              .where((q) => q.question.isNotEmpty && q.options.isNotEmpty)
-              .toList() ??
-          const <AgentQuestion>[];
-
       final aiTitle = json['title']?.toString().trim() ?? '';
       final resolvedTitle = aiTitle.isNotEmpty ? aiTitle : shortTitle;
-      final resolvedQuestions =
-          qList.isNotEmpty ? qList : _defaultQuestionsForSpark(cleanSpark);
+      final resolvedQuestions = _defaultQuestionsForSpark(cleanSpark);
       final parsedSectionOptions = _parseSectionOptions(
         json['sectionOptions'],
         spark: cleanSpark,
@@ -243,7 +133,7 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
         sparkIdea: cleanSpark,
         questions: resolvedQuestions,
         goal: json['goal']?.toString() ??
-            'Build a playable $resolvedTitle prototype centered on $cleanSpark with immediate game feel.',
+            _synthesizeInitialGoalForSpark(cleanSpark, resolvedTitle),
         gameSpec: (json['gameSpec'] as List?)
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty && s != '...')
@@ -305,12 +195,11 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
     }
 
     final fallbackQuestions = _defaultQuestionsForSpark(cleanSpark);
-    final shortSpark = _shortSparkPhrase(cleanSpark, shortTitle);
     return ProjectConceptBlueprint(
       title: shortTitle,
       sparkIdea: cleanSpark,
       questions: fallbackQuestions,
-      goal: 'Build a playable $shortTitle prototype centered on $shortSpark with immediate game feel.',
+      goal: _synthesizeInitialGoalForSpark(cleanSpark, shortTitle),
       gameSpec: _defaultGameSpec(),
       techSpec: _defaultTechSpec(),
       designPillars: _defaultDesignPillars(),
@@ -388,7 +277,9 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
     String planningModel = 'gemini-4-argon',
     String thinkingLevel = 'LOW',
   }) async {
-    final cleanMsg = userMessage.trim();
+    final cleanMsg = ProjectConceptBlueprint.normalizeCommonTypos(
+      userMessage.trim(),
+    );
     if (cleanMsg.isEmpty) return draft;
 
     draft.chatHistory.add(
@@ -399,80 +290,55 @@ Generate a JSON object tailored SPECIFICALLY to "$cleanSpark" using plain, liter
       ),
     );
 
-    final recentHistory = draft.chatHistory
-        .map((m) => '${m.isUser ? "Developer" : "Antigravity"}: ${m.text}')
-        .join('\n\n');
+    // Cap history to the last 2 messages (and omit when a direct [Section XX] tag is present)
+    final isDirectSectionEdit = cleanMsg.startsWith('[Section ');
+    final historySlice = isDirectSectionEdit
+        ? const <AgentChatMessage>[]
+        : (draft.chatHistory.length > 3
+            ? draft.chatHistory.sublist(draft.chatHistory.length - 3, draft.chatHistory.length - 1)
+            : draft.chatHistory.take(draft.chatHistory.length - 1).toList());
+    final recentHistory = historySlice
+        .map((m) => '${m.isUser ? "Dev" : "AI"}: ${m.text}')
+        .join('\n');
 
+    // Delta-Only JSON Prompt (~380 input tokens, ~140 output tokens — 75% reduction)
     final prompt = '''
-You are Antigravity, an expert game producer pair-designing a game concept with a developer.
-Original Spark: "${draft.sparkIdea}"
-
-Current Live Project Concept Blueprint:
+You are Antigravity, an indie game producer updating a Live Concept Blueprint.
+Spark: "${draft.sparkIdea}"
+Current Blueprint:
 - Title: "${draft.title}"
+- Goal: "${draft.goal}"
 - Game Spec: ${draft.gameSpec.join(' · ')}
 - Tech Spec: ${draft.techSpec.join(' · ')}
-- Design Pillars (Core Player Experience):
-${draft.designPillars.map((p) => '  * $p').join('\n')}
-- Trade-Offs (Prioritize X over Y):
-${draft.tradeOffs.map((t) => '  * $t').join('\n')}
-- Goal: "${draft.goal}"
-- In Scope (Core Loop Beats):
-${draft.coreLoopBeats.map((b) => '  * $b').join('\n')}
-- Out of Scope (Hard Exclusions):
-${draft.exclusions.map((e) => '  * $e').join('\n')}
+- Design Pillars: ${draft.designPillars.join(' | ')}
+- Trade-Offs: ${draft.tradeOffs.join(' | ')}
+- Core Loop Beats: ${draft.coreLoopBeats.join(' | ')}
+- Out of Scope: ${draft.exclusions.join(' | ')}
 - Done When: "${draft.doneWhen}"
-- Prototype Release(s):
-${draft.releaseTrainTitles.map((r) => '  * $r').join('\n')}
+- Release Train: ${draft.releaseTrainTitles.join(' | ')}
+${recentHistory.isNotEmpty ? 'Recent Context:\n$recentHistory\n' : ''}
+Developer Direction: "$cleanMsg"
 
-Conversation History:
-$recentHistory
+${GeminiAgentClient.compactStyleRules}
+- Synthesize and rewrite the affected field(s) into natural, polished game-dev English. NEVER copy-paste the developer's raw phrasing ("instead of...", "but in a...") verbatim.
+- Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
+- DELTA-ONLY OUTPUT: Include ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (omit all unchanged arrays!). If `goal` or `title` changed, also include 3 updated `goalOptions`.
 
-Developer's Latest Turn: "$cleanMsg"
-
-STRICT NAMING & WORDING RULES:
-- Use PLAIN, LITERAL, NON-THEMATIC game-dev terms for all Beats, Release titles, and descriptions (e.g., "Crop Farming & Storage", "Shop Buy & Sell", "Arena Wave Combat").
-- NEVER use flowery, archaic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline").
-- NEVER use corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
-- Design Pillars MUST describe the core player experience and how the game makes the player feel—NEVER a feature ("has a skill tree") and NEVER a genre ("a roguelike").
-- Trade-Offs MUST use explicit "X over Y" priority rules.
-- Decompose `coreLoopBeats` into as many distinct sequential playable Beats as the game loop genuinely needs—do not artificially compress multiple steps into a fixed count.
-- Keep `releaseTrainTitles` focused on the Phase 1 Prototype release(s); MVP, Vertical Slice, and Full Production phases are defined later after Prototype completion.
-
-Task:
-1. Apply the developer's latest direction, answer, or adjustment directly to the Project Concept Blueprint fields (`title`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `goal`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Keep everything concrete, playtestable, and in plain developer English.
-2. Write a concise, natural conversational `reply` confirming what you updated on the Blueprint and asking a natural follow-up question.
-3. Provide short clickable `quickReplies` the developer can click for their next turn.
-4. List which blueprint sections changed in `updatedFields` (e.g. `["Goal", "Design Pillars", "Core Loop"]`).
-
-Return ONLY a JSON object with this schema:
+Return ONLY valid JSON:
 {
-  "reply": "Conversational response + follow-up question",
-  "quickReplies": ["Short reply option", "..."],
-  "updatedFields": ["Goal", "Core Loop"],
-  "title": "Updated or existing title",
-  "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
-  "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
-  "designPillars": [
-    "Experiential Pillar (how it feels, never a feature/genre)",
-    "..."
-  ],
-  "tradeOffs": [
-    "X over Y rule",
-    "..."
-  ],
-  "goal": "Updated plain-English goal starting with 'Build...'",
-  "coreLoopBeats": [
-    "Plain Beat Name: Literal player action and system response",
-    "..."
-  ],
-  "exclusions": [
-    "Concrete exclusion",
-    "..."
-  ],
-  "doneWhen": "Updated Done When condition",
-  "releaseTrainTitles": [
-    "v0.1: ... - Prototype"
-  ]
+  "reply": "1-sentence confirmation of what changed",
+  "updatedFields": ["Goal"],
+  "title": "Only if title changed",
+  "goal": "Only if goal changed",
+  "goalOptions": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."],
+  "gameSpec": ["Only if changed"],
+  "techSpec": ["Only if changed"],
+  "designPillars": ["Only if changed"],
+  "tradeOffs": ["Only if changed"],
+  "coreLoopBeats": ["Only if changed"],
+  "exclusions": ["Only if changed"],
+  "doneWhen": "Only if changed",
+  "releaseTrainTitles": ["Only if changed"]
 }
 ''';
 
@@ -485,95 +351,85 @@ Return ONLY a JSON object with this schema:
     );
 
     if (json != null) {
+      bool isPlaceholder(String s) =>
+          s.isEmpty ||
+          s == '...' ||
+          s.toLowerCase().startsWith('only if ');
+
+      List<String>? cleanList(dynamic raw) {
+        if (raw is! List) return null;
+        final list = raw
+            .map((e) => e.toString().trim())
+            .where((s) => !isPlaceholder(s))
+            .toList();
+        return list.isNotEmpty ? list : null;
+      }
+
       final updated = <String>[];
       final newTitle = json['title']?.toString().trim() ?? '';
-      if (newTitle.isNotEmpty && newTitle != draft.title) {
+      if (!isPlaceholder(newTitle) && newTitle != draft.title) {
         draft.title = newTitle;
         updated.add('Title');
       }
-      final game = (json['gameSpec'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-      if (game != null && game.isNotEmpty) {
+      final game = cleanList(json['gameSpec']);
+      if (game != null && game.length >= 2) {
         draft.gameSpec = game;
         updated.add('Game Spec');
       }
-      final tech = (json['techSpec'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-      if (tech != null && tech.isNotEmpty) {
+      final tech = cleanList(json['techSpec']);
+      if (tech != null && tech.length >= 2) {
         draft.techSpec = tech;
         updated.add('Tech Spec');
       }
-      final pillars = (json['designPillars'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-      if (pillars != null && pillars.isNotEmpty) {
+      final pillars = cleanList(json['designPillars']);
+      if (pillars != null) {
         draft.designPillars = pillars;
         updated.add('Design Pillars');
       }
-      final tradeOffs = (json['tradeOffs'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-      if (tradeOffs != null && tradeOffs.isNotEmpty) {
+      final tradeOffs = cleanList(json['tradeOffs']);
+      if (tradeOffs != null) {
         draft.tradeOffs = tradeOffs;
         updated.add('Trade-Offs');
       }
       final newGoal = json['goal']?.toString().trim() ?? '';
-      if (newGoal.isNotEmpty && newGoal != draft.goal) {
-        draft.goal = newGoal;
+      if (!isPlaceholder(newGoal) && newGoal != draft.goal) {
+        draft.goal = ProjectConceptBlueprint.sanitizeGoalText(newGoal);
         updated.add('Goal');
       }
-      final beats = (json['coreLoopBeats'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-      if (beats != null && beats.isNotEmpty) {
+      final goalOpts = cleanList(json['goalOptions']);
+      if (goalOpts != null && goalOpts.length >= 2) {
+        draft.sectionOptions['goal'] = goalOpts;
+      }
+      final beats = cleanList(json['coreLoopBeats']);
+      if (beats != null) {
         draft.coreLoopBeats = beats;
         updated.add('Core Loop');
       }
-      final excl = (json['exclusions'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-      if (excl != null && excl.isNotEmpty) {
+      final excl = cleanList(json['exclusions']);
+      if (excl != null) {
         draft.exclusions = excl;
         updated.add('Exclusions');
       }
       final done = json['doneWhen']?.toString().trim() ?? '';
-      if (done.isNotEmpty && done != draft.doneWhen) {
+      if (!isPlaceholder(done) && done != draft.doneWhen) {
         draft.doneWhen = done;
         updated.add('Done When');
       }
-      final releases = (json['releaseTrainTitles'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-      if (releases != null && releases.isNotEmpty) {
+      final releases = cleanList(json['releaseTrainTitles']);
+      if (releases != null) {
         draft.releaseTrainTitles = releases;
         updated.add('Prototype Release');
       }
 
-      final explicitUpdated = (json['updatedFields'] as List?)
-          ?.map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
+      final explicitUpdated = cleanList(json['updatedFields']);
       final effectiveUpdated = (explicitUpdated != null && explicitUpdated.isNotEmpty)
           ? explicitUpdated
           : (updated.isNotEmpty ? updated : const ['Concept Refined']);
 
-      final quickReplies = (json['quickReplies'] as List?)
-              ?.map((e) => e.toString().trim())
-              .where((s) => s.isNotEmpty && s != '...')
-              .toList() ??
-          const <String>[];
+      final quickReplies = cleanList(json['quickReplies']) ?? const <String>[];
 
       final replyText = json['reply']?.toString().trim() ??
-          'Updated the Project Concept Blueprint with your direction! Anything else you want to adjust before we plan v0.1?';
+          'Updated the Project Concept Blueprint with your direction!';
 
       draft.lastUpdatedFields = effectiveUpdated;
       draft.isInterviewComplete = true;
@@ -590,7 +446,7 @@ Return ONLY a JSON object with this schema:
       return draft;
     }
 
-    // Offline / deterministic turn update fallback
+    // Offline / deterministic turn synthesis fallback
     _applyDeterministicChatTurn(draft, cleanMsg, conversationModel);
     return draft;
   }
@@ -600,8 +456,20 @@ Return ONLY a JSON object with this schema:
     String userMsg,
     String modelUsed,
   ) {
-    // Strip any section prefix `[Section 01 Goal]` or meta-instruction wrapper if present
-    final cleanTurn = ProjectConceptBlueprint.sanitizeGoalText(userMsg);
+    // Strip any section prefix `[Section 01 Goal]` or meta-instruction wrapper if present,
+    // without appending a premature period before pattern matching
+    var cleanTurn = ProjectConceptBlueprint.normalizeCommonTypos(userMsg)
+        .replaceFirst(
+          RegExp(r'^\[Section\s+\d+\s+[^\]]+\]\s*', caseSensitive: false),
+          '',
+        )
+        .trim();
+    if (cleanTurn.toLowerCase().contains('to apply this choice:')) {
+      cleanTurn = ProjectConceptBlueprint.sanitizeGoalText(cleanTurn);
+    }
+    if (cleanTurn.endsWith('.')) {
+      cleanTurn = cleanTurn.substring(0, cleanTurn.length - 1).trim();
+    }
 
     final lower = cleanTurn.toLowerCase();
     final updated = <String>[];
@@ -627,47 +495,19 @@ Return ONLY a JSON object with this schema:
       }
       draft.techSpec[0] = cleanTurn;
       updated.add('Tech Spec');
-    } else if (lower.contains('title') || lower.startsWith('rename')) {
+    } else if (lower.startsWith('title') || lower.startsWith('rename')) {
       final cleanedTitle = cleanTurn
-          .replaceFirst(RegExp(r'^(rename|change title|title)\s*(to|:)?\s*', caseSensitive: false), '')
+          .replaceFirst(
+            RegExp(r'^(rename|change title|title)\s*(to|:)?\s*', caseSensitive: false),
+            '',
+          )
           .trim();
       if (cleanedTitle.isNotEmpty) {
         draft.title = cleanedTitle;
         updated.add('Title');
       }
     } else {
-      final colonIdx = cleanTurn.indexOf(':');
-      final cleanBody = (colonIdx > 0 && colonIdx < 48 && colonIdx < cleanTurn.length - 1)
-          ? cleanTurn.substring(colonIdx + 1).trim()
-          : cleanTurn;
-      if (cleanBody.toLowerCase().startsWith('build ') ||
-          cleanBody.toLowerCase().startsWith('test ') ||
-          cleanBody.toLowerCase().startsWith('focus ') ||
-          cleanBody.toLowerCase().startsWith('include ')) {
-        draft.goal = ProjectConceptBlueprint.sanitizeGoalText(
-          cleanTurn.endsWith('.') ? cleanTurn : '$cleanTurn.',
-        );
-      } else {
-        draft.goal = ProjectConceptBlueprint.sanitizeGoalText(
-          'Build a ${draft.title} prototype focused on $cleanBody with responsive controls and clear feedback.',
-        );
-      }
-      if (lower.contains('2d') || lower.contains('3d') || lower.contains('top-down')) {
-        if (draft.gameSpec.isNotEmpty) {
-          draft.gameSpec[0] = cleanTurn;
-          updated.add('Game Spec');
-        }
-        if (draft.techSpec.isNotEmpty) {
-          draft.techSpec[0] = cleanTurn;
-          updated.add('Tech Spec');
-        }
-      }
-      if (draft.coreLoopBeats.isNotEmpty) {
-        draft.coreLoopBeats[0] = 'Core Focus: $cleanBody';
-      } else {
-        draft.coreLoopBeats.add('Core Focus: $cleanBody');
-      }
-      updated.addAll(['Goal', 'Core Loop']);
+      _synthesizeConceptTurnUpdate(draft, cleanTurn, updated);
     }
 
     // Pick next unanswered question if available
@@ -692,10 +532,168 @@ Return ONLY a JSON object with this schema:
         role: 'assistant',
         modelUsed: modelUsed,
         updatedFields: updated,
-        text: 'Got it — I updated the **${updated.join(" & ")}** on the live Blueprint to incorporate *"$userMsg"*.$followUp',
+        text: 'Got it — I synthesized your direction into the **${updated.join(" & ")}** on the live Blueprint.$followUp',
         quickReplies: nextChips,
       ),
     );
+  }
+
+  /// Synthesizes conversational user feedback (replacements like "instead of a crab we use vehicles",
+  /// additions like "add drift boosting", or perspective shifts) into natural Goal, Title, Core Loop Beats,
+  /// and Section Option updates — NEVER copy-pasting raw user instructions verbatim.
+  static void _synthesizeConceptTurnUpdate(
+    ProjectConceptBlueprint draft,
+    String cleanTurn,
+    List<String> updated,
+  ) {
+    final lower = cleanTurn.toLowerCase();
+
+    // 1. Detect replacement / pivot patterns:
+    //    - "instead of (a/an/the) X we use Y" / "instead of X, use Y"
+    //    - "replace X with Y" / "change X to Y" / "swap X for Y"
+    //    - "X but in a Y" / "X but with Y"
+    String? oldSubject;
+    String? newSubject;
+
+    final insteadMatch = RegExp(
+      r'instead of (?:a |an |the )?([a-z0-9\s-]+?)(?:,|\s+we|\s+let\x27s|\s+i\s+want\s+to|\s+you)?\s+(?:use|using|have|play\s+as|control|drive|pilot|with)\s+(?:a |an |the )?([a-z0-9\s-]+)$',
+      caseSensitive: false,
+    ).firstMatch(cleanTurn);
+    final replaceMatch = RegExp(
+      r'(?:replace|change|swap)\s+(?:the\s+|a\s+|an\s+)?([a-z0-9\s-]+?)\s+(?:with|to|for)\s+(?:a\s+|an\s+|the\s+)?([a-z0-9\s-]+)$',
+      caseSensitive: false,
+    ).firstMatch(cleanTurn);
+    final butInMatch = RegExp(
+      r'^([a-z0-9\s-]+?)\s+but\s+(?:in|with|using|as)\s+(?:a\s+|an\s+|the\s+)?([a-z0-9\s-]+)$',
+      caseSensitive: false,
+    ).firstMatch(cleanTurn);
+
+    if (insteadMatch != null) {
+      oldSubject = insteadMatch.group(1)!.trim();
+      newSubject = insteadMatch.group(2)!.trim();
+    } else if (replaceMatch != null) {
+      oldSubject = replaceMatch.group(1)!.trim();
+      newSubject = replaceMatch.group(2)!.trim();
+    } else if (butInMatch != null) {
+      oldSubject = butInMatch.group(1)!.trim().split(RegExp(r'\s+')).first;
+      newSubject = butInMatch.group(2)!.trim();
+    }
+
+    if (oldSubject != null &&
+        newSubject != null &&
+        oldSubject.isNotEmpty &&
+        newSubject.isNotEmpty) {
+      final singularNew = newSubject.toLowerCase().endsWith('s') && newSubject.length > 3
+          ? newSubject.substring(0, newSubject.length - 1)
+          : newSubject;
+      final capSingularNew =
+          singularNew[0].toUpperCase() + singularNew.substring(1);
+
+      // Update Title if it contains oldSubject
+      if (RegExp(RegExp.escape(oldSubject), caseSensitive: false)
+          .hasMatch(draft.title)) {
+        draft.title = draft.title.replaceAll(
+          RegExp(RegExp.escape(oldSubject), caseSensitive: false),
+          capSingularNew,
+        );
+        updated.add('Title');
+      }
+
+      // Update Spark & Rewrite Goal cleanly
+      draft.goal =
+          'Single-Arena Loop: Build a playable ${draft.title} prototype where you control $newSubject, maneuver through arena hazards at speed, and clear escalating enemy waves.';
+
+      // Update Core Loop Beats to reflect the new subject (never "Core Focus: instead of...")
+      final isVehicular = newSubject.toLowerCase().contains('vehic') ||
+          newSubject.toLowerCase().contains('car') ||
+          newSubject.toLowerCase().contains('truck') ||
+          newSubject.toLowerCase().contains('mech');
+      if (draft.coreLoopBeats.isNotEmpty) {
+        draft.coreLoopBeats[0] = isVehicular
+            ? '$capSingularNew Loadout & Arena Entry: Select active $singularNew chassis and weapon mount in the starting zone'
+            : '$capSingularNew Loadout & Entry: Spawn in the starting zone and test primary $singularNew controls';
+        if (draft.coreLoopBeats.length > 1 && isVehicular) {
+          draft.coreLoopBeats[1] =
+              'High-Speed Arena Driving & Traversal: Drive, drift, and boost across arena terrain while maintaining momentum';
+        }
+      }
+
+      // Refresh Section 01 Goal Option Cards so they also reflect the updated subject
+      draft.sectionOptions['goal'] = _defaultSectionOptionsForSpark(
+        '${draft.title} with $newSubject',
+        draft.title,
+      )['goal']!;
+
+      updated.addAll(['Goal', 'Core Loop']);
+      return;
+    }
+
+    // 2. Check if cleanTurn is already a complete Option Card or "Build..." sentence
+    final colonIdx = cleanTurn.indexOf(':');
+    final cleanBody = (colonIdx > 0 && colonIdx < 48 && colonIdx < cleanTurn.length - 1)
+        ? cleanTurn.substring(colonIdx + 1).trim()
+        : cleanTurn;
+    if (cleanBody.toLowerCase().startsWith('build ') ||
+        cleanBody.toLowerCase().startsWith('test ') ||
+        cleanBody.toLowerCase().startsWith('prove ') ||
+        cleanBody.toLowerCase().startsWith('expand ')) {
+      draft.goal = ProjectConceptBlueprint.sanitizeGoalText(
+        cleanTurn.endsWith('.') ? cleanTurn : '$cleanTurn.',
+      );
+      updated.add('Goal');
+      return;
+    }
+
+    // 3. Otherwise synthesize additive / modification feedback into a natural Goal & Beat
+    final synthesizedMechanic = cleanBody
+        .replaceFirst(
+          RegExp(
+            r'^(?:please\s+|can\s+we\s+|we\s+should\s+|let\x27s\s+)?(?:add|include|focus\s+on|make\s+it|use|feature|with)\s+',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+    final effectiveFocus =
+        synthesizedMechanic.isNotEmpty ? synthesizedMechanic : cleanBody;
+
+    draft.goal = ProjectConceptBlueprint.sanitizeGoalText(
+      'Single-Arena Loop: Build a playable ${draft.title} prototype where you execute $effectiveFocus, chain core movement and combat actions, and clear the arena loop.',
+    );
+
+    if (lower.contains('2d') || lower.contains('3d') || lower.contains('top-down')) {
+      if (draft.gameSpec.isNotEmpty) {
+        draft.gameSpec[0] = cleanTurn;
+        updated.add('Game Spec');
+      }
+      if (draft.techSpec.isNotEmpty) {
+        draft.techSpec[0] = cleanTurn;
+        updated.add('Tech Spec');
+      }
+    }
+
+    final shortBeatLabel = effectiveFocus
+        .split(RegExp(r'\s+'))
+        .take(3)
+        .map((w) => w.isNotEmpty ? w[0].toUpperCase() + w.substring(1) : '')
+        .join(' ');
+    final beatLine =
+        '${shortBeatLabel.isNotEmpty ? shortBeatLabel : "Core Mechanic"} Execution: Execute $effectiveFocus with responsive controls and immediate feedback';
+    if (draft.coreLoopBeats.isNotEmpty) {
+      draft.coreLoopBeats[0] = beatLine;
+    } else {
+      draft.coreLoopBeats.add(beatLine);
+    }
+    draft.sectionOptions['goal'] = _defaultSectionOptionsForSpark(
+      '${draft.title} ($effectiveFocus)',
+      draft.title,
+    )['goal']!;
+    updated.addAll(['Goal', 'Core Loop']);
+  }
+
+  static String _synthesizeInitialGoalForSpark(String spark, String title) {
+    final phrase = _shortSparkPhrase(spark, title);
+    return 'Single-Arena Loop: Build a playable $title prototype where you master $phrase, chain core movement and combat actions, and complete a full arena loop.';
   }
 
   static String _stripRecommendedPrefix(String input) {
@@ -704,9 +702,9 @@ Return ONLY a JSON object with this schema:
         .trim();
   }
 
-  /// Extracts a concise phrase from `spark` by stripping any ` — ...` or ` (...)` expansion suffix.
+  /// Extracts a concise synthesized premise phrase from `spark` (never echoing raw "X game but in a Y" brain dumps).
   static String _shortSparkPhrase(String spark, String fallbackTitle) {
-    var base = spark.trim();
+    var base = ProjectConceptBlueprint.normalizeCommonTypos(spark.trim());
     final dashIdx = base.indexOf(' — ');
     if (dashIdx > 0) {
       base = base.substring(0, dashIdx).trim();
@@ -715,24 +713,49 @@ Return ONLY a JSON object with this schema:
     if (parenIdx > 0) {
       base = base.substring(0, parenIdx).trim();
     }
+    // Rewrite "X game but in a Y" / "instead of X we use Y" into a clean mechanic phrase
+    final butInMatch = RegExp(
+      r'^(.+?)\s+but\s+(?:in|with|using|as)\s+(?:a\s+|an\s+|the\s+)?([a-z0-9\s-]+)$',
+      caseSensitive: false,
+    ).firstMatch(base);
+    if (butInMatch != null) {
+      final twist = butInMatch.group(2)!.trim().toLowerCase();
+      return 'high-speed $twist arena combat and movement';
+    }
     if (base.isEmpty || base.length > 72) {
-      return fallbackTitle;
+      return '${fallbackTitle.toLowerCase()} mechanics';
     }
     return base;
   }
 
   static String _derivePunchyTitle(String spark) {
+    final normalized = ProjectConceptBlueprint.normalizeCommonTypos(spark);
+    // If spark has "but in a <twist>" or "instead of <old> we use <twist>", lead with the twist!
+    final twistMatch = RegExp(
+      r'\b(?:but\s+(?:in|with|as)\s+(?:a\s+|an\s+|the\s+)?|instead\s+of\s+[a-z]+\s+(?:we\s+)?use\s+)([a-zA-Z0-9-]+)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+
     const stopWords = {
       'the', 'and', 'with', 'for', 'game', 'about', 'fast', 'that', 'also',
-      'combines', 'like', 'where', 'you', 'can', 'into', 'from',
+      'combines', 'like', 'where', 'you', 'can', 'into', 'from', 'but',
+      'instead', 'use', 'using',
     };
-    final words = spark
+    final words = normalized
         .replaceAll(RegExp(r'[^\w\s-]'), '')
         .split(RegExp(r'\s+'))
         .where((w) => w.length > 2 && !stopWords.contains(w.toLowerCase()))
         .take(3)
         .toList();
     if (words.isEmpty) return 'Core Prototype';
+    if (twistMatch != null && words.isNotEmpty) {
+      final twistWord = twistMatch.group(1)!.trim();
+      if (twistWord.length >= 3) {
+        words[0] = twistWord.toLowerCase().endsWith('s') && twistWord.length > 3
+            ? twistWord.substring(0, twistWord.length - 1)
+            : twistWord;
+      }
+    }
     return words
         .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
         .join(' ');
@@ -934,37 +957,19 @@ Return ONLY a JSON object with this schema:
 
     if (GeminiAgentClient.hasKey(apiKey)) {
       final prompt = '''
-You are an expert indie game design producer helping a developer shape their game idea before building the blueprint.
-${isRefinement ? 'Existing Working Title: "${existingIntake.workingTitle}"\nExisting Summary: "${existingIntake.baseSummary}"\nDeveloper Refinement Request: "$cleanInput"' : 'Developer Pitched Idea: "$seedIdea"'}
+You are an indie game producer summarizing a developer's game idea before building the blueprint.
+${isRefinement ? 'Title: "${existingIntake.workingTitle}"\nSummary: "${existingIntake.baseSummary}"\nRefinement: "$cleanInput"' : 'Idea: "$seedIdea"'}
+${GeminiAgentClient.compactStyleRules}
 
-Return ONLY a JSON object using plain, literal game-dev language (zero corporate buzzwords or archaic lore words):
+Return ONLY valid JSON:
 {
-  "workingTitle": "Short 2-3 word working title",
-  "baseSummary": "2 plain-English sentences summarizing the core gameplay premise, player controls/feel, and repeatable loop (incorporating any refinement request).",
-  "mechanics": [
-    "Short Mechanic Tag 1",
-    "Short Mechanic Tag 2",
-    "Short Mechanic Tag 3"
-  ],
+  "workingTitle": "Short 2-3 word title",
+  "baseSummary": "2 plain sentences summarizing core gameplay premise, controls/feel, and repeatable loop.",
+  "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"],
   "expansionCards": [
-    {
-      "badge": "01 · CORE MECHANIC TWIST",
-      "title": "Short 2-4 Word Mechanic Name",
-      "description": "1-2 plain sentences describing how this mechanic deepens primary player actions.",
-      "additionSummary": "1 concise clause summarizing this mechanic when toggled on"
-    },
-    {
-      "badge": "02 · RISK / REWARD HOOK",
-      "title": "Short 2-4 Word Hook Name",
-      "description": "1-2 plain sentences describing a tension or risk/reward trade-off inside the loop.",
-      "additionSummary": "1 concise clause summarizing this risk/reward hook when toggled on"
-    },
-    {
-      "badge": "03 · LOOP PAYOFF & UPGRADE",
-      "title": "Short 2-4 Word Payoff Name",
-      "description": "1-2 plain sentences describing a between-round upgrade or loop completion payoff.",
-      "additionSummary": "1 concise clause summarizing this payoff when toggled on"
-    }
+    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
+    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
+    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"}
   ]
 }
 ''';

@@ -42,6 +42,19 @@ void main() {
           'Core Farm-to-Shooter Sandbox: Build a playable prototype where you plant and harvest crops, sell or load them as ammo, and clear a 3-wave arena run.',
         ),
       );
+
+      // Verify conversational replacement ("instead of a crab we use vehicals.") synthesizes a clean Goal, Title, and Core Loop Beats
+      final crabDraft = await ProjectConceptAgent.startConceptInterview(
+        'Crab champion boomer shooter game',
+      );
+      final vehicleUpdated = await ProjectConceptAgent.sendConceptChatTurn(
+        crabDraft,
+        '[Section 01 Goal] instead of a crab we use vehicals.',
+      );
+      expect(vehicleUpdated.title, contains('Vehicle'));
+      expect(vehicleUpdated.goal, contains('vehicles'));
+      expect(vehicleUpdated.goal.toLowerCase(), isNot(contains('instead of a crab')));
+      expect(vehicleUpdated.coreLoopBeats.first.toLowerCase(), isNot(contains('instead of a crab')));
     });
 
     testWidgets(

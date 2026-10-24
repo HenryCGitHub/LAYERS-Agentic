@@ -82,68 +82,41 @@ class ReleasePlannerAgent {
         : '  (Decompose the project goal into sequential playable loop beats)';
 
     if (GeminiAgentClient.hasKey(apiKey)) {
+      final projectGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
       final prompt = '''
-You are the Antigravity Release Planner Agent (`gemini-4-argon`) for a game studio.
-We are planning milestone Release: "${releaseDoc.title}" (Version Tag: $versionTag, Scope Preset: ${preset.label} — ${preset.description}).
+You are the Antigravity Release Planner Agent (`gemini-4-argon`) planning Release: "${releaseDoc.title}" ($versionTag, ${preset.label}).
+Project: "${projectDoc.title}" | Goal: "$projectGoal"
+Game Spec: $gameSpecText | Tech Spec: $techSpecText
+Pillars: $pillarsText
+Trade-Offs: $tradeOffsText
+Exclusions: ${projectExclusions.join(' | ')}
 
-Project Title: "${projectDoc.title}"
-Game Spec: $gameSpecText
-Tech Spec: $techSpecText
-Design Pillars (Core Player Experience):
-$pillarsText
-Trade-Offs (Prioritize X over Y):
-$tradeOffsText
-Project Concept Scope:
-${projectDoc.sections['scope'] ?? ''}
-
-Approved Stage 1 Core Gameplay Loop Beats (${coreLoopItems.length} Beats):
+Approved Stage 1 Core Loop Beats (${coreLoopItems.length} Beats):
 $numberedCoreLoopSummary
-
 ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
 
-STRICT NAMING & ARCHITECTURE RULES:
-1. 1-TO-1 STAGE 1 CORE LOOP → STAGE 2 EPICS & PLAYABLE FEATURES CONTINUITY:
-   - Use the Stage 1 Core Loop steps (`BEAT-01` through `BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) to define the corresponding Epics (`beats` array entries `E01..E0${coreLoopItems.length}`) required to make the loop work! NEVER drop or collapse Stage 1 Core Loop steps down to 2 or 3 epics.
-   - Under EACH Epic, generate BOTH:
-     * `1–2` In-Scope Playable Features (`"included": true`) that build the essential gameplay mechanics needed to playtest that Epic on screen in $versionTag, AND
-     * `1` Out-of-Scope / Next-Release Candidate Feature (`"included": false`) that belongs to that Epic but can wait for the next release so the developer can decide inside each Epic what to keep in $versionTag vs. defer to the next release.
-   - No artificial "30-second" loop time limit: a core loop takes whatever natural duration fits "${projectDoc.title}".
-2. PLAIN FUNCTIONAL GAME-DEV TITLES (NO THEMATIC / LORE / ARCHAIC WORDING):
-   - Every Beat, Feature, and Checkpoint `title` MUST use plain, everyday game-dev words that state the literal mechanic or system (e.g., "Crop Farming & Storage", "Planting & Harvesting", "Grid Building", "Shop Buy & Sell", "Shotgun Arena Combat", "Greybox Test Room").
-   - NEVER use flowery, archaic, poetic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition Prep", "Wasteland", "Adrenaline", "Ordinance").
-3. PERMANENT MECHANICS vs. TEMPORARY TESTBEDS:
-   - Keep permanent mechanics (movement, weapons, farming, AI, UI) in their own Features so they evolve cleanly from $versionTag onward.
-   - Keep temporary greybox test rooms or debug spawners in a separate testbed Feature so they can be marked `"lifecycle": "superseded"` in later releases without throwing away core mechanics.
-4. FEATURE LIFECYCLE STATUS (`lifecycle`):
-   - For v0.1 (first release): all features use `"lifecycle": "new"`.
-   - For v0.2+ (subsequent releases evolving an existing tree):
-     * `"stable"` — Existing feature from a prior release that works and needs 0 new hours (`"estimatedHours": 0`, `"checkpoints": []`). Leave it alone!
-     * `"upgrade"` — Existing feature getting new $versionTag checkpoints, scope items, or tuning parameters (`"estimatedHours"` = ONLY the new delta hours for $versionTag, and `"checkpoints"` = ONLY the new $versionTag checkpoints).
-     * `"new"` — Brand new feature added in $versionTag (or promoted from prior Out of Scope).
-     * `"superseded"` — Temporary v0.1 testbed replaced by a real level/arena in $versionTag (`"included": false`, `"supersedesFeatureTitle"` set on the new replacement feature).
-5. BANNED CORPORATE JARGON:
-   - Never use words like "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "staging", "synergy", or "seamlessly". Start goals with concrete verbs like "Build...", "Add...", or "Connect...".
+${GeminiAgentClient.compactStyleRules}
+- Map each Stage 1 Beat (`BEAT-01..BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) 1-to-1 to a Beat entry in `beats`.
+- Under each Beat, generate `1–2` In-Scope Playable Features (`"included": true`) and `1` Next-Release Candidate Feature (`"included": false`).
+- Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
+- `lifecycle`: `"new"` for v0.1; for v0.2+, use `"stable"` (0h, empty checkpoints), `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"`.
 
-Return ONLY a JSON object with this exact schema:
+Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
 {
-  "goal": "Plain-English sentence starting with 'Build...' or 'Expand...' stating the goal of ${releaseDoc.title}",
-  "doneWhen": "Concrete playtest condition for when ${releaseDoc.title} is ready to ship",
-  "explicitExclusions": ["Deferred or excluded mechanic", "..."],
+  "goal": "Build... goal of ${releaseDoc.title}",
+  "doneWhen": "Concrete playtest completion condition",
+  "explicitExclusions": ["Excluded mechanic", "..."],
   "questions": [
     {
       "id": "rel_q_1",
-      "question": "Specific release question in plain dev terms?",
-      "options": [
-        "(Recommended) Short Card Title: Concise 1-sentence description",
-        "Alternative Card Title: Concise 1-sentence description",
-        "Third Card Title: Concise 1-sentence description"
-      ]
+      "question": "Release priority question?",
+      "options": ["(Recommended) Title: 1-sentence description", "Title 2: ...", "Title 3: ..."]
     }
   ],
   "beats": [
     {
       "id": "beat_1",
-      "title": "Plain Functional Beat Title",
+      "title": "Plain Beat Title",
       "goal": "Literal beat goal",
       "doneWhen": "Literal beat completion criteria",
       "features": [
@@ -155,20 +128,15 @@ Return ONLY a JSON object with this exact schema:
           "estimatedHours": 6,
           "included": true,
           "lifecycle": "new",
-          "originVersion": "$versionTag",
-          "inScope": ["Scope item", "..."],
+          "inScope": ["Scope item"],
           "outOfScope": ["Deferred item"],
-          "tuningParams": ["paramOne: 10.0 m/s", "..."],
+          "tuningParams": ["paramOne: 10.0 m/s"],
           "edgeCases": ["[TAG] Specific edge case behavior"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "releaseVersion": "$versionTag",
-              "tasks": ["Task (2h)", "..."],
-              "coveredScope": ["Scope item"],
-              "tuningParams": ["paramOne: 10.0 m/s"],
-              "edgeCases": ["[TAG] Specific edge case behavior"]
+              "tasks": ["Task (2h)"]
             }
           ]
         }
@@ -844,39 +812,35 @@ Return ONLY a JSON object with this exact schema:
     if (GeminiAgentClient.hasKey(apiKey)) {
       final currentBeatsSummary = blueprint.beats
           .map(
-            (b) => '- Beat "${b.title}" (${b.goal}):\n'
-                '${b.features.map((f) => '  * Feature "${f.title}" [${f.included ? "IN SCOPE" : "DEFERRED"}, lifecycle: ${f.lifecycle.name}] (${f.activeDeltaHours}h): ${f.goal}').join('\n')}',
+            (b) => '- ${b.id} "${b.title}" (${b.goal}): '
+                '${b.features.map((f) => '"${f.title}" [${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h]').join(', ')}',
           )
           .join('\n');
 
+      // Delta-Beat JSON Prompt (~70% fewer output tokens: only return modified/added Beats)
       final prompt = '''
-You are the Antigravity Release Planner Agent pair-planning "${blueprint.releaseTitle}" (${blueprint.releaseVersionTag}) with a game developer.
-Current Release Blueprint:
+You are the Antigravity Release Planner Agent updating "${blueprint.releaseTitle}" (${blueprint.releaseVersionTag}).
+Current Plan:
 - Goal: "${blueprint.goal}"
 - Done When: "${blueprint.doneWhen}"
-- Explicit Exclusions: ${blueprint.explicitExclusions.join(', ')}
-- Beats & Features:
+- Exclusions: ${blueprint.explicitExclusions.join(', ')}
+- Beats:
 $currentBeatsSummary
 
-Developer's Latest Chat Message: "$cleanMsg"
+Developer Request: "$cleanMsg"
+${GeminiAgentClient.compactStyleRules}
+- DELTA-ONLY BEATS: In `beats`, return ONLY the specific Beat(s) that were modified or added by the developer's request (untouched Beats are preserved automatically).
 
-STRICT NAMING & WORDING RULES:
-- Use PLAIN, LITERAL, NON-THEMATIC game-dev words for all Beat, Feature, and Checkpoint titles (2-4 everyday words like "Crop Farming & Storage", "Shop Buy & Sell", "Shotgun Arena Combat").
-- NEVER use flowery, archaic, or roleplay/lore words (e.g., NEVER write "Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline").
-- NEVER use corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
-
-Task:
-Apply the developer's requested changes to the Release Blueprint and reply conversationally in 1-2 sentences confirming what you changed.
-Return ONLY a JSON object with this schema:
+Return ONLY valid JSON:
 {
-  "reply": "1-2 sentence confirmation of the changes made to the Release Plan",
-  "goal": "Updated release goal starting with 'Build...'",
-  "doneWhen": "Updated release doneWhen",
+  "reply": "1-2 sentence confirmation of the changes made",
+  "goal": "Updated release goal (or existing if unchanged)",
+  "doneWhen": "Updated release doneWhen (or existing if unchanged)",
   "explicitExclusions": ["Exclusion 1", "Exclusion 2"],
   "beats": [
     {
       "id": "beat_1",
-      "title": "Plain Functional Beat Title",
+      "title": "Plain Beat Title",
       "goal": "1-sentence literal beat goal",
       "doneWhen": "1-sentence literal beat completion criteria",
       "features": [
@@ -888,20 +852,15 @@ Return ONLY a JSON object with this schema:
           "estimatedHours": 6,
           "included": true,
           "lifecycle": "new",
-          "originVersion": "${blueprint.releaseVersionTag}",
-          "inScope": ["Scope item 1", "Scope item 2"],
+          "inScope": ["Scope item"],
           "outOfScope": ["Deferred item"],
-          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.15 s"],
+          "tuningParams": ["paramOne: 10.0 m/s"],
           "edgeCases": ["[TAG] Specific edge case behavior"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "releaseVersion": "${blueprint.releaseVersionTag}",
-              "tasks": ["Task 1 (2h)", "Task 2 (2h)"],
-              "coveredScope": ["Scope item 1"],
-              "tuningParams": ["paramOne: 10.0 m/s"],
-              "edgeCases": ["[TAG] Specific edge case behavior"]
+              "tasks": ["Task 1 (2h)", "Task 2 (2h)"]
             }
           ]
         }
@@ -933,9 +892,24 @@ Return ONLY a JSON object with this schema:
           fallbackExclusions: blueprint.explicitExclusions,
         );
         if (updatedBp != null) {
-          blueprint.goal = updatedBp.goal;
-          blueprint.doneWhen = updatedBp.doneWhen;
-          blueprint.beats = updatedBp.beats;
+          if (updatedBp.goal.isNotEmpty) blueprint.goal = updatedBp.goal;
+          if (updatedBp.doneWhen.isNotEmpty) blueprint.doneWhen = updatedBp.doneWhen;
+          // Merge delta Beats onto existing blueprint.beats so untouched Epics stay intact
+          final mergedBeats = List<ProposedBeatBlueprint>.from(blueprint.beats);
+          for (final deltaBeat in updatedBp.beats) {
+            final idx = mergedBeats.indexWhere(
+              (b) =>
+                  b.id == deltaBeat.id ||
+                  b.title.toLowerCase().trim() ==
+                      deltaBeat.title.toLowerCase().trim(),
+            );
+            if (idx != -1) {
+              mergedBeats[idx] = deltaBeat;
+            } else {
+              mergedBeats.add(deltaBeat);
+            }
+          }
+          blueprint.beats = mergedBeats;
           blueprint.explicitExclusions = updatedBp.explicitExclusions;
           final reply = json['reply']?.toString().trim() ??
               'Updated the Release Plan Blueprint with your changes!';

@@ -11,6 +11,17 @@ class GeminiAgentClient {
   static const String _rawEnvKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String _b64EnvKey = String.fromEnvironment('GEMINI_API_KEY_B64');
 
+  /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~55 tokens vs ~220 tokens).
+  static const String compactStyleRules = '''
+RULES:
+- Use plain, literal 2-4 word game-dev titles (e.g. "Crop Farming & Storage", "Shop Buy & Sell", "Vehicle Arena Combat").
+- NEVER use archaic/lore words ("Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline", "Ordinance") or corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
+- Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.
+- Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.''';
+
+  /// Records the last non-200 status hint (e.g., HTTP 402 prepayment credits depleted) for diagnostics.
+  static String? lastErrorStatus;
+
   static String resolveDefaultApiKey() {
     if (_rawEnvKey.trim().isNotEmpty) return _rawEnvKey.trim();
     if (_b64EnvKey.trim().isNotEmpty) {
@@ -40,12 +51,19 @@ class GeminiAgentClient {
       preferredModel,
       'gemini-flash-latest',
       'gemini-3-flash-preview',
-      'gemini-2.5-flash',
+      'gemini-3.1-flash-lite-preview',
     }.toList();
 
+    final normalizedThinking = thinkingLevel.trim().toUpperCase();
+    // Skip billed thinking tokens on fast 'LOW' JSON turns unless running Stage 2 architecture models
+    final preferThinking = normalizedThinking == 'MEDIUM' ||
+        normalizedThinking == 'HIGH' ||
+        preferredModel.contains('argon') ||
+        preferredModel.contains('pro');
+    final thinkingOrder = preferThinking ? const [true, false] : const [false];
+
     for (final model in modelsToTry) {
-      // Try first with thinkingConfig (for Gemini 3/4/latest models), then retry without if rejected
-      for (final includeThinking in [true, false]) {
+      for (final includeThinking in thinkingOrder) {
         try {
           final uri = Uri.parse(
             'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
@@ -54,9 +72,9 @@ class GeminiAgentClient {
             'temperature': temperature,
             'responseMimeType': 'application/json',
           };
-          if (includeThinking && thinkingLevel.trim().isNotEmpty) {
+          if (includeThinking && normalizedThinking.isNotEmpty) {
             genConfig['thinkingConfig'] = {
-              'thinkingLevel': thinkingLevel.trim().toUpperCase(),
+              'thinkingLevel': normalizedThinking,
             };
           }
 
@@ -78,6 +96,7 @@ class GeminiAgentClient {
               .timeout(const Duration(seconds: 25));
 
           if (response.statusCode == 200) {
+            lastErrorStatus = null;
             final body = jsonDecode(response.body) as Map<String, dynamic>;
             final candidates = body['candidates'] as List?;
             if (candidates != null && candidates.isNotEmpty) {
@@ -95,6 +114,15 @@ class GeminiAgentClient {
                 }
               }
             }
+          } else if (response.statusCode == 401 ||
+              response.statusCode == 402 ||
+              response.statusCode == 403) {
+            // Fail fast on auth/billing errors instead of retrying 8x across models
+            lastErrorStatus = 'HTTP ${response.statusCode}';
+            return null;
+          } else if (response.statusCode == 404) {
+            // Model not found; skip second thinking pass and try next model
+            break;
           }
         } catch (_) {
           // Retry without thinkingConfig or fall back to next model

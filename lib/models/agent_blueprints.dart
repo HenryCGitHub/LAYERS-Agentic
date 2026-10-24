@@ -194,13 +194,29 @@ class ProjectConceptBlueprint {
     Map<String, List<String>>? sectionOptions,
   })  : goal = sanitizeGoalText(goal),
         chatHistory = chatHistory ?? <AgentChatMessage>[],
-        sectionOptions = sectionOptions ?? <String, List<String>>{};
+        sectionOptions = sectionOptions ?? <String, List<String>>{} {
+    // Auto-repair any legacy Beat 01 that copy-pasted raw "instead of..." user instructions
+    if (coreLoopBeats.isNotEmpty &&
+        RegExp(r'^Core Focus:\s*instead of\b', caseSensitive: false)
+            .hasMatch(coreLoopBeats.first)) {
+      coreLoopBeats[0] =
+          'Primary Vehicle & Loadout Control: Spawn in the arena and test responsive steering, boost, and primary fire';
+    }
+  }
 
-  /// Strips leaked `[Section 01 Goal]...` or `to apply this choice: "..."` prompt wrappers
-  /// and stacked parenthetical brain-dump notes from a Goal string so saved or live projects
-  /// always display a clean, readable 1-sentence Goal.
+  /// Normalizes common game-dev typos in conversational user input (e.g. "vehicals" -> "vehicles").
+  static String normalizeCommonTypos(String input) {
+    return input
+        .replaceAll(RegExp(r'\bvehicals\b', caseSensitive: false), 'vehicles')
+        .replaceAll(RegExp(r'\bvehical\b', caseSensitive: false), 'vehicle')
+        .replaceAll(RegExp(r'\benemys\b', caseSensitive: false), 'enemies');
+  }
+
+  /// Strips leaked `[Section 01 Goal]...` or `to apply this choice: "..."` prompt wrappers,
+  /// raw `"focused on instead of X we use Y"` copy-pastes, and stacked parenthetical brain-dump notes
+  /// from a Goal string so saved or live projects always display a clean, readable 1-sentence Goal.
   static String sanitizeGoalText(String rawGoal) {
-    var clean = rawGoal.trim();
+    var clean = normalizeCommonTypos(rawGoal.trim());
     if (clean.isEmpty) return clean;
 
     final lower = clean.toLowerCase();
@@ -249,6 +265,27 @@ class ProjectConceptBlueprint {
       ),
       '',
     );
+
+    // Repair raw "Build a <Title> prototype focused on instead of <X> we use <Y> with responsive controls..."
+    final rawInsteadMatch = RegExp(
+      r'^Build a (.+?) prototype focused on ["\s]*instead of (?:a |an |the )?([a-zA-Z0-9\s-]+?)\s+(?:we\s+use|use|using|have|play\s+as)\s+([a-zA-Z0-9\s-]+?)\.?\s*["\s]*with responsive controls and clear feedback\.?$',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    if (rawInsteadMatch != null) {
+      final rawTitle = rawInsteadMatch.group(1)!.trim();
+      final oldSubject = rawInsteadMatch.group(2)!.trim();
+      final newSubject = rawInsteadMatch.group(3)!.trim();
+      final singularNew = newSubject.toLowerCase().endsWith('s') && newSubject.length > 3
+          ? newSubject.substring(0, newSubject.length - 1)
+          : newSubject;
+      final capNew = singularNew[0].toUpperCase() + singularNew.substring(1);
+      final updatedTitle = rawTitle.replaceAll(
+        RegExp(RegExp.escape(oldSubject), caseSensitive: false),
+        capNew,
+      );
+      clean =
+          'Single-Arena Loop: Build a playable $updatedTitle prototype where you control $newSubject, weave through arena hazards, and clear escalating enemy waves.';
+    }
 
     // Strip stacked parenthetical brain-dump notes if more than 1 parenthetical block appears
     final parenMatches = RegExp(r'\([^()]{12,}\)').allMatches(clean).length;
