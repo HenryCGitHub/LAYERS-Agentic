@@ -193,7 +193,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         id: 'rel_q_feel',
         question: 'For ${releaseDoc.title}, what should we prioritize during greybox playtesting?',
         options: [
-          '(Recommended) Controls & Mechanic Feel: Crisp input responsiveness, core mechanic feel, and state transitions at 60 FPS',
+          '(Recommended) Controls & Mechanic Feel: Crisp input responsiveness, core mechanic feel, and clean state transitions',
           'Combat Hit & Telegraphs: Target hit confirmation, visual/audio telegraphs, and impact feedback cues',
           'Full Loop & Upgrade Flow: Complete loop progression, reward/upgrade selection, and instant restart flow',
         ],
@@ -232,7 +232,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           id: 'feat_${beatNum}_1',
           title: '$beatTitle Mechanics & Controls',
           goal: 'Build the playable mechanics and feedback for $beatTitle ($beatDesc).',
-          doneWhen: 'Playtester can execute $beatTitle reliably at 60 FPS with clear visual and audio cues.',
+          doneWhen: 'Playtester can execute $beatTitle reliably from start to finish with clear visual and audio cues.',
           estimatedHours: 5,
           included: true,
           lifecycle: FeatureLifecycleStatus.newFeature,

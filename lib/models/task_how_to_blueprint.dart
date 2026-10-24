@@ -164,7 +164,7 @@ class MechanicArchetypeProfile {
         return MechanicArchetypeProfile(
           category: 'grapple',
           goal: 'Build $clean raycast targeting, tether pull velocity, and release momentum.',
-          doneWhen: 'Player fires $clean at valid anchors, swings/pulls smoothly at 60 FPS, and keeps momentum on release.',
+          doneWhen: 'Player fires $clean at valid anchors, swings/pulls smoothly across gaps, and keeps momentum on release.',
           inScope: [
             'Anchor raycast check and tether line rendering for $clean',
             'Pull/swing velocity impulse and release momentum transfer',
@@ -374,7 +374,7 @@ class MechanicArchetypeProfile {
         return MechanicArchetypeProfile(
           category: 'ui',
           goal: 'Build $clean state binding, smooth camera/HUD interpolation, and threshold notifications.',
-          doneWhen: 'Camera and HUD readouts for $clean update at 60 FPS in sync with gameplay state changes.',
+          doneWhen: 'Camera and HUD readouts for $clean update immediately in sync with gameplay state changes.',
           inScope: [
             'Event-driven HUD readout binding and smooth interpolation for $clean',
             'Threshold pop animation and clean reset on round restart',
@@ -412,7 +412,7 @@ class MechanicArchetypeProfile {
         return MechanicArchetypeProfile(
           category: 'core',
           goal: 'Build playable $clean mechanics, state transitions, and player feedback$descSuffix.',
-          doneWhen: 'Playtester can execute $clean reliably at 60 FPS with immediate visual and audio confirmation.',
+          doneWhen: 'Playtester can execute $clean reliably from start to finish with immediate visual and audio confirmation.',
           inScope: [
             'Core player input, state transition logic, and active execution for $clean',
             'Immediate on-screen visual/audio feedback and clean transition to next beat',

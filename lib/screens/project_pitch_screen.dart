@@ -169,9 +169,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       purpose: 'Observable playtest condition that proves the Prototype is complete.',
       question: 'How will we verify that the Prototype loop is done?',
       options: [
-        '60 FPS Full Loop: Playtester completes a full core loop cycle at 60 FPS with zero soft-locks',
-        'All Beats & Clean Reset: Playtester executes all core loop beats, collects rewards, and resets cleanly',
-        '3 Consecutive Runs: Playtester completes 3 consecutive loop cycles with responsive controls and clear feedback',
+        'All Beats & Clean Reset: Playtester spawns in, executes every core loop beat from start to finish, and resets the arena cleanly',
+        '3 Consecutive Runs: Playtester completes 3 back-to-back loop cycles with clear win/fail resolution and zero soft-locks',
+        'No-Explain Playtest: A playtester picks up the controls, reads the primary objective from on-screen cues alone, and completes a full round',
       ],
     ),
     _SectionConfig(
@@ -2161,32 +2161,18 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 11,
+                            color: textSecondary,
+                          ),
+                          const SizedBox(width: 4),
                           Text(
-                            '← / → Step',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
+                            'Click any item below to edit directly',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
                               color: textSecondary,
                             ),
-                          ),
-                          const SizedBox(width: 14),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.edit_outlined,
-                                size: 11,
-                                color: textSecondary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Click any item below to edit directly',
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ],
                           ),
                         ],
                       ),

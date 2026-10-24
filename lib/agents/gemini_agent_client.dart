@@ -17,6 +17,7 @@ RULES:
 - Use plain, literal 2-4 word game-dev titles (e.g. "Crop Farming & Storage", "Shop Buy & Sell", "Vehicle Arena Combat").
 - NEVER use archaic/lore words ("Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline", "Ordinance") or corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
 - Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.
+- `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").
 - Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.''';
 
   /// Records the last non-200 status hint (e.g., HTTP 402 prepayment credits depleted) for diagnostics.

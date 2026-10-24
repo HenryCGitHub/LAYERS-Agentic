@@ -1423,9 +1423,9 @@ class WorkbenchProvider extends ChangeNotifier {
         break;
       case 'doneWhen':
         fresh = [
-          'A playtester completes 3 consecutive $title runs in under 5 minutes with zero physics clipping or state softlocks.',
-          'A new player understands the primary $title control loop within 30 seconds without verbal instructions and asks for another run.',
-          'All core loop beats transition cleanly at 60 FPS and resetting the arena restores 100% of dynamic objects.',
+          'Win/Fail & Clean Reset: Playtester triggers both win and fail states and resets the $title arena with 100% of dynamic objects restored.',
+          'No-Instruction Playtest: A new player understands the primary $title control loop within 30 seconds from on-screen cues alone and finishes a round.',
+          '3-Run Loop Endurance: Playtester completes 3 consecutive $title runs in under 5 minutes with responsive controls and zero state soft-locks.',
         ];
         break;
       case 'releaseTrain':

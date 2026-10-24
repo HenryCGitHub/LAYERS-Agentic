@@ -815,9 +815,9 @@ Return ONLY valid JSON:
         'Defer Meta-Save & Audio: Defer persistent meta-progression save files and custom audio menus until MVP',
       ],
       'doneWhen': [
-        '60 FPS Full Loop: Playtester completes a full $title core loop cycle at 60 FPS with zero soft-locks',
-        'All Beats & Clean Reset: Playtester executes all $title core beats, collects rewards, and resets cleanly',
-        '3 Consecutive Runs: Playtester completes 3 consecutive $title loop cycles with responsive controls and clear feedback',
+        'All Beats & Clean Reset: Playtester spawns in, executes every $title core loop beat from start to finish, and resets the arena cleanly',
+        '3 Consecutive Runs: Playtester completes 3 back-to-back $title loop cycles with clear win/fail resolution and zero soft-locks',
+        'No-Explain Playtest: A playtester picks up the controls, reads the primary $title objective from on-screen cues alone, and completes a full round',
       ],
       'prototypeRelease': [
         'Single v0.1 Greybox: Single Greybox Prototype (v0.1) proving all $title Core Loop Beats work together',
