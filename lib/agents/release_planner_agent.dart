@@ -97,7 +97,7 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 
 ${GeminiAgentClient.compactStyleRules}
 - Map each Stage 1 Beat (`BEAT-01..BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) 1-to-1 to a Beat entry in `beats`.
-- Under each Beat, generate `1–2` In-Scope Playable Features (`"included": true`) and `1` Next-Release Candidate Feature (`"included": false`).
+- Under each Beat, generate `1–2` In-Scope Playable Features (`"included": true`) needed for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
 - `lifecycle`: `"new"` for v0.1; for v0.2+, use `"stable"` (0h, empty checkpoints), `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"`.
 
@@ -220,7 +220,6 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       final beatDesc = rawBeat.contains(':')
           ? rawBeat.substring(rawBeat.indexOf(':') + 1).trim()
           : rawBeat.trim();
-      final isLastBeat = i == effectiveLoopItems.length - 1;
       final archetype = MechanicArchetypeProfile.fromFeatureTitle(
         '$beatTitle Mechanics & Controls',
         beatTitle: beatTitle,
@@ -300,53 +299,6 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                 ],
               ),
             ],
-          ),
-        if (isLastBeat)
-          ProposedFeatureBlueprint(
-            id: 'feat_${beatNum}_2',
-            title: 'Bonus Time-Trial Medals',
-            goal: 'Award Bronze/Silver/Gold performance medals at the end of a completed loop.',
-            doneWhen: 'Completing the loop under target thresholds displays medal icon on summary card.',
-            estimatedHours: 4,
-            included: false, // Pre-unchecked to demonstrate YAGNI toggle -> Out of Scope
-            lifecycle: FeatureLifecycleStatus.newFeature,
-            originVersion: versionTag,
-            inScope: const [
-              'Gold/Silver/Bronze threshold evaluation and badge popup',
-            ],
-            tuningParams: const [
-              'goldMedalThreshold: 1000 pts',
-            ],
-            edgeCases: const [
-              '[SCORE CLAMP] Simultaneous completion events award medal exactly once',
-            ],
-            checkpoints: [
-              ProposedCheckpointBlueprint(
-                title: 'Medal Threshold Evaluation',
-                playtestCriteria: 'Complete loop above target threshold -> Gold medal badge animates on summary screen.',
-                releaseVersion: versionTag,
-                tasks: const [
-                  'Compare round performance against goldMedalThreshold and render badge (2h)',
-                ],
-                coveredScope: const [
-                  'Gold/Silver/Bronze threshold evaluation and badge popup',
-                ],
-                tuningParams: const [
-                  'goldMedalThreshold: 1000 pts',
-                ],
-                edgeCases: const [
-                  '[SCORE CLAMP] Simultaneous completion events award medal exactly once',
-                ],
-              ),
-            ],
-          )
-        else
-          _buildNextReleaseCandidateFeature(
-            beatNum: beatNum,
-            beatTitle: beatTitle,
-            beatDesc: beatDesc,
-            versionTag: versionTag,
-            featId: 'feat_${beatNum}_${i == 0 ? 3 : 2}',
           ),
       ];
 
@@ -740,17 +692,6 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       }
 
       if (features.isNotEmpty) {
-        if (!features.any((f) => !f.included)) {
-          features.add(
-            _buildNextReleaseCandidateFeature(
-              beatNum: bIdx + 1,
-              beatTitle: bTitle,
-              beatDesc: bGoal,
-              versionTag: versionTag,
-              featId: 'feat_${bIdx + 1}_${features.length + 1}_deferred',
-            ),
-          );
-        }
         beats.add(
           ProposedBeatBlueprint(
             id: (bMap['id'] ?? 'beat_${bIdx + 1}').toString(),
@@ -980,86 +921,6 @@ Return ONLY valid JSON:
 
     blueprint.lastAgentReply = replyText;
     return blueprint;
-  }
-
-  /// Builds an Epic-specific Out-of-Scope / Next-Release Candidate Feature (`included: false`)
-  /// so every Epic (`E01..E0N`) in Stage 2 displays both its In-Scope release features and
-  /// a concrete stretch/next-release feature that the user can toggle in or keep queued for next release.
-  static ProposedFeatureBlueprint _buildNextReleaseCandidateFeature({
-    required int beatNum,
-    required String beatTitle,
-    required String beatDesc,
-    required String versionTag,
-    required String featId,
-  }) {
-    final cat = MechanicArchetypeProfile.inferCategory('$beatTitle $beatDesc');
-    final String candidateTitle;
-    switch (cat) {
-      case 'grapple':
-        candidateTitle = '$beatTitle Multi-Anchor Zipline';
-        break;
-      case 'movement':
-        candidateTitle = '$beatTitle Air-Dash & Vault Cancel';
-        break;
-      case 'combat':
-        candidateTitle = '$beatTitle Alt-Fire & Parry Counter';
-        break;
-      case 'farming':
-        candidateTitle = '$beatTitle Auto-Watering Sprinklers';
-        break;
-      case 'economy':
-        candidateTitle = '$beatTitle Loadout Presets & Reroll';
-        break;
-      case 'building':
-        candidateTitle = '$beatTitle Multi-Tile Blueprint Copy';
-        break;
-      case 'ui':
-        candidateTitle = '$beatTitle Split-Time Delta Overlay';
-        break;
-      default:
-        const suffixes = <String>[
-          'Loadout Presets & Quick-Swap',
-          'Combo Chain & Speed Boost',
-          'Secondary Hazard & Counter',
-          'Bonus Multiplier & Risk Tier',
-          'Upgrade Reroll & Compare',
-          'Mastery Challenge & Split Timer',
-        ];
-        final suffix = suffixes[(beatNum - 1) % suffixes.length];
-        candidateTitle = '$beatTitle: $suffix';
-    }
-
-    final archetype = MechanicArchetypeProfile.fromFeatureTitle(
-      candidateTitle,
-      beatTitle: beatTitle,
-      beatDescription: beatDesc,
-    );
-
-    return ProposedFeatureBlueprint(
-      id: featId,
-      title: candidateTitle,
-      goal: archetype.goal,
-      doneWhen: archetype.doneWhen,
-      estimatedHours: 4,
-      included: false,
-      lifecycle: FeatureLifecycleStatus.newFeature,
-      originVersion: versionTag,
-      inScope: archetype.inScope,
-      outOfScope: archetype.outOfScope,
-      tuningParams: archetype.tuningParams,
-      edgeCases: archetype.edgeCases,
-      checkpoints: [
-        ProposedCheckpointBlueprint(
-          title: archetype.cp1Title,
-          playtestCriteria: archetype.cp1Playtest,
-          releaseVersion: versionTag,
-          tasks: archetype.cp1Tasks,
-          coveredScope: [archetype.inScope.first],
-          tuningParams: archetype.tuningParams,
-          edgeCases: [archetype.edgeCases.first],
-        ),
-      ],
-    );
   }
 
   static String _extractBeatTitle(String rawBullet, {required String fallback}) {

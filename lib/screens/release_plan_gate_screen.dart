@@ -72,17 +72,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
   }
 
   Widget _buildActiveStage2SectionWorkspace(ReleaseBlueprint bp) {
-    final interventions = widget.workbench.stage2Interventions;
     if (!_isStepByBeatMode || _activeStage2Section == 'full_review') {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildGateBanner(bp),
           const SizedBox(height: 18),
-          if (interventions.isNotEmpty) ...[
-            _buildScopeGuardSection(bp),
-            const SizedBox(height: 22),
-          ],
           if (bp.questions.isNotEmpty) ...[
             _buildReleaseQuestionsSection(bp),
             const SizedBox(height: 22),
@@ -179,6 +174,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           ],
         );
       case 'queued':
+      case 'scope_guard':
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -206,52 +202,6 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 ),
                 InkWell(
                   key: const ValueKey('stage2_queued_next_btn'),
-                  onTap: () => setState(() {
-                    _activeStage2Section = 'scope_guard';
-                  }),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                    child: Text(
-                      'Next Section: Producer Scope Guard →',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: accentCyan,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      case 'scope_guard':
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildScopeGuardSection(bp),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                InkWell(
-                  onTap: () => setState(() {
-                    _activeStage2Section = 'queued';
-                  }),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                    child: Text(
-                      '‹ Prev Section: Queued & Cuts',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-                InkWell(
-                  key: const ValueKey('stage2_scope_guard_next_btn'),
                   onTap: () => setState(() {
                     _isStepByBeatMode = false;
                     _activeStage2Section = 'full_review';
@@ -656,9 +606,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     final isGoalActive = _isStepByBeatMode && _activeStage2Section == 'goal';
     final isQuestionsActive =
         _isStepByBeatMode && _activeStage2Section == 'questions';
-    final isQueuedActive = _isStepByBeatMode && _activeStage2Section == 'queued';
-    final isScopeGuardActive =
-        _isStepByBeatMode && _activeStage2Section == 'scope_guard';
+    final isQueuedActive = _isStepByBeatMode &&
+        (_activeStage2Section == 'queued' ||
+            _activeStage2Section == 'scope_guard');
     final isFullReviewActive =
         !_isStepByBeatMode || _activeStage2Section == 'full_review';
 
@@ -767,46 +717,30 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   ),
                 ),
 
-                // ↪ Out of Scope & Planned for Next Release
+                // ↪ Unified Scope Guard, Out of Scope & Planned for Next Release
                 _buildFlushStepperRow(
                   rowKey: const ValueKey('stage2_step_queued'),
                   code: '↪',
-                  codeColor: accentAmber,
-                  title: 'Out of Scope & $nextVer',
-                  trailingText: bp.totalDeferredFeatures > 0
-                      ? '+${bp.totalDeferredFeatures}f · ${bp.totalDeferredHours}h'
-                      : '${bp.explicitExclusions.length} cuts',
-                  trailingColor: bp.totalDeferredFeatures > 0
+                  codeColor: interventions.isNotEmpty ||
+                          bp.totalDeferredFeatures > 0
                       ? accentAmber
-                      : accentCrimson,
+                      : accentEmerald,
+                  title: 'Out of Scope & $nextVer',
+                  trailingText: interventions.isNotEmpty
+                      ? '${interventions.length} alert${interventions.length == 1 ? "" : "s"}'
+                      : (bp.totalDeferredFeatures > 0
+                          ? '+${bp.totalDeferredFeatures}f · ${bp.totalDeferredHours}h'
+                          : '${bp.explicitExclusions.length} cuts'),
+                  trailingColor: interventions.isNotEmpty
+                      ? accentCrimson
+                      : (bp.totalDeferredFeatures > 0
+                          ? accentAmber
+                          : textSecondary),
                   isActive: isQueuedActive,
                   onTap: () {
                     setState(() {
                       _isStepByBeatMode = true;
                       _activeStage2Section = 'queued';
-                    });
-                  },
-                ),
-
-                // 🛡 Dedicated Producer Scope Guard Section
-                _buildFlushStepperRow(
-                  rowKey: const ValueKey('stage2_step_scope_guard'),
-                  code: '🛡',
-                  codeColor: interventions.isEmpty
-                      ? accentEmerald
-                      : accentAmber,
-                  title: 'Producer Scope Guard',
-                  trailingText: interventions.isEmpty
-                      ? '✓ Clean'
-                      : '${interventions.length} alert${interventions.length == 1 ? "" : "s"}',
-                  trailingColor: interventions.isEmpty
-                      ? accentEmerald
-                      : accentCrimson,
-                  isActive: isScopeGuardActive,
-                  onTap: () {
-                    setState(() {
-                      _isStepByBeatMode = true;
-                      _activeStage2Section = 'scope_guard';
                     });
                   },
                 ),
@@ -1849,7 +1783,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
-                    'Uncheck any feature to queue for $nextVer ↪',
+                    'Click Defer to $nextVer ↪ on any feature to queue for next release',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -2018,10 +1952,8 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
   ) {
     final beatCode = 'EPIC·${(beatIndex + 1).toString().padLeft(2, '0')}';
     final nextVer = _nextReleaseVersionTag(bp.releaseVersionTag);
-    final activeFeatures = beat.features.where((f) => !f.isSuperseded).toList();
     final includedInEpic = beat.features.where((f) => f.included || f.isSuperseded).toList();
     final deferredInEpic = beat.deferredFeatures;
-    final allIncluded = activeFeatures.isNotEmpty && activeFeatures.every((f) => f.included);
     final beatCtrl = _controllerForBeat(beat.id);
 
     void submitNewBeatFeature() {
@@ -2034,7 +1966,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Open Editorial Epic Header with 1px Bottom Hairline
+        // Open Editorial Epic Header with 1px Bottom Hairline (No Epic Checkbox)
         Container(
           padding: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -2042,98 +1974,73 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
               bottom: BorderSide(color: borderSubtle),
             ),
           ),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              InkWell(
-                key: ValueKey('toggle_beat_${beat.id}'),
-                onTap: () => widget.workbench.toggleProposedBeatScope(
-                  beat.id,
-                  !allIncluded,
-                ),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 3, right: 10),
-                  child: Icon(
-                    allIncluded
-                        ? Icons.check_box_rounded
-                        : Icons.check_box_outline_blank_rounded,
-                    size: 18,
-                    color: allIncluded ? accentEmerald : textMuted,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
                       children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Text(
-                                beatCode,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: accentCyan,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  beat.title,
-                                  style: AppTheme.displayFont(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: textPrimary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              InkWell(
-                                key: ValueKey('edit_epic_btn_${beat.id}'),
-                                onTap: () => _showEditEpicDialog(beat),
-                                borderRadius: BorderRadius.circular(4),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                  child: Text(
-                                    'Edit ✎',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: textSecondary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                          ),
-                        ),
                         Text(
-                          deferredInEpic.isNotEmpty
-                              ? '${beat.includedFeatures.length} in ${bp.releaseVersionTag} · ${deferredInEpic.length} for $nextVer · ${beat.totalIncludedHours}h'
-                              : '${beat.includedFeatures.length} Features · ${beat.totalIncludedHours}h',
+                          beatCode,
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w800,
-                            color: accentEmerald,
+                            color: accentCyan,
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            beat.title,
+                            style: AppTheme.displayFont(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          key: ValueKey('edit_epic_btn_${beat.id}'),
+                          onTap: () => _showEditEpicDialog(beat),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            child: Text(
+                              'Edit ✎',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      beat.goal,
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: textSecondary,
-                      ),
+                  ),
+                  Text(
+                    deferredInEpic.isNotEmpty
+                        ? '${beat.includedFeatures.length} in ${bp.releaseVersionTag} · ${deferredInEpic.length} in $nextVer · ${beat.totalIncludedHours}h'
+                        : '${beat.includedFeatures.length} ${beat.includedFeatures.length == 1 ? "Feature" : "Features"} · ${beat.totalIncludedHours}h',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: accentEmerald,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                beat.goal,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: textSecondary,
                 ),
               ),
             ],
@@ -2144,7 +2051,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
         for (final feat in includedInEpic)
           _buildFeatureToggleRow(bp, beat, feat),
 
-        // 2. Out-of-Scope / Planned for Next Release Features right inside the Epic
+        // 2. User-Deferred Features Planned for Next Release (Only shown if user deferred a feature)
         if (deferredInEpic.isNotEmpty) ...[
           Container(
             margin: const EdgeInsets.only(top: 12),
@@ -2160,7 +2067,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '↪ OUT OF SCOPE IN THIS EPIC · PLANNED FOR ${nextVer.toUpperCase()} (${deferredInEpic.length})',
+                  '↪ DEFERRED FROM THIS EPIC · PLANNED FOR ${nextVer.toUpperCase()} (${deferredInEpic.length})',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
@@ -2169,7 +2076,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   ),
                 ),
                 Text(
-                  'Check box to include in ${bp.releaseVersionTag}',
+                  'Click + Include in ${bp.releaseVersionTag} to restore',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 9.5,
                     fontWeight: FontWeight.w600,
@@ -2270,91 +2177,91 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              InkWell(
-                key: ValueKey('toggle_feat_${feat.id}'),
-                onTap: () => widget.workbench.toggleProposedFeatureScope(
-                  beat.id,
-                  feat.id,
-                  !feat.included,
-                ),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 1, right: 10),
-                  child: Icon(
+              // Design A: Explicit Scope Status Pill (Replaces mystery checkbox)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, right: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (isIncluded ? accentEmerald : accentAmber)
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: (isIncluded ? accentEmerald : accentAmber)
+                          .withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: Text(
                     isIncluded
-                        ? Icons.check_box_rounded
-                        : Icons.check_box_outline_blank_rounded,
-                    size: 17,
-                    color: isIncluded ? accentEmerald : textMuted,
+                        ? 'IN ${bp.releaseVersionTag.toUpperCase()} ✓'
+                        : '${nextVer.toUpperCase()} ↪',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: isIncluded ? accentEmerald : accentAmber,
+                    ),
                   ),
                 ),
               ),
               Expanded(
-                child: InkWell(
-                  onTap: () => widget.workbench.toggleProposedFeatureScope(
-                    beat.id,
-                    feat.id,
-                    !feat.included,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            feat.title,
-                            style: AppTheme.displayFont(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: isIncluded ? textPrimary : textMuted,
-                            ).copyWith(
-                              decoration: isIncluded
-                                  ? TextDecoration.none
-                                  : TextDecoration.lineThrough,
-                            ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          feat.title,
+                          style: AppTheme.displayFont(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: isIncluded ? textPrimary : textMuted,
+                          ).copyWith(
+                            decoration: isIncluded
+                                ? TextDecoration.none
+                                : TextDecoration.lineThrough,
                           ),
-                          _buildLifecycleBadge(feat, bp.releaseVersionTag),
+                        ),
+                        _buildLifecycleBadge(feat, bp.releaseVersionTag),
+                        Text(
+                          depTier.shortBadge,
+                          key: ValueKey('stage2_dep_tier_${feat.id}'),
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: accentCyan,
+                          ),
+                        ),
+                        if (feat.lifecycle == FeatureLifecycleStatus.upgrade)
                           Text(
-                            depTier.shortBadge,
-                            key: ValueKey('stage2_dep_tier_${feat.id}'),
+                            '${feat.originVersion} ✓ → +${feat.checkpoints.fold<int>(0, (sum, c) => sum + c.tasks.length)} ${bp.releaseVersionTag} Tasks',
+                            key: ValueKey('stage2_upgrade_diff_${feat.id}'),
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w800,
-                              color: accentCyan,
+                              color: accentEmerald,
                             ),
                           ),
-                          if (feat.lifecycle == FeatureLifecycleStatus.upgrade)
-                            Text(
-                              '${feat.originVersion} ✓ → +${feat.checkpoints.fold<int>(0, (sum, c) => sum + c.tasks.length)} ${bp.releaseVersionTag} Tasks',
-                              key: ValueKey('stage2_upgrade_diff_${feat.id}'),
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: accentEmerald,
-                              ),
-                            ),
-                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      !isIncluded &&
+                              feat.lifecycle !=
+                                  FeatureLifecycleStatus.superseded
+                          ? '↪ Deferred to $nextVer Release Gate · ${feat.goal}'
+                          : (feat.lifecycle == FeatureLifecycleStatus.stable
+                              ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
+                              : feat.goal),
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        height: 1.45,
+                        color: isIncluded ? textSecondary : textMuted,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        !isIncluded &&
-                                feat.lifecycle !=
-                                    FeatureLifecycleStatus.superseded
-                            ? '↪ Queued for $nextVer Release Gate · ${feat.goal}'
-                            : (feat.lifecycle == FeatureLifecycleStatus.stable
-                                ? 'Verified in ${feat.originVersion} · Untouched in ${bp.releaseVersionTag} (0h new work)'
-                                : feat.goal),
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          height: 1.45,
-                          color: isIncluded ? textSecondary : textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -2391,7 +2298,41 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     );
                   },
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
+              ],
+              // Design A: Explicit Defer / Include Action Pill
+              if (feat.lifecycle != FeatureLifecycleStatus.superseded) ...[
+                InkWell(
+                  key: ValueKey('toggle_feat_${feat.id}'),
+                  onTap: () => widget.workbench.toggleProposedFeatureScope(
+                    beat.id,
+                    feat.id,
+                    !feat.included,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: isIncluded
+                            ? borderSubtle
+                            : accentEmerald.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Text(
+                      isIncluded
+                          ? 'Defer to $nextVer ↪'
+                          : '+ Include in ${bp.releaseVersionTag}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: isIncluded ? textSecondary : accentEmerald,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
               ],
               InkWell(
                 key: ValueKey('edit_stage2_feat_${feat.id}'),
@@ -2409,7 +2350,27 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              InkWell(
+                key: ValueKey('delete_stage2_feat_${feat.id}'),
+                onTap: () => widget.workbench.removeProposedFeatureFromBeat(
+                  beat.id,
+                  feat.id,
+                ),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                  child: Text(
+                    '×',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               InkWell(
                 key: ValueKey('edit_stage2_feat_hours_${feat.id}'),
                 onTap: () => _showEditProposedFeatureDialog(beat.id, feat),
@@ -2423,7 +2384,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                     !isIncluded
                         ? (feat.lifecycle == FeatureLifecycleStatus.superseded
                             ? 'ARCHIVED'
-                            : 'QUEUED FOR ${nextVer.toUpperCase()} ↪')
+                            : '${feat.estimatedHours}h ($nextVer)')
                         : (feat.lifecycle == FeatureLifecycleStatus.stable
                             ? 'STABLE · 0h'
                             : '${feat.activeDeltaHours}h'),
@@ -2636,6 +2597,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
               '${deferredItems.length} Planned for $nextVer · ${bp.explicitExclusions.length} Cuts',
         ),
         const SizedBox(height: 14),
+        // Unified Producer Scope Guard inside Out of Scope & v0.2
+        _buildScopeGuardSection(bp),
+        const SizedBox(height: 18),
         // Open 3px Amber Left-Bar Section: Out of Scope Features Planned for Next Release
         Container(
           padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
@@ -2652,7 +2616,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 children: [
                   Expanded(
                     child: Text(
-                      '↪ OUT OF SCOPE FEATURES · PLANNED FOR ${nextVer.toUpperCase()} RELEASE',
+                      '↪ DEFERRED FEATURES · PLANNED FOR ${nextVer.toUpperCase()} RELEASE',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -2696,7 +2660,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Text(
-                    'All proposed features are currently included in ${bp.releaseVersionTag}. Uncheck any feature inside an Epic to plan it for $nextVer.',
+                    'All proposed features are currently included in ${bp.releaseVersionTag}. Click "Defer to $nextVer ↪" on any feature inside an Epic to queue it for $nextVer.',
                     style: GoogleFonts.inter(
                       fontSize: 12.5,
                       color: textMuted,

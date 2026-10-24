@@ -251,7 +251,12 @@ class WorkspaceAgentOrchestrator {
     // 1. Check for Out-of-Scope conflicts on included features
     for (final beat in blueprint.beats) {
       for (final feat in beat.includedFeatures) {
-        final conflictExclusion = _findExclusionOverlap(feat.title, feat.goal, exclusions);
+        final conflictExclusion = _findExclusionOverlap(
+          feat.title,
+          feat.goal,
+          exclusions,
+          projectTitle: concept?.title,
+        );
         if (conflictExclusion != null) {
           interventions.add(
             AgentIntervention(
@@ -394,10 +399,18 @@ class WorkspaceAgentOrchestrator {
   static String? _findExclusionOverlap(
     String featTitle,
     String featGoal,
-    List<String> exclusions,
-  ) {
+    List<String> exclusions, {
+    String? projectTitle,
+  }) {
     final combined = '${featTitle.toLowerCase()} ${featGoal.toLowerCase()}';
+    final titleWords = (projectTitle ?? '')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length >= 3)
+        .toSet();
     final stopWords = <String>{
+      ...titleWords,
       'no',
       'not',
       'without',
@@ -416,6 +429,28 @@ class WorkspaceAgentOrchestrator {
       'advanced',
       'custom',
       'deferred',
+      'defer',
+      'until',
+      'prototype',
+      'release',
+      'releases',
+      'multi',
+      'branch',
+      'trees',
+      'phase',
+      'deep',
+      'files',
+      'save',
+      'menus',
+      'audio',
+      'persistent',
+      'meta',
+      'progression',
+      'mechanics',
+      'controls',
+      'feedback',
+      'execute',
+      'playable',
       'from',
       'player',
       'players',

@@ -248,12 +248,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsNothing);
         expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
-        expect(find.text('Bonus Time-Trial Medals'), findsOneWidget);
-        expect(find.byKey(const ValueKey('restore_deferred_feat_feat_7_2')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_scope_guard_section')), findsOneWidget);
+        expect(find.text('IN V0.1 ✓'), findsWidgets);
+        expect(find.text('Defer to v0.2 ↪'), findsWidgets);
 
-        // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats)
+        // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats, 0 pre-deferred filler)
         expect(provider.releaseBlueprint!.beats.length, 7);
         expect(provider.releaseBlueprint!.totalIncludedFeatures, 8);
+        expect(provider.releaseBlueprint!.totalDeferredFeatures, 0);
         expect(find.byKey(const ValueKey('release_sticky_bottom_dock')), findsOneWidget);
 
         // Verify Expandable Build Tasks & Playtest Preview Drawer on Beat 1 Feature 1 (seeds 3 Build Tasks: 01, 02, 03)
@@ -432,10 +434,10 @@ void main() {
         expect(provider.conceptDraft!.tradeOffs, isNotEmpty);
         expect(provider.conceptDraft!.techSpec, isNotEmpty);
 
-        // Plan & Execute v0.1 (deferring a feature in Beat 2 to verify automatic carryover into v0.2!)
+        // Plan & Execute v0.1 (Epics start with 0 pre-deferred features; deferring a feature in Beat 2 verifies automatic carryover into v0.2!)
         await provider.openReleasePlanGate();
         for (final epic in provider.releaseBlueprint!.beats) {
-          expect(epic.deferredFeatures, isNotEmpty);
+          expect(epic.deferredFeatures, isEmpty);
         }
         final v1RelId = provider.activeRelease!.id;
         final v1Beat2 = provider.releaseBlueprint!.beats[1];
