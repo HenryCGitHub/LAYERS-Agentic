@@ -230,8 +230,8 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         ProposedFeatureBlueprint(
           id: 'feat_${beatNum}_1',
           title: '$beatTitle Mechanics & Controls',
-          goal: 'Build the playable mechanics and feedback for $beatTitle ($beatDesc).',
-          doneWhen: 'Playtester can execute $beatTitle reliably from start to finish with clear visual and audio cues.',
+          goal: archetype.goal,
+          doneWhen: archetype.doneWhen,
           estimatedHours: 5,
           included: true,
           lifecycle: FeatureLifecycleStatus.newFeature,
@@ -243,7 +243,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           checkpoints: [
             ProposedCheckpointBlueprint(
               title: '$beatTitle Core Implementation & Playtest',
-              playtestCriteria: 'Execute $beatTitle in the test arena -> verify "$beatDesc" responds immediately on screen.',
+              playtestCriteria: archetype.cp1Playtest,
               releaseVersion: versionTag,
               tasks: [
                 'Create actor/node structure and base properties for $beatTitle (2h)',
@@ -302,14 +302,16 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           ),
       ];
 
+      final isLegacyCircularBeatDesc =
+          beatDesc.toLowerCase().startsWith('execute ');
       beats.add(
         ProposedBeatBlueprint(
           id: 'beat_$beatNum',
           title: beatTitle,
-          goal: beatDesc.isNotEmpty
+          goal: (beatDesc.isNotEmpty && !isLegacyCircularBeatDesc)
               ? beatDesc
-              : 'Execute $beatTitle with responsive controls and clear feedback.',
-          doneWhen: 'Playtester completes $beatTitle and transitions cleanly to the next beat.',
+              : archetype.goal,
+          doneWhen: archetype.doneWhen,
           features: beatFeatures,
         ),
       );

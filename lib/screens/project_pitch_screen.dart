@@ -489,7 +489,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               for (final step in steps) {
                 final formatted = step.contains(':')
                     ? step
-                    : '$step: Execute $step for ${d.title}';
+                    : _describeCoreLoopBeatStep(step);
                 if (!combined.any((c) => c.toLowerCase().startsWith(
                     step.split(':').first.trim().toLowerCase()))) {
                   combined.add(formatted);
@@ -522,6 +522,37 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           break;
       }
     });
+  }
+
+  String _describeCoreLoopBeatStep(String rawStep) {
+    final step = rawStep.trim();
+    final lower = step.toLowerCase();
+    if (lower.contains('prep') ||
+        lower.contains('loadout') ||
+        lower.contains('setup') ||
+        lower.contains('stage')) {
+      return '$step: Pick starting weapon and ability in the staging area and step into the arena trigger to start a run.';
+    }
+    if (lower.contains('action') ||
+        lower.contains('combat') ||
+        lower.contains('engage') ||
+        lower.contains('execute')) {
+      return '$step: Move, dodge, and fire at enemy waves in the arena until all targets are cleared.';
+    }
+    if (lower.contains('upgrade') ||
+        lower.contains('reward') ||
+        lower.contains('resource') ||
+        lower.contains('loot') ||
+        lower.contains('claim')) {
+      return '$step: Collect dropped resources or open the reward chest and pick 1 stat/weapon upgrade.';
+    }
+    if (lower.contains('reset') ||
+        lower.contains('next round') ||
+        lower.contains('resolve') ||
+        lower.contains('restart')) {
+      return '$step: Clear the arena state, advance the wave counter, and spawn the next round or restart cleanly on death.';
+    }
+    return '$step: Trigger $step player inputs, update active gameplay state, and show immediate visual/audio feedback.';
   }
 
   void _applySectionOptionDeterministic(

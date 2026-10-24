@@ -113,6 +113,28 @@ class MechanicArchetypeProfile {
         lower.contains('forag')) {
       return 'farming';
     }
+    if (lower.contains('loadout') ||
+        lower.contains('prep') ||
+        lower.contains('staging') ||
+        lower.contains('setup') ||
+        lower.contains('equip')) {
+      return 'loadout';
+    }
+    if (lower.contains('upgrade') ||
+        lower.contains('reward') ||
+        lower.contains('perk') ||
+        lower.contains('pickup') ||
+        lower.contains('resource') ||
+        lower.contains('claim')) {
+      return 'upgrade';
+    }
+    if (lower.contains('reset') ||
+        lower.contains('next round') ||
+        lower.contains('restart') ||
+        lower.contains('resolve') ||
+        lower.contains('wave clear')) {
+      return 'reset';
+    }
     if (lower.contains('shop') ||
         lower.contains('buy') ||
         lower.contains('sell') ||
@@ -121,9 +143,7 @@ class MechanicArchetypeProfile {
         lower.contains('craft') ||
         lower.contains('invent') ||
         lower.contains('loot') ||
-        lower.contains('ore') ||
-        lower.contains('loadout') ||
-        lower.contains('upgrade')) {
+        lower.contains('ore')) {
       return 'economy';
     }
     if (lower.contains('grid') ||
@@ -405,14 +425,123 @@ class MechanicArchetypeProfile {
           ],
         );
 
+      case 'loadout':
+        return MechanicArchetypeProfile(
+          category: 'loadout',
+          goal: 'Let the player pick their starting weapon and ability in the staging area and step into the arena trigger to start a run.',
+          doneWhen: 'Player interacts with weapon/ability pedestals to equip their loadout, sees HUD ammo/ability slots update, and enters the arena cleanly.',
+          inScope: [
+            'Staging weapon/ability selection pedestals and equip interaction for $clean',
+            'Active weapon slot binding, HUD icon/ammo sync, and arena start trigger',
+          ],
+          outOfScope: [
+            'Persistent multi-tab skill trees and cosmetic skin lockers',
+          ],
+          tuningParams: const [
+            'startingAmmoMax: 30 rounds',
+            'swapCooldownSec: 0.25 s',
+            'interactRadius: 2.0 m',
+          ],
+          edgeCases: const [
+            '[EMPTY LOADOUT GUARD] Require at least 1 equipped primary weapon before activating the arena launch trigger',
+            '[SWAP DEBOUNCE] Lock weapon swap duringswapCooldownSec so rapid presses never spawn duplicate weapon actors',
+          ],
+          cp1Title: '$clean Weapon & Ability Equip',
+          cp1Playtest: 'Interact with a weapon pedestal in the staging area -> player equips the weapon, HUD ammo updates, and stepping into the launch zone starts Round 1.',
+          cp1Tasks: [
+            'Create staging pedestal interaction and active weapon/ability equip logic for $clean (2h)',
+            'Bind HUD weapon/ammo readout and arena launch trigger volume (2h)',
+          ],
+          cp2Title: '$clean Swap Guard & Visual Cues',
+          cp2Playtest: 'Rapidly swap pedestals and test entering arena unarmed -> verify swapCooldownSec debounce and empty-loadout guard.',
+          cp2Tasks: [
+            'Hook up weapon equip SFX, pedestal highlight, and HUD slot flash (1h)',
+            'Enforce empty-loadout launch guard and swapCooldownSec debounce (1h)',
+          ],
+        );
+
+      case 'upgrade':
+        return MechanicArchetypeProfile(
+          category: 'upgrade',
+          goal: 'Spawn a wave-clear reward pickup or chest that lets the player choose 1 stat or weapon modifier before the next round.',
+          doneWhen: 'Clearing a wave spawns the reward prompt, picking an upgrade immediately modifies player stats, and only 1 choice can be claimed per round.',
+          inScope: [
+            'Reward pickup/chest spawn on wave clear and 3-choice upgrade selection for $clean',
+            'Immediate stat/weapon modifier application and HUD stat pop feedback',
+          ],
+          outOfScope: [
+            '100-item meta-unlock encyclopedia and reroll currency shops',
+          ],
+          tuningParams: const [
+            'upgradeChoicesCount: 3 options',
+            'statBuffMultiplier: 1.20 x',
+            'pickupMagnetRadius: 3.5 m',
+          ],
+          edgeCases: const [
+            '[SINGLE CLAIM GUARD] Despawn remaining reward options immediately after 1 upgrade is selected',
+            '[STAT STACK CLAMP] Clamp fire-rate and speed multipliers so stacked upgrades never divide by zero',
+          ],
+          cp1Title: '$clean Reward Spawn & Stat Modifier',
+          cp1Playtest: 'Clear the test wave and pick 1 upgrade -> player stat increases by statBuffMultiplier and remaining choices despawn.',
+          cp1Tasks: [
+            'Spawn wave-clear reward trigger and present upgradeChoicesCount options for $clean (2h)',
+            'Apply selected statBuffMultiplier to active player stats and despawn unchosen options (2h)',
+          ],
+          cp2Title: '$clean Pickup Feel & Stack Clamp',
+          cp2Playtest: 'Stack multiple upgrades in a row -> verify HUD stat callout chime and clamped max fire-rate/speed.',
+          cp2Tasks: [
+            'Hook up reward chest/pickup VFX, selection chime, and HUD buff badge (1h)',
+            'Enforce single-claim lock and stat multiplier safety clamps (1h)',
+          ],
+        );
+
+      case 'reset':
+        return MechanicArchetypeProfile(
+          category: 'reset',
+          goal: 'Clear leftover projectiles and enemies on round end or player death, advance the wave counter, and spawn the next wave or restart cleanly.',
+          doneWhen: 'Finishing a wave or dying resets arena state in under 1 second with zero orphaned actors or duplicated timers.',
+          inScope: [
+            'Round-end / player-death state check, arena actor cleanup, and wave counter increment for $clean',
+            'Next-wave spawn trigger and instant 1-button run restart flow',
+          ],
+          outOfScope: [
+            'Online leaderboard replay uploads and cinematic post-match cutscenes',
+          ],
+          tuningParams: const [
+            'nextWaveDelaySec: 2.5 s',
+            'enemyCountScale: 1.25 x',
+            'respawnInvulnSec: 1.0 s',
+          ],
+          edgeCases: const [
+            '[ORPHAN ACTOR CLEANUP] Destroy all active enemy projectiles and hazards before spawning the next round',
+            '[DOUBLE TRIGGER GUARD] Ensure simultaneous last-enemy kill and player death resolves deterministically without double-spawning waves',
+          ],
+          cp1Title: '$clean Wave Transition & Run Restart',
+          cp1Playtest: 'Clear the final enemy or trigger player death -> leftover projectiles clear, wave counter increments (or resets to Round 1), and next wave spawns after nextWaveDelaySec.',
+          cp1Tasks: [
+            'Implement wave-clear / death state transition and arena cleanup for $clean (2h)',
+            'Wire wave counter increment, enemyCountScale spawn math, and instant restart reset (2h)',
+          ],
+          cp2Title: '$clean Banner Cues & Cleanup Guards',
+          cp2Playtest: 'Trigger simultaneous kill/death edge case and spam restart -> verify zero duplicate wave spawns and clean HUD reset.',
+          cp2Tasks: [
+            'Hook up Round Clear / Try Again banner and audio stinger for $clean (1h)',
+            'Enforce orphan projectile cleanup and double-trigger lock (1h)',
+          ],
+        );
+
       default:
-        final descSuffix = (beatDescription != null && beatDescription.trim().isNotEmpty)
-            ? ' (${beatDescription.trim()})'
-            : '';
+        final cleanBeatDesc = (beatDescription ?? '').trim();
+        final isCircularDesc =
+            cleanBeatDesc.toLowerCase().startsWith('execute ');
+        final descSuffix =
+            (cleanBeatDesc.isNotEmpty && !isCircularDesc)
+                ? ' ($cleanBeatDesc)'
+                : '';
         return MechanicArchetypeProfile(
           category: 'core',
-          goal: 'Build playable $clean mechanics, state transitions, and player feedback$descSuffix.',
-          doneWhen: 'Playtester can execute $clean reliably from start to finish with immediate visual and audio confirmation.',
+          goal: 'Build playable $clean input handling, active state logic, and immediate on-screen player feedback$descSuffix.',
+          doneWhen: 'Player triggers $clean in the arena and sees immediate movement/combat state response and HUD/audio confirmation.',
           inScope: [
             'Core player input, state transition logic, and active execution for $clean',
             'Immediate on-screen visual/audio feedback and clean transition to next beat',
@@ -428,7 +557,7 @@ class MechanicArchetypeProfile {
             '[INPUT GUARD] Rapid repeated inputs during active state transition cleanly without state lock',
           ],
           cp1Title: '$clean Core State & Controls',
-          cp1Playtest: 'Trigger $clean in the test arena -> state activates within actionResponseWindow and updates gameplay.',
+          cp1Playtest: 'Trigger $clean in the test arena -> player action executes within actionResponseWindow with visible state change and HUD/audio feedback.',
           cp1Tasks: [
             'Implement player input trigger and state logic for $clean (2h)',
             'Apply actionResponseWindow timing and stateCooldownSec recovery (1h)',

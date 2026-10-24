@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/tier_document.dart';
+import 'task_how_to_blueprint.dart';
 export 'task_how_to_blueprint.dart';
 
 /// Represents a single dynamic state node in a Feature's state machine.
@@ -111,11 +112,18 @@ class FeatureStateNode {
 
   /// Observable in-viewport playtest condition for this stage.
   String get playtestCondition {
-    final t = trigger.trim();
+    var t = trigger.trim();
     if (t.toLowerCase().startsWith('playtest:')) {
-      return t.substring(9).trim();
+      t = t.substring(9).trim();
     }
-    if (t.isNotEmpty) return t;
+    if (t.isNotEmpty) {
+      final lower = t.toLowerCase();
+      if (lower.startsWith('execute ') && lower.contains('verify "execute ')) {
+        return MechanicArchetypeProfile.fromFeatureTitle(cleanStageTitle)
+            .cp1Playtest;
+      }
+      return t;
+    }
     if (feedback != null && feedback!.trim().isNotEmpty) return feedback!.trim();
     return 'Verify stage deliverables and checklist criteria in game viewport.';
   }

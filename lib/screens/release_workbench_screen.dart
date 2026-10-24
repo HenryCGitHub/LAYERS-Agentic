@@ -6,6 +6,7 @@ import '../models/feature_state.dart';
 import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/section_text_utils.dart';
 
 /// Stage 3 Screen: Active Release Workbench
 /// - Left Rail: Core Loop Epics & Features switcher for the active Release
@@ -2080,8 +2081,38 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       isCollapsed = false;
     }
 
-    final tuningItems = node.tuningParams;
-    final edgeItems = node.edgeCases;
+    final featureArchetype =
+        MechanicArchetypeProfile.fromFeatureTitle(feat.title);
+    final rawFeatureGoal = SectionTextUtils.resolveGoal(feat.sections).trim();
+    final isLegacyCircularGoal = rawFeatureGoal.isEmpty ||
+        rawFeatureGoal.toLowerCase().contains('(execute ') ||
+        rawFeatureGoal
+            .toLowerCase()
+            .startsWith('build the playable mechanics and feedback for ');
+    final featureGoalText =
+        isLegacyCircularGoal ? featureArchetype.goal : rawFeatureGoal;
+
+    final rawPlaytest = node.playtestCondition.trim();
+    final isLegacyCircularPlaytest = rawPlaytest.isEmpty ||
+        (rawPlaytest.toLowerCase().startsWith('execute ') &&
+            rawPlaytest.toLowerCase().contains('verify "execute ')) ||
+        (rawPlaytest.toLowerCase().startsWith('trigger ') &&
+            rawPlaytest
+                .toLowerCase()
+                .contains('state activates within actionresponsewindow') &&
+            featureArchetype.category != 'core');
+    final resolvedPlaytestCheck =
+        isLegacyCircularPlaytest ? featureArchetype.cp1Playtest : rawPlaytest;
+
+    final hasLegacyEconomyMismatch = featureArchetype.category != 'economy' &&
+        node.tuningParams.isNotEmpty &&
+        node.tuningParams.first.contains('transactionCostBase: 25 gold');
+    final tuningItems = hasLegacyEconomyMismatch
+        ? featureArchetype.tuningParams
+        : node.tuningParams;
+    final edgeItems = hasLegacyEconomyMismatch
+        ? featureArchetype.edgeCases
+        : node.edgeCases;
 
     // Resolve Checkable How-To Blueprints for all parent tasks in this checkpoint
     final engineHint = _engineHint;
@@ -2268,12 +2299,39 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 ],
                               ),
                               const SizedBox(height: 7),
+                              RichText(
+                                key: ValueKey(
+                                  'task_sheet_feature_goal_${node.id}',
+                                ),
+                                text: TextSpan(
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    color: textPrimary.withValues(alpha: 0.9),
+                                    height: 1.4,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: 'FEATURE GOAL: ',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: accentCyan,
+                                      ),
+                                    ),
+                                    TextSpan(text: featureGoalText),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 5),
                               Wrap(
                                 spacing: 10,
                                 runSpacing: 6,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
                                   RichText(
+                                    key: ValueKey(
+                                      'task_sheet_playtest_check_${node.id}',
+                                    ),
                                     text: TextSpan(
                                       style: GoogleFonts.inter(
                                         fontSize: 12.5,
@@ -2282,14 +2340,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       ),
                                       children: [
                                         TextSpan(
-                                          text: 'PLAYTEST GOAL: ',
+                                          text: 'PLAYTEST CHECK: ',
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 10.5,
                                             fontWeight: FontWeight.w800,
                                             color: accentEmerald,
                                           ),
                                         ),
-                                        TextSpan(text: node.playtestCondition),
+                                        TextSpan(text: resolvedPlaytestCheck),
                                       ],
                                     ),
                                   ),
