@@ -160,7 +160,7 @@ class ProjectConceptBlueprint {
     required this.title,
     required this.sparkIdea,
     required this.questions,
-    required this.goal,
+    required String goal,
     this.gameSpec = const [
       '2D Top-Down',
       'Twin-Stick (WASD + Aim)',
@@ -192,8 +192,75 @@ class ProjectConceptBlueprint {
     List<AgentChatMessage>? chatHistory,
     this.lastUpdatedFields = const [],
     Map<String, List<String>>? sectionOptions,
-  })  : chatHistory = chatHistory ?? <AgentChatMessage>[],
+  })  : goal = sanitizeGoalText(goal),
+        chatHistory = chatHistory ?? <AgentChatMessage>[],
         sectionOptions = sectionOptions ?? <String, List<String>>{};
+
+  /// Strips leaked `[Section 01 Goal]...` or `to apply this choice: "..."` prompt wrappers
+  /// and stacked parenthetical brain-dump notes from a Goal string so saved or live projects
+  /// always display a clean, readable 1-sentence Goal.
+  static String sanitizeGoalText(String rawGoal) {
+    var clean = rawGoal.trim();
+    if (clean.isEmpty) return clean;
+
+    final lower = clean.toLowerCase();
+    const choiceMarker = 'to apply this choice:';
+    final choiceIdx = lower.indexOf(choiceMarker);
+    if (choiceIdx != -1) {
+      var afterMarker = clean.substring(choiceIdx + choiceMarker.length).trim();
+      if (afterMarker.startsWith('"') || afterMarker.startsWith("'")) {
+        afterMarker = afterMarker.substring(1).trim();
+      }
+      // Strip trailing `. Keep all other sections intact...` and wrapper suffixes
+      afterMarker = afterMarker.replaceFirst(
+        RegExp(
+          r'"?\.?\s*Keep all other sections intact.*$',
+          caseSensitive: false,
+        ),
+        '',
+      );
+      afterMarker = afterMarker.replaceFirst(
+        RegExp(
+          r'"\s*with responsive controls and clear feedback\.?$',
+          caseSensitive: false,
+        ),
+        '',
+      );
+      if (afterMarker.endsWith('"') || afterMarker.endsWith("'")) {
+        afterMarker = afterMarker.substring(0, afterMarker.length - 1).trim();
+      }
+      if (afterMarker.isNotEmpty) {
+        clean = afterMarker;
+      }
+    }
+
+    // Strip any remaining `[Section 01 Goal]` prefix or `focused on "[Section ..."` wrapper
+    clean = clean.replaceFirst(
+      RegExp(
+        r'^.*?\[Section\s+\d+\s+[^\]]+\]\s*(Update ONLY the [^\n]+?:\s*)?',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    clean = clean.replaceFirst(
+      RegExp(
+        r'\.?\s*Keep all other sections intact.*$',
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    // Strip stacked parenthetical brain-dump notes if more than 1 parenthetical block appears
+    final parenMatches = RegExp(r'\([^()]{12,}\)').allMatches(clean).length;
+    if (parenMatches >= 2) {
+      clean = clean.replaceAll(RegExp(r'\s*\([^()]{12,}\)'), '').trim();
+    }
+
+    if (clean.isNotEmpty && !clean.endsWith('.')) {
+      clean = '$clean.';
+    }
+    return clean;
+  }
 
   /// Formats the Project Concept into the strict 3-part Scope & Goal layout.
   String toFormattedScopeSection() {

@@ -601,14 +601,7 @@ Return ONLY a JSON object with this schema:
     String modelUsed,
   ) {
     // Strip any section prefix `[Section 01 Goal]` or meta-instruction wrapper if present
-    var cleanTurn = userMsg
-        .replaceFirst(RegExp(r'^\[Section\s+\d+\s+[^\]]+\]\s*', caseSensitive: false), '')
-        .trim();
-    final choiceMatch = RegExp(r'to apply this choice:\s*"([^"]+)"', caseSensitive: false)
-        .firstMatch(cleanTurn);
-    if (choiceMatch != null) {
-      cleanTurn = choiceMatch.group(1)!.trim();
-    }
+    final cleanTurn = ProjectConceptBlueprint.sanitizeGoalText(userMsg);
 
     final lower = cleanTurn.toLowerCase();
     final updated = <String>[];
@@ -651,10 +644,13 @@ Return ONLY a JSON object with this schema:
           cleanBody.toLowerCase().startsWith('test ') ||
           cleanBody.toLowerCase().startsWith('focus ') ||
           cleanBody.toLowerCase().startsWith('include ')) {
-        draft.goal = cleanBody.endsWith('.') ? cleanBody : '$cleanBody.';
+        draft.goal = ProjectConceptBlueprint.sanitizeGoalText(
+          cleanTurn.endsWith('.') ? cleanTurn : '$cleanTurn.',
+        );
       } else {
-        draft.goal =
-            'Build a ${draft.title} prototype focused on $cleanBody with responsive controls and clear feedback.';
+        draft.goal = ProjectConceptBlueprint.sanitizeGoalText(
+          'Build a ${draft.title} prototype focused on $cleanBody with responsive controls and clear feedback.',
+        );
       }
       if (lower.contains('2d') || lower.contains('3d') || lower.contains('top-down')) {
         if (draft.gameSpec.isNotEmpty) {

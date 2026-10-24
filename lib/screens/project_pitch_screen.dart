@@ -537,9 +537,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     widget.workbench.updateConceptDraft((d) {
       switch (sectionIdx) {
         case 0:
-          final cleanGoal = bodyAfterColon.isNotEmpty
-              ? bodyAfterColon
-              : optionText.trim();
+          final cleanGoal = ProjectConceptBlueprint.sanitizeGoalText(optionText);
           if (cleanGoal.isNotEmpty) {
             d.goal = cleanGoal.endsWith('.') ? cleanGoal : '$cleanGoal.';
           }
@@ -2883,15 +2881,18 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     bool isReadOnlySummary = false,
   }) {
     switch (sectionIdx) {
-      case 0: // 01 Goal — Callout Blockquote (Click to Edit)
-        return _buildCalloutStatement(
-          draft.goal,
-          highlightMetrics: false,
-          onEditTap: () => _showDirectSectionTextEditDialog(
-            title: '01 Goal',
-            initialText: draft.goal,
-            onSave: (val) => widget.workbench.updateConceptDraft((d) => d.goal = val),
-          ),
+      case 0: // 01 Goal — Option A: Strategy Badge + Bold 1-Sentence Headline + 3 Scannable Clause Cards
+        return _buildStructuredGoalSection(
+          draft,
+          onEditTap: isReadOnlySummary
+              ? null
+              : () => _showDirectSectionTextEditDialog(
+                    title: '01 Goal',
+                    initialText: ProjectConceptBlueprint.sanitizeGoalText(draft.goal),
+                    onSave: (val) => widget.workbench.updateConceptDraft(
+                      (d) => d.goal = ProjectConceptBlueprint.sanitizeGoalText(val),
+                    ),
+                  ),
         );
       case 1: // 02 Game Spec — 2×2 Key-Value Spec Grid (Direct Click-to-Edit)
         return _buildKvSpecGrid(
@@ -3007,6 +3008,268 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           isReadOnlySummary: isReadOnlySummary,
         );
     }
+  }
+
+  Widget _buildStructuredGoalSection(
+    ProjectConceptBlueprint draft, {
+    VoidCallback? onEditTap,
+  }) {
+    final sanitized = ProjectConceptBlueprint.sanitizeGoalText(draft.goal);
+    final colonIdx = sanitized.indexOf(':');
+    String strategyBadge = 'PROTOTYPE TARGET';
+    String headline = sanitized;
+
+    if (colonIdx > 0 && colonIdx <= 48 && colonIdx < sanitized.length - 1) {
+      strategyBadge = sanitized.substring(0, colonIdx).trim().toUpperCase();
+      headline = sanitized.substring(colonIdx + 1).trim();
+    } else {
+      final selectedOptIdx = _selectedOptionBySection[0];
+      final goalOpts = draft.sectionOptions['goal'] ?? const <String>[];
+      if (selectedOptIdx != null &&
+          selectedOptIdx >= 0 &&
+          selectedOptIdx < goalOpts.length) {
+        final opt = goalOpts[selectedOptIdx];
+        final optColon = opt.indexOf(':');
+        if (optColon > 0 && optColon <= 48) {
+          strategyBadge = opt.substring(0, optColon).trim().toUpperCase();
+        }
+      }
+    }
+
+    final clauses = _extractGoalClauses(headline, draft.coreLoopBeats);
+    final clauseAccents = <Color>[accentCyan, accentAmber, accentEmerald];
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('stage1_goal_structured_card'),
+        onTap: onEditTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8, right: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: accentCyan,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Strategy Badge Row + Click to Edit hint
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: accentCyan.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: accentCyan.withValues(alpha: 0.30),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: accentCyan,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          strategyBadge,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: accentCyan,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  if (onEditTap != null)
+                    Text(
+                      '✎ Click to edit',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: textMuted,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // 2. Bold 1-Sentence Headline
+              Text(
+                headline,
+                style: GoogleFonts.inter(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w700,
+                  height: 1.45,
+                  letterSpacing: -0.2,
+                  color: textPrimary,
+                ),
+              ),
+              if (clauses.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                // 3. 3 Scannable Clause Cards (01, 02, 03)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final useRow = constraints.maxWidth >= 520;
+                    final cards = List<Widget>.generate(clauses.length, (i) {
+                      final clause = clauses[i];
+                      final accent = clauseAccents[i % clauseAccents.length];
+                      final numTag = (i + 1).toString().padLeft(2, '0');
+                      return Container(
+                        key: ValueKey('stage1_goal_clause_card_$i'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: borderSubtle),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$numTag · ${clause.title.toUpperCase()}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: accent,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              clause.body,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                height: 1.42,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    });
+
+                    if (useRow) {
+                      return IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var i = 0; i < cards.length; i++) ...[
+                              if (i > 0) const SizedBox(width: 10),
+                              Expanded(child: cards[i]),
+                            ],
+                          ],
+                        ),
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < cards.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 8),
+                          cards[i],
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<({String title, String body})> _extractGoalClauses(
+    String headline,
+    List<String> coreLoopBeats,
+  ) {
+    // 1. Check if headline has a 3-part action series after "where you "
+    final lower = headline.toLowerCase();
+    final whereIdx = lower.indexOf('where you ');
+    if (whereIdx != -1) {
+      final afterWhere = headline.substring(whereIdx + 'where you '.length).trim();
+      final parts = afterWhere
+          .split(RegExp(r',\s*and\s+|,\s+'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (parts.length >= 3) {
+        return List.generate(3, (i) {
+          final rawClause = parts[i];
+          final formattedClause = rawClause[0].toUpperCase() + rawClause.substring(1);
+          final body = formattedClause.endsWith('.')
+              ? formattedClause
+              : '$formattedClause.';
+          // Pair with Core Loop Beat title when available, else derive a 2-3 word label
+          String title = _deriveShortClauseLabel(rawClause, i);
+          if (i < coreLoopBeats.length && coreLoopBeats[i].contains(':')) {
+            final beatTitle = coreLoopBeats[i].split(':').first.trim();
+            if (beatTitle.isNotEmpty && beatTitle.length <= 24) {
+              title = beatTitle;
+            }
+          }
+          return (title: title, body: body);
+        });
+      }
+    }
+
+    // 2. Otherwise pull the top 3 Core Loop Beats (`Title: Action description`)
+    final result = <({String title, String body})>[];
+    for (var i = 0; i < coreLoopBeats.length && result.length < 3; i++) {
+      final beat = coreLoopBeats[i].trim();
+      if (beat.isEmpty) continue;
+      final colon = beat.indexOf(':');
+      if (colon > 0 && colon < beat.length - 1) {
+        result.add((
+          title: beat.substring(0, colon).trim(),
+          body: beat.substring(colon + 1).trim(),
+        ));
+      } else {
+        result.add((
+          title: 'Step 0${i + 1}',
+          body: beat,
+        ));
+      }
+    }
+    return result;
+  }
+
+  String _deriveShortClauseLabel(String clause, int index) {
+    final lower = clause.toLowerCase();
+    if (lower.contains('plant') && lower.contains('harvest')) {
+      return 'Plant & Harvest';
+    }
+    if (lower.contains('sell') || lower.contains('ammo') || lower.contains('load')) {
+      return 'Load or Sell';
+    }
+    if (lower.contains('wave') || lower.contains('arena')) {
+      return 'Arena Run';
+    }
+    final words = clause
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(3)
+        .toList();
+    if (words.isEmpty) return 'Phase 0${index + 1}';
+    return words.join(' ');
   }
 
   Widget _buildCalloutStatement(

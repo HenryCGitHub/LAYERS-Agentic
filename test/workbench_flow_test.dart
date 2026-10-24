@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/workspace_agent_tools.dart';
 import 'package:layers_agentic/main.dart';
+import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
@@ -31,6 +32,16 @@ void main() {
       expect(updated.toFormattedScopeSection(), contains('In Scope:'));
       expect(updated.toFormattedScopeSection(), contains('Out of Scope:'));
       expect(updated.toFormattedScopeSection(), contains('Done When:'));
+
+      // Verify sanitizeGoalText strips leaked `[Section 01 Goal]...` wrappers with nested quotes
+      const leakedGoal =
+          'Build a Crop Defense Shooter prototype focused on "[Section 01 Goal] Update ONLY the Goal section for "Crop Defense Shooter" (Build a 2D Top-Down Arena prototype around Crop Defense Shooter...) to apply this choice: "Core Farm-to-Shooter Sandbox: Build a playable prototype where you plant and harvest crops, sell or load them as ammo, and clear a 3-wave arena run.". Keep all other sections intact and do not repeat this instruction text inside the output field." with responsive controls and clear feedback.';
+      expect(
+        ProjectConceptBlueprint.sanitizeGoalText(leakedGoal),
+        equals(
+          'Core Farm-to-Shooter Sandbox: Build a playable prototype where you plant and harvest crops, sell or load them as ammo, and clear a 3-wave arena run.',
+        ),
+      );
     });
 
     testWidgets(
@@ -112,6 +123,11 @@ void main() {
         expect(find.byKey(const ValueKey('agent_option_card_0_2')), findsOneWidget);
         expect(find.text('SECTION 01 / 09'), findsOneWidget);
         expect(find.text('Goal'), findsWidgets);
+        // Verify Option A structured Goal card + 3 Scannable Clause Cards (01, 02, 03)
+        expect(find.byKey(const ValueKey('stage1_goal_structured_card')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_goal_clause_card_0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_goal_clause_card_1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_goal_clause_card_2')), findsOneWidget);
 
         // Verify clicking a Stage 1B Option Card applies it, and clicking it again unselects it and restores the default Goal
         final initialGoal = provider.conceptDraft!.goal;
