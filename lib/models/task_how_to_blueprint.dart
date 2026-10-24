@@ -928,6 +928,223 @@ class TaskHowToBlueprint {
     return clauses.isEmpty ? <String>[cleanTitle] : clauses;
   }
 
+  /// Derives concrete guard variable/condition names and natural English step fields
+  /// from a checkpoint edge-case guard string (eliminating raw `[... GUARD]` bracket tags
+  /// in prose and generic `ValidateGuard_N()` placeholders in code).
+  static ({
+    String shortTitle,
+    List<String> highlightTokens,
+    String instruction,
+    String explain,
+    String code,
+    String verify,
+    String pitfall,
+  }) deriveConcreteGuardStepSpec({
+    required String rawGuard,
+    required String targetAssetName,
+    required String engineLabel,
+    required bool unrealCppMode,
+    required String primaryVarName,
+  }) {
+    final shortGuard =
+        rawGuard.replaceFirst(_leadingBracketTagRegex, '').trim();
+    final lower = shortGuard.toLowerCase();
+
+    // 1. Stack / Cap / Max Limit Guard
+    if (lower.contains('stack') ||
+        (lower.contains('cap') && lower.contains('limit')) ||
+        lower.contains('max capacity')) {
+      final code = engineLabel == 'UNREAL 5'
+          ? (unrealCppMode
+              ? 'if (currentBuffStacks >= maxBuffStacks) return;\ncurrentBuffStacks++;'
+              : '[Branch: currentBuffStacks < maxBuffStacks]\n   └──► (True)  ──► [Increment currentBuffStacks] ──► [Apply Stat Buff ($primaryVarName)]\n   └──► (False) ──► [Return / Skip Buff]')
+          : (engineLabel == 'UNITY C#'
+              ? 'if (currentBuffStacks >= maxBuffStacks) return;\ncurrentBuffStacks++;'
+              : 'if current_buff_stacks >= max_buff_stacks:\n    return\ncurrent_buff_stacks += 1');
+      final condToken = engineLabel == 'GODOT 4'
+          ? 'current_buff_stacks < max_buff_stacks'
+          : 'currentBuffStacks < maxBuffStacks';
+      return (
+        shortTitle: 'Guard: $shortGuard',
+        highlightTokens: const [
+          'currentBuffStacks < maxBuffStacks',
+          'currentBuffStacks >= maxBuffStacks',
+          'current_buff_stacks < max_buff_stacks',
+          'current_buff_stacks >= max_buff_stacks',
+          'currentBuffStacks',
+          'maxBuffStacks',
+          'current_buff_stacks',
+          'max_buff_stacks',
+        ],
+        instruction:
+            'In $targetAssetName, check $condToken before applying the effect so stacks cannot exceed the cap.',
+        explain:
+            'Prevents runaway stat scaling when the player triggers the same upgrade or effect repeatedly.',
+        code: code,
+        verify:
+            'Trigger the effect repeatedly in Play mode and confirm $condToken stops additional stacks once the cap is reached.',
+        pitfall:
+            'Check $condToken before modifying player attributes so capped picks exit cleanly.',
+      );
+    }
+
+    // 2. Despawn / Cleanup / Clear Unchosen Widgets Guard
+    if (lower.contains('despawn') ||
+        lower.contains('unchosen') ||
+        lower.contains('cleanup') ||
+        lower.contains('orphan')) {
+      final code = engineLabel == 'UNREAL 5'
+          ? (unrealCppMode
+              ? 'if (!bCardsActive) return;\nbCardsActive = false;\nDespawnUnchosenCards();'
+              : '[Branch: bCardsActive]\n   └──► (True) ──► [Set bCardsActive = false]\n                   [Call DespawnUnchosenCards()]')
+          : (engineLabel == 'UNITY C#'
+              ? 'if (!bCardsActive) return;\nbCardsActive = false;\nDespawnUnchosenCards();'
+              : 'if not cards_active:\n    return\ncards_active = false\ndespawn_unchosen_cards()');
+      final fnToken = engineLabel == 'GODOT 4'
+          ? 'despawn_unchosen_cards()'
+          : 'DespawnUnchosenCards()';
+      final flagToken =
+          engineLabel == 'GODOT 4' ? 'cards_active' : 'bCardsActive';
+      return (
+        shortTitle: 'Guard: $shortGuard',
+        highlightTokens: const [
+          'DespawnUnchosenCards()',
+          'despawn_unchosen_cards()',
+          'bCardsActive = false',
+          'cards_active = false',
+          'bCardsActive',
+          'cards_active',
+        ],
+        instruction:
+            'After applying the selection in $targetAssetName, check $flagToken and call $fnToken so remaining unchosen cards are removed immediately.',
+        explain:
+            'Prevents leftover upgrade cards from lingering on screen or being clicked a second time after a choice is made.',
+        code: code,
+        verify:
+            'Select 1 of the spawned upgrade cards in Play mode and confirm $fnToken removes all remaining cards immediately.',
+        pitfall:
+            'Set $flagToken = false before calling $fnToken so rapid clicks during close animations are ignored.',
+      );
+    }
+
+    // 3.Occupied / Solid Tile / Grid Boundary Guard
+    if (lower.contains('tile') ||
+        lower.contains('occupied') ||
+        lower.contains('solid') ||
+        lower.contains('boundary') ||
+        lower.contains('bounds')) {
+      final code = engineLabel == 'UNREAL 5'
+          ? (unrealCppMode
+              ? 'if (IsTileBlocked(targetCell)) return;\nStepTowardCell(targetCell, $primaryVarName);'
+              : '[Branch: NOT IsTileBlocked(targetCell)]\n   └──► (True) ──► [Step Toward targetCell ($primaryVarName)]')
+          : (engineLabel == 'UNITY C#'
+              ? 'if (IsTileBlocked(targetCell)) return;\nStepTowardCell(targetCell, $primaryVarName);'
+              : 'if is_tile_blocked(target_cell):\n    return\nstep_toward_cell(target_cell, $primaryVarName)');
+      final fnToken = engineLabel == 'GODOT 4'
+          ? 'is_tile_blocked(target_cell)'
+          : 'IsTileBlocked(targetCell)';
+      return (
+        shortTitle: 'Guard: $shortGuard',
+        highlightTokens: const [
+          'NOT IsTileBlocked(targetCell)',
+          'IsTileBlocked(targetCell)',
+          'is_tile_blocked(target_cell)',
+        ],
+        instruction:
+            'Before stepping $targetAssetName into the target cell, check $fnToken so movement into occupied or solid tiles is blocked.',
+        explain:
+            'Prevents $targetAssetName from clipping into walls or overlapping occupied grid cells.',
+        code: code,
+        verify:
+            'Attempt to move into an occupied or solid cell in Play mode and confirm $fnToken blocks the move cleanly.',
+        pitfall:
+            'Check $fnToken before starting interpolation so blocked moves never shift the actor position.',
+      );
+    }
+
+    // 4. Default / Lock Selection / Duplicate Trigger / Cooldown Guard
+    final isResetGuard = lower.contains('reset') || lower.contains('restart');
+    final flagName = engineLabel == 'GODOT 4'
+        ? (isResetGuard ? 'reset_in_progress' : 'selection_locked')
+        : (isResetGuard ? 'bResetInProgress' : 'bSelectionLocked');
+    final notFlagExpr = engineLabel == 'UNREAL 5' && !unrealCppMode
+        ? 'NOT $flagName'
+        : (engineLabel == 'GODOT 4' ? 'not $flagName' : '!$flagName');
+    final code = engineLabel == 'UNREAL 5'
+        ? (unrealCppMode
+            ? 'if ($flagName) return;\n$flagName = true;'
+            : '[Branch: $notFlagExpr]\n   └──► (True) ──► [Set $flagName = true]\n                   [Apply Action ($primaryVarName)]')
+        : (engineLabel == 'UNITY C#'
+            ? 'if ($flagName) return;\n$flagName = true;'
+            : 'if $flagName:\n    return\n$flagName = true');
+    return (
+      shortTitle: 'Guard: $shortGuard',
+      highlightTokens: [
+        'NOT $flagName',
+        '!$flagName',
+        'not $flagName',
+        '$flagName = true',
+        flagName,
+      ],
+      instruction:
+          'At the start of your trigger event in $targetAssetName, check $notFlagExpr and set $flagName = true on the first activation.',
+      explain:
+          'Enforces "$shortGuard" so rapid double-clicks or duplicate triggers cannot fire the action twice.',
+      code: code,
+      verify:
+          'Trigger the action rapidly in Play mode and confirm $flagName blocks duplicate activations so only 1 trigger runs.',
+      pitfall:
+          'Set $flagName = true immediately on the first frame before running any animation or state delay.',
+    );
+  }
+
+  /// Returns all concrete guard highlight tokens across `edgeItems` for semantic syntax highlighting.
+  static List<String> extractGuardHighlightTokens(List<String> edgeItems) {
+    final tokens = <String>{
+      'currentBuffStacks < maxBuffStacks',
+      'currentBuffStacks >= maxBuffStacks',
+      'current_buff_stacks < max_buff_stacks',
+      'current_buff_stacks >= max_buff_stacks',
+      'currentBuffStacks',
+      'maxBuffStacks',
+      'current_buff_stacks',
+      'max_buff_stacks',
+      'DespawnUnchosenCards()',
+      'despawn_unchosen_cards()',
+      'bCardsActive = false',
+      'cards_active = false',
+      'bCardsActive',
+      'cards_active',
+      'NOT IsTileBlocked(targetCell)',
+      'IsTileBlocked(targetCell)',
+      'is_tile_blocked(target_cell)',
+      'NOT bSelectionLocked',
+      '!bSelectionLocked',
+      'not selection_locked',
+      'bSelectionLocked = true',
+      'selection_locked = true',
+      'bSelectionLocked',
+      'selection_locked',
+      'NOT bResetInProgress',
+      '!bResetInProgress',
+      'bResetInProgress = true',
+      'bResetInProgress',
+      'reset_in_progress',
+    };
+    final bracketPrefix = RegExp(r'^\[[^\]]+\]\s*');
+    for (final rawGuard in edgeItems) {
+      final trimmed = rawGuard.trim();
+      if (trimmed.isNotEmpty) {
+        tokens.add(trimmed);
+        final stripped = trimmed.replaceFirst(bracketPrefix, '').trim();
+        if (stripped.length >= 6) {
+          tokens.add(stripped);
+        }
+      }
+    }
+    return tokens.toList();
+  }
+
   /// Dynamically resolves `parentTask.children` into `1..N` atomic, zero-assumption "LEGO / IKEA" sub-steps
   /// (`Step X.1` through `Step X.N`) adapted to `engineHint` (`GODOT 4`, `UNITY C#`, `UNREAL 5`),
   /// scaling down to 3–4 steps for compact feel/guard tasks or up to 10+ steps for multi-clause,
@@ -1655,6 +1872,28 @@ class TaskHowToBlueprint {
     void addPhaseStep(int phaseIdx) {
       final rawSpec = buildAtomicStepSpec(phaseIdx);
       final rawCtx = buildPhaseSpecContext(phaseIdx);
+      if (phaseIdx == 5) {
+        final guardSpec = deriveConcreteGuardStepSpec(
+          rawGuard: primaryGuard,
+          targetAssetName: targetAssetName,
+          engineLabel: engineLabel,
+          unrealCppMode: unrealCppMode,
+          primaryVarName: primaryVarName,
+        );
+        dynamicSpecs.add((
+          stepHeader:
+              'STEP $taskNum.${dynamicSpecs.length + 1} · ${guardSpec.shortTitle.toUpperCase()}',
+          shortTitle: guardSpec.shortTitle,
+          instruction: guardSpec.instruction,
+          verify: guardSpec.verify,
+          path: rawSpec.path,
+          code: guardSpec.code,
+          explain: guardSpec.explain,
+          primaryChip: rawCtx.primaryChip,
+          pitfall: guardSpec.pitfall,
+        ));
+        return;
+      }
       dynamicSpecs.add((
         stepHeader: rawSpec.stepHeader,
         shortTitle: rawSpec.shortTitle,
@@ -1784,27 +2023,24 @@ class TaskHowToBlueprint {
 
         for (int gIdx = 1; gIdx < effectiveEdgeCases.length; gIdx++) {
           final extraGuard = effectiveEdgeCases[gIdx];
-          final shortGuard = extraGuard
-              .replaceFirst(_leadingBracketTagRegex, '')
-              .trim();
+          final guardSpec = deriveConcreteGuardStepSpec(
+            rawGuard: extraGuard,
+            targetAssetName: targetAssetName,
+            engineLabel: engineLabel,
+            unrealCppMode: unrealCppMode,
+            primaryVarName: primaryVarName,
+          );
           dynamicSpecs.add((
-            stepHeader: 'STEP $taskNum.${dynamicSpecs.length + 1} · ENFORCE ${extraGuard.toUpperCase()}',
-            shortTitle: 'Guard: $shortGuard',
-            instruction:
-                'Add an explicit guard check on $targetAssetName before state mutation to enforce $extraGuard.',
-            verify:
-                'Stress-testing $shortGuard in the viewport blocks invalid state transitions cleanly.',
+            stepHeader:
+                'STEP $taskNum.${dynamicSpecs.length + 1} · ${guardSpec.shortTitle.toUpperCase()}',
+            shortTitle: guardSpec.shortTitle,
+            instruction: guardSpec.instruction,
+            verify: guardSpec.verify,
             path: whereLocation,
-            code: engineLabel == 'UNREAL 5'
-                ? 'if (!ValidateGuard_${gIdx + 1}()) return; // $extraGuard'
-                : (engineLabel == 'UNITY C#'
-                    ? 'if (!ValidateGuard_${gIdx + 1}()) return; // $extraGuard'
-                    : 'if not _validate_guard_${gIdx + 1}():\n    return # $extraGuard'),
-            explain:
-                'Protects $targetAssetName against edge case: $extraGuard.',
+            code: guardSpec.code,
+            explain: guardSpec.explain,
             primaryChip: 'Guard: $extraGuard',
-            pitfall:
-                'Run $extraGuard before applying velocity or state changes so cancelled frames leave no side effects.',
+            pitfall: guardSpec.pitfall,
           ));
         }
       }
@@ -1829,16 +2065,19 @@ class TaskHowToBlueprint {
       );
     }
 
-    final hasStaleEconomySteps = hasLegacyEconomyMismatch &&
-        parentTask.children.any(
-          (c) =>
-              c.codeTargetFile != 'custom_snippet' &&
-              (c.text.toUpperCase().contains('TRANSACTIONCOSTBASE') ||
-                  c.text.toUpperCase().contains('PROCESSDURATIONSEC') ||
-                  c.text.toUpperCase().contains('STACKMAXCAPACITY') ||
-                  (c.codeSnippet ?? '').contains('transactionCostBase')),
-        );
-    if ((parentTask.children.isEmpty || hasStaleEconomySteps) &&
+    final hasStaleEconomyOrGuardSteps = parentTask.children.any(
+      (c) =>
+          c.codeTargetFile != 'custom_snippet' &&
+          ((hasLegacyEconomyMismatch &&
+                  (c.text.toUpperCase().contains('TRANSACTIONCOSTBASE') ||
+                      c.text.toUpperCase().contains('PROCESSDURATIONSEC') ||
+                      c.text.toUpperCase().contains('STACKMAXCAPACITY') ||
+                      (c.codeSnippet ?? '').contains('transactionCostBase'))) ||
+              (c.codeSnippet ?? '').contains('ValidateGuard_') ||
+              (c.codeSnippet ?? '').contains('_validate_guard_') ||
+              (c.codeSnippet ?? '').contains('!IsBoundaryBlocked')),
+    );
+    if ((parentTask.children.isEmpty || hasStaleEconomyOrGuardSteps) &&
         !parentTask.children.any((c) => c.codeTargetFile == 'custom_snippet')) {
       final isParentCompleted = parentTask.completed;
       parentTask.children = [

@@ -3218,29 +3218,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       }
     }
 
-    // 2. Guard rules & guard function identifiers -> 'guard' (Amber)
-    final bracketPrefix = RegExp(r'^\[[^\]]+\]\s*');
-    for (final rawGuard in edgeItems) {
-      final trimmed = rawGuard.trim();
-      if (trimmed.isNotEmpty) {
-        tokenKindByLiteral[trimmed] = 'guard';
-        final stripped = trimmed.replaceFirst(bracketPrefix, '').trim();
-        if (stripped.length >= 6) {
-          tokenKindByLiteral[stripped] = 'guard';
-        }
-      }
-    }
-    for (final guardIdent in const [
-      'ValidateGuard_1()',
-      'ValidateGuard_2()',
-      'ValidateGuard_3()',
-      '_validate_guard_1()',
-      '_validate_guard_2()',
-      '_validate_guard_3()',
-      'IsBoundaryBlocked()',
-      '!IsBoundaryBlocked',
-    ]) {
-      tokenKindByLiteral[guardIdent] = 'guard';
+    // 2. Concrete guard variables, conditions & guard rules -> 'guard' (Amber)
+    for (final guardToken
+        in TaskHowToBlueprint.extractGuardHighlightTokens(edgeItems)) {
+      tokenKindByLiteral[guardToken] = 'guard';
     }
 
     // 3. Concrete asset & component names -> 'asset' (Cyan)
