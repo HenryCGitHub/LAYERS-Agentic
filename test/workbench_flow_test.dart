@@ -16,7 +16,7 @@ void main() {
       );
       expect(draft.questions.length, 3);
       expect(draft.isInterviewComplete, isTrue);
-      expect(draft.chatHistory.length, 2);
+      expect(draft.lastAgentReply, isNotEmpty);
       expect(draft.coreLoopBeats.length, greaterThanOrEqualTo(6));
       expect(draft.releaseTrainTitles.length, 1);
 
@@ -26,7 +26,7 @@ void main() {
         '2D Side-Scrolling Precision Platformer',
       );
 
-      expect(updated.chatHistory.length, 4);
+      expect(updated.lastAgentReply, isNotEmpty);
       expect(updated.goal, contains('2D Side-Scrolling Precision Platformer'));
       expect(updated.toFormattedScopeSection(), contains('Goal:'));
       expect(updated.toFormattedScopeSection(), contains('In Scope:'));

@@ -801,14 +801,6 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     final cleanMsg = userMessage.trim();
     if (cleanMsg.isEmpty) return blueprint;
 
-    blueprint.chatHistory.add(
-      AgentChatMessage(
-        id: 'rel_msg_user_${blueprint.chatHistory.length}',
-        role: 'user',
-        text: cleanMsg,
-      ),
-    );
-
     if (GeminiAgentClient.hasKey(apiKey)) {
       final currentBeatsSummary = blueprint.beats
           .map(
@@ -913,15 +905,7 @@ Return ONLY valid JSON:
           blueprint.explicitExclusions = updatedBp.explicitExclusions;
           final reply = json['reply']?.toString().trim() ??
               'Updated the Release Plan Blueprint with your changes!';
-          blueprint.chatHistory.add(
-            AgentChatMessage(
-              id: 'rel_msg_ai_${blueprint.chatHistory.length}',
-              role: 'assistant',
-              modelUsed: modelName,
-              text: reply,
-              updatedFields: const ['Release Plan Updated'],
-            ),
-          );
+          blueprint.lastAgentReply = reply;
           return blueprint;
         }
       }
@@ -994,15 +978,7 @@ Return ONLY valid JSON:
       blueprint.goal = '${blueprint.goal} (Adjusted: $cleanMsg)';
     }
 
-    blueprint.chatHistory.add(
-      AgentChatMessage(
-        id: 'rel_msg_ai_${blueprint.chatHistory.length}',
-        role: 'assistant',
-        modelUsed: modelName,
-        text: replyText,
-        updatedFields: const ['Release Plan Updated'],
-      ),
-    );
+    blueprint.lastAgentReply = replyText;
     return blueprint;
   }
 

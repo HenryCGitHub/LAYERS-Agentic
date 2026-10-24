@@ -185,12 +185,7 @@ Return ONLY valid JSON:
           'Prototype Release',
         ],
         sectionOptions: parsedSectionOptions,
-        chatHistory: _buildInitialChatHistory(
-          spark: cleanSpark,
-          title: resolvedTitle,
-          questions: resolvedQuestions,
-          modelUsed: modelName,
-        ),
+        lastAgentReply: 'Drafted the initial $resolvedTitle Concept Blueprint.',
       );
     }
 
@@ -222,53 +217,13 @@ Return ONLY valid JSON:
         'Prototype Release',
       ],
       sectionOptions: _defaultSectionOptionsForSpark(cleanSpark, shortTitle),
-      chatHistory: _buildInitialChatHistory(
-        spark: cleanSpark,
-        title: shortTitle,
-        questions: fallbackQuestions,
-        modelUsed: modelName,
-      ),
+      lastAgentReply: 'Drafted the initial $shortTitle Concept Blueprint.',
     );
   }
 
-  static List<AgentChatMessage> _buildInitialChatHistory({
-    required String spark,
-    required String title,
-    required List<AgentQuestion> questions,
-    required String modelUsed,
-  }) {
-    final firstQ = questions.isNotEmpty
-        ? questions.first.question
-        : 'How does the initial Core Loop look to you?';
-    final quickChips = <String>[
-      if (questions.isNotEmpty)
-        for (final opt in questions.first.options)
-          _stripRecommendedPrefix(opt),
-      'Looks great — ready to plan v0.1!',
-    ];
-
-    return [
-      AgentChatMessage(
-        id: 'msg_user_0',
-        role: 'user',
-        text: spark,
-      ),
-      AgentChatMessage(
-        id: 'msg_ai_0',
-        role: 'assistant',
-        modelUsed: modelUsed,
-        updatedFields: const ['Drafted Initial Concept Blueprint'],
-        text: 'I drafted the initial **$title** Concept Blueprint based on your idea!\n\n'
-            'We can refine each section one at a time (Goal, Game Spec, Tech Spec, Design Pillars, Trade-Offs, Core Loop Beats, Out of Scope, Done When, and Prototype Release).\n\n'
-            '**First up:** $firstQ',
-        quickReplies: quickChips,
-      ),
-    ];
-  }
-
-  /// Turn-by-turn Co-Design Chat: Takes the user's message, updates the live
+  /// Stateless Blueprint Turn: Takes the user's instruction, updates the live
   /// `ProjectConceptBlueprint` in place using `conversationModel` (`gemini-flash-latest`),
-  /// and appends the AI's conversational reply + next follow-up question / quick replies.
+  /// and sets `lastAgentReply`. Zero conversation history tokens are sent or stored.
   static Future<ProjectConceptBlueprint> sendConceptChatTurn(
     ProjectConceptBlueprint draft,
     String userMessage, {
@@ -282,26 +237,7 @@ Return ONLY valid JSON:
     );
     if (cleanMsg.isEmpty) return draft;
 
-    draft.chatHistory.add(
-      AgentChatMessage(
-        id: 'msg_user_${draft.chatHistory.length}',
-        role: 'user',
-        text: cleanMsg,
-      ),
-    );
-
-    // Cap history to the last 2 messages (and omit when a direct [Section XX] tag is present)
-    final isDirectSectionEdit = cleanMsg.startsWith('[Section ');
-    final historySlice = isDirectSectionEdit
-        ? const <AgentChatMessage>[]
-        : (draft.chatHistory.length > 3
-            ? draft.chatHistory.sublist(draft.chatHistory.length - 3, draft.chatHistory.length - 1)
-            : draft.chatHistory.take(draft.chatHistory.length - 1).toList());
-    final recentHistory = historySlice
-        .map((m) => '${m.isUser ? "Dev" : "AI"}: ${m.text}')
-        .join('\n');
-
-    // Delta-Only JSON Prompt (~380 input tokens, ~140 output tokens — 75% reduction)
+    // Stateless Delta-Only JSON Prompt (0 history tokens; only modified fields returned)
     final prompt = '''
 You are Antigravity, an indie game producer updating a Live Concept Blueprint.
 Spark: "${draft.sparkIdea}"
@@ -316,7 +252,6 @@ Current Blueprint:
 - Out of Scope: ${draft.exclusions.join(' | ')}
 - Done When: "${draft.doneWhen}"
 - Release Train: ${draft.releaseTrainTitles.join(' | ')}
-${recentHistory.isNotEmpty ? 'Recent Context:\n$recentHistory\n' : ''}
 Developer Direction: "$cleanMsg"
 
 ${GeminiAgentClient.compactStyleRules}
@@ -426,35 +361,23 @@ Return ONLY valid JSON:
           ? explicitUpdated
           : (updated.isNotEmpty ? updated : const ['Concept Refined']);
 
-      final quickReplies = cleanList(json['quickReplies']) ?? const <String>[];
-
       final replyText = json['reply']?.toString().trim() ??
           'Updated the Project Concept Blueprint with your direction!';
 
       draft.lastUpdatedFields = effectiveUpdated;
       draft.isInterviewComplete = true;
-      draft.chatHistory.add(
-        AgentChatMessage(
-          id: 'msg_ai_${draft.chatHistory.length}',
-          role: 'assistant',
-          modelUsed: conversationModel,
-          text: replyText,
-          quickReplies: quickReplies,
-          updatedFields: effectiveUpdated,
-        ),
-      );
+      draft.lastAgentReply = replyText;
       return draft;
     }
 
     // Offline / deterministic turn synthesis fallback
-    _applyDeterministicChatTurn(draft, cleanMsg, conversationModel);
+    _applyDeterministicChatTurn(draft, cleanMsg);
     return draft;
   }
 
   static void _applyDeterministicChatTurn(
     ProjectConceptBlueprint draft,
     String userMsg,
-    String modelUsed,
   ) {
     // Strip any section prefix `[Section 01 Goal]` or meta-instruction wrapper if present,
     // without appending a premature period before pattern matching
@@ -510,32 +433,10 @@ Return ONLY valid JSON:
       _synthesizeConceptTurnUpdate(draft, cleanTurn, updated);
     }
 
-    // Pick next unanswered question if available
-    final assistantTurnCount = draft.chatHistory.where((m) => !m.isUser).length;
-    final nextQIdx = assistantTurnCount < draft.questions.length ? assistantTurnCount : -1;
-    final followUp = nextQIdx != -1
-        ? '\n\n**Next question:** ${draft.questions[nextQIdx].question}'
-        : '\n\nHow does the updated Blueprint look now? Feel free to ask for more tweaks or click **Approve & Plan v0.1 Release →**.';
-    final nextChips = nextQIdx != -1
-        ? draft.questions[nextQIdx].options.map(_stripRecommendedPrefix).toList()
-        : <String>[
-            'Split combat into separate approach and strike beats',
-            'Add a boss/hazard challenge beat',
-            'Looks great — ready for v0.1!',
-          ];
-
     draft.lastUpdatedFields = updated;
     draft.isInterviewComplete = true;
-    draft.chatHistory.add(
-      AgentChatMessage(
-        id: 'msg_ai_${draft.chatHistory.length}',
-        role: 'assistant',
-        modelUsed: modelUsed,
-        updatedFields: updated,
-        text: 'Got it — I synthesized your direction into the **${updated.join(" & ")}** on the live Blueprint.$followUp',
-        quickReplies: nextChips,
-      ),
-    );
+    draft.lastAgentReply =
+        'Synthesized your direction into ${updated.join(" & ")} on the live Blueprint.';
   }
 
   /// Synthesizes conversational user feedback (replacements like "instead of a crab we use vehicles",
@@ -694,12 +595,6 @@ Return ONLY valid JSON:
   static String _synthesizeInitialGoalForSpark(String spark, String title) {
     final phrase = _shortSparkPhrase(spark, title);
     return 'Single-Arena Loop: Build a playable $title prototype where you master $phrase, chain core movement and combat actions, and complete a full arena loop.';
-  }
-
-  static String _stripRecommendedPrefix(String input) {
-    return input
-        .replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '')
-        .trim();
   }
 
   /// Extracts a concise synthesized premise phrase from `spark` (never echoing raw "X game but in a Y" brain dumps).

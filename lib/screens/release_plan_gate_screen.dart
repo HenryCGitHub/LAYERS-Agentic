@@ -1304,30 +1304,26 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
               ),
             ],
           ),
-          if (bp.chatHistory.isNotEmpty) ...[
+          if (bp.lastAgentReply != null && bp.lastAgentReply!.isNotEmpty) ...[
             const SizedBox(height: 10),
-            for (final msg in bp.chatHistory.reversed.take(2).toList().reversed)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: msg.isUser ? accentAmber : accentEmerald,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  child: Text(
-                    '${msg.isUser ? "You" : "Agent"}: ${msg.text}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: textSecondary,
-                    ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: accentEmerald,
+                    width: 2,
                   ),
                 ),
               ),
+              child: Text(
+                'Agent: ${bp.lastAgentReply}',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: textSecondary,
+                ),
+              ),
+            ),
           ],
           const SizedBox(height: 10),
           Row(
