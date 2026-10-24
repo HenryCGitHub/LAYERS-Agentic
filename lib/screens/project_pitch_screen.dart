@@ -868,58 +868,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     });
   }
 
-  KeyEventResult _handleStage1KeyEvent(
-    KeyEvent event,
-    ProjectConceptBlueprint draft,
-  ) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final primaryFocus = FocusManager.instance.primaryFocus;
-    if (primaryFocus?.context?.widget is EditableText) {
-      return KeyEventResult.ignored;
-    }
-
-    final isMetaOrCtrl = HardwareKeyboard.instance.isMetaPressed ||
-        HardwareKeyboard.instance.isControlPressed;
-    final key = event.logicalKey;
-
-    if (isMetaOrCtrl && key == LogicalKeyboardKey.enter) {
-      if (_currentStep < _sections.length) {
-        setState(() {
-          for (int i = 0; i < _sections.length; i++) {
-            _visitedSteps.add(i);
-          }
-          _currentStep = _sections.length;
-        });
-      } else if (!widget.workbench.isAgentBusy) {
-        widget.workbench.openReleasePlanGate();
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.arrowLeft && _currentStep > 0) {
-      _goToStep(_currentStep - 1);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight &&
-        _currentStep < _sections.length) {
-      _goToStep(_currentStep + 1);
-      return KeyEventResult.handled;
-    }
-
-    if (_currentStep < _sections.length) {
-      final opts = _optionsForSection(draft, _currentStep);
-      int? optIdx;
-      if (key == LogicalKeyboardKey.digit1 && opts.isNotEmpty) optIdx = 0;
-      if (key == LogicalKeyboardKey.digit2 && opts.length > 1) optIdx = 1;
-      if (key == LogicalKeyboardKey.digit3 && opts.length > 2) optIdx = 2;
-      if (optIdx != null) {
-        _selectSectionOption(draft, _currentStep, optIdx);
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
   void _promptEditProjectTitle(ProjectConceptBlueprint draft) {
     _showDirectSectionTextEditDialog(
       title: 'Rename Project Title',
@@ -964,60 +912,56 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     }
 
     // Step 1B / 1C: Unified Left Outliner Sidebar (308px) + Focused Co-Design Canvas
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (_, event) => _handleStage1KeyEvent(event, draft),
-      child: Container(
-        key: const ValueKey('concept_interview_card'),
-        color: bgBase,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 780;
-            final mainCanvasColumn = Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1100),
-                        child: _currentStep < _sections.length
-                            ? _buildFocusedSectionWorkspace(draft, _currentStep)
-                            : _buildFullReviewWorkspace(draft),
-                      ),
+    return Container(
+      key: const ValueKey('concept_interview_card'),
+      color: bgBase,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 780;
+          final mainCanvasColumn = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1100),
+                      child: _currentStep < _sections.length
+                          ? _buildFocusedSectionWorkspace(draft, _currentStep)
+                          : _buildFullReviewWorkspace(draft),
                     ),
                   ),
                 ),
-                _buildConceptStickyBottomDock(draft),
-              ],
-            );
+              ),
+              _buildConceptStickyBottomDock(draft),
+            ],
+          );
 
-            if (!isWide) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    height: 220,
-                    child: _buildLeftConceptOutlinerRail(draft),
-                  ),
-                  Expanded(child: mainCanvasColumn),
-                ],
-              );
-            }
-
-            return Row(
+          if (!isWide) {
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
-                  width: 280,
+                  height: 220,
                   child: _buildLeftConceptOutlinerRail(draft),
                 ),
                 Expanded(child: mainCanvasColumn),
               ],
             );
-          },
-        ),
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 280,
+                child: _buildLeftConceptOutlinerRail(draft),
+              ),
+              Expanded(child: mainCanvasColumn),
+            ],
+          );
+        },
       ),
     );
   }
@@ -2828,14 +2772,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                                 color: optIdx == 0 ? accentCyan : textSecondary,
                               ),
                             ),
-                            Text(
-                              ' · Key ${optIdx + 1}',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                                color: textSecondary,
-                              ),
-                            ),
                             if (isMulti) ...[
                               const SizedBox(width: 10),
                               Text(
@@ -4471,35 +4407,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           side: BorderSide(color: accentAmber.withValues(alpha: 0.55)),
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            widget.workbench.isAgentBusy
-                ? 'Generating Release Plan...'
-                : 'Approve & Plan v0.1 Release →',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-            decoration: BoxDecoration(
-              color: focalAccentFg.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(
-              '⌘↵',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w700,
-                color: focalAccentFg,
-              ),
-            ),
-          ),
-        ],
+      child: Text(
+        widget.workbench.isAgentBusy
+            ? 'Generating Release Plan...'
+            : 'Approve & Plan v0.1 Release →',
+        style: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
