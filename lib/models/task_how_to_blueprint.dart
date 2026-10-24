@@ -851,6 +851,11 @@ class TaskHowToBlueprint {
       'logic',
       'pass',
       'stage',
+      'structure',
+      'base',
+      'properties',
+      'actor',
+      'node',
     };
     final words = _identifierWordRegex
         .allMatches(clean)
@@ -969,12 +974,24 @@ class TaskHowToBlueprint {
     final bpAsset = 'BP_$pascalAsset';
     final cppClass = 'A$pascalAsset';
 
-    final primaryVar = checkpointNode.tuningParams.isNotEmpty
-        ? checkpointNode.tuningParams[taskIndex % checkpointNode.tuningParams.length]
+    final cpArchetype =
+        MechanicArchetypeProfile.fromFeatureTitle(checkpointNode.cleanStageTitle);
+    final hasLegacyEconomyMismatch = cpArchetype.category != 'economy' &&
+        checkpointNode.tuningParams.isNotEmpty &&
+        checkpointNode.tuningParams.first.contains('transactionCostBase: 25 gold');
+    final effectiveTuningParams = hasLegacyEconomyMismatch
+        ? cpArchetype.tuningParams
+        : checkpointNode.tuningParams;
+    final effectiveEdgeCases = hasLegacyEconomyMismatch
+        ? cpArchetype.edgeCases
+        : checkpointNode.edgeCases;
+
+    final primaryVar = effectiveTuningParams.isNotEmpty
+        ? effectiveTuningParams[taskIndex % effectiveTuningParams.length]
         : 'responseTime: 0.12 s';
     final primaryVarName = primaryVar.split(':').first.trim();
-    final primaryGuard = checkpointNode.edgeCases.isNotEmpty
-        ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
+    final primaryGuard = effectiveEdgeCases.isNotEmpty
+        ? effectiveEdgeCases[taskIndex % effectiveEdgeCases.length]
         : '[STATE GUARD] Prevent duplicate trigger while active';
     final isFoundationTask = taskIndex == 0;
     final isStateLogicTask = taskIndex == 1;
@@ -1737,8 +1754,8 @@ class TaskHowToBlueprint {
       // 2. When a task is multi-clause (>= 3 clauses) or heavy (> 180m), also emit dedicated steps for each extra tuning parameter and guard
       final expandSpecItems = clauses.length >= 3 || totalTaskMinutes > 180;
       if (expandSpecItems) {
-        for (int tIdx = 1; tIdx < checkpointNode.tuningParams.length; tIdx++) {
-          final extraTune = checkpointNode.tuningParams[tIdx];
+        for (int tIdx = 1; tIdx < effectiveTuningParams.length; tIdx++) {
+          final extraTune = effectiveTuningParams[tIdx];
           final extraVarName = extraTune
               .split(':')
               .first
@@ -1765,8 +1782,8 @@ class TaskHowToBlueprint {
           ));
         }
 
-        for (int gIdx = 1; gIdx < checkpointNode.edgeCases.length; gIdx++) {
-          final extraGuard = checkpointNode.edgeCases[gIdx];
+        for (int gIdx = 1; gIdx < effectiveEdgeCases.length; gIdx++) {
+          final extraGuard = effectiveEdgeCases[gIdx];
           final shortGuard = extraGuard
               .replaceFirst(_leadingBracketTagRegex, '')
               .trim();
@@ -1812,7 +1829,16 @@ class TaskHowToBlueprint {
       );
     }
 
-    if (parentTask.children.isEmpty &&
+    final hasStaleEconomySteps = hasLegacyEconomyMismatch &&
+        parentTask.children.any(
+          (c) =>
+              c.codeTargetFile != 'custom_snippet' &&
+              (c.text.toUpperCase().contains('TRANSACTIONCOSTBASE') ||
+                  c.text.toUpperCase().contains('PROCESSDURATIONSEC') ||
+                  c.text.toUpperCase().contains('STACKMAXCAPACITY') ||
+                  (c.codeSnippet ?? '').contains('transactionCostBase')),
+        );
+    if ((parentTask.children.isEmpty || hasStaleEconomySteps) &&
         !parentTask.children.any((c) => c.codeTargetFile == 'custom_snippet')) {
       final isParentCompleted = parentTask.completed;
       parentTask.children = [
@@ -1958,12 +1984,24 @@ class TaskHowToBlueprint {
     final taskNum = taskIndex + 1;
     final cleanTitle = extractCleanTitle(parentTask.text);
     final engineLabel = detectEngineLabel(engineHint);
-    final primaryVar = checkpointNode.tuningParams.isNotEmpty
-        ? checkpointNode.tuningParams[taskIndex % checkpointNode.tuningParams.length]
+    final cpArchetype =
+        MechanicArchetypeProfile.fromFeatureTitle(checkpointNode.cleanStageTitle);
+    final hasLegacyEconomyMismatch = cpArchetype.category != 'economy' &&
+        checkpointNode.tuningParams.isNotEmpty &&
+        checkpointNode.tuningParams.first.contains('transactionCostBase: 25 gold');
+    final effectiveTuningParams = hasLegacyEconomyMismatch
+        ? cpArchetype.tuningParams
+        : checkpointNode.tuningParams;
+    final effectiveEdgeCases = hasLegacyEconomyMismatch
+        ? cpArchetype.edgeCases
+        : checkpointNode.edgeCases;
+
+    final primaryVar = effectiveTuningParams.isNotEmpty
+        ? effectiveTuningParams[taskIndex % effectiveTuningParams.length]
         : 'responseTime: 0.12 s';
     final primaryVarName = primaryVar.split(':').first.trim();
-    final primaryGuard = checkpointNode.edgeCases.isNotEmpty
-        ? checkpointNode.edgeCases[taskIndex % checkpointNode.edgeCases.length]
+    final primaryGuard = effectiveEdgeCases.isNotEmpty
+        ? effectiveEdgeCases[taskIndex % effectiveEdgeCases.length]
         : '[STATE GUARD] Prevent duplicate trigger while active';
 
     final stopWords = <String>{
