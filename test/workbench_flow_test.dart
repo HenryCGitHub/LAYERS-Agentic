@@ -105,7 +105,7 @@ void main() {
         );
         await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
         await tester.pumpAndSettle();
-        expect(find.textContaining('Add wall-run chains'), findsWidgets);
+        expect(find.textContaining('wall-run chains'), findsWidgets);
 
         // Clicking a Concept Expansion Card toggles it on (adds to summary) without auto-launching Stage 1B,
         // and clicking it a second time unselects it!
@@ -1277,13 +1277,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     test(
-      'Stage 1A Idea Summarizer extracts domain nouns for Working Title, synthesizes natural non-quoting summary, and matches parkour/courier mechanics without grapple hooks',
+      'Stage 1A Idea Summarizer & Update Summary handles initial pitch, empty-input card fold/refresh, replacement, rename, and full pitch swap',
       () async {
         const courierPitch =
             'Brave areas too lethal for ordinary survivors to retrieve and deliver vital cargo across a ruined metropolis using fluid parkour, wall-running, and high-speed combat against scavengers hunting your haul.';
-        final intake = ProjectConceptAgent.buildDeterministicSparkIntake(
-          rawIdea: courierPitch,
-        );
+        final provider = WorkbenchProvider();
+        await provider.ingestOrRefineSparkIdea(courierPitch);
+        final intake = provider.sparkIntake!;
 
         // 1. Working Title extracts domain/mechanic nouns instead of copying first 3 words ("Brave Areas Too")
         expect(intake.workingTitle, isNot('Brave Areas Too'));
@@ -1310,6 +1310,48 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           intake.expansionCards.first.title,
           'Wall-Run Chain & Vault Boost',
         );
+
+        // 4. Flow 4: Toggle an Expansion Card on and click Update Summary with an empty input box
+        provider.toggleSparkExpansionCard(0);
+        expect(provider.sparkIntake!.expansionCards.first.isSelected, isTrue);
+        await provider.ingestOrRefineSparkIdea('');
+        final afterEmptyUpdate = provider.sparkIntake!;
+        // Selected card is folded into baseSummary & mechanics, and new Expansion Cards are loaded
+        expect(
+          afterEmptyUpdate.baseSummary.toLowerCase(),
+          contains('wall-run chain and rooftop vault speed boost'),
+        );
+        expect(
+          afterEmptyUpdate.mechanics,
+          contains('Wall-Run Chain & Vault Boost'),
+        );
+        expect(
+          afterEmptyUpdate.expansionCards.first.title,
+          'Momentum Slide & Rooftop Kick',
+        );
+
+        // 5. Flow 3: Replacement refinement ("instead of scavengers use patrol drones")
+        await provider.ingestOrRefineSparkIdea(
+          'instead of scavengers use patrol drones',
+        );
+        final afterReplace = provider.sparkIntake!;
+        expect(afterReplace.rawIdea.toLowerCase(), contains('patrol drones'));
+        expect(afterReplace.mechanics, contains('Patrol Drones'));
+
+        // 6. Flow 1: Explicit title rename ("rename to Metro Runner")
+        await provider.ingestOrRefineSparkIdea('rename to Metro Runner');
+        expect(provider.sparkIntake!.workingTitle, 'Metro Runner');
+
+        // 7. Flow 2: Full new game pitch (>10 words) replaces the concept cleanly
+        await provider.ingestOrRefineSparkIdea(
+          'A deep-sea submarine salvage and photography game across dark ocean trenches with hull pressure hazards',
+        );
+        final afterNewPitch = provider.sparkIntake!;
+        expect(
+          afterNewPitch.workingTitle.toLowerCase(),
+          anyOf(contains('submarine'), contains('ocean'), contains('salvage')),
+        );
+        expect(afterNewPitch.baseSummary.toLowerCase(), contains('submarine'));
       },
     );
   });

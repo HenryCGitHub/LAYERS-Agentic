@@ -270,6 +270,9 @@ class WorkbenchProvider extends ChangeNotifier {
   Future<void> ingestOrRefineSparkIdea(String userInput) async {
     final clean = userInput.trim();
     if (clean.isEmpty && _sparkIntake == null) return;
+    if (_sparkIntake != null) {
+      _sparkSuggestionVariantOffset++;
+    }
 
     _isAgentBusy = true;
     _agentProgressStep =
