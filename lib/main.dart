@@ -144,18 +144,25 @@ class WorkbenchShell extends StatelessWidget {
     final draft = workbench.conceptDraft;
     final bp = workbench.releaseBlueprint;
     final rel = workbench.activeRelease;
-    final allFeats = <String>[
+    final allFeatDocs = <TierDocument>[
       for (final b in workbench.activeReleaseBeats)
-        for (final f in workbench.featuresForBeat(b.id)) f.id,
+        ...workbench.featuresForBeat(b.id),
     ];
-    final doneFeatCount = allFeats
+    final allFeats = [for (final f in allFeatDocs) f.id];
+    final nonStableFeatIds = [
+      for (final f in allFeatDocs)
+        if (f.sections['lifecycle'] != 'stable') f.id,
+    ];
+    final targetBadgeFeatIds =
+        nonStableFeatIds.isNotEmpty ? nonStableFeatIds : allFeats;
+    final doneFeatCount = targetBadgeFeatIds
         .where((id) => workbench.getDocumentProgress(id) >= 100)
         .length;
 
     final String? stage1Badge = draft != null ? '✓' : null;
     final String? stage2Badge = bp?.releaseVersionTag;
-    final String? stage3Badge = allFeats.isNotEmpty
-        ? '$doneFeatCount/${allFeats.length}'
+    final String? stage3Badge = targetBadgeFeatIds.isNotEmpty
+        ? '$doneFeatCount/${targetBadgeFeatIds.length}'
         : (rel != null ? '${workbench.getDocumentProgress(rel.id)}%' : null);
 
     final String? rawSpark = workbench.activeProject?.title.trim() ?? draft?.sparkIdea.trim();
