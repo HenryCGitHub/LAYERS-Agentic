@@ -731,7 +731,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       ..writeln('## 08. Done When')
       ..writeln('> ${draft.doneWhen}')
       ..writeln()
-      ..writeln('## 09. Phase 1: Prototype Release');
+      ..writeln('## 09. Progressive Releases (v0.1 → v0.2+)');
     for (final r in draft.releaseTrainTitles) {
       buf.writeln('- $r');
     }
@@ -991,7 +991,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 280,
+                width: 248,
                 child: _buildLeftConceptOutlinerRail(draft),
               ),
               Expanded(child: mainCanvasColumn),
@@ -1673,7 +1673,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     );
   }
 
-  // ── Unified 308px Left Concept Stepper (`01 Goal` ... `09 Prototype Release` + `10 Full Review`) ─
+  // ── Unified 2-Surface Recessed Left Concept Stepper (`01 Goal` ... `09 Releases` + `10 Full Review`) ─
   Widget _buildLeftConceptOutlinerRail(ProjectConceptBlueprint draft) {
     final verifiedCount =
         _visitedSteps.where((idx) => idx >= 0 && idx < _sections.length).length;
@@ -1682,22 +1682,13 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
 
     return Container(
       key: const ValueKey('stage1_left_outliner_rail'),
-      decoration: BoxDecoration(
-        color: bgRecessed,
-        border: Border(
-          right: BorderSide(color: borderSubtle),
-          bottom: BorderSide(color: borderSubtle),
-        ),
-      ),
+      color: bgRecessed,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Flush Top Snapshot Header (Zero 4-sided nested boxes — separated by 1px bottom hairline)
+          // Flush Top Snapshot Header (Zero 4-sided nested boxes)
           Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 12, 11),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: borderSubtle)),
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1792,6 +1783,31 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   _buildOutlineSectionNode(draft, i),
                 _buildFinalReviewOutlineNode(verifiedCount: verifiedCount),
               ],
+            ),
+          ),
+
+          // Quick-Action Footer: Jump straight to 2. Workbench (Build v0.1) from any section
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+            child: InkWell(
+              key: const ValueKey('outliner_quick_build_v01_btn'),
+              onTap: widget.workbench.isAgentBusy
+                  ? null
+                  : () => widget.workbench.approveConceptAndBuildRelease(),
+              borderRadius: BorderRadius.circular(5),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Text(
+                  'Build v0.1 →',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: accentEmerald,
+                  ),
+                ),
+              ),
             ),
           ),
         ],

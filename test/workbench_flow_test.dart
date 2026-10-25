@@ -391,8 +391,31 @@ void main() {
           find.byKey(ValueKey('step_dropdown_${cp0Id}_0')),
           findsOneWidget,
         );
+        expect(
+          find.byKey(ValueKey('inline_step_copilot_tailor_btn_$cp0Id')),
+          findsOneWidget,
+        );
         expect(find.textContaining('✓ Verify: '), findsOneWidget);
         expect(find.text('Complete & Next →'), findsOneWidget);
+
+        // Verify Progressive AI Release Co-Pilot Modal (+ New Release (v0.2) ✦) with 1-click AI Direction Presets
+        final newProgRelBtn = find.byKey(
+          const ValueKey('outliner_new_progressive_release_btn'),
+        );
+        await tester.ensureVisible(newProgRelBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(newProgRelBtn);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('progressive_next_release_modal')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('progressive_preset_chip_0')),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
 
         // Resize to Half-Width (720px) and verify 1-Line Unified Context Bar + Step Dropdown
         tester.view.physicalSize = const Size(720, 900);

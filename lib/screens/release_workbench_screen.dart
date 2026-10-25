@@ -9,11 +9,11 @@ import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/section_text_utils.dart';
 
-/// Stage 3 Screen: Active Release Workbench
-/// - Left Rail: Core Loop Epics & Features switcher for the active Release
-/// - Main Canvas:
-///   - Release Completion Banner (when 100% of Checkpoints are VERIFIED ✓)
-///   - Focused Task Sheet with 6-Step Accordion List (Do -> Copy -> Verify Triad)
+/// Stage 2 Screen: Streamlined 2-Surface Open-Canvas Release Workbench
+/// - Left Outliner Rail (`#0C0E12`): Core Loop Epics (`E01`, `E02`, ...) & Singular-Focused Features
+/// - Right Open Workspace (`#12151B`):
+///   - Full-Width: Fixed-Order Step List (`STEPS (X/Y)`) on the left + Active Step (`Do -> Copy -> Verify`) on the right
+///   - Half-Width: 1-Line Floating Context Bar (`E01 · Epic › Feature ▾` + `Step X/Y ▾ | ‹ ›`) + Active Step
 class ReleaseWorkbenchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
 
@@ -35,11 +35,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Set<String> _expandedDoneCheckpoints = {};
   final Set<String> _awaitingPlaytestVerification = {};
   int? _manualCheckpointFocusIndex;
-  bool _criticalPathOnly = false;
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
   bool _unrealCppMode = false;
-  double _outlinerWidth = 340.0;
+  double _outlinerWidth = 232.0;
   bool _isHalfScreenOutlinerOpen = false;
 
   String _formatOutlineBeatDisplayTitle(String rawBeatTitle) {
@@ -104,7 +103,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           onHorizontalDragUpdate: (details) {
                             setState(() {
                               _outlinerWidth = (_outlinerWidth + details.delta.dx)
-                                  .clamp(260.0, 520.0);
+                                  .clamp(220.0, 520.0);
                             });
                           },
                           child: const SizedBox.expand(),
@@ -126,7 +125,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
         // Half-Screen Mode (< 1040px): Main Canvas gets 100% width; Outliner becomes a Slide-Over Overlay Drawer
         final overlayWidth =
-            _outlinerWidth.clamp(260.0, constraints.maxWidth * 0.85);
+            _outlinerWidth.clamp(220.0, constraints.maxWidth * 0.85);
         return Stack(
           children: [
             Positioned.fill(
@@ -314,13 +313,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       onSelected: (value) {
                         if (value == '__progressive_release__') {
                           _showProgressiveNextReleaseModal(context);
-                        } else if (value == '__evolve__') {
-                          widget.workbench.advanceToNextRelease();
-                        } else if (value == '__replan__') {
-                          widget.workbench.reopenCurrentReleasePlanGate();
                         } else if (value.startsWith('rel:')) {
                           final targetId = value.substring(4);
-                          widget.workbench.selectActiveRelease(targetId);
+                          final targetDoc = widget.workbench.documents[targetId];
+                          if (targetDoc != null &&
+                              targetDoc.childrenIds.isEmpty &&
+                              targetId != rel.id) {
+                            _showProgressiveNextReleaseModal(context);
+                          } else {
+                            widget.workbench.selectActiveRelease(targetId);
+                          }
                         } else {
                           widget.workbench.setReleaseViewFilter(value);
                         }
@@ -463,7 +465,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                                   ),
                                                 ),
                                                 child: Text(
-                                                  'Plan Gate →',
+                                                  'Build Release →',
                                                   style: GoogleFonts.jetBrainsMono(
                                                     fontSize: 9.5,
                                                     fontWeight: FontWeight.w700,
@@ -540,30 +542,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w700,
                                     color: accentEmerald,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem<String>(
-                            value: '__replan__',
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '✎ Edit $activeVer Scope',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  activeVer,
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    color: textMuted,
                                   ),
                                 ),
                               ],
@@ -672,15 +650,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     Text(
                       widget.workbench.activePhaseBadgeLabel,
                       key: const ValueKey('stage3_phase_badge'),
-                    ),
-                    InkWell(
-                      key: const ValueKey('critical_path_filter_btn'),
-                      onTap: () {
-                        setState(() {
-                          _criticalPathOnly = !_criticalPathOnly;
-                        });
-                      },
-                      child: const SizedBox.shrink(),
                     ),
                     InkWell(
                       key: const ValueKey('focus_mode_toggle_btn'),
@@ -795,27 +764,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       ),
                     ),
                     for (int fIdx = 0; fIdx < beatFeats.length; fIdx++)
-                      Builder(
-                        builder: (context) {
-                          final feat = beatFeats[fIdx];
-                          final depTier =
-                              WorkspaceAgentOrchestrator.classifyDependencyTier(
-                            featureTitle: feat.title,
-                            beatIndex: bIdx,
-                            featureIndexInBeat: fIdx,
-                          );
-                          if (_criticalPathOnly && depTier.tierRank > 2) {
-                            return const SizedBox.shrink();
-                          }
-                          return _buildFeatureRailItem(
-                            feat,
-                            activeVer: activeVer,
-                            beatTitle: beat.title,
-                            beatIndex: bIdx,
-                            featureIndexInBeat: fIdx,
-                            globalFeatureIndex: prevFeaturesBeforeBeat + fIdx,
-                          );
-                        },
+                      _buildFeatureRailItem(
+                        beatFeats[fIdx],
+                        activeVer: activeVer,
+                        beatTitle: beat.title,
+                        beatIndex: bIdx,
+                        featureIndexInBeat: fIdx,
+                        globalFeatureIndex: prevFeaturesBeforeBeat + fIdx,
                       ),
                   ],
                 );
@@ -833,14 +788,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '+ New Release (${widget.workbench.nextProgressiveVersionLabel})',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: accentEmerald,
+                  Flexible(
+                    child: Text(
+                      '+ New Release (${widget.workbench.nextProgressiveVersionLabel})',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: accentEmerald,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 6),
                   Text(
                     '✦ AI',
                     style: GoogleFonts.jetBrainsMono(
@@ -1603,6 +1563,21 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     TierDocument completedFeat,
     TierDocument nextFeat,
   ) {
+    final completedBeat = completedFeat.parentId != null
+        ? widget.workbench.documents[completedFeat.parentId!]
+        : null;
+    final nextBeat = nextFeat.parentId != null
+        ? widget.workbench.documents[nextFeat.parentId!]
+        : null;
+    final completedTitle = _formatOutlineFeatureDisplayTitle(
+      completedFeat.title,
+      completedBeat?.title,
+    );
+    final nextTitle = _formatOutlineFeatureDisplayTitle(
+      nextFeat.title,
+      nextBeat?.title,
+    );
+
     return Container(
       key: const ValueKey('next_feature_advance_banner'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1625,7 +1600,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '${completedFeat.title} is 100% VERIFIED ✓! Ready for the next feature in your loop?',
+                    '$completedTitle is 100% VERIFIED ✓! Ready for the next feature in your loop?',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -1650,7 +1625,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             onPressed: () => widget.workbench.selectFeature(nextFeat.id),
             icon: const Icon(Icons.arrow_forward_rounded, size: 15),
             label: Text(
-              'Continue to ${nextFeat.title} →',
+              'Continue to $nextTitle →',
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
@@ -1663,6 +1638,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   }
 
   Widget _buildReleaseShippedBanner(TierDocument rel) {
+    final nextVer = widget.workbench.nextProgressiveVersionLabel;
     return Container(
       key: const ValueKey('release_complete_banner'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1721,10 +1697,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
-                onPressed: () => widget.workbench.advanceToNextRelease(),
-                icon: const Icon(Icons.arrow_forward_rounded, size: 15),
+                onPressed: () => _showProgressiveNextReleaseModal(context),
+                icon: const Icon(Icons.auto_awesome_rounded, size: 14),
                 label: Text(
-                  widget.workbench.nextReleaseActionLabel,
+                  '+ New Release ($nextVer) ✦',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -1743,6 +1719,25 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     if (!context.mounted) return;
 
     final directiveCtrl = TextEditingController();
+    const aiDirectionPresets = <({String label, String prompt})>[
+      (
+        label: '⚡ Deepen Core Mechanics',
+        prompt: 'Add Player Dash & Parry to Beat 1',
+      ),
+      (
+        label: '👾 Add Enemy & Wave Variety',
+        prompt: 'Add Elite Enemy Spawner to Beat 2',
+      ),
+      (
+        label: '📈 Add Progression & Rewards',
+        prompt: 'Add Upgrade Relic Choice to Beat 3',
+      ),
+      (
+        label: '✨ Polish Game Feel & HUD',
+        prompt: 'Add Hit-Stop & Damage Numbers to Beat 2',
+      ),
+    ];
+
     await showDialog<void>(
       context: context,
       builder: (ctx) {
@@ -1818,7 +1813,49 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           height: 1.4,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (int pIdx = 0; pIdx < aiDirectionPresets.length; pIdx++)
+                            InkWell(
+                              key: ValueKey('progressive_preset_chip_$pIdx'),
+                              borderRadius: BorderRadius.circular(5),
+                              onTap: widget.workbench.isAgentBusy
+                                  ? null
+                                  : () async {
+                                      await widget.workbench
+                                          .sendReleasePlanChatMessage(
+                                        aiDirectionPresets[pIdx].prompt,
+                                      );
+                                      if (ctx.mounted) setModalState(() {});
+                                    },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: bgRecessed,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: accentCyan.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Text(
+                                  aiDirectionPresets[pIdx].label,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentCyan,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
@@ -2273,11 +2310,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             ),
             onPressed: () {
               Navigator.of(ctx).pop();
-              widget.workbench.advanceToNextRelease();
+              _showProgressiveNextReleaseModal(context);
             },
-            icon: const Icon(Icons.arrow_forward_rounded, size: 15),
+            icon: const Icon(Icons.auto_awesome_rounded, size: 15),
             label: Text(
-              'Evolve to Next Release ✦',
+              '+ New Release (${widget.workbench.nextProgressiveVersionLabel}) ✦',
               style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
             ),
           ),
@@ -3933,6 +3970,93 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                         style: GoogleFonts.inter(
                                           fontSize: 12.5,
                                           fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                // ── ELEMENT 4: Quiet 1-Line Inline Step Co-Pilot (Zero boxes, lineless action strip) ──
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    InkWell(
+                                      key: ValueKey(
+                                        'inline_step_copilot_tailor_btn_${node.id}',
+                                      ),
+                                      onTap: () => _promptTailorHowToDialog(
+                                        feat,
+                                        states,
+                                        index,
+                                        selectedTaskIdx,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 3,
+                                        ),
+                                        child: Text(
+                                          '✦ Tailor Step with Agent',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: accentCyan.withValues(
+                                              alpha: 0.9,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'inline_step_copilot_edit_btn_${node.id}',
+                                      ),
+                                      onTap: () =>
+                                          _promptEditHowToSubStepDialog(
+                                        feat,
+                                        states,
+                                        node,
+                                        selectedTaskIdx,
+                                        activeSubStepIdx,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 3,
+                                        ),
+                                        child: Text(
+                                          '✎ Edit Step',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'inline_step_copilot_copy_all_btn_${node.id}',
+                                      ),
+                                      onTap: () =>
+                                          _copyAllTaskCode(selectedHowTo),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 3,
+                                        ),
+                                        child: Text(
+                                          '⧉ Copy All Task Code',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMuted,
+                                          ),
                                         ),
                                       ),
                                     ),

@@ -134,9 +134,10 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
-- Under each active Beat, generate `1–2` In-Scope Playable Features (`"included": true`) needed for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
+- Under each active Beat, generate `1–2` Singular-Focused Playable Features (`"included": true`) needed for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
+- SINGULAR-FOCUSED FEATURE TITLES: Every Feature must represent 1 concrete mechanic (`2–3` plain game-dev words, e.g., `"Weapon Equip"`, `"Player Dash"`, `"Enemy Wave Spawner"`, `"Loot Pickup"`, `"Wave Reset"`). NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
-- Keep each entry in `tasks` a short 3–4 word title plus duration tag (e.g. `"Actor & Base Properties (2h)"`, `"State Logic & Player Input (2h)"`, `"Feedback Cues & State Guard (1h)"`) — never write a full sentence or repeat the Beat/Feature name inside a task title.
+- SINGULAR-FOCUSED TASKS: Keep each entry in `tasks` a short 2–3 word singular-focused title plus duration tag (e.g. `"Actor Setup (2h)"`, `"State Logic (2h)"`, `"State Guard (1h)"`) — never write a full sentence or repeat the Beat/Feature name inside a task title.
 - `lifecycle`: `"new"` for v0.1; for v0.2+, use `"stable"` (0h, empty checkpoints), `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"`.
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):

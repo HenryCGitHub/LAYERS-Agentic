@@ -7,13 +7,13 @@
 - **Dual-Model AI Routing (`lib/agents/gemini_agent_client.dart` & `lib/providers/workbench_provider.dart`)**:
   - **Conversation & Concept Blueprint Model (Stage 1)**: `gemini-flash-latest` with `thinkingLevel: "LOW"` for fast turn-by-turn co-design chat and live Project Concept Blueprint updates.
   - **Release Architecture Model (Stage 2)**: `gemini-4-argon` with `thinkingLevel: "LOW"` for Release Plan Gate blueprint generation and multi-release evolution (`v0.1` → `v0.2` → `v1.0+`).
-- **3-Stage Antigravity Workflow (One Release at a Time)**:
-  1. **Stage 1 — One-Section-at-a-Time Dynamic UI + Full Blueprint Review (`lib/screens/project_pitch_screen.dart` & `lib/agents/project_concept_agent.dart`)**:
-     - Structure-first Dynamic UI stepper (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Design Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`, `09 Release Train`) paired with a section-scoped Agent Console (`gemini-flash-latest`), followed by Step `10 · Full Review` right before approval.
-  2. **Stage 2 — Antigravity Release Plan Gate (`lib/screens/release_plan_gate_screen.dart` & `lib/agents/release_planner_agent.dart`)**:
-     - Proposes an evolving single-Release Blueprint (`ReleaseBlueprint`) using `gemini-4-argon` with a conversational refinement chat bar and Beat/Feature keep/defer checkboxes. Supports 4 Feature Lifecycle states across releases: `NEW`, `UPGRADING (v0.1 → v0.2)`, `STABLE ✓`, and `SUPERSEDED` (retiring temporary greybox testbeds).
-  3. **Stage 3 — Focus Mode Active Release Workbench (`lib/screens/release_workbench_screen.dart` & `ReleaseExecutorAgent`)**:
-     - Non-destructively merges Beats, Features, and version-stamped `60/40 Playable Checkpoints` (`v0.1`, `v0.2`, etc.). Defaults to **Focus Mode** (spotlighting 1 Active Feature and 1 Active Checkpoint at a time, dimming sibling items, auto-collapsing verified checkpoints, providing a 1-click `Continue to Next Feature →` banner, and a compact Left-Rail Release Dropdown).
+- **2-Stage Antigravity Workflow (`1. Concept` → `2. Workbench`)**:
+  1. **Stage 1 — Concept Blueprint (`1. Concept` in `lib/screens/project_pitch_screen.dart` & `lib/agents/project_concept_agent.dart`)**:
+     - Structure-first Dynamic UI stepper (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Design Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`, `09 Progressive Releases`) paired with a section-scoped Agent Console (`gemini-flash-latest`), followed by Step `10 · Full Review`. Clicking **`Approve & Build v0.1 →`** generates `v0.1` and transitions directly into **`2. Workbench`**.
+  2. **Stage 2 — Streamlined 2-Surface Open-Canvas Release Workbench (`2. Workbench` in `lib/screens/release_workbench_screen.dart` & `ReleasePlannerAgent` / `ReleaseExecutorAgent`)**:
+     - **2-Surface Open-Canvas Architecture**: Recessed Left Outliner Rail (`#0C0E12`) showing Epics (`E01`, `E02`, ...) and **Singular-Focused Features** (`Weapon Equip`, `Player Dash`, `Enemy Wave Spawner`, `Loot Pickup`, `Wave Reset`) + Open Workspace (`#12151B`).
+     - **Full-Width vs. Half-Width**: Full-Width (`>= 1040px`) places the fixed-order Step List (`STEPS (X/Y)`) on the left of the workspace and the Active Step (`Do` → `Copy` → `Verify`) on the right. Half-Width (`< 1040px`) collapses into a 1-line floating context bar (`E01 · Epic › Feature ▾` + `Step X/Y ▾ | ‹ ›`).
+     - **Progressive AI Releases (`v0.1` → `v0.2` → `v0.3+`)**: Clicking **`+ New Release (v0.2) ✦`** inside the Workbench opens the **Progressive AI Release Co-Pilot** (`gemini-4-argon`) with 1-click AI direction presets, `UPGRADE` / `NEW` checkboxes, and non-destructive live-tree merging (`NEW`, `UPGRADING`, `STABLE ✓`, `SUPERSEDED`).
 
 ## 1. Mandatory Planning & Confirmation Gate
 - **NEVER** edit, create, or modify any project code files (using `replace_file_content`, `write_to_file`, or modifying commands) without first presenting an `implementation_plan.md` artifact and waiting for explicit user confirmation.
