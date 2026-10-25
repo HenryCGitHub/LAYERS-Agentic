@@ -40,28 +40,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   double _outlinerWidth = 340.0;
   bool _isHalfScreenOutlinerOpen = false;
 
+  String _formatOutlineBeatDisplayTitle(String rawBeatTitle) {
+    return MechanicArchetypeProfile.concreteBeatDisplayTitle(rawBeatTitle);
+  }
+
   String _formatOutlineFeatureDisplayTitle(
     String featTitle,
-    String? beatTitle,
-  ) {
-    if (beatTitle == null || beatTitle.trim().isEmpty) return featTitle;
-    final cleanBeat = beatTitle.split(':').last.split('—').last.trim();
-    if (cleanBeat.isEmpty) return featTitle;
-    final lowerFeat = featTitle.toLowerCase();
-    final lowerBeat = cleanBeat.toLowerCase();
-    if (lowerFeat.startsWith(lowerBeat) &&
-        featTitle.length > cleanBeat.length + 2) {
-      var remainder = featTitle.substring(cleanBeat.length).trimLeft();
-      if (remainder.startsWith(':') ||
-          remainder.startsWith('—') ||
-          remainder.startsWith('-')) {
-        remainder = remainder.substring(1).trimLeft();
-      }
-      if (remainder.isNotEmpty) {
-        return remainder;
-      }
-    }
-    return featTitle;
+    String? beatTitle, {
+    int beatIndex = 0,
+  }) {
+    return MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+      featTitle,
+      beatTitle: beatTitle,
+      beatIndex: beatIndex,
+    );
   }
 
   bool _isDoubleClickOnOutlineItem(String key) {
@@ -784,7 +776,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           children: [
                             Expanded(
                               child: Text(
-                                'E${(bIdx + 1).toString().padLeft(2, '0')} · ${beat.title.split(':').last.split('—').last.trim().toUpperCase()}',
+                                'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
                                 maxLines: 2,
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 9.5,
@@ -894,8 +886,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
 
     final shouldDim = isFocus && !isSelected;
-    final displayTitle =
-        _formatOutlineFeatureDisplayTitle(feat.title, beatTitle);
+    final displayTitle = _formatOutlineFeatureDisplayTitle(
+      feat.title,
+      beatTitle,
+      beatIndex: beatIndex,
+    );
 
     return Opacity(
       opacity: shouldDim ? 0.68 : 1.0,

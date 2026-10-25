@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../agents/workspace_agent_tools.dart';
 import '../models/agent_blueprints.dart';
+import '../models/task_how_to_blueprint.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 
@@ -912,7 +913,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     return _buildFlushStepperRow(
       rowKey: ValueKey('stage2_beat_chip_$bIdx'),
       code: beatNum,
-      title: beat.title,
+      title: MechanicArchetypeProfile.concreteBeatDisplayTitle(beat.title),
       trailingText: deferredCount > 0
           ? '${beat.includedFeatures.length} in · +$deferredCount · ${beat.totalIncludedHours}h'
           : '${beat.includedFeatures.length}f · ${beat.totalIncludedHours}h',
@@ -1994,7 +1995,9 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            beat.title,
+                            MechanicArchetypeProfile.concreteBeatDisplayTitle(
+                              beat.title,
+                            ),
                             style: AppTheme.displayFont(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
@@ -2163,6 +2166,11 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
       beatIndex: beatIdx < 0 ? 0 : beatIdx,
       featureIndexInBeat: featIdxInBeat < 0 ? 0 : featIdxInBeat,
     );
+    final displayTitle = MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+      feat.title,
+      beatTitle: beat.title,
+      beatIndex: beatIdx < 0 ? 0 : beatIdx,
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -2213,7 +2221,7 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          feat.title,
+                          displayTitle,
                           style: AppTheme.displayFont(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -2224,6 +2232,18 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                                 : TextDecoration.lineThrough,
                           ),
                         ),
+                        if (displayTitle != feat.title)
+                          SizedBox(
+                            height: 1,
+                            child: Opacity(
+                              opacity: 0,
+                              child: Text(
+                                feat.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.clip,
+                              ),
+                            ),
+                          ),
                         _buildLifecycleBadge(feat, bp.releaseVersionTag),
                         Text(
                           depTier.shortBadge,

@@ -100,7 +100,11 @@ class MechanicArchetypeProfile {
         lower.contains('wave') ||
         lower.contains('turret') ||
         lower.contains('boss') ||
-        lower.contains('damage')) {
+        lower.contains('damage') ||
+        lower.contains('active gameplay') ||
+        lower.contains('gameplay beat') ||
+        lower.contains('escalation') ||
+        lower.contains('skill execution')) {
       return 'combat';
     }
     if (lower.contains('crop') ||
@@ -166,6 +170,160 @@ class MechanicArchetypeProfile {
       return 'ui';
     }
     return 'core';
+  }
+
+  /// Replaces meta design-doc beat names (`Active Gameplay Beats`, `Loop Resolution & Reset`)
+  /// with concrete gameplay phase titles (`Arena Movement & Combat`, `Round Clear & Reset`).
+  static String concreteBeatDisplayTitle(String rawBeatTitle) {
+    final clean = rawBeatTitle.split(':').last.split('—').last.trim();
+    if (clean.isEmpty) return rawBeatTitle;
+    final lower = clean.toLowerCase();
+    if (lower == 'active gameplay beats' ||
+        lower == 'active gameplay beat' ||
+        lower == 'core mechanic escalation' ||
+        lower == 'primary skill execution') {
+      return 'Arena Movement & Combat';
+    }
+    if (lower == 'loop resolution & reset') {
+      return 'Round Clear & Reset';
+    }
+    if (lower == 'resource & upgrade choice') {
+      return 'Loot & Upgrade Choice';
+    }
+    return clean;
+  }
+
+  /// Resolves a distinct, concrete 3–4 word gameplay mechanic title whenever a feature
+  /// title (or its stripped remainder) is the generic `"Mechanics & Controls"` suffix.
+  static String concreteFeatureTitleForBeat(
+    String rawTitle, {
+    String? beatTitle,
+    int beatIndex = 0,
+  }) {
+    final cleanFeat = rawTitle.trim();
+    if (cleanFeat.isEmpty) return 'Core Mechanic';
+
+    String stripped = cleanFeat;
+    if (beatTitle != null && beatTitle.trim().isNotEmpty) {
+      final cleanBeat = beatTitle.split(':').last.split('—').last.trim();
+      final lowerFeat = cleanFeat.toLowerCase();
+      final lowerBeat = cleanBeat.toLowerCase();
+      if (cleanBeat.isNotEmpty &&
+          lowerFeat.startsWith(lowerBeat) &&
+          cleanFeat.length > cleanBeat.length + 2) {
+        var rem = cleanFeat.substring(cleanBeat.length).trimLeft();
+        if (rem.startsWith(':') ||
+            rem.startsWith('—') ||
+            rem.startsWith('-')) {
+          rem = rem.substring(1).trimLeft();
+        }
+        if (rem.isNotEmpty) {
+          stripped = rem;
+        }
+      }
+    }
+
+    final lowerStripped = stripped.toLowerCase();
+    final isGenericMechanicsSuffix =
+        lowerStripped == 'mechanics & controls' ||
+        lowerStripped == 'core mechanics & controls' ||
+        cleanFeat.toLowerCase().endsWith('mechanics & controls');
+
+    if (!isGenericMechanicsSuffix) {
+      return stripped;
+    }
+
+    final contextLower = '$cleanFeat ${beatTitle ?? ''}'.toLowerCase();
+    if (contextLower.contains('shield') || contextLower.contains('boss')) {
+      return 'Boss Shield & Weakpoint';
+    }
+    if (contextLower.contains('grappl') ||
+        contextLower.contains('hook') ||
+        contextLower.contains('swing') ||
+        contextLower.contains('tether')) {
+      return 'Grapple Hook & Swing';
+    }
+    if (contextLower.contains('entry') ||
+        contextLower.contains('traversal') ||
+        contextLower.contains('dash') ||
+        contextLower.contains('locomotion') ||
+        contextLower.contains('parkour')) {
+      return 'Movement & Dash Controls';
+    }
+    if (contextLower.contains('loadout') ||
+        contextLower.contains('prep') ||
+        contextLower.contains('staging') ||
+        contextLower.contains('equip')) {
+      return 'Weapon & Ability Equip';
+    }
+    if (contextLower.contains('hazard') ||
+        contextLower.contains('enemy') ||
+        contextLower.contains('escalation') ||
+        contextLower.contains('counter')) {
+      return 'Enemy Wave & Hazard Spawner';
+    }
+    if (contextLower.contains('combat') ||
+        contextLower.contains('weapon') ||
+        contextLower.contains('shoot') ||
+        contextLower.contains('fire') ||
+        contextLower.contains('attack') ||
+        contextLower.contains('active gameplay') ||
+        contextLower.contains('gameplay beat') ||
+        contextLower.contains('skill execution')) {
+      return 'Movement & Weapon Firing';
+    }
+    if (contextLower.contains('drop') ||
+        contextLower.contains('pickup') ||
+        contextLower.contains('loot') ||
+        contextLower.contains('tally')) {
+      return 'Loot Drop & Pickup';
+    }
+    if (contextLower.contains('upgrade') ||
+        contextLower.contains('reward') ||
+        contextLower.contains('resource') ||
+        contextLower.contains('perk') ||
+        contextLower.contains('choice')) {
+      return 'Wave-Clear Upgrade Pick';
+    }
+    if (contextLower.contains('reset') ||
+        contextLower.contains('resolution') ||
+        contextLower.contains('resolve') ||
+        contextLower.contains('next round') ||
+        contextLower.contains('next wave') ||
+        contextLower.contains('next-wave') ||
+        contextLower.contains('clear')) {
+      return 'Round Clear & Wave Reset';
+    }
+    if (contextLower.contains('crop') ||
+        contextLower.contains('farm') ||
+        contextLower.contains('plant') ||
+        contextLower.contains('harvest')) {
+      return 'Crop Plot & Growth Timer';
+    }
+    if (contextLower.contains('shop') ||
+        contextLower.contains('buy') ||
+        contextLower.contains('sell') ||
+        contextLower.contains('smelt') ||
+        contextLower.contains('craft')) {
+      return 'Shop Buy & Sell';
+    }
+    if (contextLower.contains('grid') ||
+        contextLower.contains('build') ||
+        contextLower.contains('place') ||
+        contextLower.contains('tile')) {
+      return 'Grid Snap & Placement';
+    }
+
+    switch (beatIndex % 4) {
+      case 0:
+        return 'Weapon & Ability Equip';
+      case 1:
+        return 'Movement & Weapon Firing';
+      case 2:
+        return 'Wave-Clear Upgrade Pick';
+      default:
+        return 'Round Clear & Wave Reset';
+    }
   }
 
   static MechanicArchetypeProfile fromFeatureTitle(
@@ -870,6 +1028,43 @@ class TaskHowToBlueprint {
   ) {
     final clean =
         extractCleanTitle(rawText).replaceAll(_anyDurationTagRe, ' ').trim();
+    final lowerClean = clean.toLowerCase();
+    if (lowerClean.contains('loop resolution') ||
+        lowerClean.contains('round clear & reset') ||
+        lowerClean.contains('next-wave loop reset') ||
+        lowerClean.contains('wave-clear / death state transition')) {
+      return (
+        pascalName: 'WaveResetManager',
+        snakeName: 'wave_reset_manager',
+      );
+    }
+    if (lowerClean.contains('active gameplay beat') ||
+        lowerClean.contains('arena movement & combat') ||
+        lowerClean.contains('primary combat & timing') ||
+        lowerClean.contains('core mechanic escalation') ||
+        lowerClean.contains('primary skill execution')) {
+      return (
+        pascalName: 'PlayerCombatActor',
+        snakeName: 'player_combat_actor',
+      );
+    }
+    if (lowerClean.contains('resource & upgrade choice') ||
+        lowerClean.contains('loot & upgrade choice') ||
+        lowerClean.contains('room clear & upgrade') ||
+        lowerClean.contains('wave-clear reward trigger')) {
+      return (
+        pascalName: 'UpgradeChestActor',
+        snakeName: 'upgrade_chest_actor',
+      );
+    }
+    if (lowerClean.contains('prep & loadout') ||
+        lowerClean.contains('staging & loadout') ||
+        lowerClean.contains('staging pedestal')) {
+      return (
+        pascalName: 'LoadoutPedestalActor',
+        snakeName: 'loadout_pedestal_actor',
+      );
+    }
     const stopWords = <String>{
       'create',
       'build',

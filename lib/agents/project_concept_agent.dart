@@ -805,9 +805,9 @@ Return ONLY valid JSON:
         'Greybox Readability: Clean greybox readability over heavy visual shaders in v0.1',
       ],
       'coreLoop': [
-        'Complete 4-Beat Loop: Prep & Loadout → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
-        'Direct Action Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
-        'Skill Mastery Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
+        'Complete 4-Beat Loop: Prep & Loadout → Arena Movement & Combat → Loot & Upgrade Choice → Round Clear & Reset',
+        'Direct Action Loop: Arena Drop-In → High-Speed Movement & Combat → Wave Objective Clear → Score & Loot Tally → Instant Reset',
+        'Skill Mastery Loop: Loadout & Positioning → Primary Weapon & Dash → Hazard Dodge & Counter → Upgrade Pick → Next Wave',
       ],
       'exclusions': [
         'Cut Trees, Co-Op & Story: Cut multi-branch skill trees, online co-op, and story cutscenes from the $title Prototype',
