@@ -31,6 +31,12 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
   bool _collapseQuestions = true;
   bool _isStepByBeatMode = true;
   int _activeBeatIndex = 0;
+  String? _lastBlueprintDocId;
+
+  int _firstActiveBeatIndex(ReleaseBlueprint bp) {
+    final idx = bp.beats.indexWhere((b) => b.totalIncludedHours > 0);
+    return idx >= 0 ? idx : 0;
+  }
 
   /// Active section in the Stage 2 Flat Section Stepper:
   /// `'goal'`, `'questions'`, `'beat'` (uses `_activeBeatIndex`), `'queued'`, or `'full_review'`.
@@ -156,17 +162,27 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                   key: const ValueKey('stage2_questions_next_btn'),
                   onTap: () => setState(() {
                     _activeStage2Section = 'beat';
-                    _activeBeatIndex = 0;
+                    _activeBeatIndex = _firstActiveBeatIndex(bp);
                   }),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                    child: Text(
-                      'Next Section: E01 ${bp.beats.isNotEmpty ? bp.beats.first.title : "Epics"} →',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: accentCyan,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final targetIdx = _firstActiveBeatIndex(bp);
+                        final targetCode =
+                            'E${(targetIdx + 1).toString().padLeft(2, '0')}';
+                        final targetTitle = bp.beats.isNotEmpty
+                            ? bp.beats[targetIdx].title
+                            : 'Epics';
+                        return Text(
+                          'Next Section: $targetCode $targetTitle →',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: accentCyan,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -243,6 +259,13 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
           ),
         ),
       );
+    }
+
+    if (_lastBlueprintDocId != bp.releaseDocId) {
+      _lastBlueprintDocId = bp.releaseDocId;
+      _activeBeatIndex = _firstActiveBeatIndex(bp);
+    } else if (_activeBeatIndex >= bp.beats.length && bp.beats.isNotEmpty) {
+      _activeBeatIndex = 0;
     }
 
     return Container(
@@ -909,15 +932,21 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
     final beatNum = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
     final hasIncluded = beat.includedFeatures.isNotEmpty;
     final deferredCount = beat.deferredFeatures.length;
+    final isAllStableZeroDelta =
+        hasIncluded && beat.totalIncludedHours == 0 && deferredCount == 0;
 
     return _buildFlushStepperRow(
       rowKey: ValueKey('stage2_beat_chip_$bIdx'),
       code: beatNum,
       title: MechanicArchetypeProfile.concreteBeatDisplayTitle(beat.title),
-      trailingText: deferredCount > 0
-          ? '${beat.includedFeatures.length} in · +$deferredCount · ${beat.totalIncludedHours}h'
-          : '${beat.includedFeatures.length}f · ${beat.totalIncludedHours}h',
-      trailingColor: hasIncluded ? accentEmerald : textMuted,
+      trailingText: isAllStableZeroDelta
+          ? 'STABLE ✓'
+          : (deferredCount > 0
+              ? '${beat.includedFeatures.length} in · +$deferredCount · ${beat.totalIncludedHours}h'
+              : '${beat.includedFeatures.length}f · ${beat.totalIncludedHours}h'),
+      trailingColor: isAllStableZeroDelta
+          ? accentEmerald.withValues(alpha: 0.72)
+          : (hasIncluded ? accentEmerald : textMuted),
       isActive: isSelectedBeat,
       onTap: () {
         setState(() {
@@ -969,6 +998,29 @@ class _ReleasePlanGateScreenState extends State<ReleasePlanGateScreen>
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.7,
                             color: accentCyan,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          key: const ValueKey('stage2_phase_badge'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accentAmber.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: accentAmber.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Text(
+                            widget.workbench.activePhaseBadgeLabel,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: accentAmber,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),

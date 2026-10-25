@@ -690,8 +690,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('OUTLINE'),
+                     const Text('OUTLINE'),
                     const Text('ACTIVE RELEASE'),
+                    Text(
+                      widget.workbench.activePhaseBadgeLabel,
+                      key: const ValueKey('stage3_phase_badge'),
+                    ),
                     InkWell(
                       key: const ValueKey('critical_path_filter_btn'),
                       onTap: () {
@@ -794,13 +798,24 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             ),
                             if (beatFeats.isNotEmpty) ...[
                               const SizedBox(width: 8),
-                              Text(
-                                '$doneBeatCount/${beatFeats.length}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: allBeatDone ? accentEmerald : textMuted,
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final allBeatStable = beatFeats.every(
+                                    (f) => f.sections['lifecycle'] == 'stable',
+                                  );
+                                  return Text(
+                                    allBeatStable
+                                        ? 'STABLE ✓'
+                                        : '$doneBeatCount/${beatFeats.length}',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: allBeatDone || allBeatStable
+                                          ? accentEmerald
+                                          : textMuted,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ],
@@ -1254,18 +1269,54 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       ),
                                     ),
                                     const SizedBox(width: 6),
-                                    Text(
-                                      '$doneSubCount/$totalSubCount',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: task.completed
-                                            ? accentEmerald.withValues(
-                                                alpha: 0.75,
-                                              )
-                                            : (isTaskActive
-                                                ? accentCyan
-                                                : textMuted),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'complete_task_group_${node.id}_$tIdx',
+                                      ),
+                                      onTap: () {
+                                        final markDone = !task.completed;
+                                        task.completed = markDone;
+                                        for (final c in task.children) {
+                                          c.completed = markDone;
+                                        }
+                                        setState(() {
+                                          final nextTaskIdx = node.checklist
+                                              .indexWhere((t) => !t.completed);
+                                          if (markDone && nextTaskIdx != -1) {
+                                            _selectedTaskIndexByCheckpoint[
+                                                node.id] = nextTaskIdx;
+                                            _selectedSubStepIndexByTask[
+                                                '${node.id}_$nextTaskIdx'] = 0;
+                                          } else {
+                                            _selectedTaskIndexByCheckpoint[
+                                                node.id] = tIdx;
+                                          }
+                                        });
+                                        widget.workbench
+                                            .updateFeatureStates(feat.id, states);
+                                      },
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 3,
+                                          vertical: 1,
+                                        ),
+                                        child: Text(
+                                          task.completed
+                                              ? '✓ $doneSubCount/$totalSubCount'
+                                              : '$doneSubCount/$totalSubCount',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: task.completed
+                                                ? accentEmerald.withValues(
+                                                    alpha: 0.85,
+                                                  )
+                                                : (isTaskActive
+                                                    ? accentCyan
+                                                    : textMuted),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1707,7 +1758,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 onPressed: () => widget.workbench.advanceToNextRelease(),
                 icon: const Icon(Icons.arrow_forward_rounded, size: 15),
                 label: Text(
-                  'Ship & Plan Next Release ✦',
+                  widget.workbench.nextReleaseActionLabel,
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -2892,6 +2943,45 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                             : textSecondary,
                                       ),
                                     ),
+                                    if (!node.isCompleted) ...[
+                                      const SizedBox(width: 10),
+                                      InkWell(
+                                        key: ValueKey(
+                                          'fast_track_checkpoint_btn_${node.id}',
+                                        ),
+                                        onTap: () {
+                                          for (final task in node.checklist) {
+                                            task.completed = true;
+                                            for (final child in task.children) {
+                                              child.completed = true;
+                                            }
+                                          }
+                                          _advanceToNextStep(
+                                            feat,
+                                            states,
+                                            node,
+                                            node.checklist.length - 1,
+                                            node.checklist.last.children.length -
+                                                1,
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 3,
+                                          ),
+                                          child: Text(
+                                            '✓ Complete All',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: accentEmerald,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                     if (selectedHowTo.engineLabel ==
                                         'UNREAL 5') ...[
                                       const SizedBox(width: 14),

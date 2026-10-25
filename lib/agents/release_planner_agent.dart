@@ -1499,13 +1499,26 @@ class ReleaseExecutorAgent {
                     '${beatDoc.id}::${featBp.title.toLowerCase().trim()}']);
         final featId = existingFeat?.id ?? 'feat_${beatId}_${fIdx + 1}';
 
-        // If STABLE and already exists in vault, preserve its existing document & checkpoints untouched!
+        // If STABLE and already exists in vault, preserve its existing document & mark prior checkpoints verified!
         if (featBp.lifecycle == FeatureLifecycleStatus.stable &&
             existingFeat != null) {
           existingFeat.parentId = beatDoc.id;
           existingFeat.sections['lifecycle'] = FeatureLifecycleStatus.stable.name;
           existingFeat.sections['lastVerifiedVersion'] =
               existingFeat.sections['originVersion'] ?? 'v0.1';
+          final stableStates =
+              FeatureStateNode.getStatesForDocument(existingFeat);
+          if (stableStates.isNotEmpty) {
+            for (final s in stableStates) {
+              for (final t in s.checklist) {
+                t.completed = true;
+                for (final c in t.children) {
+                  c.completed = true;
+                }
+              }
+            }
+            FeatureStateNode.saveStatesToDocument(existingFeat, stableStates);
+          }
           beatDoc.childrenIds.add(existingFeat.id);
           createdOrUpdatedDocs.add(existingFeat);
           continue;
@@ -1515,6 +1528,16 @@ class ReleaseExecutorAgent {
         final existingStates = existingFeat != null
             ? FeatureStateNode.getStatesForDocument(existingFeat)
             : <FeatureStateNode>[];
+        if (existingStates.isNotEmpty) {
+          for (final s in existingStates) {
+            for (final t in s.checklist) {
+              t.completed = true;
+              for (final c in t.children) {
+                c.completed = true;
+              }
+            }
+          }
+        }
 
         final mergedInScope = <String>{
           if (existingFeat != null)

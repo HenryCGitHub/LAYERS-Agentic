@@ -644,7 +644,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           d.doneWhen = bodyAfterColon;
           break;
         case 8:
-          if (optIdx == 0) {
+          final lowerOpt = optionText.toLowerCase();
+          final isSplitOption = lowerOpt.contains('v0.2') ||
+              lowerOpt.contains('two-step') ||
+              lowerOpt.contains('split') ||
+              (!lowerOpt.contains('single') && optIdx == 1);
+          if (!isSplitOption) {
             d.releaseTrainTitles = [
               'v0.1: ${d.title} Core Loop - Prototype',
             ];
@@ -4177,12 +4182,24 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                'Scope: ${draft.coreLoopBeats.length} Core Loop Beats · ${draft.gameSpec.length} Game Specs · ${draft.designPillars.length} Design Pillars',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  color: textSecondary.withValues(alpha: 0.85),
-                ),
+              Builder(
+                builder: (context) {
+                  final totalBeats = draft.coreLoopBeats.length;
+                  final isSplitTrain = draft.releaseTrainTitles.length > 1;
+                  final halfCount = (totalBeats + 1) ~/ 2;
+                  final scopeCaption = isSplitTrain
+                      ? (index == 0
+                          ? 'Part 1 Scope: Core Loop Beats 1–$halfCount (Controls & Primary Mechanics)'
+                          : 'Part 2 Scope: Core Loop Beats ${halfCount + 1}–$totalBeats (Progression & Loop Reset)')
+                      : 'Scope: $totalBeats Core Loop Beats · ${draft.gameSpec.length} Game Specs · ${draft.designPillars.length} Design Pillars';
+                  return Text(
+                    scopeCaption,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: textSecondary.withValues(alpha: 0.85),
+                    ),
+                  );
+                },
               ),
             ],
           ),

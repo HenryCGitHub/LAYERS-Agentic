@@ -1093,6 +1093,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         // Phase 1 · Part 1 (v0.1): Should only include the first half of the Core Loop Beats (2 Beats)
         await provider.openReleasePlanGate();
         expect(provider.currentPhase, ProductionPhase.prototype);
+        expect(provider.activePhaseBadgeLabel, 'PHASE 1 · PROTOTYPE (1/2)');
+        expect(
+          provider.nextReleaseActionLabel,
+          'Ship & Plan v0.2 (Prototype Part 2) ✦',
+        );
         final part1Bp = provider.releaseBlueprint!;
         expect(part1Bp.beats.length, 2);
         await provider.approveAndExecuteReleasePlan();
@@ -1100,6 +1105,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         // Advance to Phase 1 · Part 2 (v0.2): Keeps Part 1 Epics STABLE ✓ and adds the remaining 2 Core Loop Beats as NEW
         await provider.advanceToNextRelease();
         expect(provider.currentPhase, ProductionPhase.prototype);
+        expect(provider.activePhaseBadgeLabel, 'PHASE 1 · PROTOTYPE (2/2)');
+        expect(
+          provider.nextReleaseActionLabel,
+          'Ship & Unlock Phase 2 (MVP Epic 1) ✦',
+        );
         final part2Bp = provider.releaseBlueprint!;
         expect(part2Bp.beats.length, 4);
         expect(
@@ -1115,6 +1125,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isTrue,
         );
         await provider.approveAndExecuteReleasePlan();
+        // Stage 3 auto-focuses the first incomplete NEW Beat (Beat 3, index 2) and marks Part 1 STABLE features 100% complete
+        expect(provider.selectedBeatId, provider.activeReleaseBeats[2].id);
 
         // Advance to Phase 2 · Per-Epic MVPs (unlocks 4 MVP Epic releases, 1 per Prototype Beat)
         await provider.advanceToNextRelease();
@@ -1126,6 +1138,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         for (int epicIdx = 0; epicIdx < 4; epicIdx++) {
           expect(provider.currentPhase, ProductionPhase.mvp);
+          expect(
+            provider.activePhaseBadgeLabel,
+            'PHASE 2 · MVP EPIC ${epicIdx + 1} OF 4',
+          );
           final mvpBp = provider.releaseBlueprint!;
           expect(mvpBp.releaseTitle, contains('MVP Epic ${epicIdx + 1}'));
 
@@ -1140,7 +1156,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                       f.lifecycle == FeatureLifecycleStatus.newFeature,
                 ),
                 isTrue,
-                reason: 'Epic ${epicIdx + 1} should upgrade in its targeted MVP release',
+                reason:
+                    'Epic ${epicIdx + 1} should upgrade in its targeted MVP release',
               );
             } else {
               expect(
@@ -1148,17 +1165,47 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                   (f) => f.lifecycle == FeatureLifecycleStatus.stable,
                 ),
                 isTrue,
-                reason: 'Non-target Epic ${bIdx + 1} must stay STABLE in MVP Epic ${epicIdx + 1}',
+                reason:
+                    'Non-target Epic ${bIdx + 1} must stay STABLE in MVP Epic ${epicIdx + 1}',
               );
             }
           }
 
           await provider.approveAndExecuteReleasePlan();
+          // Stage 3 auto-focuses the active MVP Epic `epicIdx` and ensures STABLE Epics have 100% progress
+          expect(
+            provider.selectedBeatId,
+            provider.activeReleaseBeats[epicIdx].id,
+          );
+          for (int bIdx = 0; bIdx < provider.activeReleaseBeats.length; bIdx++) {
+            if (bIdx != epicIdx) {
+              final stableBeat = provider.activeReleaseBeats[bIdx];
+              for (final feat in provider.featuresForBeat(stableBeat.id)) {
+                expect(
+                  provider.getDocumentProgress(feat.id),
+                  100,
+                  reason:
+                      'STABLE Feature ${feat.title} in Epic ${bIdx + 1} should have 100% progress',
+                );
+              }
+            }
+          }
+          if (epicIdx == 3) {
+            expect(
+              provider.nextReleaseActionLabel,
+              'Ship & Unlock Phase 3 (Vertical Slice) ✦',
+            );
+          }
           await provider.advanceToNextRelease();
         }
 
         // Phase 3 · Vertical Slice: Unlocks automatically after all 4 Per-Epic MVPs complete
         expect(provider.currentPhase, ProductionPhase.verticalSlice);
+        expect(provider.activePhaseBadgeLabel, 'PHASE 3 · VERTICAL SLICE');
+        expect(
+          provider.nextReleaseActionLabel,
+          'Ship & Unlock Phase 4 (Full Production) ✦',
+        );
         final vsBp = provider.releaseBlueprint!;
         expect(vsBp.releaseTitle, contains('Vertical Slice'));
         // Every Epic's primary feature receives a Vertical Slice Polish upgrade checkpoint
@@ -1177,6 +1224,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         // Phase 4 · Full Production: Unlocks automatically after Vertical Slice completes
         await provider.advanceToNextRelease();
         expect(provider.currentPhase, ProductionPhase.fullProduction);
+        expect(
+          provider.activePhaseBadgeLabel,
+          'PHASE 4 · FULL PRODUCTION (PASS 1)',
+        );
         final fpBp = provider.releaseBlueprint!;
         expect(fpBp.releaseTitle, contains('Full Production'));
         expect(fpBp.preset, ReleaseScope.fullProduction);

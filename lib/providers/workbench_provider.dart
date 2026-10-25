@@ -1368,9 +1368,14 @@ class WorkbenchProvider extends ChangeNotifier {
     if (beats.isEmpty) return;
     TierDocument? firstActiveBeat;
     TierDocument? firstActiveFeat;
+
+    // 1st Pass: Prioritize incomplete features with active-release work (`upgrade` or `newFeature`)
     for (final b in beats) {
       for (final f in featuresForBeat(b.id)) {
-        if (getDocumentProgress(f.id) < 100) {
+        final lc = f.sections['lifecycle'] ?? '';
+        final isActiveLifecycle = lc == FeatureLifecycleStatus.upgrade.name ||
+            lc == FeatureLifecycleStatus.newFeature.name;
+        if (isActiveLifecycle && getDocumentProgress(f.id) < 100) {
           firstActiveBeat = b;
           firstActiveFeat = f;
           break;
@@ -1378,6 +1383,21 @@ class WorkbenchProvider extends ChangeNotifier {
       }
       if (firstActiveFeat != null) break;
     }
+
+    // 2nd Pass: Fall back to any incomplete feature
+    if (firstActiveFeat == null) {
+      for (final b in beats) {
+        for (final f in featuresForBeat(b.id)) {
+          if (getDocumentProgress(f.id) < 100) {
+            firstActiveBeat = b;
+            firstActiveFeat = f;
+            break;
+          }
+        }
+        if (firstActiveFeat != null) break;
+      }
+    }
+
     _selectedBeatId = (firstActiveBeat ?? beats.first).id;
     final feats = featuresForBeat(_selectedBeatId!);
     _selectedFeatureId =
@@ -1494,12 +1514,12 @@ class WorkbenchProvider extends ChangeNotifier {
           '3-Run Loop Endurance: Playtester completes 3 consecutive $title runs in under 5 minutes with responsive controls and zero state soft-locks.',
         ];
         break;
+      case 'prototypeRelease':
       case 'releaseTrain':
       default:
         fresh = [
-          'v0.1: Greybox Core Controls & Loop Reset - Prototype · v0.2: Hazard Escalation & Combat Feel - MVP · v0.3: Gold Standard Vertical Slice Arena - Vertical Slice',
-          'v0.1: Primary Mechanic & Physics Toy - Prototype · v0.2: Full 3-Beat Run Loop & Scoring - MVP · v0.3: Polished Audio/VFX Vertical Slice - Vertical Slice',
-          'v0.1: Single-Room Core Loop Testbed - Prototype · v0.2: Enemy Archetypes & Upgrade Beat - MVP · v1.0: Launch Content & Balance Pass - Standard',
+          'Single v0.1 Greybox ($offset): Single Greybox Prototype (v0.1) proving all $title Core Loop Beats work together',
+          'Two-Step v0.1 → v0.2 ($offset): v0.1 $title Controls & Primary Mechanics → v0.2 Full $title Core Loop & Reset',
         ];
         break;
     }
@@ -2677,6 +2697,79 @@ Return ONLY a JSON object with this schema:
 
   ProductionPhase _currentPhase = ProductionPhase.prototype;
   ProductionPhase get currentPhase => _currentPhase;
+
+  /// Concise 4-Phase Release Train badge displayed in Stage 2 and Stage 3 headers.
+  String get activePhaseBadgeLabel {
+    final rel = activeRelease;
+    final allRels = projectReleases;
+    switch (_currentPhase) {
+      case ProductionPhase.prototype:
+        final protoRels = allRels
+            .where(
+              (r) =>
+                  r.sections['phase'] == ProductionPhase.prototype.name ||
+                  r.releaseScope == ReleaseScope.prototype ||
+                  r.releaseScope == ReleaseScope.featurePrototype,
+            )
+            .toList();
+        if (protoRels.length > 1 && rel != null) {
+          final idx = protoRels.indexWhere((r) => r.id == rel.id);
+          if (idx >= 0) {
+            return 'PHASE 1 · PROTOTYPE (${idx + 1}/${protoRels.length})';
+          }
+        }
+        return 'PHASE 1 · PROTOTYPE';
+      case ProductionPhase.mvp:
+        final mvpRels = allRels
+            .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
+            .toList();
+        if (mvpRels.isNotEmpty && rel != null) {
+          final idx = mvpRels.indexWhere((r) => r.id == rel.id);
+          if (idx >= 0) {
+            return 'PHASE 2 · MVP EPIC ${idx + 1} OF ${mvpRels.length}';
+          }
+        }
+        return 'PHASE 2 · MVP TRACK';
+      case ProductionPhase.verticalSlice:
+        return 'PHASE 3 · VERTICAL SLICE';
+      case ProductionPhase.fullProduction:
+        final pass = rel?.sections['fullProductionPass'] ?? '1';
+        return 'PHASE 4 · FULL PRODUCTION (PASS $pass)';
+    }
+  }
+
+  /// Descriptive CTA label for the Stage 3 `Ship & Plan Next Release` button naming the exact next milestone or phase unlock.
+  String get nextReleaseActionLabel {
+    final releases = projectReleases;
+    final currentIdx = releases.indexWhere((r) => r.id == _activeReleaseId);
+    final nextIdx = currentIdx + 1;
+    if (nextIdx >= 0 && nextIdx < releases.length) {
+      final nextRel = releases[nextIdx];
+      final nextVer =
+          nextRel.sections['versionTag'] ??
+          RegExp(r'v\d+\.\d+').firstMatch(nextRel.title)?.group(0) ??
+          'v0.${nextIdx + 1}';
+      if (nextRel.sections['phase'] == ProductionPhase.mvp.name) {
+        final epicIdx =
+            (int.tryParse(nextRel.sections['targetEpicIndex'] ?? '') ?? 0) + 1;
+        return 'Ship & Plan $nextVer (MVP Epic $epicIdx) ✦';
+      }
+      if (nextRel.sections['prototypePart'] == '2') {
+        return 'Ship & Plan $nextVer (Prototype Part 2) ✦';
+      }
+      return 'Ship & Plan $nextVer ✦';
+    }
+    switch (_currentPhase) {
+      case ProductionPhase.prototype:
+        return 'Ship & Unlock Phase 2 (MVP Epic 1) ✦';
+      case ProductionPhase.mvp:
+        return 'Ship & Unlock Phase 3 (Vertical Slice) ✦';
+      case ProductionPhase.verticalSlice:
+        return 'Ship & Unlock Phase 4 (Full Production) ✦';
+      case ProductionPhase.fullProduction:
+        return 'Ship & Plan Next Full Production Pass ✦';
+    }
+  }
 
   ReleaseRetrospectiveSummary? _lastReleaseRetrospective;
   ReleaseRetrospectiveSummary? get lastReleaseRetrospective =>
