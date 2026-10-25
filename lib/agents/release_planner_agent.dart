@@ -99,6 +99,7 @@ ${GeminiAgentClient.compactStyleRules}
 - Map each Stage 1 Beat (`BEAT-01..BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) 1-to-1 to a Beat entry in `beats`.
 - Under each Beat, generate `1–2` In-Scope Playable Features (`"included": true`) needed for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
+- Keep each entry in `tasks` a short 3–4 word title plus duration tag (e.g. `"Actor & Base Properties (2h)"`, `"State Logic & Player Input (2h)"`, `"Feedback Cues & State Guard (1h)"`) — never write a full sentence or repeat the Beat/Feature name inside a task title.
 - `lifecycle`: `"new"` for v0.1; for v0.2+, use `"stable"` (0h, empty checkpoints), `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"`.
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
@@ -245,10 +246,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
               title: '$beatTitle Core Implementation & Playtest',
               playtestCriteria: archetype.cp1Playtest,
               releaseVersion: versionTag,
-              tasks: [
-                'Create actor/node structure and base properties for $beatTitle (2h)',
-                'Implement core state transitions and player interaction for $beatTitle (2h)',
-                'Hook visual/audio feedback cues and transition guard for $beatTitle (1h)',
+              tasks: const [
+                'Actor & Base Properties (2h)',
+                'State Logic & Player Input (2h)',
+                'Feedback Cues & State Guard (1h)',
               ],
               coveredScope: archetype.inScope,
               tuningParams: archetype.tuningParams,
@@ -284,9 +285,9 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                 playtestCriteria: 'Trigger $beatTitle near arena boundary -> camera tracks smoothly and HUD updates state.',
                 releaseVersion: versionTag,
                 tasks: const [
-                  'Create camera rig and HUD state readout container (1h)',
-                  'Implement camera follow smoothing and boundary clamp (2h)',
-                  'Wire active state readout indicator and viewport test (1h)',
+                  'Camera Rig & HUD Container (1h)',
+                  'Follow Smoothing & Bound Clamp (2h)',
+                  'State Readout & Viewport Test (1h)',
                 ],
                 coveredScope: [
                   'Camera follow smoothing and active state indicator for $beatTitle',

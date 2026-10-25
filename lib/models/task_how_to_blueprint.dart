@@ -597,6 +597,8 @@ class TaskHowToBlueprint {
 
   static final RegExp _trailingDurationRe =
       RegExp(r'\s*\(([\d\.]+\s*[hm])\)\s*$', caseSensitive: false);
+  static final RegExp _anyDurationTagRe =
+      RegExp(r'\s*\(([\d\.]+\s*[hm])\)', caseSensitive: false);
   static final RegExp _leadingTagRe = RegExp(
     r'^\[(?:PREREQ|BUILD|HOOK|TEST|INPUT|STATE|PHYSICS|FEEL|UI)\]\s*',
     caseSensitive: false,
@@ -611,8 +613,58 @@ class TaskHowToBlueprint {
   static final RegExp _trimUnderscoresRegex = RegExp(r'^_+|_+$');
   static final RegExp _nonIdentCharRegex = RegExp(r'[^a-zA-Z0-9_]');
   static final RegExp _leadingBracketTagRegex = RegExp(r'^\[[^\]]+\]\s*');
+  static final RegExp _bracketTagCaptureRegex = RegExp(r'^\[([^\]]+)\]');
   static final RegExp _stepHeaderPrefixRegex =
       RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false);
+
+  /// Concise 3–4 word task title for the Left Outliner (condensing legacy verbose task sentences).
+  String get shortTaskTitle => formatConciseTaskTitle(cleanTitle);
+
+  static String formatConciseTaskTitle(String rawCleanTitle) {
+    var text = rawCleanTitle.replaceAll(_anyDurationTagRe, '').trim();
+    final lower = text.toLowerCase();
+    if (lower.startsWith('create actor/node structure') ||
+        lower.startsWith('create actor / node structure')) {
+      return 'Actor & Base Properties';
+    }
+    if (lower.startsWith('implement core state transitions')) {
+      return 'State Logic & Player Input';
+    }
+    if (lower.startsWith('hook visual/audio feedback cues') ||
+        lower.startsWith('hook up visual/audio feedback cues')) {
+      return 'Feedback Cues & State Guard';
+    }
+    if (lower.startsWith('create camera rig and hud')) {
+      return 'Camera Rig & HUD Container';
+    }
+    if (lower.startsWith('implement camera follow smoothing')) {
+      return 'Follow Smoothing & Bound Clamp';
+    }
+    if (lower.startsWith('wire active state readout')) {
+      return 'State Readout & Viewport Test';
+    }
+    // Strip redundant trailing " for <Beat/Feature Name>"
+    text = text.replaceFirst(
+      RegExp(r'\s+for\s+[A-Z][\w\s&\-\/]*$'),
+      '',
+    );
+    if (text.length > 32) {
+      text = text
+          .replaceFirst(
+            RegExp(
+              r'^(?:Create|Implement|Hook up|Hook|Wire|Subscribe|Enforce|Spawn|Apply|Bind)\s+',
+              caseSensitive: false,
+            ),
+            '',
+          )
+          .replaceAll(' and ', ' & ')
+          .trim();
+      if (text.isNotEmpty) {
+        text = text[0].toUpperCase() + text.substring(1);
+      }
+    }
+    return text.isEmpty ? rawCleanTitle : text;
+  }
 
   /// Lightweight LRU-style memoization cache for `TaskHowToBlueprint.resolve`
   /// so Outliner ETA rollups and Active Step Workspace renders do not re-run regexes
@@ -816,11 +868,14 @@ class TaskHowToBlueprint {
   static ({String pascalName, String snakeName}) deriveConcreteAssetName(
     String rawText,
   ) {
-    final clean = extractCleanTitle(rawText);
+    final clean =
+        extractCleanTitle(rawText).replaceAll(_anyDurationTagRe, ' ').trim();
     const stopWords = <String>{
       'create',
       'build',
       'implement',
+      'implementation',
+      'playtest',
       'add',
       'wire',
       'hook',
@@ -928,6 +983,55 @@ class TaskHowToBlueprint {
     return clauses.isEmpty ? <String>[cleanTitle] : clauses;
   }
 
+  /// Formats a crisp 2–4 word `Guard: ...` title for the Outliner and Step Header
+  /// (e.g., `[EMPTY LOADOUT GUARD] Require at least 1...` -> `Guard: Empty Loadout`)
+  /// so full-sentence guard rules never overflow or wrap in the Outliner.
+  static String _formatConciseGuardShortTitle(
+    String rawGuard,
+    String fallbackShortTitle,
+  ) {
+    final tagMatch = _bracketTagCaptureRegex.firstMatch(rawGuard.trim());
+    if (tagMatch != null) {
+      final rawTag = tagMatch.group(1)!.trim();
+      final upperTag = rawTag.toUpperCase();
+      const genericTags = <String>{
+        'GUARD',
+        'STATE GUARD',
+        'INPUT GUARD',
+        'PLAYTEST GUARD',
+        'SIMULATION GUARD',
+      };
+      if (!genericTags.contains(upperTag)) {
+        final cleanedTag = rawTag
+            .replaceFirst(RegExp(r'\s+GUARD$', caseSensitive: false), '')
+            .trim();
+        if (cleanedTag.isNotEmpty) {
+          final titleCased = cleanedTag
+              .split(RegExp(r'\s+'))
+              .where((w) => w.isNotEmpty)
+              .map((w) {
+                if (w.toUpperCase() == 'LOS' ||
+                    w.toUpperCase() == 'HUD' ||
+                    w.toUpperCase() == 'UI') {
+                  return w.toUpperCase();
+                }
+                return w
+                    .split('-')
+                    .map(
+                      (p) => p.isEmpty
+                          ? p
+                          : p[0].toUpperCase() + p.substring(1).toLowerCase(),
+                    )
+                    .join('-');
+              })
+              .join(' ');
+          return 'Guard: $titleCased';
+        }
+      }
+    }
+    return fallbackShortTitle;
+  }
+
   /// Derives concrete guard variable/condition names and natural English step fields
   /// from a checkpoint edge-case guard string (eliminating raw `[... GUARD]` bracket tags
   /// in prose and generic `ValidateGuard_N()` placeholders in code).
@@ -965,7 +1069,10 @@ class TaskHowToBlueprint {
           ? 'current_buff_stacks < max_buff_stacks'
           : 'currentBuffStacks < maxBuffStacks';
       return (
-        shortTitle: 'Guard: $shortGuard',
+        shortTitle: _formatConciseGuardShortTitle(
+          rawGuard,
+          'Guard: Max Stack Cap',
+        ),
         highlightTokens: const [
           'currentBuffStacks < maxBuffStacks',
           'currentBuffStacks >= maxBuffStacks',
@@ -1006,7 +1113,10 @@ class TaskHowToBlueprint {
       final flagToken =
           engineLabel == 'GODOT 4' ? 'cards_active' : 'bCardsActive';
       return (
-        shortTitle: 'Guard: $shortGuard',
+        shortTitle: _formatConciseGuardShortTitle(
+          rawGuard,
+          'Guard: Clear Unchosen Cards',
+        ),
         highlightTokens: const [
           'DespawnUnchosenCards()',
           'despawn_unchosen_cards()',
@@ -1044,7 +1154,10 @@ class TaskHowToBlueprint {
           ? 'is_tile_blocked(target_cell)'
           : 'IsTileBlocked(targetCell)';
       return (
-        shortTitle: 'Guard: $shortGuard',
+        shortTitle: _formatConciseGuardShortTitle(
+          rawGuard,
+          'Guard: Blocked Tile Check',
+        ),
         highlightTokens: const [
           'NOT IsTileBlocked(targetCell)',
           'IsTileBlocked(targetCell)',
@@ -1078,7 +1191,12 @@ class TaskHowToBlueprint {
             ? 'if ($flagName) return;\n$flagName = true;'
             : 'if $flagName:\n    return\n$flagName = true');
     return (
-      shortTitle: 'Guard: $shortGuard',
+      shortTitle: _formatConciseGuardShortTitle(
+        rawGuard,
+        isResetGuard
+            ? 'Guard: Reset Lock Check'
+            : 'Guard: Duplicate Trigger Lock',
+      ),
       highlightTokens: [
         'NOT $flagName',
         '!$flagName',

@@ -1230,7 +1230,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                             const SizedBox(width: 5),
                                             Expanded(
                                               child: Text(
-                                                '${bp.numLabel} · ${bp.cleanTitle}',
+                                                '${bp.numLabel} · ${bp.shortTaskTitle}',
                                                 maxLines: 2,
                                                 style: GoogleFonts.inter(
                                                   fontSize: 11.5,
