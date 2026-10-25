@@ -1880,6 +1880,23 @@ class WorkbenchProvider extends ChangeNotifier {
       releaseIds.add(relId);
     }
 
+    // Preserve any existing Phase 2 (MVP), Phase 3 (Vertical Slice), or Phase 4 (Full Production)
+    // releases—or any subsequent release already built—so revisiting Stage 1 mid-project
+    // never detaches unlocked phases.
+    if (existingProj != null) {
+      for (final existingRelId in existingProj.childrenIds) {
+        if (releaseIds.contains(existingRelId)) continue;
+        final existingRelDoc = documents[existingRelId];
+        if (existingRelDoc == null) continue;
+        final relPhase = existingRelDoc.sections['phase'] ?? '';
+        final isNonPrototypePhase = relPhase.isNotEmpty &&
+            relPhase != ProductionPhase.prototype.name;
+        if (isNonPrototypePhase || existingRelDoc.childrenIds.isNotEmpty) {
+          releaseIds.add(existingRelId);
+        }
+      }
+    }
+
     projDoc.childrenIds = releaseIds;
     documents[projId] = projDoc;
     _activeProjectId = projId;
@@ -2651,17 +2668,59 @@ Return ONLY a JSON object with this schema:
     notifyListeners();
   }
 
-  /// Rollup progress (0-100) for any document in the hierarchy.
+  String get activeReleaseVersionTag {
+    final rel = activeRelease;
+    if (rel == null) return 'v0.1';
+    return rel.sections['versionTag'] ??
+        ReleasePlannerAgent.extractReleaseVersionTag(rel.title);
+  }
+
+  /// Concise milestone subtitle for the Stage 3 Release Dropdown and header pill.
+  String releaseConciseLabel(TierDocument relDoc) {
+    final protoPart = relDoc.sections['prototypePart'] ?? '';
+    if (protoPart == '1') return 'Prototype (Part 1)';
+    if (protoPart == '2') return 'Prototype (Part 2)';
+    final phase = relDoc.sections['phase'] ?? '';
+    if (phase == ProductionPhase.mvp.name) {
+      final match =
+          RegExp(r'MVP Epic\s*\d+(?:\s*\([^)]+\))?', caseSensitive: false)
+              .firstMatch(relDoc.title);
+      if (match != null) return match.group(0)!.trim();
+      final idx =
+          (int.tryParse(relDoc.sections['targetEpicIndex'] ?? '') ?? 0) + 1;
+      return 'MVP Epic $idx';
+    }
+    if (phase == ProductionPhase.verticalSlice.name ||
+        relDoc.releaseScope == ReleaseScope.verticalSlice) {
+      return 'Vertical Slice';
+    }
+    if (phase == ProductionPhase.fullProduction.name ||
+        relDoc.releaseScope == ReleaseScope.fullProduction) {
+      final pass = relDoc.sections['fullProductionPass'] ?? '1';
+      return 'Full Production (Pass $pass)';
+    }
+    return relDoc.releaseScope.label;
+  }
+
+  /// Rollup progress (0-100) for any document in the hierarchy, scoped to the active release's delta checkpoints.
   int getDocumentProgress(String docId) {
     final doc = documents[docId];
     if (doc == null) return 0;
 
     if (doc.tier == TierType.feature) {
+      if (doc.sections['lifecycle'] == FeatureLifecycleStatus.stable.name) {
+        return 100;
+      }
       final states = FeatureStateNode.getStatesForDocument(doc);
       if (states.isEmpty) return doc.isCompleted ? 100 : 0;
+      final activeVer = activeReleaseVersionTag;
+      final activeStates =
+          states.where((s) => s.releaseVersion == activeVer).toList();
+      final effectiveStates =
+          activeStates.isNotEmpty ? activeStates : states;
       int total = 0;
       int done = 0;
-      for (final s in states) {
+      for (final s in effectiveStates) {
         total += s.totalChecklistCount;
         done += s.completedChecklistCount;
       }
@@ -2670,6 +2729,67 @@ Return ONLY a JSON object with this schema:
     }
 
     if (doc.childrenIds.isEmpty) return doc.isCompleted ? 100 : 0;
+
+    // For a Release document, scope progress to active (non-STABLE) Epics so new releases start at 0%
+    if (doc.tier == TierType.release) {
+      if (doc.id != _activeReleaseId) {
+        final relVer = doc.sections['versionTag'] ??
+            ReleasePlannerAgent.extractReleaseVersionTag(doc.title);
+        int relTotal = 0;
+        int relDone = 0;
+        for (final beatId in doc.childrenIds) {
+          for (final feat in featuresForBeat(beatId)) {
+            final states = FeatureStateNode.getStatesForDocument(feat);
+            for (final s in states) {
+              if (s.releaseVersion == relVer) {
+                relTotal += s.totalChecklistCount;
+                relDone += s.completedChecklistCount;
+              }
+            }
+          }
+        }
+        if (relTotal > 0) {
+          return ((relDone / relTotal) * 100).round();
+        }
+      }
+      final activeBeatIds = doc.childrenIds.where((beatId) {
+        final feats = featuresForBeat(beatId);
+        return feats.any(
+          (f) => f.sections['lifecycle'] != FeatureLifecycleStatus.stable.name,
+        );
+      }).toList();
+      final targetBeatIds =
+          activeBeatIds.isNotEmpty ? activeBeatIds : doc.childrenIds;
+      int sum = 0;
+      int count = 0;
+      for (final childId in targetBeatIds) {
+        if (documents.containsKey(childId)) {
+          sum += getDocumentProgress(childId);
+          count++;
+        }
+      }
+      return count == 0 ? 0 : (sum / count).round();
+    }
+
+    if (doc.tier == TierType.epic) {
+      final activeFeatIds = doc.childrenIds.where((featId) {
+        final f = documents[featId];
+        return f != null &&
+            f.sections['lifecycle'] != FeatureLifecycleStatus.stable.name;
+      }).toList();
+      final targetFeatIds =
+          activeFeatIds.isNotEmpty ? activeFeatIds : doc.childrenIds;
+      int sum = 0;
+      int count = 0;
+      for (final childId in targetFeatIds) {
+        if (documents.containsKey(childId)) {
+          sum += getDocumentProgress(childId);
+          count++;
+        }
+      }
+      return count == 0 ? 0 : (sum / count).round();
+    }
+
     int sum = 0;
     int count = 0;
     for (final childId in doc.childrenIds) {

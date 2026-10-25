@@ -309,7 +309,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final relProgress = widget.workbench.getDocumentProgress(rel.id);
     final releases = widget.workbench.projectReleases;
     final archivedFeats = widget.workbench.supersededFeatures;
-    final activeVer = rel.sections['versionTag'] ?? 'v0.1';
+    final activeVer = widget.workbench.activeReleaseVersionTag;
     final releaseRemMins = _computeReleaseRemainingMinutes(beats);
     final releaseRemHoursStr =
         TaskHowToBlueprint.formatRemainingHoursShort(releaseRemMins);
@@ -380,7 +380,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       (r.title.contains(':')
                                           ? r.title.split(':').first.trim()
                                           : 'v0.${rIdx + 1}');
-                                  final rScopeLabel = r.releaseScope.label;
+                                  final rScopeLabel =
+                                      widget.workbench.releaseConciseLabel(r);
                                   final rProg = widget.workbench.getDocumentProgress(r.id);
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
@@ -620,7 +621,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   color: accentCyan,
                                 ),
                               ),
-                              TextSpan(text: '${rel.releaseScope.label} ▾'),
+                              TextSpan(
+                                text:
+                                    '${widget.workbench.releaseConciseLabel(rel)} ▾',
+                              ),
                             ],
                           ),
                         ),

@@ -201,7 +201,17 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           fallbackExclusions: projectExclusions,
         );
         if (parsed != null) {
-          return parsed;
+          return reconcileReleaseBlueprintWithPhaseRules(
+            parsed: parsed,
+            releaseDoc: releaseDoc,
+            preset: preset,
+            versionTag: versionTag,
+            existingBeats: existingBeats,
+            existingFeaturesByBeat: existingFeaturesByBeat,
+            deferredByBeatIndex: deferredByBeatIndex,
+            projectExclusions: projectExclusions,
+            allCoreLoopItems: coreLoopItems,
+          );
         }
       }
     }
@@ -1165,6 +1175,254 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       questions: questions,
       beats: beats,
       explicitExclusions: exclusions,
+    );
+  }
+
+  /// Reconciles a live LLM `ReleaseBlueprint` against existing Vault Beat/Feature IDs
+  /// and enforces the 4-Phase Release Train invariants (Split Prototype Part 1/2,
+  /// Per-Epic MVP single-Epic targeting, Vertical Slice polish, and Full Production promotion).
+  static ReleaseBlueprint reconcileReleaseBlueprintWithPhaseRules({
+    required ReleaseBlueprint parsed,
+    required TierDocument releaseDoc,
+    required ReleaseScope preset,
+    required String versionTag,
+    required List<TierDocument> existingBeats,
+    required Map<String, List<TierDocument>> existingFeaturesByBeat,
+    required Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex,
+    required List<String> projectExclusions,
+    required List<String> allCoreLoopItems,
+  }) {
+    final prototypePart = releaseDoc.sections['prototypePart'] ?? '';
+    final isSubsequentRelease =
+        existingBeats.isNotEmpty || versionTag != 'v0.1';
+
+    // Phase 1 Split Prototype Part 1 (v0.1): Clamp beats to the first half of the Core Loop
+    if (!isSubsequentRelease) {
+      if (prototypePart == '1' && allCoreLoopItems.length >= 2) {
+        final halfCount = (allCoreLoopItems.length / 2).ceil();
+        if (parsed.beats.length > halfCount) {
+          return ReleaseBlueprint(
+            releaseDocId: parsed.releaseDocId,
+            releaseTitle: parsed.releaseTitle,
+            releaseVersionTag: parsed.releaseVersionTag,
+            preset: parsed.preset,
+            goal: parsed.goal,
+            doneWhen: parsed.doneWhen,
+            questions: parsed.questions,
+            beats: parsed.beats.take(halfCount).toList(),
+            explicitExclusions: parsed.explicitExclusions,
+          );
+        }
+      }
+      return parsed;
+    }
+
+    if (existingBeats.isEmpty) return parsed;
+
+    // Build canonical subsequent release structure to anchor Vault IDs & 4-Phase lifecycle rules
+    final canonical = _buildDeterministicSubsequentRelease(
+      releaseDoc: releaseDoc,
+      preset: preset,
+      versionTag: versionTag,
+      existingBeats: existingBeats,
+      existingFeaturesByBeat: existingFeaturesByBeat,
+      deferredByBeatIndex: deferredByBeatIndex,
+      projectExclusions: projectExclusions,
+      allCoreLoopItems: allCoreLoopItems,
+    );
+
+    final reconciledBeats = <ProposedBeatBlueprint>[];
+    for (int bIdx = 0; bIdx < canonical.beats.length; bIdx++) {
+      final canonBeat = canonical.beats[bIdx];
+      final isCanonBeatAllStable = canonBeat.features.isNotEmpty &&
+          canonBeat.features.every(
+            (f) => f.lifecycle == FeatureLifecycleStatus.stable,
+          );
+
+      // If this Beat is locked STABLE in the active Phase (e.g. Part 1 Epics in Split Prototype Part 2,
+      // or non-target Epics in Phase 2 Per-Epic MVP), preserve the canonical STABLE Beat untouched.
+      if (isCanonBeatAllStable) {
+        reconciledBeats.add(canonBeat);
+        continue;
+      }
+
+      // Find the matching LLM Beat by ID, normalized title, index, or single-Epic response
+      ProposedBeatBlueprint? llmBeat;
+      for (final b in parsed.beats) {
+        if (b.id == canonBeat.id ||
+            b.title.toLowerCase().trim() ==
+                canonBeat.title.toLowerCase().trim()) {
+          llmBeat = b;
+          break;
+        }
+      }
+      llmBeat ??= (bIdx < parsed.beats.length)
+          ? parsed.beats[bIdx]
+          : (parsed.beats.length == 1 ? parsed.beats.first : null);
+
+      if (llmBeat == null || llmBeat.features.isEmpty) {
+        reconciledBeats.add(canonBeat);
+        continue;
+      }
+
+      // If this is a brand-new Beat added in Split Prototype Part 2 (`bIdx >= existingBeats.length`)
+      if (bIdx >= existingBeats.length) {
+        final newFeats = llmBeat.features.map((f) {
+          return ProposedFeatureBlueprint(
+            id: f.id,
+            title: f.title,
+            goal: f.goal.isNotEmpty ? f.goal : canonBeat.features.first.goal,
+            doneWhen: f.doneWhen.isNotEmpty
+                ? f.doneWhen
+                : canonBeat.features.first.doneWhen,
+            estimatedHours: f.estimatedHours > 0 ? f.estimatedHours : 5,
+            included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
+            inScope: f.inScope.isNotEmpty
+                ? f.inScope
+                : canonBeat.features.first.inScope,
+            outOfScope: f.outOfScope,
+            tuningParams: f.tuningParams.isNotEmpty
+                ? f.tuningParams
+                : canonBeat.features.first.tuningParams,
+            edgeCases: f.edgeCases.isNotEmpty
+                ? f.edgeCases
+                : canonBeat.features.first.edgeCases,
+            checkpoints: f.checkpoints.isNotEmpty
+                ? f.checkpoints
+                : canonBeat.features.first.checkpoints,
+          );
+        }).toList();
+        reconciledBeats.add(
+          ProposedBeatBlueprint(
+            id: canonBeat.id,
+            title: canonBeat.title,
+            goal: llmBeat.goal.isNotEmpty ? llmBeat.goal : canonBeat.goal,
+            doneWhen: llmBeat.doneWhen.isNotEmpty
+                ? llmBeat.doneWhen
+                : canonBeat.doneWhen,
+            features: newFeats,
+          ),
+        );
+        continue;
+      }
+
+      // Existing Beat receiving upgrades / new features in Phase 2, 3, or 4:
+      // Bind existing Feature Vault IDs so upgrades evolve existing cards in-place without duplication!
+      final mergedFeats = <ProposedFeatureBlueprint>[];
+      final usedLlmFeatIndices = <int>{};
+
+      for (final canonFeat in canonBeat.features) {
+        if (canonFeat.lifecycle == FeatureLifecycleStatus.stable ||
+            canonFeat.lifecycle == FeatureLifecycleStatus.superseded) {
+          mergedFeats.add(canonFeat);
+          continue;
+        }
+        if (canonFeat.lifecycle == FeatureLifecycleStatus.upgrade) {
+          int matchIdx = -1;
+          for (int i = 0; i < llmBeat.features.length; i++) {
+            if (usedLlmFeatIndices.contains(i)) continue;
+            final lf = llmBeat.features[i];
+            if (lf.id == canonFeat.id ||
+                lf.title.toLowerCase().trim() ==
+                    canonFeat.title.toLowerCase().trim()) {
+              matchIdx = i;
+              break;
+            }
+          }
+          if (matchIdx < 0) {
+            for (int i = 0; i < llmBeat.features.length; i++) {
+              if (!usedLlmFeatIndices.contains(i) &&
+                  llmBeat.features[i].lifecycle !=
+                      FeatureLifecycleStatus.stable) {
+                matchIdx = i;
+                break;
+              }
+            }
+          }
+          if (matchIdx >= 0) {
+            usedLlmFeatIndices.add(matchIdx);
+            final lf = llmBeat.features[matchIdx];
+            mergedFeats.add(
+              ProposedFeatureBlueprint(
+                id: canonFeat.id,
+                title: canonFeat.title,
+                goal: lf.goal.isNotEmpty ? lf.goal : canonFeat.goal,
+                doneWhen:
+                    lf.doneWhen.isNotEmpty ? lf.doneWhen : canonFeat.doneWhen,
+                estimatedHours: lf.estimatedHours > 0
+                    ? lf.estimatedHours
+                    : canonFeat.estimatedHours,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.upgrade,
+                originVersion: canonFeat.originVersion,
+                inScope:
+                    lf.inScope.isNotEmpty ? lf.inScope : canonFeat.inScope,
+                outOfScope: lf.outOfScope.isNotEmpty
+                    ? lf.outOfScope
+                    : canonFeat.outOfScope,
+                tuningParams: lf.tuningParams.isNotEmpty
+                    ? lf.tuningParams
+                    : canonFeat.tuningParams,
+                edgeCases: lf.edgeCases.isNotEmpty
+                    ? lf.edgeCases
+                    : canonFeat.edgeCases,
+                checkpoints: lf.checkpoints.isNotEmpty
+                    ? lf.checkpoints
+                    : canonFeat.checkpoints,
+              ),
+            );
+          } else {
+            mergedFeats.add(canonFeat);
+          }
+        }
+      }
+
+      // Append any genuinely new features from the LLM (or fallback to canonical new features)
+      bool addedNewFromLlm = false;
+      for (int i = 0; i < llmBeat.features.length; i++) {
+        if (usedLlmFeatIndices.contains(i)) continue;
+        final lf = llmBeat.features[i];
+        if (lf.lifecycle == FeatureLifecycleStatus.newFeature) {
+          mergedFeats.add(lf);
+          addedNewFromLlm = true;
+        }
+      }
+      if (!addedNewFromLlm) {
+        for (final canonFeat in canonBeat.features) {
+          if (canonFeat.lifecycle == FeatureLifecycleStatus.newFeature) {
+            mergedFeats.add(canonFeat);
+          }
+        }
+      }
+
+      reconciledBeats.add(
+        ProposedBeatBlueprint(
+          id: canonBeat.id,
+          title: canonBeat.title,
+          goal: llmBeat.goal.isNotEmpty ? llmBeat.goal : canonBeat.goal,
+          doneWhen:
+              llmBeat.doneWhen.isNotEmpty ? llmBeat.doneWhen : canonBeat.doneWhen,
+          features: mergedFeats,
+        ),
+      );
+    }
+
+    return ReleaseBlueprint(
+      releaseDocId: parsed.releaseDocId,
+      releaseTitle: parsed.releaseTitle,
+      releaseVersionTag: parsed.releaseVersionTag,
+      preset: parsed.preset,
+      goal: parsed.goal.isNotEmpty ? parsed.goal : canonical.goal,
+      doneWhen:
+          parsed.doneWhen.isNotEmpty ? parsed.doneWhen : canonical.doneWhen,
+      questions:
+          parsed.questions.isNotEmpty ? parsed.questions : canonical.questions,
+      beats: reconciledBeats,
+      explicitExclusions: parsed.explicitExclusions.isNotEmpty
+          ? parsed.explicitExclusions
+          : canonical.explicitExclusions,
     );
   }
 

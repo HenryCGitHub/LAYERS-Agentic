@@ -1172,10 +1172,26 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           }
 
           await provider.approveAndExecuteReleasePlan();
-          // Stage 3 auto-focuses the active MVP Epic `epicIdx` and ensures STABLE Epics have 100% progress
+          // Stage 3 auto-focuses the active MVP Epic `epicIdx`, starts active release & feature progress at 0%, and ensures STABLE Epics have 100% progress
           expect(
             provider.selectedBeatId,
             provider.activeReleaseBeats[epicIdx].id,
+          );
+          expect(
+            provider.getDocumentProgress(provider.selectedFeatureId!),
+            0,
+            reason:
+                'Upgraded feature in MVP Epic ${epicIdx + 1} should start at 0% for its new delta checkpoints',
+          );
+          expect(
+            provider.getDocumentProgress(provider.activeReleaseId!),
+            0,
+            reason:
+                'New MVP Epic ${epicIdx + 1} release should start at 0% (ignoring 100% STABLE Epics)',
+          );
+          expect(
+            provider.releaseConciseLabel(provider.activeRelease!),
+            contains('MVP Epic ${epicIdx + 1}'),
           );
           for (int bIdx = 0; bIdx < provider.activeReleaseBeats.length; bIdx++) {
             if (bIdx != epicIdx) {
@@ -1189,6 +1205,21 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 );
               }
             }
+          }
+          // Verify revisiting Stage 1 mid-project preserves all unlocked Phase 2 MVP releases
+          if (epicIdx == 0) {
+            provider.updateConceptDraft((draft) {
+              draft.exclusions = [
+                ...draft.exclusions,
+                'Co-Op Split Screen Mode',
+              ];
+            });
+            expect(
+              provider.projectReleases
+                  .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
+                  .length,
+              4,
+            );
           }
           if (epicIdx == 3) {
             expect(
