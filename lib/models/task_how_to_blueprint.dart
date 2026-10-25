@@ -198,6 +198,7 @@ class MechanicArchetypeProfile {
   static String concreteFeatureTitleForBeat(
     String rawTitle, {
     String? beatTitle,
+    String? beatGoal,
     int beatIndex = 0,
   }) {
     final cleanFeat = rawTitle.trim();
@@ -224,6 +225,30 @@ class MechanicArchetypeProfile {
     }
 
     final lowerStripped = stripped.toLowerCase();
+    final contextLower =
+        '$cleanFeat ${beatTitle ?? ''} ${beatGoal ?? ''}'.toLowerCase();
+
+    // Deduplicate secondary features like "Loadout Presets & Reroll" across different Epics
+    if (lowerStripped == 'loadout presets & reroll' ||
+        cleanFeat.toLowerCase().endsWith('loadout presets & reroll')) {
+      if (contextLower.contains('upgrade') ||
+          contextLower.contains('loot') ||
+          contextLower.contains('resource') ||
+          contextLower.contains('reward') ||
+          contextLower.contains('choice') ||
+          beatIndex == 2) {
+        return 'Upgrade Reroll & Stat Buffs';
+      }
+      if (contextLower.contains('reset') ||
+          contextLower.contains('clear') ||
+          contextLower.contains('resolution') ||
+          contextLower.contains('resolve') ||
+          beatIndex == 3) {
+        return 'Run Summary & Fast Restart';
+      }
+      return 'Starting Weapon Pedestals';
+    }
+
     final isGenericMechanicsSuffix =
         lowerStripped == 'mechanics & controls' ||
         lowerStripped == 'core mechanics & controls' ||
@@ -233,7 +258,6 @@ class MechanicArchetypeProfile {
       return stripped;
     }
 
-    final contextLower = '$cleanFeat ${beatTitle ?? ''}'.toLowerCase();
     if (contextLower.contains('shield') || contextLower.contains('boss')) {
       return 'Boss Shield & Weakpoint';
     }
@@ -728,6 +752,772 @@ class MechanicArchetypeProfile {
           ],
         );
     }
+  }
+
+  /// Returns a concise, mechanic-specific Task Group overline title (`01`, `02`, `03`)
+  /// so the Flat Borderless Step Timeline names the actual system instead of generic "State Logic & Player Input".
+  static String taskGroupTitle(
+    String category,
+    int taskIndex, {
+    String fallbackTitle = '',
+  }) {
+    if (fallbackTitle.toUpperCase().startsWith('[FIX]') || taskIndex >= 3) {
+      return fallbackTitle;
+    }
+    switch (category) {
+      case 'loadout':
+        return switch (taskIndex) {
+          0 => 'Pedestal & Slots',
+          1 => 'Equip & Socket',
+          _ => 'HUD & Swap Guard',
+        };
+      case 'combat':
+        return switch (taskIndex) {
+          0 => 'Combat Actor & Hitbox',
+          1 => 'Fire & Damage Math',
+          _ => 'Hit-Flash & Guards',
+        };
+      case 'movement':
+        return switch (taskIndex) {
+          0 => 'Movement & Velocity',
+          1 => 'Dash & Combo Chain',
+          _ => 'FOV Kick & Guards',
+        };
+      case 'upgrade':
+        return switch (taskIndex) {
+          0 => 'Reward Chest & Data',
+          1 => '3-Card Roll & Buff',
+          _ => 'Pickup VFX & Lock',
+        };
+      case 'reset':
+        return switch (taskIndex) {
+          0 => 'Wave Manager Setup',
+          1 => 'Clear & Wave Scale',
+          _ => 'Banner & Cleanup',
+        };
+      case 'ui':
+        return switch (taskIndex) {
+          0 => 'Camera & HUD Setup',
+          1 => 'Follow Lerp & Signal',
+          _ => 'Callout & Bound Clamp',
+        };
+      case 'farming':
+        return switch (taskIndex) {
+          0 => 'Plot Tile & State',
+          1 => 'Growth Timer & Yield',
+          _ => 'Stage Swap & Guards',
+        };
+      case 'economy':
+        return switch (taskIndex) {
+          0 => 'Shop & Slot Data',
+          1 => 'Cost & Inventory Math',
+          _ => 'Readout & Cap Guard',
+        };
+      case 'building':
+        return switch (taskIndex) {
+          0 => 'Grid Cell & Snap',
+          1 => 'Placement & Occupancy',
+          _ => 'Ghost Tint & Guards',
+        };
+      case 'grapple':
+        return switch (taskIndex) {
+          0 => 'Hook Raycast & Anchor',
+          1 => 'Pull Velocity & Swing',
+          _ => 'Tether Line & Guards',
+        };
+      default:
+        return fallbackTitle.isNotEmpty
+            ? fallbackTitle
+            : switch (taskIndex) {
+                0 => 'Actor & Base Setup',
+                1 => 'Input & Core Logic',
+                _ => 'Feedback & Guards',
+              };
+    }
+  }
+
+  /// Resolves domain-specific Step titles, instructions, verification checks, and code comments
+  /// across all 3 Task Groups (`01`, `02`, `03`) for each mechanic archetype.
+  static ({
+    String stepHeader,
+    String shortTitle,
+    String instruction,
+    String verify,
+    String codeLead,
+  })? mechanicStepOverride({
+    required String category,
+    required int taskIndex,
+    required int stepIdx,
+    required int taskNum,
+    required String targetAsset,
+    required String primaryVarName,
+  }) {
+    if (category == 'core' || stepIdx < 0 || stepIdx > 4) return null;
+    final grp = taskIndex.clamp(0, 2);
+
+    ({String title, String instr, String verify, String codeLead})? entry;
+
+    switch (category) {
+      case 'loadout':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Create $targetAsset & Slot Struct',
+              instr: 'Create $targetAsset and define the weapon and ability slot fields (EquippedWeaponId, CurrentAmmo, bIsSlotReady).',
+              verify: '$targetAsset compiles cleanly with weapon slot properties ready in the editor.',
+              codeLead: '// Loadout Slot Data on $targetAsset',
+            ),
+          (0, 1) => (
+              title: 'Add Pedestal Mesh & Overlap Box',
+              instr: 'Attach the pedestal VisualMesh and InteractBox trigger volume to $targetAsset so players can step up to equip.',
+              verify: 'Pedestal mesh and InteractBox wireframe appear aligned in the viewport.',
+              codeLead: '// Pedestal Mesh + Overlap Trigger Volume',
+            ),
+          (0, 2) => (
+              title: 'Place Pedestal in Staging Zone',
+              instr: 'Compile and place $targetAsset inside the starting staging room near the arena entry gate.',
+              verify: '$targetAsset is positioned in the staging area and listed in the scene outliner.',
+              codeLead: '// Staging Zone Pedestal Placement',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName in Inspector',
+              instr: 'Expose $primaryVarName on $targetAsset so designers can tune starting ammo and swap timing live.',
+              verify: 'Selecting $targetAsset shows $primaryVarName as an editable field in the Details/Inspector panel.',
+              codeLead: '// Loadout Tuning Parameter: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Initialize Starting Weapon Slots',
+              instr: 'Populate the default weapon/ability slot state on startup using $primaryVarName.',
+              verify: 'Pressing Play initializes $targetAsset with valid default slot values from $primaryVarName.',
+              codeLead: '// Initialize Default Weapon Slots ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Detect Pedestal Overlap',
+              instr: 'Bind the InteractBox overlap event on $targetAsset to detect when the player enters equip range.',
+              verify: 'Walking up to $targetAsset registers player overlap and highlights the active pedestal.',
+              codeLead: '// Detect Player Overlap at Weapon Pedestal',
+            ),
+          (1, 1) => (
+              title: 'Bind Interact & Validate Slot',
+              instr: 'When the player presses Interact at $targetAsset, verify the target weapon slot is unlocked and ready to equip.',
+              verify: 'Pressing Interact near $targetAsset validates the slot and fires the equip handler.',
+              codeLead: '// Validate Target Weapon Slot on Interact',
+            ),
+          (1, 2) => (
+              title: 'Attach Weapon Actor to Hand Socket',
+              instr: 'Attach the chosen weapon actor/mesh to the player character\'s WeaponSocket and update the active loadout reference.',
+              verify: 'Interacting with $targetAsset visibly attaches the weapon to the player\'s hand socket on screen.',
+              codeLead: '// Attach Equipped Weapon to Player Hand Socket',
+            ),
+          (1, 3) => (
+              title: 'Apply $primaryVarName & Swap Cooldown',
+              instr: 'Set the equipped weapon\'s starting ammo/cooldown from $primaryVarName when the swap completes.',
+              verify: 'Equipped weapon initializes its ammo and swap timer directly from $primaryVarName.',
+              codeLead: '// Apply $primaryVarName to Equipped Loadout Slot',
+            ),
+          (1, _) => (
+              title: 'Unlock Arena Launch Trigger',
+              instr: 'Mark the player loadout as ready on $targetAsset so stepping into the arena launch volume starts Round 1.',
+              verify: 'Equipping a primary weapon unlocks the arena launch trigger and transitions smoothly.',
+              codeLead: '// Enable Arena Entry Trigger Once Armed ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Bind Loadout HUD Dispatcher',
+              instr: 'Connect $targetAsset\'s OnWeaponEquipped signal/event to the active HUD weapon slot controller.',
+              verify: 'Equipping a weapon on $targetAsset broadcasts the updated slot payload to the HUD.',
+              codeLead: '// Broadcast OnWeaponEquipped to HUD Controller',
+            ),
+          (_, 1) => (
+              title: 'Sync HUD Weapon Icon & Ammo Readout',
+              instr: 'Update the HUD weapon icon and ammo counter text immediately whenever the active slot changes.',
+              verify: 'Swapping weapons at $targetAsset updates the on-screen HUD icon and ammo count in real time.',
+              codeLead: '// Sync HUD Weapon Slot Icon & Ammo Counter',
+            ),
+          (_, 2) => (
+              title: 'Trigger Equip SFX & Socket Flash',
+              instr: 'Play the weapon-equip audio cue and socket flash effect on $targetAsset when a weapon locks into place.',
+              verify: 'Picking up a weapon plays the equip sound and visual flash without delay.',
+              codeLead: '// Play Weapon Equip Audio & Socket Flash Cue',
+            ),
+          (_, 3) => (
+              title: 'Bind $primaryVarName Cooldown Indicator',
+              instr: 'Drive the HUD swap-cooldown bar and pedestal prompt readiness using $primaryVarName.',
+              verify: 'The HUD swap indicator reflects $primaryVarName timing accurately during swaps.',
+              codeLead: '// Drive HUD Swap Cooldown Readout ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify Rapid Pedestal Swap Flow',
+              instr: 'Test rapid interact presses across pedestals to confirm clean weapon swapping and HUD sync.',
+              verify: 'Rapidly swapping weapons updates the player hand socket and HUD with zero duplicate actors.',
+              codeLead: '// Verify Rapid Pedestal Swap & Cooldown ($primaryVarName)',
+            ),
+        };
+      case 'combat':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Create $targetAsset Combat Class',
+              instr: 'Create $targetAsset to manage weapon firing, muzzle origin, and target hit registration.',
+              verify: '$targetAsset compiles cleanly and appears in your project scripts/blueprints folder.',
+              codeLead: '// Combat Actor & Weapon Firing Foundation ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Add Muzzle Origin & Hitbox Sensor',
+              instr: 'Attach the weapon VisualMesh, MuzzleSocket origin point, and InteractBox hitbox collision sensor to $targetAsset.',
+              verify: 'Weapon mesh, muzzle point, and hitbox wireframe appear properly aligned in the viewport.',
+              codeLead: '// Attach Weapon Mesh, MuzzleSocket & Hitbox Sensor',
+            ),
+          (0, 2) => (
+              title: 'Place $targetAsset in Arena Viewport',
+              instr: 'Place $targetAsset inside the combat arena level alongside test enemy targets.',
+              verify: '$targetAsset is spawned in the arena viewport and ready for live fire testing.',
+              codeLead: '// Spawn $targetAsset in Combat Arena',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName Combat Tuning',
+              instr: 'Expose $primaryVarName on $targetAsset so damage, fire cadence, or wave count can be tuned live.',
+              verify: 'Selecting $targetAsset in the arena shows $primaryVarName in the Inspector/Details panel.',
+              codeLead: '// Combat Tuning Parameter: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Initialize Fire Timer & Ammo State',
+              instr: 'Initialize the fire-rate timer and active combat readiness on $targetAsset using $primaryVarName.',
+              verify: '$targetAsset starts Play mode with full ammo and fire timer calibrated to $primaryVarName.',
+              codeLead: '// Initialize Fire Cadence & Ammo State ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Bind Primary Fire & Aim Input',
+              instr: 'Bind primary fire input and read the normalized aim direction vector on $targetAsset.',
+              verify: 'Pressing Fire reads the player\'s current aim vector and triggers the fire handler.',
+              codeLead: '// Bind Primary Fire & Aim Vector Input',
+            ),
+          (1, 1) => (
+              title: 'Fire Projectile / Raycast Hit Query',
+              instr: 'Spawn a projectile or cast a hit trace from MuzzleSocket along the aim vector to detect enemy hitboxes.',
+              verify: 'Firing projects a trace/projectile from MuzzleSocket and detects impacts on arena targets.',
+              codeLead: '// Fire Projectile / Raycast from MuzzleSocket',
+            ),
+          (1, 2) => (
+              title: 'Apply $primaryVarName Damage & Knockback',
+              instr: 'On target impact, subtract enemy health using $primaryVarName and apply knockback impulse along the hit normal.',
+              verify: 'Hitting an enemy reduces its HP by $primaryVarName and pushes it back visibly.',
+              codeLead: '// Apply Damage ($primaryVarName) & Knockback Impulse',
+            ),
+          (1, 3) => (
+              title: 'Wire $primaryVarName Fire Cadence',
+              instr: 'Gate consecutive shots using $primaryVarName so holding or tapping Fire respects the weapon fire rate.',
+              verify: 'Holding Fire shoots at a steady cadence governed by $primaryVarName.',
+              codeLead: '// Enforce Fire-Rate Cadence ($primaryVarName)',
+            ),
+          (1, _) => (
+              title: 'Step Recoil Recovery & Aim Velocity',
+              instr: 'Interpolate weapon recoil recovery and combat strafe velocity each physics tick using $primaryVarName.',
+              verify: 'Firing while moving recovers reticle spread smoothly using $primaryVarName.',
+              codeLead: '// Step Combat Velocity & Recoil Recovery ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Bind Target Hit Confirmation Signal',
+              instr: 'Connect the impact hit event on $targetAsset to trigger immediate visual and audio combat cues.',
+              verify: 'Every confirmed hit fires the impact feedback handler on $targetAsset.',
+              codeLead: '// Connect Hit Confirmation Event on $targetAsset',
+            ),
+          (_, 1) => (
+              title: 'Flash Target Material on Impact',
+              instr: 'Trigger a crisp emissive white hit-flash on the struck enemy mesh when damage lands.',
+              verify: 'Struck targets flash white briefly on impact before returning to their base color.',
+              codeLead: '// Trigger 60ms Emissive Hit-Flash on Struck Target',
+            ),
+          (_, 2) => (
+              title: 'Spawn Muzzle Flash & Impact Sparks',
+              instr: 'Spawn a muzzle flash and impact particle burst at the hit point alongside the gunshot/hit audio cue.',
+              verify: 'Firing and hitting a target plays both the muzzle cue and impact spark burst on screen.',
+              codeLead: '// Spawn Impact Sparks & Play Hit-Confirm SFX',
+            ),
+          (_, 3) => (
+              title: 'Scale Hitstop & Shake by $primaryVarName',
+              instr: 'Use $primaryVarName to scale brief impact hitstop and camera punch on heavy hits.',
+              verify: 'Adjusting $primaryVarName visibly tunes impact punch during arena combat.',
+              codeLead: '// Scale Hitstop & Camera Punch ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify Multi-Target Hit Registration',
+              instr: 'Fire across multiple enemy targets in Play mode to confirm clean hit registration and knockback.',
+              verify: 'Rapid shots across multiple enemies register damage and hit-flashes without dropped hits.',
+              codeLead: '// Verify Multi-Target Hit Registration ($primaryVarName)',
+            ),
+        };
+      case 'movement':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Create $targetAsset Locomotion Class',
+              instr: 'Create $targetAsset to drive player movement velocity, dash burst, and combo speed scaling.',
+              verify: '$targetAsset compiles cleanly and is ready to attach to the player pawn.',
+              codeLead: '// Player Locomotion & Dash Controller ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Add Capsule Collider & Ground Sensor',
+              instr: 'Attach the character VisualMesh and InteractBox collision/ground sensor to $targetAsset.',
+              verify: 'Character mesh and collision bounds appear centered in the viewport.',
+              codeLead: '// Attach Collision Capsule & Ground Check Sensor',
+            ),
+          (0, 2) => (
+              title: 'Place $targetAsset at Arena Spawn',
+              instr: 'Place $targetAsset at the arena spawn marker (0, 0, 0) for immediate movement testing.',
+              verify: '$targetAsset spawns cleanly on the arena floor when entering Play mode.',
+              codeLead: '// Spawn $targetAsset at Arena Start Point',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName Speed Tuning',
+              instr: 'Expose $primaryVarName on $targetAsset so top speed, acceleration, or dash impulse can be tuned live.',
+              verify: '$primaryVarName appears in the Inspector/Details panel when $targetAsset is selected.',
+              codeLead: '// Movement Tuning Variable: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Apply Base WASD Acceleration',
+              instr: 'Read directional movement input each physics tick and accelerate $targetAsset smoothly toward $primaryVarName.',
+              verify: 'Pressing WASD moves $targetAsset smoothly across the arena floor at $primaryVarName.',
+              codeLead: '// Step Base WASD Velocity ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Bind Dash & Directional Input',
+              instr: 'Bind the Dash / Burst input action on $targetAsset and capture the current movement direction vector.',
+              verify: 'Pressing Dash captures the active input direction and triggers the burst state.',
+              codeLead: '// Bind Dash Input & Capture Direction Vector',
+            ),
+          (1, 1) => (
+              title: 'Apply Dash Velocity Impulse',
+              instr: 'Launch $targetAsset along the input vector with burst velocity and start the active dash window.',
+              verify: 'Pressing Dash propels $targetAsset forward with a crisp burst of speed.',
+              codeLead: '// Apply Dash Burst Velocity Impulse',
+            ),
+          (1, 2) => (
+              title: 'Chain Combo Speed Multiplier',
+              instr: 'Increment the combo speed stack when chaining actions within the timing window and update move speed.',
+              verify: 'Chaining dashes/hits in rhythm increases movement speed visibly across the arena.',
+              codeLead: '// Increment Combo Chain Speed Multiplier',
+            ),
+          (1, 3) => (
+              title: 'Wire $primaryVarName Dash Cooldown',
+              instr: 'Drive the dash recharge timer and combo decay window using $primaryVarName.',
+              verify: 'Dash cooldown recovers cleanly according to $primaryVarName.',
+              codeLead: '// Tick Dash Cooldown & Combo Window ($primaryVarName)',
+            ),
+          (1, _) => (
+              title: 'Interpolate Deceleration & Turn Grip',
+              instr: 'Smoothly interpolate velocity from dash burst back to cruise speed each frame using $primaryVarName.',
+              verify: 'Exiting a dash transitions smoothly into normal run speed without snapping.',
+              codeLead: '// Interpolate Dash Recovery Velocity ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Bind Dash Start & Recovery Signals',
+              instr: 'Emit dash start and recovery events from $targetAsset to drive camera FOV and trail effects.',
+              verify: 'Triggering a dash fires the visual feedback signal on $targetAsset.',
+              codeLead: '// Emit Dash Start / Recovery Visual Signals',
+            ),
+          (_, 1) => (
+              title: 'Lerp Camera FOV Kick on Burst',
+              instr: 'Punch camera FOV outward during dash burst and ease back smoothly as velocity settles.',
+              verify: 'Dashing produces a responsive camera FOV kick that settles cleanly.',
+              codeLead: '// Lerp Camera FOV Kick During Dash Burst',
+            ),
+          (_, 2) => (
+              title: 'Activate Speed Trail & Whoosh SFX',
+              instr: 'Enable the motion trail emitter and play the dash whoosh audio cue while burst speed is active.',
+              verify: 'Dashing leaves a visible speed trail and plays the burst sound cue.',
+              codeLead: '// Toggle Speed Trail Emitter & Dash SFX',
+            ),
+          (_, 3) => (
+              title: 'Tune $primaryVarName Wall-Slide Projection',
+              instr: 'Use $primaryVarName to slide velocity smoothly along wall normals when dashing into angled geometry.',
+              verify: 'Dashing at a 45° angle into an arena wall slides smoothly along the surface.',
+              codeLead: '// Project Velocity Along Wall Normal ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify Jump-Cancel & Corner Slide',
+              instr: 'Test jump-canceling mid-dash and sliding along arena corners to verify velocity preservation.',
+              verify: 'Corner slides and jump-cancels preserve momentum without snagging or clipping.',
+              codeLead: '// Verify Corner Slide & Dash Cancel ($primaryVarName)',
+            ),
+        };
+      case 'upgrade':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Create $targetAsset & Upgrade Struct',
+              instr: 'Create $targetAsset and define the upgrade option struct (UpgradeId, StatTarget, BuffMultiplier).',
+              verify: '$targetAsset compiles cleanly with the upgrade pool data fields defined.',
+              codeLead: '// Upgrade Reward Actor & Card Data ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Add Reward Chest Mesh & Pickup Zone',
+              instr: 'Attach the reward chest/altar VisualMesh and InteractBox trigger volume to $targetAsset.',
+              verify: 'Reward chest mesh and pickup trigger box appear in the viewport.',
+              codeLead: '// Attach Reward Chest Mesh & Pickup Trigger',
+            ),
+          (0, 2) => (
+              title: 'Place $targetAsset at Arena Center',
+              instr: 'Place $targetAsset at the arena center reward spawn point so it activates on wave clear.',
+              verify: '$targetAsset sits at the arena reward point and is listed in the scene hierarchy.',
+              codeLead: '// Place $targetAsset at Center Arena Reward Point',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName Buff Tuning',
+              instr: 'Expose $primaryVarName on $targetAsset to tune option count, stat multiplier, or reroll cost.',
+              verify: '$primaryVarName is editable in the Inspector/Details panel on $targetAsset.',
+              codeLead: '// Upgrade Tuning Parameter: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Initialize Candidate Upgrade Pool',
+              instr: 'Populate the weighted list of stat/weapon upgrades on $targetAsset driven by $primaryVarName.',
+              verify: '$targetAsset initializes its candidate upgrade pool with valid stat modifiers on startup.',
+              codeLead: '// Initialize Weighted Upgrade Pool ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Roll 3 Non-Duplicate Upgrades on Clear',
+              instr: 'When a wave clears, roll 3 distinct upgrade options from $targetAsset\'s candidate pool.',
+              verify: 'Clearing a wave rolls 3 unique upgrade choices with zero duplicate cards.',
+              codeLead: '// Roll 3 Non-Duplicate Upgrade Options on Wave Clear',
+            ),
+          (1, 1) => (
+              title: 'Present 3 Selectable Upgrade Cards',
+              instr: 'Display the 3 rolled upgrade cards with their title, icon, and exact stat modifier percentage.',
+              verify: 'All 3 upgrade cards appear on screen and highlight when hovered or approached.',
+              codeLead: '// Populate 3 Selectable Upgrade Card Slots',
+            ),
+          (1, 2) => (
+              title: 'Apply Chosen Stat Multiplier to Player',
+              instr: 'When the player selects a card on $targetAsset, immediately multiply the target player stat (damage, fire rate, or speed).',
+              verify: 'Picking an upgrade card immediately boosts the player\'s active stat in the arena.',
+              codeLead: '// Apply Selected Stat Multiplier to Player',
+            ),
+          (1, 3) => (
+              title: 'Scale Buff Magnitude by $primaryVarName',
+              instr: 'Calculate the applied stat delta using $primaryVarName and refresh the choices if Reroll is pressed.',
+              verify: 'Stat buffs scale accurately by $primaryVarName and rerolling deals 3 fresh cards.',
+              codeLead: '// Compute Stat Buff Delta ($primaryVarName) & Reroll',
+            ),
+          (1, _) => (
+              title: 'Despawn Unchosen Rewards & Resume',
+              instr: 'Despawn the remaining unchosen upgrade options on $targetAsset and signal the next arena wave.',
+              verify: 'Selecting 1 card despawns the other 2 options immediately and resumes gameplay.',
+              codeLead: '// Despawn Unchosen Cards & Advance Loop ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Bind Upgrade Claimed Event',
+              instr: 'Connect $targetAsset\'s OnUpgradeClaimed event to the HUD buff bar and audio player.',
+              verify: 'Claiming an upgrade fires the HUD notification and audio handler.',
+              codeLead: '// Broadcast OnUpgradeClaimed to HUD & Audio',
+            ),
+          (_, 1) => (
+              title: 'Spawn Claim Burst VFX & +Stat Popup',
+              instr: 'Spawn a pickup particle burst and floating "+Stat%" callout text when an upgrade is claimed.',
+              verify: 'Picking an upgrade spawns the burst VFX and floating stat popup on screen.',
+              codeLead: '// Spawn Upgrade Claim VFX & Floating Stat Callout',
+            ),
+          (_, 2) => (
+              title: 'Add Active Buff Badge to HUD Row',
+              instr: 'Append the chosen upgrade\'s icon and stack count to the player\'s active HUD buff bar.',
+              verify: 'The claimed upgrade badge appears in the HUD buff bar and increments on stack.',
+              codeLead: '// Add Claimed Upgrade Badge to HUD Buff Bar',
+            ),
+          (_, 3) => (
+              title: 'Sync $primaryVarName Reroll & Stack Cap',
+              instr: 'Update the reroll cost readout and clamp stacked stat multipliers using $primaryVarName.',
+              verify: 'Stacked upgrades respect the safety cap defined by $primaryVarName.',
+              codeLead: '// Clamp Stacked Buffs & Sync Reroll ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify Single-Claim Lock on Pickup',
+              instr: 'Test spamming interact or overlapping two cards simultaneously to confirm only 1 upgrade can be claimed.',
+              verify: 'Simultaneous inputs claim exactly 1 upgrade and lock out duplicate picks.',
+              codeLead: '// Verify Single-Claim Lock ($primaryVarName)',
+            ),
+        };
+      case 'reset':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Create $targetAsset Wave Manager',
+              instr: 'Create $targetAsset to track active enemy count, current wave index, and round reset state.',
+              verify: '$targetAsset compiles cleanly with wave counter and reset state properties.',
+              codeLead: '// Wave Clear & Loop Reset Manager ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Add Arena Bounds & Spawn Markers',
+              instr: 'Attach the arena boundary volume and enemy wave spawn point references to $targetAsset.',
+              verify: 'Spawn markers and arena bounds are linked to $targetAsset in the viewport.',
+              codeLead: '// Link Arena Bounds & Wave Spawn Markers',
+            ),
+          (0, 2) => (
+              title: 'Place $targetAsset in Arena Level',
+              instr: 'Place $targetAsset in the main arena level and link the player respawn transform.',
+              verify: '$targetAsset is active in the level outliner with valid spawn point references.',
+              codeLead: '// Register $targetAsset in Main Arena Level',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName Wave Tuning',
+              instr: 'Expose $primaryVarName on $targetAsset to tune inter-wave countdown delay and enemy scaling.',
+              verify: '$primaryVarName is editable in the Details/Inspector panel for $targetAsset.',
+              codeLead: '// Wave Reset Tuning Parameter: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Initialize Wave 1 Counter & Timer',
+              instr: 'Initialize CurrentWave = 1 and reset the active enemy counter on startup using $primaryVarName.',
+              verify: 'Entering Play mode starts Wave 1 cleanly with enemy counts tracked by $targetAsset.',
+              codeLead: '// Initialize Wave 1 State & Timer ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Detect Zero Remaining Enemies',
+              instr: 'Decrement ActiveEnemyCount on each enemy elimination and fire OnWaveCleared when it reaches 0.',
+              verify: 'Defeating the last enemy in a wave immediately triggers OnWaveCleared on $targetAsset.',
+              codeLead: '// Detect Final Enemy Elimination -> OnWaveCleared',
+            ),
+          (1, 1) => (
+              title: 'Increment Wave Index & Scale Spawn Count',
+              instr: 'Advance CurrentWaveIndex and scale the next wave\'s enemy count/HP multiplier.',
+              verify: 'Wave counter increments (Wave 1 -> Wave 2) and calculates the scaled spawn count.',
+              codeLead: '// Increment Wave Counter & Scale Next Wave Cohort',
+            ),
+          (1, 2) => (
+              title: 'Sweep & Destroy Orphan Projectiles',
+              instr: 'Clear all leftover enemy projectiles, hazards, and temporary debris from the arena on wave end.',
+              verify: 'All active projectiles and hazards are destroyed cleanly when the round ends.',
+              codeLead: '// Destroy Leftover Projectiles & Arena Hazards',
+            ),
+          (1, 3) => (
+              title: 'Run $primaryVarName Inter-Wave Countdown',
+              instr: 'Tick the inter-wave breather countdown using $primaryVarName before spawning the next wave.',
+              verify: 'Next wave waits $primaryVarName after wave clear before spawning enemies.',
+              codeLead: '// Run Inter-Wave Countdown Timer ($primaryVarName)',
+            ),
+          (1, _) => (
+              title: 'Spawn Next Wave or 1-Key Run Reset',
+              instr: 'Spawn the next wave cohort when the countdown finishes, or reset to Wave 1 in 1 keypress on player death.',
+              verify: 'Next wave spawns cleanly after $primaryVarName, and pressing Restart resets the run in under 1s.',
+              codeLead: '// Spawn Next Wave Cohort / Instant Run Reset ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Bind Wave Clear & Run Summary Signals',
+              instr: 'Connect OnWaveCleared and OnRunReset from $targetAsset to the HUD banner controller.',
+              verify: 'Clearing a wave or ending a run notifies the HUD overlay immediately.',
+              codeLead: '// Connect Wave Clear & Reset Signals to HUD',
+            ),
+          (_, 1) => (
+              title: 'Animate Wave Clear Banner & Tally',
+              instr: 'Display the "WAVE CLEARED" / run summary banner with clear time and enemies defeated.',
+              verify: 'The Wave Clear banner animates on screen with accurate round stats.',
+              codeLead: '// Display Wave Clear Banner & Run Tally',
+            ),
+          (_, 2) => (
+              title: 'Bind 1-Key Instant Restart Shortcut',
+              instr: 'Bind the quick-restart input (R / Gamepad Start) so playtesters can restart a run immediately.',
+              verify: 'Pressing the restart shortcut resets player health, ammo, and Wave 1 state in under 1s.',
+              codeLead: '// Bind 1-Key Instant Run Restart Input',
+            ),
+          (_, 3) => (
+              title: 'Sync $primaryVarName Countdown Readout',
+              instr: 'Update the on-screen "Next Wave in X.Xs" HUD countdown text from $primaryVarName.',
+              verify: 'The HUD countdown ticks down smoothly from $primaryVarName to 0.0s.',
+              codeLead: '// Sync Next-Wave HUD Countdown ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify 3 Consecutive Wave Resets',
+              instr: 'Play through and reset 3 consecutive waves in the viewport to confirm zero leftover actors or duplicate timers.',
+              verify: '3 consecutive wave clears and resets run with stable frame time and zero orphan actors.',
+              codeLead: '// Verify 3-Wave Reset Stability ($primaryVarName)',
+            ),
+        };
+      case 'ui':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Create $targetAsset Camera & HUD Rig',
+              instr: 'Create $targetAsset to manage smooth camera tracking and live HUD state readouts.',
+              verify: '$targetAsset compiles cleanly and is ready to attach to the active viewport.',
+              codeLead: '// Camera Follow & HUD Readout Controller ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Add Camera Arm & HUD Canvas Layer',
+              instr: 'Attach the camera spring-arm/node and root HUD status container to $targetAsset.',
+              verify: 'Camera view and HUD overlay container render cleanly in the editor preview.',
+              codeLead: '// Attach Camera Rig & Root HUD Container',
+            ),
+          (0, 2) => (
+              title: 'Register $targetAsset in Main Level',
+              instr: 'Place $targetAsset in the arena level and bind it to track the spawned player actor.',
+              verify: '$targetAsset locks onto the player pawn as soon as Play mode starts.',
+              codeLead: '// Register $targetAsset & Bind Player Target',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName Lerp Speed',
+              instr: 'Expose $primaryVarName on $targetAsset to tune camera follow smoothing and HUD pop scale.',
+              verify: '$primaryVarName appears in the Inspector/Details panel for $targetAsset.',
+              codeLead: '// Camera & HUD Tuning Parameter: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Initialize Target Anchor & Arena Bounds',
+              instr: 'Cache the player transform anchor and arena boundary min/max limits on startup using $primaryVarName.',
+              verify: '$targetAsset initializes with valid arena bounds and zero camera snap on spawn.',
+              codeLead: '// Initialize Camera Anchor & Arena Bounds ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Subscribe to Player Ammo & State Signals',
+              instr: 'Connect player weapon, ammo, and wave state signals to $targetAsset.',
+              verify: 'Player actions immediately notify $targetAsset without polling every node.',
+              codeLead: '// Subscribe $targetAsset to Player State Signals',
+            ),
+          (1, 1) => (
+              title: 'Lerp Camera Position Toward Player',
+              instr: 'Smoothly interpolate camera position toward the player anchor each tick using $primaryVarName.',
+              verify: 'Moving and dashing across the arena tracks the player smoothly without camera judder.',
+              codeLead: '// Lerp Camera Transform Toward Player ($primaryVarName)',
+            ),
+          (1, 2) => (
+              title: 'Update HUD Ammo, Health & Wave Readout',
+              instr: 'Refresh the HUD ammo counter, health bar, and wave badge whenever state signals fire.',
+              verify: 'Firing, taking damage, or clearing a wave updates the HUD readout on the same frame.',
+              codeLead: '// Refresh HUD Ammo, Health & Wave Counters',
+            ),
+          (1, 3) => (
+              title: 'Apply $primaryVarName Aim Look-Ahead',
+              instr: 'Offset the camera focus slightly toward the player\'s aim direction scaled by $primaryVarName.',
+              verify: 'Aiming shifts camera framing smoothly toward the target area.',
+              codeLead: '// Apply Aim Look-Ahead Offset ($primaryVarName)',
+            ),
+          (1, _) => (
+              title: 'Clamp Camera at Arena Boundaries',
+              instr: 'Clamp the interpolated camera coordinates inside the arena bounds so the view never shows empty void.',
+              verify: 'Walking to the edge of the arena clamps the camera smoothly at the boundary wall.',
+              codeLead: '// Clamp Camera Coordinates to Arena Bounds ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Bind Critical State Callout Trigger',
+              instr: 'Detect low-ammo, reload, or medal threshold events in $targetAsset to trigger HUD callouts.',
+              verify: 'Crossing a state threshold triggers the HUD callout animation handler.',
+              codeLead: '// Trigger HUD Callout on State Threshold',
+            ),
+          (_, 1) => (
+              title: 'Animate HUD Pop Scale & Reticle Flash',
+              instr: 'Pulse the HUD counter scale and reticle tint briefly when state changes or hits occur.',
+              verify: 'HUD counters pop cleanly on update and settle back to 1.0x scale.',
+              codeLead: '// Pulse HUD Counter Scale & Reticle Cue',
+            ),
+          (_, 2) => (
+              title: 'Trigger Audio Chime & Edge Vignette',
+              instr: 'Play the UI confirmation chime and subtle screen-edge vignette when a callout fires.',
+              verify: 'State callouts play crisp audio/visual feedback without obscuring the crosshair.',
+              codeLead: '// Play UI Chime & Screen-Edge Vignette Cue',
+            ),
+          (_, 3) => (
+              title: 'Decay Shake Trauma with $primaryVarName',
+              instr: 'Decay camera shake trauma smoothly back to rest each frame using $primaryVarName.',
+              verify: 'Camera shake recovers smoothly to rest with zero lingering jitter.',
+              codeLead: '// Decay Camera Shake Trauma ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify Tracking at High Dash Speeds',
+              instr: 'Dash rapidly into arena corners while firing to verify smooth camera clamping and HUD sync.',
+              verify: 'High-speed movement at arena boundaries stays locked at 60fps with zero camera snap.',
+              codeLead: '// Verify Corner Clamping & HUD Sync ($primaryVarName)',
+            ),
+        };
+      default:
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Create $targetAsset Mechanic Class',
+              instr: 'Create $targetAsset and declare the core data fields for this mechanic.',
+              verify: '$targetAsset compiles cleanly and appears in the project asset browser.',
+              codeLead: '// Mechanic Foundation Class ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Add Visual Mesh & Trigger Volume',
+              instr: 'Attach the visible mesh and InteractBox collision sensor to $targetAsset.',
+              verify: 'Mesh and collision wireframe appear aligned in the viewport.',
+              codeLead: '// Attach Visual Mesh & Collision Trigger',
+            ),
+          (0, 2) => (
+              title: 'Place $targetAsset in Test Arena',
+              instr: 'Place a live instance of $targetAsset in the test arena level at (0, 0, 0).',
+              verify: '$targetAsset appears in the level viewport and scene outliner.',
+              codeLead: '// Place $targetAsset Instance in Level',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName in Inspector',
+              instr: 'Expose $primaryVarName on $targetAsset for live playtest tuning in the Inspector/Details panel.',
+              verify: '$primaryVarName is editable in the Inspector when $targetAsset is selected.',
+              codeLead: '// Inspector Tuning Variable: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Initialize Mechanic Startup State',
+              instr: 'Initialize the starting state and timer values on $targetAsset using $primaryVarName.',
+              verify: 'Entering Play mode initializes $targetAsset cleanly with $primaryVarName.',
+              codeLead: '// Initialize Startup State ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Bind Player Trigger Input',
+              instr: 'Bind the primary player input or overlap event on $targetAsset to start the mechanic.',
+              verify: 'Triggering the input in Play mode invokes the handler on $targetAsset.',
+              codeLead: '// Bind Primary Player Trigger on $targetAsset',
+            ),
+          (1, 1) => (
+              title: 'Execute Core Mechanic Action',
+              instr: 'Run the core spatial/gameplay action on $targetAsset when triggered by the player.',
+              verify: 'Triggering $targetAsset executes the primary gameplay action on screen.',
+              codeLead: '// Execute Core Mechanic Action on $targetAsset',
+            ),
+          (1, 2) => (
+              title: 'Update Active Visual & World State',
+              instr: 'Update $targetAsset\'s visual state and world properties immediately when the action executes.',
+              verify: '$targetAsset visibly updates on screen in response to the player action.',
+              codeLead: '// Sync Active Visual & World State',
+            ),
+          (1, 3) => (
+              title: 'Drive Action Math with $primaryVarName',
+              instr: 'Scale the mechanic\'s speed, duration, or magnitude directly from $primaryVarName.',
+              verify: 'Changing $primaryVarName in the Inspector immediately alters the live gameplay behavior.',
+              codeLead: '// Scale Mechanic Execution by $primaryVarName',
+            ),
+          (1, _) => (
+              title: 'Step Active Tick & Recovery Loop',
+              instr: 'Advance the active timer/velocity each physics tick using $primaryVarName and return cleanly to ready.',
+              verify: 'The mechanic steps smoothly each frame and recovers cleanly when finished.',
+              codeLead: '// Step Active Physics Tick ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Bind Feedback & HUD Signal',
+              instr: 'Connect $targetAsset\'s state completion signal to the HUD and feedback emitters.',
+              verify: 'Executing the mechanic emits the feedback signal cleanly.',
+              codeLead: '// Emit HUD & Feedback Signal on $targetAsset',
+            ),
+          (_, 1) => (
+              title: 'Trigger Visual Highlight & Particle Cue',
+              instr: 'Play the on-screen visual highlight or particle burst on $targetAsset when activated.',
+              verify: 'Activating $targetAsset displays immediate visual confirmation on screen.',
+              codeLead: '// Trigger Visual Highlight & Particle Burst',
+            ),
+          (_, 2) => (
+              title: 'Play Confirmation SFX & HUD Pop',
+              instr: 'Play the confirmation audio cue and update the HUD indicator when $targetAsset completes.',
+              verify: 'Audio cue and HUD readout trigger in sync with the action.',
+              codeLead: '// Play Confirmation Audio & Update HUD Readout',
+            ),
+          (_, 3) => (
+              title: 'Wire $primaryVarName Cooldown Window',
+              instr: 'Enforce the cooldown recovery window on $targetAsset using $primaryVarName.',
+              verify: 'Rapid inputs respect the $primaryVarName cooldown timer.',
+              codeLead: '// Enforce Cooldown Window ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify Full Mechanic Loop in Viewport',
+              instr: 'Run the complete mechanic loop in Play mode and verify smooth transitions under rapid input.',
+              verify: 'The full action -> feedback -> cooldown loop runs cleanly in the viewport.',
+              codeLead: '// Verify Complete Mechanic Loop ($primaryVarName)',
+            ),
+        };
+    }
+
+    return (
+      stepHeader: 'STEP $taskNum.${stepIdx + 1} · ${entry.title.toUpperCase()}',
+      shortTitle: entry.title,
+      instruction: entry.instr,
+      verify: entry.verify,
+      codeLead: entry.codeLead,
+    );
   }
 }
 
@@ -1506,6 +2296,13 @@ class TaskHowToBlueprint {
 
     final cpArchetype =
         MechanicArchetypeProfile.fromFeatureTitle(checkpointNode.cleanStageTitle);
+    final effectiveCategory = cpArchetype.category != 'core'
+        ? cpArchetype.category
+        : (checkpointNode.cleanStageTitle.toLowerCase().contains('greybox core loop')
+            ? 'core'
+            : MechanicArchetypeProfile.inferCategory(
+                '${checkpointNode.cleanStageTitle} $cleanTitle ${checkpointNode.tuningParams.join(' ')} ${checkpointNode.edgeCases.join(' ')}',
+              ));
     final hasLegacyEconomyMismatch = cpArchetype.category != 'economy' &&
         checkpointNode.tuningParams.isNotEmpty &&
         checkpointNode.tuningParams.first.contains('transactionCostBase: 25 gold');
@@ -2207,6 +3004,29 @@ class TaskHowToBlueprint {
         ));
         return;
       }
+      final mechOverride = MechanicArchetypeProfile.mechanicStepOverride(
+        category: effectiveCategory,
+        taskIndex: taskIndex,
+        stepIdx: phaseIdx,
+        taskNum: taskNum,
+        targetAsset: targetAssetName,
+        primaryVarName: primaryVarName,
+      );
+      if (mechOverride != null) {
+        dynamicSpecs.add((
+          stepHeader:
+              'STEP $taskNum.${dynamicSpecs.length + 1} · ${mechOverride.shortTitle.toUpperCase()}',
+          shortTitle: mechOverride.shortTitle,
+          instruction: mechOverride.instruction,
+          verify: mechOverride.verify,
+          path: rawSpec.path,
+          code: '${mechOverride.codeLead}\n${rawSpec.code}',
+          explain: rawCtx.explain,
+          primaryChip: rawCtx.primaryChip,
+          pitfall: rawCtx.pitfall,
+        ));
+        return;
+      }
       dynamicSpecs.add((
         stepHeader: rawSpec.stepHeader,
         shortTitle: rawSpec.shortTitle,
@@ -2386,6 +3206,13 @@ class TaskHowToBlueprint {
                       c.text.toUpperCase().contains('PROCESSDURATIONSEC') ||
                       c.text.toUpperCase().contains('STACKMAXCAPACITY') ||
                       (c.codeSnippet ?? '').contains('transactionCostBase'))) ||
+              (effectiveCategory != 'core' &&
+                  (c.text.toUpperCase().contains('DEFINE STATE ENUM') ||
+                      c.text.toUpperCase().contains('BUILD STATE TRANSITION') ||
+                      c.text.toUpperCase().contains('BUILD SETSTATE') ||
+                      c.text.toUpperCase().contains('SWAP VISUAL MATERIAL') ||
+                      c.text.toUpperCase().contains('SWAP MATERIAL') ||
+                      c.text.toUpperCase().contains('STEP STATE WITH INTERPOLATION'))) ||
               (c.codeSnippet ?? '').contains('ValidateGuard_') ||
               (c.codeSnippet ?? '').contains('_validate_guard_') ||
               (c.codeSnippet ?? '').contains('!IsBoundaryBlocked')),

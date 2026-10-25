@@ -544,6 +544,41 @@ class WorkbenchProvider extends ChangeNotifier {
 
     final beats = activeReleaseBeats;
     if (beats.isNotEmpty) {
+      // Self-heal any cross-Epic duplicate feature ID collisions from prior builds
+      final seenFeatIds = <String, String>{}; // featId -> first beatId
+      for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+        final b = beats[bIdx];
+        for (int cIdx = 0; cIdx < b.childrenIds.length; cIdx++) {
+          final fid = b.childrenIds[cIdx];
+          final firstBeatId = seenFeatIds[fid];
+          if (firstBeatId == null) {
+            seenFeatIds[fid] = b.id;
+          } else if (firstBeatId != b.id) {
+            final origDoc = documents[fid];
+            if (origDoc != null) {
+              final clonedId = 'feat_${b.id}_${cIdx + 1}';
+              final distinctTitle =
+                  MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+                origDoc.title,
+                beatTitle: b.title,
+                beatGoal: b.sections['scope'] ?? '',
+                beatIndex: bIdx,
+              );
+              final clonedDoc = TierDocument(
+                id: clonedId,
+                title: distinctTitle,
+                tier: TierType.feature,
+                parentId: b.id,
+                estimatedDuration: origDoc.estimatedDuration,
+                sections: Map<String, String>.from(origDoc.sections),
+              );
+              documents[clonedId] = clonedDoc;
+              b.childrenIds[cIdx] = clonedId;
+            }
+          }
+        }
+      }
+
       final candidateFeatId = (projectId == _activeProjectId &&
               _selectedFeatureId != null &&
               documents.containsKey(_selectedFeatureId))

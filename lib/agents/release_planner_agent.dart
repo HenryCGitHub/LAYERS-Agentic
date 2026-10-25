@@ -963,11 +963,16 @@ class ReleaseExecutorAgent {
     // Index any existing Beats and Features by ID and normalized title for non-destructive merge
     final existingBeatsByTitle = <String, TierDocument>{};
     final existingFeaturesByTitle = <String, TierDocument>{};
+    final existingFeaturesByBeatAndTitle = <String, TierDocument>{};
     for (final doc in existingDocuments.values) {
       if (doc.tier == TierType.epic) {
         existingBeatsByTitle[doc.title.toLowerCase().trim()] = doc;
       } else if (doc.tier == TierType.feature) {
-        existingFeaturesByTitle[doc.title.toLowerCase().trim()] = doc;
+        final normTitle = doc.title.toLowerCase().trim();
+        existingFeaturesByTitle[normTitle] = doc;
+        if (doc.parentId != null) {
+          existingFeaturesByBeatAndTitle['${doc.parentId}::$normTitle'] = doc;
+        }
       }
     }
 
@@ -1041,8 +1046,22 @@ class ReleaseExecutorAgent {
           }
         }
 
-        final existingFeat = existingDocuments[featBp.id] ??
-            existingFeaturesByTitle[featBp.title.toLowerCase().trim()];
+        final concreteFeatTitle =
+            MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+          featBp.title,
+          beatTitle: beatBp.title,
+          beatGoal: beatBp.goal,
+          beatIndex: bIdx,
+        );
+        final existingById = existingDocuments[featBp.id];
+        final existingFeat = (existingById != null &&
+                (existingById.parentId == null ||
+                    existingById.parentId == beatDoc.id))
+            ? existingById
+            : (existingFeaturesByBeatAndTitle[
+                    '${beatDoc.id}::${concreteFeatTitle.toLowerCase().trim()}'] ??
+                existingFeaturesByBeatAndTitle[
+                    '${beatDoc.id}::${featBp.title.toLowerCase().trim()}']);
         final featId = existingFeat?.id ?? 'feat_${beatId}_${fIdx + 1}';
 
         // If STABLE and already exists in vault, preserve its existing document & checkpoints untouched!
