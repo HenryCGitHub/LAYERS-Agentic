@@ -2434,6 +2434,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
     final featureArchetype =
         MechanicArchetypeProfile.fromFeatureTitle(feat.title);
+    final cpArchetypeCategory =
+        MechanicArchetypeProfile.inferCategory(node.cleanStageTitle);
+    final effectiveCheckpointCategory =
+        (cpArchetypeCategory == 'polish' || cpArchetypeCategory == 'content')
+            ? cpArchetypeCategory
+            : featureArchetype.category;
     final rawFeatureGoal = SectionTextUtils.resolveGoal(feat.sections).trim();
     final isLegacyCircularGoal = rawFeatureGoal.isEmpty ||
         rawFeatureGoal.toLowerCase().contains('(execute ') ||
@@ -2570,7 +2576,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                         howToBlueprints: howToBlueprints,
                         selectedTaskIdx: selectedTaskIdx,
                         activeSubStepIdx: activeSubStepIdx,
-                        featureCategory: featureArchetype.category,
+                        featureCategory: effectiveCheckpointCategory,
                       ),
                     Expanded(
                       child: Container(
@@ -2728,7 +2734,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                                       enabled: false,
                                                       height: 26,
                                                       child: Text(
-                                                        '${howToBlueprints[tIdx].numLabel} · ${MechanicArchetypeProfile.taskGroupTitle(featureArchetype.category, tIdx, fallbackTitle: howToBlueprints[tIdx].shortTaskTitle).toUpperCase()}',
+                                                        '${howToBlueprints[tIdx].numLabel} · ${MechanicArchetypeProfile.taskGroupTitle(effectiveCheckpointCategory, tIdx, fallbackTitle: howToBlueprints[tIdx].shortTaskTitle).toUpperCase()}',
                                                         style: GoogleFonts
                                                             .jetBrainsMono(
                                                           fontSize: 9.5,

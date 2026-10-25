@@ -38,6 +38,17 @@ class ReleasePlannerAgent {
   }) async {
     final preset = releaseDoc.releaseScope;
     final versionTag = extractReleaseVersionTag(releaseDoc.title);
+    final releasePhase = releaseDoc.sections['phase'] ?? '';
+    final prototypePart = releaseDoc.sections['prototypePart'] ?? '';
+    final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
+    final mvpEpicMatch = RegExp(r'MVP Epic\s*(\d+)', caseSensitive: false)
+        .firstMatch(releaseDoc.title);
+    final int? targetMvpEpicIndex = rawTargetEpicIdx != null
+        ? int.tryParse(rawTargetEpicIdx)
+        : (mvpEpicMatch != null
+            ? (int.tryParse(mvpEpicMatch.group(1)!) ?? 1) - 1
+            : null);
+
     final isSubsequentRelease =
         existingBeats.isNotEmpty || completedReleases.isNotEmpty || versionTag != 'v0.1';
     final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
@@ -49,6 +60,32 @@ class ReleasePlannerAgent {
     final techSpecText = projectDoc.sections['tech_spec'] ?? '';
     final pillarsText = projectDoc.sections['design_pillars'] ?? '';
     final tradeOffsText = projectDoc.sections['trade_offs'] ?? '';
+
+    final String phaseInstruction;
+    if (prototypePart == '1' && !isSubsequentRelease) {
+      phaseInstruction =
+          '- PHASE 1 SPLIT PROTOTYPE (PART 1 OF 2 — CONTROLS & PRIMARY MECHANICS): Only plan the first ${(coreLoopItems.length / 2).ceil()} Core Loop Beats in `v0.1` so the developer can prove primary controls and core mechanics first (the remaining Beats are reserved for `v0.2` Prototype Part 2).';
+    } else if (prototypePart == '2' ||
+        (releasePhase == ProductionPhase.prototype.name && isSubsequentRelease)) {
+      phaseInstruction =
+          '- PHASE 1 SPLIT PROTOTYPE (PART 2 OF 2 — FULL CORE LOOP): Keep all existing `v0.1` Beats & Features `"lifecycle": "stable"` (0h, empty checkpoints) and add the remaining Stage 1 Core Loop Beats as `"lifecycle": "new"` so the complete greybox loop connects end-to-end.';
+    } else if (releasePhase == ProductionPhase.mvp.name ||
+        targetMvpEpicIndex != null) {
+      final epicNum = (targetMvpEpicIndex ?? 0) + 1;
+      phaseInstruction =
+          '- PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC $epicNum ONLY): Upgrade ONLY Beat/Epic #$epicNum from greybox to MVP (`"lifecycle": "upgrade"` with delta MVP checkpoints, plus any queued deferred features for Epic #$epicNum). Keep all other Epics (`!= $epicNum`) strictly `"lifecycle": "stable"` (0h, empty checkpoints).';
+    } else if (releasePhase == ProductionPhase.verticalSlice.name ||
+        preset == ReleaseScope.verticalSlice) {
+      phaseInstruction =
+          '- PHASE 3 VERTICAL SLICE (GOLD STANDARD LEVEL): Combine all completed MVP Epics into 1 polished Gold Standard showcase level by upgrading the primary feature in EVERY Beat/Epic (`"lifecycle": "upgrade"`) with a Vertical Slice polish checkpoint (Final Art & Material Swap, SFX/VFX & Camera Feel Cues, HUD Readability & Frame Guard).';
+    } else if (releasePhase == ProductionPhase.fullProduction.name ||
+        preset == ReleaseScope.fullProduction) {
+      phaseInstruction =
+          '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
+    } else {
+      phaseInstruction =
+          '- Map each Stage 1 Beat (`BEAT-01..BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) 1-to-1 to a Beat entry in `beats`.';
+    }
 
     final existingTreeSummary = StringBuffer();
     if (existingBeats.isNotEmpty) {
@@ -96,8 +133,8 @@ $numberedCoreLoopSummary
 ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
 
 ${GeminiAgentClient.compactStyleRules}
-- Map each Stage 1 Beat (`BEAT-01..BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) 1-to-1 to a Beat entry in `beats`.
-- Under each Beat, generate `1–2` In-Scope Playable Features (`"included": true`) needed for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
+$phaseInstruction
+- Under each active Beat, generate `1–2` In-Scope Playable Features (`"included": true`) needed for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
 - Keep each entry in `tasks` a short 3–4 word title plus duration tag (e.g. `"Actor & Base Properties (2h)"`, `"State Logic & Player Input (2h)"`, `"Feedback Cues & State Guard (1h)"`) — never write a full sentence or repeat the Beat/Feature name inside a task title.
 - `lifecycle`: `"new"` for v0.1; for v0.2+, use `"stable"` (0h, empty checkpoints), `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"`.
@@ -178,16 +215,21 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         existingFeaturesByBeat: existingFeaturesByBeat,
         deferredByBeatIndex: deferredByBeatIndex,
         projectExclusions: projectExclusions,
+        allCoreLoopItems: coreLoopItems,
       );
     }
 
-    final effectiveLoopItems = coreLoopItems.isNotEmpty
+    final fullLoopItems = coreLoopItems.isNotEmpty
         ? coreLoopItems
         : <String>[
             'Player Controls & Entry: Spawn in the test arena and execute primary movement controls',
             'Core Mechanic & Target Interaction: Engage active targets and hazards with clear feedback',
             'Loop Resolution & Instant Reset: Complete round objective, tally results, and reset cleanly',
           ];
+    final effectiveLoopItems =
+        (prototypePart == '1' && fullLoopItems.length >= 2)
+            ? fullLoopItems.take((fullLoopItems.length / 2).ceil()).toList()
+            : fullLoopItems;
 
     final questions = <AgentQuestion>[
       AgentQuestion(
@@ -333,9 +375,11 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     );
   }
 
-  /// Deterministic evolution blueprint for v0.2+ when running offline / in tests.
-  /// Demonstrates how existing v0.1 features either stay STABLE (0h delta) or
-  /// UPGRADE with new v0.2 checkpoints, while new v0.2 features join the tree.
+  /// Deterministic evolution blueprint for v0.2+ across all 4 Production Phases:
+  /// - Phase 1 Split Prototype Part 2 (`prototypePart == '2'`): Keeps v0.1 Beats STABLE and adds remaining Core Loop Beats.
+  /// - Phase 2 Per-Epic MVP (`MVP Epic N`): Upgrades ONLY Epic `N` from greybox to MVP while keeping all other Epics STABLE (0h).
+  /// - Phase 3 Vertical Slice (`Gold Standard Level`): Upgrades primary feature in EVERY Epic with a Vertical Slice polish checkpoint.
+  /// - Phase 4 Full Production (`Full Production`): Scales content/level rosters across Epics and promotes deferred Out-of-Scope systems.
   static ReleaseBlueprint _buildDeterministicSubsequentRelease({
     required TierDocument releaseDoc,
     required ReleaseScope preset,
@@ -344,20 +388,259 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     required Map<String, List<TierDocument>> existingFeaturesByBeat,
     Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex = const {},
     required List<String> projectExclusions,
+    List<String> allCoreLoopItems = const [],
   }) {
     final beats = <ProposedBeatBlueprint>[];
+    final releasePhase = releaseDoc.sections['phase'] ?? '';
+    final prototypePart = releaseDoc.sections['prototypePart'] ?? '';
+    final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
+    final mvpEpicMatch = RegExp(r'MVP Epic\s*(\d+)', caseSensitive: false)
+        .firstMatch(releaseDoc.title);
+    final int? parsedMvpEpicIdx = rawTargetEpicIdx != null
+        ? int.tryParse(rawTargetEpicIdx)
+        : (mvpEpicMatch != null
+            ? (int.tryParse(mvpEpicMatch.group(1)!) ?? 1) - 1
+            : null);
+
+    final isSplitPrototypePart2 = prototypePart == '2' ||
+        (releasePhase == ProductionPhase.prototype.name &&
+            allCoreLoopItems.length > existingBeats.length);
+    final isVerticalSlicePhase =
+        releasePhase == ProductionPhase.verticalSlice.name ||
+            preset == ReleaseScope.verticalSlice;
+    final isFullProductionPhase =
+        releasePhase == ProductionPhase.fullProduction.name ||
+            preset == ReleaseScope.fullProduction;
+    final isTargetedMvpEpic = !isSplitPrototypePart2 &&
+        !isVerticalSlicePhase &&
+        !isFullProductionPhase &&
+        parsedMvpEpicIdx != null;
+    final targetMvpEpicIdx =
+        (parsedMvpEpicIdx ?? 0).clamp(0, existingBeats.length - 1);
 
     for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
       final beatDoc = existingBeats[bIdx];
-      final existingFeats = existingFeaturesByBeat[beatDoc.id] ?? const <TierDocument>[];
+      final existingFeats =
+          existingFeaturesByBeat[beatDoc.id] ?? const <TierDocument>[];
       final proposedFeats = <ProposedFeatureBlueprint>[];
 
       for (int fIdx = 0; fIdx < existingFeats.length; fIdx++) {
         final fDoc = existingFeats[fIdx];
         final originVer = fDoc.sections['originVersion'] ?? 'v0.1';
+        final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+          fDoc.title,
+          beatTitle: beatDoc.title,
+        );
 
-        if (bIdx == 0 && fIdx == 0) {
-          // Upgrade the first feature with a new v0.2 checkpoint!
+        if (isSplitPrototypePart2) {
+          // Split Prototype Part 2: Keep all v0.1 features STABLE (0h) while we append the remaining Beats below
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: fDoc.id,
+              title: fDoc.title,
+              goal: SectionTextUtils.resolveGoal(fDoc.sections),
+              doneWhen: SectionTextUtils.resolveDoneWhen(fDoc.sections),
+              estimatedHours: 0,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.stable,
+              originVersion: originVer,
+              checkpoints: const [],
+            ),
+          );
+        } else if (isVerticalSlicePhase) {
+          // Phase 3 Vertical Slice: Upgrade primary feature in EVERY Epic with a Gold Standard Polish checkpoint
+          if (fIdx == 0) {
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: fDoc.id,
+                title: fDoc.title,
+                goal:
+                    'Bring ${fDoc.title} to Vertical Slice Gold Standard visual, audio, and game-feel quality.',
+                doneWhen:
+                    '${fDoc.title} runs with final art/materials, synced SFX/VFX cues, and zero frame hitches in the showcase level.',
+                estimatedHours: 5,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.upgrade,
+                originVersion: originVer,
+                inScope: [
+                  'Final art, shader/material swap, and synced SFX/VFX impact cues for ${fDoc.title}',
+                ],
+                tuningParams: archetype.tuningParams,
+                edgeCases: [
+                  '[FRAME GUARD] Visual & particle cues pool cleanly without frame-time spikes',
+                ],
+                checkpoints: [
+                  ProposedCheckpointBlueprint(
+                    title: '${fDoc.title} Visual, Audio & Feel Polish',
+                    playtestCriteria:
+                        'Trigger ${fDoc.title} in the Gold Standard level -> verify final art, SFX/VFX cues, and 60fps stability.',
+                    releaseVersion: versionTag,
+                    tasks: const [
+                      'Final Art & Material Pass (2h)',
+                      'SFX, VFX & Camera Feel Cues (2h)',
+                      'HUD Polish & Frame-Time Guard (1h)',
+                    ],
+                    coveredScope: [
+                      'Final art, shader/material swap, and synced SFX/VFX impact cues for ${fDoc.title}',
+                    ],
+                    tuningParams: archetype.tuningParams,
+                    edgeCases: const [
+                      '[FRAME GUARD] Visual & particle cues pool cleanly without frame-time spikes',
+                    ],
+                  ),
+                ],
+              ),
+            );
+          } else {
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: fDoc.id,
+                title: fDoc.title,
+                goal: SectionTextUtils.resolveGoal(fDoc.sections),
+                doneWhen: SectionTextUtils.resolveDoneWhen(fDoc.sections),
+                estimatedHours: 0,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.stable,
+                originVersion: originVer,
+                checkpoints: const [],
+              ),
+            );
+          }
+        } else if (isFullProductionPhase) {
+          // Phase 4 Full Production: Expand content roster, levels/waves, and progression across Epics
+          if (fIdx == 0) {
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: fDoc.id,
+                title: fDoc.title,
+                goal:
+                    'Scale ${fDoc.title} across full production content rosters, multi-level encounters, and save state.',
+                doneWhen:
+                    '${fDoc.title} loads multi-stage content data tables and persists state cleanly across full runs.',
+                estimatedHours: 5,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.upgrade,
+                originVersion: originVer,
+                inScope: [
+                  'Data-driven content roster, level/wave scaling, and save-state hooks for ${fDoc.title}',
+                ],
+                tuningParams: archetype.tuningParams,
+                edgeCases: [
+                  '[CONTENT BOUNDS GUARD] Invalid or missing roster IDs fall back to default entry safely',
+                ],
+                checkpoints: [
+                  ProposedCheckpointBlueprint(
+                    title: '${fDoc.title} Content Roster & Progression Scaling',
+                    playtestCriteria:
+                        'Run through multiple levels/waves -> verify ${fDoc.title} scales from the content table and persists state.',
+                    releaseVersion: versionTag,
+                    tasks: const [
+                      'Content Roster & Data Table Expansion (2h)',
+                      'Multi-Level / Wave Progression Scaling (2h)',
+                      'Save State & Edge Guard Verification (1h)',
+                    ],
+                    coveredScope: [
+                      'Data-driven content roster, level/wave scaling, and save-state hooks for ${fDoc.title}',
+                    ],
+                    tuningParams: archetype.tuningParams,
+                    edgeCases: const [
+                      '[CONTENT BOUNDS GUARD] Invalid or missing roster IDs fall back to default entry safely',
+                    ],
+                  ),
+                ],
+              ),
+            );
+          } else {
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: fDoc.id,
+                title: fDoc.title,
+                goal: SectionTextUtils.resolveGoal(fDoc.sections),
+                doneWhen: SectionTextUtils.resolveDoneWhen(fDoc.sections),
+                estimatedHours: 0,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.stable,
+                originVersion: originVer,
+                checkpoints: const [],
+              ),
+            );
+          }
+        } else if (isTargetedMvpEpic) {
+          // Phase 2 Per-Epic MVP: Upgrade ONLY the target Epic (bIdx == targetMvpEpicIdx); keep all other Epics STABLE (0h)
+          if (bIdx == targetMvpEpicIdx && fIdx == 0) {
+            final isEpic0 = bIdx == 0;
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: fDoc.id,
+                title: fDoc.title,
+                goal: isEpic0
+                    ? 'Expand ${fDoc.title} with $versionTag air-dash chain and stamina recovery.'
+                    : 'Upgrade ${fDoc.title} from greybox to full MVP depth with ${archetype.cp2Title}.',
+                doneWhen: isEpic0
+                    ? 'Player chains ground burst into air-dash with clean stamina recharge.'
+                    : archetype.doneWhen,
+                estimatedHours: 4,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.upgrade,
+                originVersion: originVer,
+                inScope: isEpic0
+                    ? const ['Air-dash chain impulse and cooldown indicator']
+                    : archetype.inScope,
+                tuningParams: isEpic0
+                    ? const ['airDashMultiplier: 1.25 x']
+                    : archetype.tuningParams,
+                edgeCases: isEpic0
+                    ? const [
+                        '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
+                      ]
+                    : archetype.edgeCases,
+                checkpoints: [
+                  ProposedCheckpointBlueprint(
+                    title: isEpic0
+                        ? 'Air-Dash Chain & Cooldown HUD'
+                        : archetype.cp2Title,
+                    playtestCriteria: isEpic0
+                        ? 'Trigger burst in mid-air -> verify 1.25x air-dash impulse and cooldown pip recharge.'
+                        : archetype.cp2Playtest,
+                    releaseVersion: versionTag,
+                    tasks: isEpic0
+                        ? const [
+                            'Add mid-air burst chain state and airDashMultiplier (2h)',
+                            'Bind stamina pip recharge bar on reticle HUD (2h)',
+                          ]
+                        : archetype.cp2Tasks,
+                    coveredScope: isEpic0
+                        ? const ['Air-dash chain impulse and cooldown indicator']
+                        : archetype.inScope,
+                    tuningParams: isEpic0
+                        ? const ['airDashMultiplier: 1.25 x']
+                        : archetype.tuningParams,
+                    edgeCases: isEpic0
+                        ? const [
+                            '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
+                          ]
+                        : archetype.edgeCases,
+                  ),
+                ],
+              ),
+            );
+          } else {
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: fDoc.id,
+                title: fDoc.title,
+                goal: SectionTextUtils.resolveGoal(fDoc.sections),
+                doneWhen: SectionTextUtils.resolveDoneWhen(fDoc.sections),
+                estimatedHours: 0,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.stable,
+                originVersion: originVer,
+                checkpoints: const [],
+              ),
+            );
+          }
+        } else if (bIdx == 0 && fIdx == 0) {
+          // Generic v0.2 evolution fallback
           proposedFeats.add(
             ProposedFeatureBlueprint(
               id: fDoc.id,
@@ -417,52 +700,115 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         }
       }
 
-      if (bIdx == existingBeats.length - 1) {
-        // Promote a new feature in the last beat for v0.2
-        proposedFeats.add(
-          ProposedFeatureBlueprint(
-            id: 'feat_${versionTag}_medals',
-            title: 'Bonus Time-Trial Medals',
-            goal: 'Award Bronze/Silver/Gold speed medals at the end of an arena clear.',
-            doneWhen: 'Clearing under target thresholds displays medal icon on summary card.',
-            estimatedHours: 4,
-            included: true,
-            lifecycle: FeatureLifecycleStatus.newFeature,
-            originVersion: versionTag,
-            inScope: const [
-              'Gold/Silver/Bronze time threshold evaluation and badge popup',
-            ],
-            tuningParams: const [
-              'goldTimeThreshold: 25.0 s',
-            ],
-            edgeCases: const [
-              '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
-            ],
-            checkpoints: [
-              ProposedCheckpointBlueprint(
-                title: 'Medal Threshold Evaluation',
-                playtestCriteria: 'Clear arena in under 25s -> Gold medal badge animates on clear screen.',
-                releaseVersion: versionTag,
-                tasks: const [
-                  'Compare final elapsed time against goldTimeThreshold and render badge (2h)',
-                  'Add personal-best split delta indicator on clear banner (2h)',
-                ],
-                coveredScope: const [
-                  'Gold/Silver/Bronze time threshold evaluation and badge popup',
-                ],
-                tuningParams: const [
-                  'goldTimeThreshold: 25.0 s',
-                ],
-                edgeCases: const [
-                  '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
-                ],
-              ),
-            ],
-          ),
-        );
+      if (isFullProductionPhase && bIdx == existingBeats.length - 1) {
+        // Phase 4 Full Production: Promote deferred Out-of-Scope system into an active NEW feature
+        final promotedRaw = projectExclusions.isNotEmpty
+            ? projectExclusions.first
+            : 'Persistent Save & Meta-Progression';
+        final promotedTitle = promotedRaw.length <= 36
+            ? promotedRaw
+            : 'Persistent Save & Meta-Unlocks';
+        if (!proposedFeats.any(
+          (pf) => pf.title.toLowerCase() == promotedTitle.toLowerCase(),
+        )) {
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: 'feat_${versionTag}_fullprod_promoted',
+              title: promotedTitle,
+              goal:
+                  'Promote "$promotedRaw" into Full Production at Vertical Slice quality.',
+              doneWhen:
+                  'Playtester completes a full run and verifies "$promotedTitle" persists cleanly across sessions.',
+              estimatedHours: 5,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.newFeature,
+              originVersion: versionTag,
+              inScope: [
+                'Full production implementation and UI integration for $promotedTitle',
+              ],
+              tuningParams: const [
+                'saveFlushIntervalSec: 2.0 s',
+              ],
+              edgeCases: const [
+                '[SAVE INTEGRITY GUARD] Interrupted write falls back to prior verified snapshot',
+              ],
+              checkpoints: [
+                ProposedCheckpointBlueprint(
+                  title: '$promotedTitle Integration & Polish',
+                  playtestCriteria:
+                      'Complete run and reload session -> verify $promotedTitle state restores with zero data loss.',
+                  releaseVersion: versionTag,
+                  tasks: const [
+                    'Content Roster & Data Table Expansion (2h)',
+                    'Multi-Level / Wave Progression Scaling (2h)',
+                    'Save State & Edge Guard Verification (1h)',
+                  ],
+                  coveredScope: [
+                    'Full production implementation and UI integration for $promotedTitle',
+                  ],
+                  tuningParams: const [
+                    'saveFlushIntervalSec: 2.0 s',
+                  ],
+                  edgeCases: const [
+                    '[SAVE INTEGRITY GUARD] Interrupted write falls back to prior verified snapshot',
+                  ],
+                ),
+              ],
+            ),
+          );
+        }
+      } else if (!isSplitPrototypePart2 &&
+          !isVerticalSlicePhase &&
+          !isFullProductionPhase &&
+          ((isTargetedMvpEpic && bIdx == targetMvpEpicIdx) ||
+              (!isTargetedMvpEpic && bIdx == existingBeats.length - 1))) {
+        // Promote a new MVP feature in the target MVP Epic (or last beat in generic v0.2)
+        if (!isTargetedMvpEpic || bIdx == existingBeats.length - 1) {
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: 'feat_${versionTag}_medals',
+              title: 'Bonus Time-Trial Medals',
+              goal: 'Award Bronze/Silver/Gold speed medals at the end of an arena clear.',
+              doneWhen: 'Clearing under target thresholds displays medal icon on summary card.',
+              estimatedHours: 4,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.newFeature,
+              originVersion: versionTag,
+              inScope: const [
+                'Gold/Silver/Bronze time threshold evaluation and badge popup',
+              ],
+              tuningParams: const [
+                'goldTimeThreshold: 25.0 s',
+              ],
+              edgeCases: const [
+                '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+              ],
+              checkpoints: [
+                ProposedCheckpointBlueprint(
+                  title: 'Medal Threshold Evaluation',
+                  playtestCriteria: 'Clear arena in under 25s -> Gold medal badge animates on clear screen.',
+                  releaseVersion: versionTag,
+                  tasks: const [
+                    'Compare final elapsed time against goldTimeThreshold and render badge (2h)',
+                    'Add personal-best split delta indicator on clear banner (2h)',
+                  ],
+                  coveredScope: const [
+                    'Gold/Silver/Bronze time threshold evaluation and badge popup',
+                  ],
+                  tuningParams: const [
+                    'goldTimeThreshold: 25.0 s',
+                  ],
+                  edgeCases: const [
+                    '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+                  ],
+                ),
+              ],
+            ),
+          );
+        }
       }
 
-      // Carry over any features that the developer deferred (unchecked) in the prior release for this Beat!
+      // Carry over any features that the developer explicitly deferred (unchecked) in the prior release for this Beat!
       final priorDeferred =
           deferredByBeatIndex[bIdx] ?? const <ProposedFeatureBlueprint>[];
       for (final df in priorDeferred) {
@@ -511,13 +857,102 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       );
     }
 
+    // If this is Split Prototype Part 2 (`v0.2`), append the remaining Stage 1 Core Loop Beats as NEW greybox Epics!
+    if (isSplitPrototypePart2 && allCoreLoopItems.length > existingBeats.length) {
+      for (int i = existingBeats.length; i < allCoreLoopItems.length; i++) {
+        final rawBeat = allCoreLoopItems[i];
+        final beatNum = i + 1;
+        final beatTitle = _extractBeatTitle(
+          rawBeat,
+          fallback: 'Core Loop Beat $beatNum',
+        );
+        final beatDesc = rawBeat.contains(':')
+            ? rawBeat.substring(rawBeat.indexOf(':') + 1).trim()
+            : rawBeat.trim();
+        final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+          '$beatTitle Mechanics & Controls',
+          beatTitle: beatTitle,
+          beatDescription: beatDesc,
+        );
+        beats.add(
+          ProposedBeatBlueprint(
+            id: 'beat_$beatNum',
+            title: beatTitle,
+            goal: beatDesc.isNotEmpty ? beatDesc : archetype.goal,
+            doneWhen: archetype.doneWhen,
+            features: [
+              ProposedFeatureBlueprint(
+                id: 'feat_${beatNum}_1',
+                title: '$beatTitle Mechanics & Controls',
+                goal: archetype.goal,
+                doneWhen: archetype.doneWhen,
+                estimatedHours: 5,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.newFeature,
+                originVersion: versionTag,
+                inScope: archetype.inScope,
+                outOfScope: archetype.outOfScope,
+                tuningParams: archetype.tuningParams,
+                edgeCases: archetype.edgeCases,
+                checkpoints: [
+                  ProposedCheckpointBlueprint(
+                    title: '$beatTitle Core Implementation & Playtest',
+                    playtestCriteria: archetype.cp1Playtest,
+                    releaseVersion: versionTag,
+                    tasks: const [
+                      'Actor & Base Properties (2h)',
+                      'State Logic & Player Input (2h)',
+                      'Feedback Cues & State Guard (1h)',
+                    ],
+                    coveredScope: archetype.inScope,
+                    tuningParams: archetype.tuningParams,
+                    edgeCases: archetype.edgeCases,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }
+    }
+
+    final String resolvedGoal;
+    final String resolvedDoneWhen;
+    if (isSplitPrototypePart2) {
+      resolvedGoal =
+          'Complete the remaining Core Loop Epics in $versionTag while keeping verified v0.1 mechanics STABLE.';
+      resolvedDoneWhen =
+          'Playtester completes the full end-to-end prototype loop across all ${beats.length} Epics.';
+    } else if (isVerticalSlicePhase) {
+      resolvedGoal =
+          'Combine all completed MVP Epics into 1 polished Gold Standard Vertical Slice level with final art, audio, and game-feel.';
+      resolvedDoneWhen =
+          'Playtester completes the Gold Standard showcase level at shippable visual, audio, and 60fps quality.';
+    } else if (isFullProductionPhase) {
+      resolvedGoal =
+          'Expand the verified Vertical Slice template across new levels, content rosters, and promoted systems in $versionTag.';
+      resolvedDoneWhen =
+          'Playtester completes multi-level runs with expanded content rosters and persistent state verified.';
+    } else if (isTargetedMvpEpic) {
+      final targetBeatTitle = existingBeats[targetMvpEpicIdx].title;
+      resolvedGoal =
+          'Upgrade Epic ${targetMvpEpicIdx + 1} ($targetBeatTitle) from greybox to full MVP depth while keeping other Epics STABLE.';
+      resolvedDoneWhen =
+          'Epic ${targetMvpEpicIdx + 1} ($targetBeatTitle) is playable end-to-end at MVP depth inside the representative level.';
+    } else {
+      resolvedGoal =
+          'Expand the verified v0.1 core loop with $versionTag upgrades while keeping stable features untouched.';
+      resolvedDoneWhen =
+          'Playtester completes the expanded $versionTag loop with all new and upgraded checkpoints verified.';
+    }
+
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
       releaseTitle: releaseDoc.title,
       releaseVersionTag: versionTag,
       preset: preset,
-      goal: 'Expand the verified v0.1 core loop with $versionTag upgrades while keeping stable features untouched.',
-      doneWhen: 'Playtester completes the expanded $versionTag loop with all new and upgraded checkpoints verified.',
+      goal: resolvedGoal,
+      doneWhen: resolvedDoneWhen,
       questions: [
         AgentQuestion(
           id: 'rel_q_evolve',

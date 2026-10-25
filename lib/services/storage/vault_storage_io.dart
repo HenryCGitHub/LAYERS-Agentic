@@ -33,6 +33,9 @@ class VaultStorageImpl implements VaultStorageBackend {
 
   @override
   Future<VaultLoadResult> loadVaultData() async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return VaultLoadResult(documents: {});
+    }
     try {
       String? activeDocumentId;
       String? apiKey;
@@ -89,6 +92,7 @@ class VaultStorageImpl implements VaultStorageBackend {
     String? thinkingLevel,
     String? themeMode,
   }) async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     try {
       final file = await _getSettingsFile();
       String? currentThemeMode;
@@ -113,6 +117,7 @@ class VaultStorageImpl implements VaultStorageBackend {
 
   @override
   Future<void> saveDocument(TierDocument doc) async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     try {
       final file = await _docFile(doc.id);
       await file.writeAsString(jsonEncode(doc.toJson()));
@@ -121,6 +126,7 @@ class VaultStorageImpl implements VaultStorageBackend {
 
   @override
   Future<void> deleteDocument(String id) async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     try {
       final file = await _docFile(id);
       if (await file.exists()) await file.delete();

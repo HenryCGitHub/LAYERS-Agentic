@@ -69,6 +69,16 @@ class MechanicArchetypeProfile {
 
   static String inferCategory(String text) {
     final lower = text.toLowerCase();
+    if (lower.contains('visual, audio & feel polish') ||
+        lower.contains('gold standard polish') ||
+        lower.contains('final art & material pass')) {
+      return 'polish';
+    }
+    if (lower.contains('content roster & progression scaling') ||
+        lower.contains('integration & polish') ||
+        lower.contains('content data table & roster')) {
+      return 'content';
+    }
     if (lower.contains('grappl') ||
         lower.contains('hook') ||
         lower.contains('swing') ||
@@ -362,6 +372,80 @@ class MechanicArchetypeProfile {
         : inferCategory('$clean ${beatTitle ?? ''} ${beatDescription ?? ''}');
 
     switch (cat) {
+      case 'polish':
+        return MechanicArchetypeProfile(
+          category: 'polish',
+          goal: 'Polish $clean with final art materials, spatial SFX, VFX particle cues, and a 60fps frame-time guard.',
+          doneWhen: 'Player experiences $clean in the Gold Standard slice level with final materials, responsive SFX/VFX, and zero frame drops.',
+          inScope: [
+            'Final materials, shaders, and animation curves for $clean',
+            'Spatial SFX, particle bursts, and HUD readout animations',
+          ],
+          outOfScope: [
+            'Additional multi-level content rosters',
+          ],
+          tuningParams: const [
+            'vfxBurstScale: 1.15 x',
+            'sfxPitchVariance: 0.08',
+            'hudTweenDuration: 0.14 s',
+          ],
+          edgeCases: const [
+            '[FRAME-TIME GUARD] Pool particle and audio emitters so 60fps never drops during rapid action',
+            '[VISUAL CLARITY GUARD] Keep hit-flash and screen-shake within readability bounds',
+          ],
+          cp1Title: '$clean · Visual, Audio & Feel Polish',
+          cp1Playtest: 'Play through $clean in the Vertical Slice level -> final art, SFX pitch variance, VFX bursts, and HUD animations fire at 60fps.',
+          cp1Tasks: [
+            '01 · Final Art & Material Pass (1h)',
+            '02 · SFX, VFX & Camera Feel Cues (1h)',
+            '03 · HUD Polish & Frame-Time Guard (1h)',
+          ],
+          cp2Title: '$clean · Gold Standard Readability Pass',
+          cp2Playtest: 'Trigger rapid actions in the Vertical Slice level -> audio/visual cues remain crisp with zero emitter clipping.',
+          cp2Tasks: [
+            '01 · Final Art & Material Pass (1h)',
+            '02 · SFX, VFX & Camera Feel Cues (1h)',
+            '03 · HUD Polish & Frame-Time Guard (1h)',
+          ],
+        );
+
+      case 'content':
+        return MechanicArchetypeProfile(
+          category: 'content',
+          goal: 'Expand $clean with data-driven content rosters, multi-wave/level scaling, and persistent run state.',
+          doneWhen: 'Player progresses through multiple waves/levels using expanded $clean rosters and save-state persistence.',
+          inScope: [
+            'Data-table roster definitions and multi-tier variants for $clean',
+            'Level/wave difficulty curve scaling and run-state save hooks',
+          ],
+          outOfScope: [
+            'Post-launch expansion packs',
+          ],
+          tuningParams: const [
+            'contentTierMultiplier: 1.25 x',
+            'rosterSpawnWeight: 1.0',
+            'progressionCurveExponent: 1.18',
+          ],
+          edgeCases: const [
+            '[PROGRESSION GUARD] Clamp tier scaling at max level cap to prevent stat overflow',
+            '[SAVE STATE GUARD] Persist unlocked roster state cleanly across level transitions',
+          ],
+          cp1Title: '$clean · Content Roster & Progression Scaling',
+          cp1Playtest: 'Play through 3 consecutive waves/levels -> expanded $clean variants spawn and scale smoothly along progressionCurveExponent.',
+          cp1Tasks: [
+            '01 · Content Data Table & Roster Setup (2h)',
+            '02 · Multi-Wave / Level Scaling Integration (2h)',
+            '03 · Persistence & Progression Guard (1h)',
+          ],
+          cp2Title: '$clean · Full Production Polish & Balance',
+          cp2Playtest: 'Complete a full multi-level run -> unlocked $clean tiers persist and balance curves hold steady.',
+          cp2Tasks: [
+            '01 · Content Data Table & Roster Setup (1h)',
+            '02 · Multi-Wave / Level Scaling Integration (1h)',
+            '03 · Persistence & Progression Guard (1h)',
+          ],
+        );
+
       case 'grapple':
         return MechanicArchetypeProfile(
           category: 'grapple',
@@ -824,6 +908,18 @@ class MechanicArchetypeProfile {
           0 => 'Hook Raycast & Anchor',
           1 => 'Pull Velocity & Swing',
           _ => 'Tether Line & Guards',
+        };
+      case 'polish':
+        return switch (taskIndex) {
+          0 => 'Art & Material Pass',
+          1 => 'SFX, VFX & Camera Feel',
+          _ => 'HUD & Frame Guard',
+        };
+      case 'content':
+        return switch (taskIndex) {
+          0 => 'Content Data & Roster',
+          1 => 'Wave & Level Scaling',
+          _ => 'Save State & Bounds Guard',
         };
       default:
         return fallbackTitle.isNotEmpty
@@ -1414,6 +1510,192 @@ class MechanicArchetypeProfile {
               instr: 'Dash rapidly into arena corners while firing to verify smooth camera clamping and HUD sync.',
               verify: 'High-speed movement at arena boundaries stays locked at 60fps with zero camera snap.',
               codeLead: '// Verify Corner Clamping & HUD Sync ($primaryVarName)',
+            ),
+        };
+      case 'polish':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Swap Greybox Mesh for Final $targetAsset Art',
+              instr: 'Replace the greybox proxy mesh on $targetAsset with the final production mesh and LOD group.',
+              verify: '$targetAsset renders with final silhouette and clean collision bounds in the Vertical Slice level.',
+              codeLead: '// Swap Greybox Proxy for Final Production Mesh ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Assign Master Shader & Emissive Parameters',
+              instr: 'Apply the master surface shader to $targetAsset and expose dynamic emissive/hit-flash parameters.',
+              verify: 'Material instance on $targetAsset responds to runtime state and lighting.',
+              codeLead: '// Bind Dynamic Material & Emissive Parameters',
+            ),
+          (0, 2) => (
+              title: 'Bind Animation Blend & Easing Curves',
+              instr: 'Connect state transitions on $targetAsset to smooth animation blend spaces and easing curves.',
+              verify: 'Activating $targetAsset plays smooth anticipation and recovery motion with zero pop.',
+              codeLead: '// Configure Animation Blend & Easing Curve',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName Polish Scalar',
+              instr: 'Expose $primaryVarName in the Inspector to tune visual intensity in the Gold Standard slice.',
+              verify: '$primaryVarName adjusts visual intensity live in the viewport.',
+              codeLead: '// Inspector Polish Scalar: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Verify Lighting & Readability Contrast',
+              instr: 'Inspect $targetAsset under Vertical Slice level lighting to confirm clear silhouette contrast.',
+              verify: '$targetAsset remains immediately readable against arena backgrounds.',
+              codeLead: '// Verify Silhouette & Readability Contrast ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Attach Pooled VFX Emitter to $targetAsset',
+              instr: 'Attach a pre-warmed particle emitter to $targetAsset for activation, impact, and recovery bursts.',
+              verify: 'Triggering $targetAsset spawns crisp particle cues without first-frame shader hitch.',
+              codeLead: '// Attach Pre-Warmed VFX Emitter ($targetAsset)',
+            ),
+          (1, 1) => (
+              title: 'Wire Spatial SFX with Pitch Variance',
+              instr: 'Play spatialized audio cues on $targetAsset with randomized pitch variance to prevent ear fatigue.',
+              verify: 'Repeated triggers on $targetAsset play distinct, balanced spatial audio.',
+              codeLead: '// Play Spatial SFX with Pitch Variance',
+            ),
+          (1, 2) => (
+              title: 'Add Micro Camera Impulse & Hit-Stop',
+              instr: 'Trigger a subtle camera trauma impulse or 2-frame hit-stop when $targetAsset lands a high-impact action.',
+              verify: 'Impact moments feel punchy without disorienting player aim.',
+              codeLead: '// Trigger Micro Camera Impulse & Hit-Stop',
+            ),
+          (1, 3) => (
+              title: 'Scale Feel Cues by $primaryVarName',
+              instr: 'Multiply particle burst scale and audio attenuation by $primaryVarName.',
+              verify: 'Adjusting $primaryVarName scales VFX/SFX intensity proportionally.',
+              codeLead: '// Scale VFX & Audio Cues by $primaryVarName',
+            ),
+          (1, _) => (
+              title: 'Recycle Emitters on Action Complete',
+              instr: 'Return finished VFX/SFX instances to the object pool cleanly when $targetAsset finishes its cycle.',
+              verify: 'Active emitter count returns to baseline after rapid triggers.',
+              codeLead: '// Recycle Pooled VFX/SFX Instances ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Animate HUD Readout Tween on $targetAsset',
+              instr: 'Replace instant HUD text/bar jumps with a smooth eased tween driven by $targetAsset signals.',
+              verify: 'HUD counters and bars animate smoothly on every $targetAsset update.',
+              codeLead: '// Animate HUD Readout Tween ($targetAsset)',
+            ),
+          (_, 1) => (
+              title: 'Add Screen-Space Callout & Icon Pulse',
+              instr: 'Pulse the HUD icon and status callout when $targetAsset becomes ready or triggers a critical state.',
+              verify: 'Player peripheral vision catches state changes without looking away from the center.',
+              codeLead: '// Trigger HUD Icon Pulse & Callout',
+            ),
+          (_, 2) => (
+              title: 'Enforce Emitter Pool Cap & Frame Guard',
+              instr: 'Cap simultaneous active particles/sounds on $targetAsset so frame time stays under 16.6ms.',
+              verify: 'Stress-testing rapid inputs holds a locked 60fps frame time.',
+              codeLead: '// Enforce 60fps Emitter Pool Cap',
+            ),
+          (_, 3) => (
+              title: 'Clamp Polish Intensity via $primaryVarName',
+              instr: 'Clamp screen-shake and flash opacity using $primaryVarName so combat remains readable.',
+              verify: 'Overlapping triggers never wash out screen visibility.',
+              codeLead: '// Clamp Readability Bounds ($primaryVarName)',
+            ),
+          (_, _) => (
+              title: 'Verify Gold Standard Slice Sign-Off',
+              instr: 'Play a full Vertical Slice loop and verify $targetAsset meets visual, audio, and 60fps quality targets.',
+              verify: '$targetAsset feels shipping-ready across the entire Gold Standard level.',
+              codeLead: '// Verify Vertical Slice Quality Bar ($primaryVarName)',
+            ),
+        };
+      case 'content':
+        entry = switch ((grp, stepIdx)) {
+          (0, 0) => (
+              title: 'Define $targetAsset Roster Data Schema',
+              instr: 'Create a data table / resource schema for $targetAsset variants (TierId, BaseStat, SpawnWeight, AssetRef).',
+              verify: 'Roster data schema compiles and supports multiple tier rows in the editor.',
+              codeLead: '// Define Content Roster Schema ($targetAsset)',
+            ),
+          (0, 1) => (
+              title: 'Populate Tier 1–3 Content Variants',
+              instr: 'Author Tier 1, Tier 2, and Tier 3 variant entries for $targetAsset with distinct stats and visuals.',
+              verify: 'All 3 content tiers appear in the roster table with valid asset references.',
+              codeLead: '// Populate Tier 1-3 Roster Entries',
+            ),
+          (0, 2) => (
+              title: 'Wire Data-Driven Loader on $targetAsset',
+              instr: 'Load stats, mesh, and behavior parameters on $targetAsset dynamically from the active roster row.',
+              verify: 'Spawning $targetAsset with different TierIds applies the matching variant config.',
+              codeLead: '// Load Variant Config from Roster Row',
+            ),
+          (0, 3) => (
+              title: 'Expose $primaryVarName Scaling Curve',
+              instr: 'Expose $primaryVarName in the Inspector to tune cross-tier progression scaling.',
+              verify: '$primaryVarName scales variant stats cleanly across tiers.',
+              codeLead: '// Inspector Progression Scalar: $primaryVarName',
+            ),
+          (0, _) => (
+              title: 'Validate Missing-Row Fallback Defaults',
+              instr: 'Provide safe default values if an invalid or locked TierId is requested on $targetAsset.',
+              verify: 'Invalid roster queries fall back cleanly to Tier 1 without null errors.',
+              codeLead: '// Guard Missing Roster Row Fallback ($primaryVarName)',
+            ),
+          (1, 0) => (
+              title: 'Bind Level & Wave Progression Index',
+              instr: 'Subscribe $targetAsset to the current level/wave index from the run progression manager.',
+              verify: 'Advancing to the next level or wave notifies $targetAsset of the new difficulty tier.',
+              codeLead: '// Bind Level & Wave Progression Index ($targetAsset)',
+            ),
+          (1, 1) => (
+              title: 'Select Variant by Weighted Spawn Table',
+              instr: 'Roll weighted variant selection on $targetAsset based on current level depth and SpawnWeight.',
+              verify: 'Higher levels introduce Tier 2 and Tier 3 variants at the expected weights.',
+              codeLead: '// Roll Weighted Variant Selection',
+            ),
+          (1, 2) => (
+              title: 'Apply Multi-Level Difficulty Multiplier',
+              instr: 'Scale $targetAsset health, yield, or cooldowns across levels using $primaryVarName.',
+              verify: 'Progression difficulty curve scales smoothly from early to late levels.',
+              codeLead: '// Apply Multi-Level Scaling ($primaryVarName)',
+            ),
+          (1, 3) => (
+              title: 'Sync Level Transition & Arena Handoff',
+              instr: 'Reset transient state on $targetAsset while preserving unlocked tiers across level transitions.',
+              verify: 'Moving between levels transitions $targetAsset cleanly with zero state leak.',
+              codeLead: '// Sync Level Transition Handoff',
+            ),
+          (1, _) => (
+              title: 'Verify Multi-Wave Pacing Curve',
+              instr: 'Simulate a 3-level progression pass and verify $targetAsset variant pacing and balance.',
+              verify: 'Tier ramp-up feels balanced and rewarding across consecutive levels.',
+              codeLead: '// Verify Multi-Level Pacing Curve ($primaryVarName)',
+            ),
+          (_, 0) => (
+              title: 'Serialize $targetAsset Unlock & Run State',
+              instr: 'Write unlocked tier IDs and persistent counters for $targetAsset into the save-state payload.',
+              verify: 'Saving the run records current $targetAsset progression data accurately.',
+              codeLead: '// Serialize Persistent State ($targetAsset)',
+            ),
+          (_, 1) => (
+              title: 'Restore Saved Roster State on Load',
+              instr: 'Restore unlocked tiers and progression state on $targetAsset when loading or continuing a run.',
+              verify: 'Reloading the session restores exact $targetAsset unlocks and stats.',
+              codeLead: '// Restore Saved Roster State',
+            ),
+          (_, 2) => (
+              title: 'Enforce Max-Tier Cap & Overflow Guard',
+              instr: 'Clamp $primaryVarName scaling at the maximum progression cap so late-game math never overflows.',
+              verify: 'End-game waves stay within safe numerical and frame-time bounds.',
+              codeLead: '// Clamp Max-Tier Scaling ($primaryVarName)',
+            ),
+          (_, 3) => (
+              title: 'Update HUD Progression & Unlock Banner',
+              instr: 'Display the active tier badge and unlock notification on the HUD when $targetAsset upgrades.',
+              verify: 'HUD clearly communicates newly unlocked content tiers to the player.',
+              codeLead: '// Emit HUD Tier Unlock Notification',
+            ),
+          (_, _) => (
+              title: 'Verify Full Production Loop Across Levels',
+              instr: 'Run an end-to-end multi-level session verifying roster variety, scaling, and save-state persistence.',
+              verify: '$targetAsset operates at full production quality across all levels.',
+              codeLead: '// Verify Full Production Multi-Level Loop ($primaryVarName)',
             ),
         };
       default:

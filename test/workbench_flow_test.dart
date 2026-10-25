@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/workspace_agent_tools.dart';
+import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/feature_state.dart';
@@ -1062,6 +1063,134 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final restoredStates =
             FeatureStateNode.getStatesForDocument(restoredDoc);
         expect(restoredStates.first.tuningParams.length, initialTuningCount);
+      },
+    );
+
+    test(
+      '4-Phase Release Train: Split Prototype (v0.1 -> v0.2) -> Per-Epic MVPs (MVP Epic 1..4) -> Vertical Slice -> Full Production',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('Arena Roguelite');
+
+        // Configure a 4-Beat Core Loop with a 2-Part Split Prototype in Stage 1 Step 09
+        provider.updateConceptDraft((draft) {
+          draft.coreLoopBeats = [
+            'Staging & Loadout Prep: Choose starting weapon and dash module.',
+            'Arena Entry & Traversal: Enter arena and dash across hazards.',
+            'Combat & Wave Escalation: Defeat enemy waves and dodge attacks.',
+            'Loot & Round Reset: Pick 1 of 3 upgrades and start next wave.',
+          ];
+          draft.releaseTrainTitles = [
+            'v0.1: Prototype — Part 1: Controls & Primary Mechanics',
+            'v0.2: Prototype — Part 2: Progression & Loop Reset',
+          ];
+          draft.exclusions = [
+            'Endless Boss Rush Mode',
+            'Daily Seeded Leaderboard',
+          ];
+        });
+
+        // Phase 1 · Part 1 (v0.1): Should only include the first half of the Core Loop Beats (2 Beats)
+        await provider.openReleasePlanGate();
+        expect(provider.currentPhase, ProductionPhase.prototype);
+        final part1Bp = provider.releaseBlueprint!;
+        expect(part1Bp.beats.length, 2);
+        await provider.approveAndExecuteReleasePlan();
+
+        // Advance to Phase 1 · Part 2 (v0.2): Keeps Part 1 Epics STABLE ✓ and adds the remaining 2 Core Loop Beats as NEW
+        await provider.advanceToNextRelease();
+        expect(provider.currentPhase, ProductionPhase.prototype);
+        final part2Bp = provider.releaseBlueprint!;
+        expect(part2Bp.beats.length, 4);
+        expect(
+          part2Bp.beats[0].features.every(
+            (f) => f.lifecycle == FeatureLifecycleStatus.stable,
+          ),
+          isTrue,
+        );
+        expect(
+          part2Bp.beats[2].features.any(
+            (f) => f.lifecycle == FeatureLifecycleStatus.newFeature,
+          ),
+          isTrue,
+        );
+        await provider.approveAndExecuteReleasePlan();
+
+        // Advance to Phase 2 · Per-Epic MVPs (unlocks 4 MVP Epic releases, 1 per Prototype Beat)
+        await provider.advanceToNextRelease();
+        expect(provider.currentPhase, ProductionPhase.mvp);
+        final mvpReleases = provider.projectReleases
+            .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
+            .toList();
+        expect(mvpReleases.length, 4);
+
+        for (int epicIdx = 0; epicIdx < 4; epicIdx++) {
+          expect(provider.currentPhase, ProductionPhase.mvp);
+          final mvpBp = provider.releaseBlueprint!;
+          expect(mvpBp.releaseTitle, contains('MVP Epic ${epicIdx + 1}'));
+
+          // Only Epic `epicIdx` should have UPGRADING/NEW features; all other Epics must be STABLE ✓ (0h)
+          for (int bIdx = 0; bIdx < mvpBp.beats.length; bIdx++) {
+            final beatFeats = mvpBp.beats[bIdx].features;
+            if (bIdx == epicIdx) {
+              expect(
+                beatFeats.any(
+                  (f) =>
+                      f.lifecycle == FeatureLifecycleStatus.upgrade ||
+                      f.lifecycle == FeatureLifecycleStatus.newFeature,
+                ),
+                isTrue,
+                reason: 'Epic ${epicIdx + 1} should upgrade in its targeted MVP release',
+              );
+            } else {
+              expect(
+                beatFeats.every(
+                  (f) => f.lifecycle == FeatureLifecycleStatus.stable,
+                ),
+                isTrue,
+                reason: 'Non-target Epic ${bIdx + 1} must stay STABLE in MVP Epic ${epicIdx + 1}',
+              );
+            }
+          }
+
+          await provider.approveAndExecuteReleasePlan();
+          await provider.advanceToNextRelease();
+        }
+
+        // Phase 3 · Vertical Slice: Unlocks automatically after all 4 Per-Epic MVPs complete
+        expect(provider.currentPhase, ProductionPhase.verticalSlice);
+        final vsBp = provider.releaseBlueprint!;
+        expect(vsBp.releaseTitle, contains('Vertical Slice'));
+        // Every Epic's primary feature receives a Vertical Slice Polish upgrade checkpoint
+        for (final beat in vsBp.beats) {
+          expect(
+            beat.features.first.lifecycle,
+            FeatureLifecycleStatus.upgrade,
+          );
+          expect(
+            beat.features.first.checkpoints.first.title,
+            contains('Visual, Audio & Feel Polish'),
+          );
+        }
+        await provider.approveAndExecuteReleasePlan();
+
+        // Phase 4 · Full Production: Unlocks automatically after Vertical Slice completes
+        await provider.advanceToNextRelease();
+        expect(provider.currentPhase, ProductionPhase.fullProduction);
+        final fpBp = provider.releaseBlueprint!;
+        expect(fpBp.releaseTitle, contains('Full Production'));
+        expect(fpBp.preset, ReleaseScope.fullProduction);
+        // Primary features receive Content Roster & Progression Scaling checkpoints + deferred Out of Scope items promote as NEW features
+        expect(
+          fpBp.beats.first.features.first.checkpoints.first.title,
+          contains('Content Roster & Progression Scaling'),
+        );
+        final promotedNewFeatures = fpBp.beats
+            .expand((b) => b.features)
+            .where((f) => f.lifecycle == FeatureLifecycleStatus.newFeature)
+            .toList();
+        expect(promotedNewFeatures, isNotEmpty);
+        await provider.approveAndExecuteReleasePlan();
       },
     );
   });
