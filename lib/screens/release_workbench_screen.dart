@@ -37,6 +37,32 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Set<String> _expandedOutlineFeatureIds = {};
   final Map<String, int> _lastOutlineTapMsByKey = {};
   bool _unrealCppMode = false;
+  double _outlinerWidth = 340.0;
+  bool _isHalfScreenOutlinerOpen = false;
+
+  String _formatOutlineFeatureDisplayTitle(
+    String featTitle,
+    String? beatTitle,
+  ) {
+    if (beatTitle == null || beatTitle.trim().isEmpty) return featTitle;
+    final cleanBeat = beatTitle.split(':').last.split('—').last.trim();
+    if (cleanBeat.isEmpty) return featTitle;
+    final lowerFeat = featTitle.toLowerCase();
+    final lowerBeat = cleanBeat.toLowerCase();
+    if (lowerFeat.startsWith(lowerBeat) &&
+        featTitle.length > cleanBeat.length + 2) {
+      var remainder = featTitle.substring(cleanBeat.length).trimLeft();
+      if (remainder.startsWith(':') ||
+          remainder.startsWith('—') ||
+          remainder.startsWith('-')) {
+        remainder = remainder.substring(1).trimLeft();
+      }
+      if (remainder.isNotEmpty) {
+        return remainder;
+      }
+    }
+    return featTitle;
+  }
 
   bool _isDoubleClickOnOutlineItem(String key) {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -85,31 +111,93 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 780;
-        if (isWide) {
+        final isFullScreenDocked = constraints.maxWidth >= 1040;
+        if (isFullScreenDocked) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 280,
-                child: _buildLeftBeatFeatureRail(rel),
+                width: _outlinerWidth,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: _buildLeftBeatFeatureRail(rel),
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: -3,
+                      bottom: 0,
+                      width: 6,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeColumn,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onHorizontalDragUpdate: (details) {
+                            setState(() {
+                              _outlinerWidth = (_outlinerWidth + details.delta.dx)
+                                  .clamp(260.0, 520.0);
+                            });
+                          },
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Expanded(
-                child: _buildFeatureMainCanvas(rel),
+                child: _buildFeatureMainCanvas(
+                  rel,
+                  isHalfScreenOverlayMode: false,
+                ),
               ),
             ],
           );
         }
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildLeftBeatFeatureRail(rel, shrinkWrap: true),
-              const SizedBox(height: 16),
-              _buildFeatureMainCanvas(rel, shrinkWrap: true),
-            ],
-          ),
+
+        // Half-Screen Mode (< 1040px): Main Canvas gets 100% width; Outliner becomes a Slide-Over Overlay Drawer
+        final overlayWidth =
+            _outlinerWidth.clamp(260.0, constraints.maxWidth * 0.85);
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: _buildFeatureMainCanvas(
+                rel,
+                isHalfScreenOverlayMode: true,
+              ),
+            ),
+            if (_isHalfScreenOutlinerOpen)
+              Positioned.fill(
+                child: GestureDetector(
+                  key: const ValueKey('halfscreen_outliner_scrim'),
+                  onTap: () {
+                    setState(() {
+                      _isHalfScreenOutlinerOpen = false;
+                    });
+                  },
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.52),
+                  ),
+                ),
+              ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              top: 0,
+              bottom: 0,
+              left: _isHalfScreenOutlinerOpen ? 0 : -(overlayWidth + 24),
+              width: overlayWidth,
+              child: Material(
+                color: Colors.transparent,
+                elevation: _isHalfScreenOutlinerOpen ? 20 : 0,
+                child: _buildLeftBeatFeatureRail(
+                  rel,
+                  isOverlayDrawer: true,
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -220,7 +308,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     return rem;
   }
 
-  Widget _buildLeftBeatFeatureRail(TierDocument rel, {bool shrinkWrap = false}) {
+  Widget _buildLeftBeatFeatureRail(
+    TierDocument rel, {
+    bool shrinkWrap = false,
+    bool isOverlayDrawer = false,
+  }) {
     final beats = widget.workbench.activeReleaseBeats;
     final relProgress = widget.workbench.getDocumentProgress(rel.id);
     final releases = widget.workbench.projectReleases;
@@ -544,27 +636,60 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Right: Simple Number-Only Live Rollup ("12h Left #%"), no tile, no progress bar
-                  RichText(
-                    key: const ValueKey('outline_release_eta_summary'),
-                    text: TextSpan(
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: isReleaseDone ? accentEmerald : textPrimary,
-                      ),
-                      children: [
-                        TextSpan(text: '$releaseRemHoursStr Left '),
-                        TextSpan(
-                          text: '$relProgress%',
+                  // Right: Simple Number-Only Live Rollup ("12h Left #%"), plus Close button in Half-Screen Slide-Over mode
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RichText(
+                        key: const ValueKey('outline_release_eta_summary'),
+                        text: TextSpan(
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w700,
-                            color: accentEmerald,
+                            color: isReleaseDone ? accentEmerald : textPrimary,
+                          ),
+                          children: [
+                            TextSpan(text: '$releaseRemHoursStr Left '),
+                            TextSpan(
+                              text: '$relProgress%',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: accentEmerald,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isOverlayDrawer) ...[
+                        const SizedBox(width: 8),
+                        InkWell(
+                          key: const ValueKey(
+                            'close_halfscreen_outliner_btn',
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _isHalfScreenOutlinerOpen = false;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 3,
+                            ),
+                            child: Text(
+                              '✕',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: textSecondary,
+                              ),
+                            ),
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -633,7 +758,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 5),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(color: borderSubtle),
@@ -654,15 +779,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           widget.workbench.selectFeature(targetFeat.id);
                         },
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: Text(
                                 'E${(bIdx + 1).toString().padLeft(2, '0')} · ${beat.title.split(':').last.split('—').last.trim().toUpperCase()}',
+                                maxLines: 2,
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 0.8,
+                                  height: 1.25,
                                   color: allBeatDone
                                       ? accentEmerald.withValues(alpha: 0.75)
                                       : (isBeatActive ? textSecondary : textMuted),
@@ -670,11 +798,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       ? TextDecoration.lineThrough
                                       : TextDecoration.none,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (beatFeats.isNotEmpty)
+                            if (beatFeats.isNotEmpty) ...[
+                              const SizedBox(width: 8),
                               Text(
                                 '$doneBeatCount/${beatFeats.length}',
                                 style: GoogleFonts.jetBrainsMono(
@@ -683,6 +810,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   color: allBeatDone ? accentEmerald : textMuted,
                                 ),
                               ),
+                            ],
                           ],
                         ),
                       ),
@@ -703,6 +831,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           return _buildFeatureRailItem(
                             feat,
                             activeVer: activeVer,
+                            beatTitle: beat.title,
                             beatIndex: bIdx,
                             featureIndexInBeat: fIdx,
                             globalFeatureIndex: prevFeaturesBeforeBeat + fIdx,
@@ -731,7 +860,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     return Container(
       decoration: BoxDecoration(
         color: bgRecessed,
-        border: Border(right: BorderSide(color: borderSubtle)),
+        border: Border(
+          right: BorderSide(
+            color: isOverlayDrawer ? borderBright : borderSubtle,
+          ),
+        ),
       ),
       child: SingleChildScrollView(child: content),
     );
@@ -740,6 +873,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   Widget _buildFeatureRailItem(
     TierDocument feat, {
     required String activeVer,
+    String? beatTitle,
     int beatIndex = 0,
     int featureIndexInBeat = 0,
     int globalFeatureIndex = 0,
@@ -760,12 +894,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
 
     final shouldDim = isFocus && !isSelected;
+    final displayTitle =
+        _formatOutlineFeatureDisplayTitle(feat.title, beatTitle);
 
     return Opacity(
-      opacity: shouldDim ? 0.62 : 1.0,
+      opacity: shouldDim ? 0.68 : 1.0,
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected ? bgSurface : Colors.transparent,
+          color: isSelected
+              ? (isDark
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : bgSurface)
+              : Colors.transparent,
           border: Border(
             bottom: BorderSide(color: borderSubtle),
           ),
@@ -793,9 +933,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               child: Container(
                 padding: EdgeInsets.fromLTRB(
                   isSelected ? 13 : 16,
-                  10,
+                  8,
                   16,
-                  10,
+                  8,
                 ),
                 decoration: BoxDecoration(
                   border: isSelected
@@ -808,33 +948,37 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       : null,
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    InkWell(
-                      key: ValueKey('outline_feat_chevron_${feat.id}'),
-                      onTap: () {
-                        setState(() {
-                          _toggleFeatureExpandedInOutline(
-                            feat.id,
-                            currentlyExpanded: isExpanded,
-                          );
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(4),
-                      child: SizedBox(
-                        width: 14,
-                        height: 18,
-                        child: Center(
-                          child: Text(
-                            isDone && !isExpanded
-                                ? '✓'
-                                : (isExpanded ? '▾' : '▸'),
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              color: isDone
-                                  ? accentEmerald
-                                  : (isSelected ? accentCyan : textMuted),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: InkWell(
+                        key: ValueKey('outline_feat_chevron_${feat.id}'),
+                        onTap: () {
+                          setState(() {
+                            _toggleFeatureExpandedInOutline(
+                              feat.id,
+                              currentlyExpanded: isExpanded,
+                            );
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: SizedBox(
+                          width: 14,
+                          height: 18,
+                          child: Center(
+                            child: Text(
+                              isDone && !isExpanded
+                                  ? '✓'
+                                  : (isExpanded ? '▾' : '▸'),
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: isDone
+                                    ? accentEmerald
+                                    : (isSelected ? accentCyan : textMuted),
+                              ),
                             ),
                           ),
                         ),
@@ -842,34 +986,55 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     ),
                     const SizedBox(width: 7),
                     Expanded(
-                      child: Text(
-                        feat.title,
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isDone
-                              ? textMuted.withValues(alpha: 0.6)
-                              : (isSelected ? textPrimary : textSecondary),
-                          decoration: isDone
-                              ? TextDecoration.lineThrough
-                              : TextDecoration.none,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayTitle,
+                            maxLines: 2,
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              height: 1.25,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isDone
+                                  ? textMuted.withValues(alpha: 0.6)
+                                  : (isSelected ? textPrimary : textSecondary),
+                              decoration: isDone
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                            ),
+                          ),
+                          if (displayTitle != feat.title)
+                            SizedBox(
+                              height: 1,
+                              child: Opacity(
+                                opacity: 0,
+                                child: Text(
+                                  feat.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.clip,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isDone ? 'DONE' : featRemLabel,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: isSelected || isDone
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: isDone
-                            ? accentEmerald
-                            : (isSelected ? accentCyan : textMuted),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        isDone ? 'DONE' : featRemLabel,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: isSelected || isDone
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: isDone
+                              ? accentEmerald
+                              : (isSelected ? accentCyan : textMuted),
+                        ),
                       ),
                     ),
                     Offstage(
@@ -890,8 +1055,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
   }
 
-  /// Single-Spine De-Boxed Outliner Hierarchy: Renders `Feature -> Numbered Tasks (01 · ...) -> Leaf Steps (✓ / ● / ○)`
-  /// along a single 2px vertical guide spine without nested boxes or double borders.
+  /// Unified 4-Rank Outliner Hierarchy: Renders `Feature -> Numbered Tasks (01 · ...) -> Nested Steps (01..06)`
+  /// with full untruncated multi-line titles and an L2 elevated pill on the active step.
   Widget _buildOutlineFeatureChildrenTree(TierDocument feat) {
     final states = FeatureStateNode.getStatesForDocument(feat);
     if (states.isEmpty) return const SizedBox.shrink();
@@ -914,10 +1079,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final engineHint = _engineHint;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(22, 2, 12, 10),
+      margin: const EdgeInsets.fromLTRB(22, 0, 10, 6),
       decoration: BoxDecoration(
         border: Border(
-          left: BorderSide(color: borderSubtle, width: 2),
+          left: BorderSide(color: borderSubtle, width: 1.5),
         ),
       ),
       child: Column(
@@ -936,7 +1101,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
                 int activeTaskIdx = _selectedTaskIndexByCheckpoint[cpNode.id] ??
                     cpNode.checklist.indexWhere((t) => !t.completed);
-                if (activeTaskIdx < 0 || activeTaskIdx >= cpNode.checklist.length) {
+                if (activeTaskIdx < 0 ||
+                    activeTaskIdx >= cpNode.checklist.length) {
                   activeTaskIdx = 0;
                 }
 
@@ -951,7 +1117,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           setState(() {
                             _manualCheckpointFocusIndex = cpIdx;
                             if (cpDone) {
-                              if (_expandedDoneCheckpoints.contains(cpNode.id)) {
+                              if (_expandedDoneCheckpoints
+                                  .contains(cpNode.id)) {
                                 _expandedDoneCheckpoints.remove(cpNode.id);
                               } else {
                                 _expandedDoneCheckpoints.add(cpNode.id);
@@ -995,110 +1162,326 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                     ? '✓'
                                     : (isTaskActive ? '●' : '○');
 
-                                return InkWell(
-                                  key: ValueKey(
-                                    'outline_task_${cpNode.id}_$tIdx',
-                                  ),
-                                  onTap: () {
-                                    setState(() {
-                                      _manualCheckpointFocusIndex = cpIdx;
-                                      _selectedTaskIndexByCheckpoint[
-                                          cpNode.id] = tIdx;
-                                    });
-                                    if (widget.workbench.selectedFeatureId !=
-                                        feat.id) {
-                                      widget.workbench.selectFeature(feat.id);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: EdgeInsets.fromLTRB(
-                                      isTaskActive ? 8 : 10,
-                                      6,
-                                      8,
-                                      6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isTaskActive
-                                          ? accentCyan.withValues(alpha: 0.08)
-                                          : Colors.transparent,
-                                      border: isTaskActive
-                                          ? Border(
-                                              left: BorderSide(
-                                                color: isFixTask
-                                                    ? accentCrimson
-                                                    : accentCyan,
-                                                width: 2,
+                                int activeSubStepIdx =
+                                    _selectedSubStepIndexByTask[
+                                            '${cpNode.id}_$tIdx'] ??
+                                        task.children
+                                            .indexWhere((c) => !c.completed);
+                                if (activeSubStepIdx < 0 ||
+                                    activeSubStepIdx >= bp.subSteps.length) {
+                                  activeSubStepIdx = 0;
+                                }
+
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    InkWell(
+                                      key: ValueKey(
+                                        'outline_task_${cpNode.id}_$tIdx',
+                                      ),
+                                      onTap: () {
+                                        setState(() {
+                                          _manualCheckpointFocusIndex = cpIdx;
+                                          _selectedTaskIndexByCheckpoint[
+                                              cpNode.id] = tIdx;
+                                        });
+                                        if (widget
+                                                .workbench.selectedFeatureId !=
+                                            feat.id) {
+                                          widget.workbench
+                                              .selectFeature(feat.id);
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          10,
+                                          4,
+                                          8,
+                                          4,
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(top: 1),
+                                              child: SizedBox(
+                                                width: 14,
+                                                child: Text(
+                                                  taskSymbol,
+                                                  textAlign: TextAlign.center,
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: task.completed
+                                                        ? accentEmerald
+                                                        : (isFixTask
+                                                            ? accentCrimson
+                                                            : (isTaskActive
+                                                                ? accentCyan
+                                                                : textMuted)),
+                                                  ),
+                                                ),
                                               ),
-                                            )
-                                          : null,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 14,
-                                          child: Text(
-                                            taskSymbol,
-                                            textAlign: TextAlign.center,
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: task.completed
-                                                  ? accentEmerald
-                                                  : (isFixTask
-                                                      ? accentCrimson
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Expanded(
+                                              child: Text(
+                                                '${bp.numLabel} · ${bp.cleanTitle}',
+                                                maxLines: 2,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  height: 1.25,
+                                                  fontWeight: isTaskActive &&
+                                                          !task.completed
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
+                                                  color: task.completed
+                                                      ? textMuted.withValues(
+                                                          alpha: 0.5,
+                                                        )
+                                                      : (isFixTask
+                                                          ? accentCrimson
+                                                          : (isTaskActive
+                                                              ? textPrimary
+                                                              : textMuted)),
+                                                  decoration: task.completed
+                                                      ? TextDecoration
+                                                          .lineThrough
+                                                      : TextDecoration.none,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(top: 1),
+                                              child: Text(
+                                                '$doneSubCount/$totalSubCount · $taskRemLabel',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9.5,
+                                                  fontWeight: isTaskActive
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                                  color: task.completed
+                                                      ? accentEmerald
+                                                          .withValues(
+                                                          alpha: 0.65,
+                                                        )
                                                       : (isTaskActive
                                                           ? accentCyan
-                                                          : textMuted)),
+                                                          : textMuted),
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                          ],
                                         ),
-                                        const SizedBox(width: 5),
-                                        Expanded(
-                                          child: Text(
-                                            '${bp.numLabel} · ${bp.cleanTitle}',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 11.5,
-                                              fontWeight: isTaskActive &&
-                                                      !task.completed
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w500,
-                                              color: task.completed
-                                                  ? textMuted.withValues(
-                                                      alpha: 0.5,
-                                                    )
-                                                  : (isFixTask
-                                                      ? accentCrimson
-                                                      : (isTaskActive
-                                                          ? textPrimary
-                                                          : textSecondary)),
-                                              decoration: task.completed
-                                                  ? TextDecoration.lineThrough
-                                                  : TextDecoration.none,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          '$doneSubCount/$totalSubCount · $taskRemLabel',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 9.5,
-                                            fontWeight: isTaskActive
-                                                ? FontWeight.w700
-                                                : FontWeight.w500,
-                                            color: task.completed
-                                                ? accentEmerald.withValues(
-                                                    alpha: 0.65,
-                                                  )
-                                                : (isTaskActive
-                                                    ? accentCyan
-                                                    : textMuted),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
+                                    // Rank 4 in Unified Outliner: Nested Steps 01..06 directly inside the Active Task
+                                    if (isTaskActive &&
+                                        widget.workbench.selectedFeatureId ==
+                                            feat.id &&
+                                        bp.subSteps.isNotEmpty)
+                                      Container(
+                                        margin: const EdgeInsets.fromLTRB(
+                                          18,
+                                          1,
+                                          4,
+                                          3,
+                                        ),
+                                        padding: const EdgeInsets.only(left: 8),
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            left: BorderSide(
+                                              color: borderSubtle,
+                                              width: 1,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            for (int sIdx = 0;
+                                                sIdx < bp.subSteps.length;
+                                                sIdx++)
+                                              Builder(
+                                                builder: (context) {
+                                                  final stepItem =
+                                                      bp.subSteps[sIdx];
+                                                  final isStepActive =
+                                                      sIdx == activeSubStepIdx;
+                                                  final isStepDone = stepItem
+                                                      .subtask.completed;
+                                                  return InkWell(
+                                                    key: ValueKey(
+                                                      'outliner_substep_${cpNode.id}_${tIdx}_$sIdx',
+                                                    ),
+                                                    onTap: () {
+                                                      setState(() {
+                                                        _manualCheckpointFocusIndex =
+                                                            cpIdx;
+                                                        _selectedTaskIndexByCheckpoint[
+                                                            cpNode.id] = tIdx;
+                                                        _selectedSubStepIndexByTask[
+                                                                '${cpNode.id}_$tIdx'] =
+                                                            sIdx;
+                                                        _isHalfScreenOutlinerOpen =
+                                                            false;
+                                                      });
+                                                    },
+                                                    borderRadius:
+                                                        const BorderRadius.only(
+                                                      topRight:
+                                                          Radius.circular(5),
+                                                      bottomRight:
+                                                          Radius.circular(5),
+                                                    ),
+                                                    child: Container(
+                                                      margin:
+                                                          const EdgeInsets.only(
+                                                        bottom: 1,
+                                                      ),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3.5,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: isStepActive
+                                                            ? bgSurface
+                                                            : Colors
+                                                                .transparent,
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .only(
+                                                          topRight:
+                                                              Radius.circular(
+                                                                  5),
+                                                          bottomRight:
+                                                              Radius.circular(
+                                                                  5),
+                                                        ),
+                                                        border: Border(
+                                                          left: BorderSide(
+                                                            color: isStepActive
+                                                                ? accentCyan
+                                                                : Colors
+                                                                    .transparent,
+                                                            width: 2.5,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      child: Row(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                              top: 1,
+                                                            ),
+                                                            child: Text(
+                                                              (sIdx + 1)
+                                                                  .toString()
+                                                                  .padLeft(
+                                                                      2, '0'),
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 9.5,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                color: isStepActive
+                                                                    ? accentCyan
+                                                                    : (isStepDone
+                                                                        ? accentEmerald
+                                                                        : textMuted),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 6,
+                                                          ),
+                                                          Expanded(
+                                                            child: Text(
+                                                              stepItem
+                                                                  .shortTitle,
+                                                              maxLines: 2,
+                                                              style: GoogleFonts
+                                                                  .inter(
+                                                                fontSize: 11,
+                                                                height: 1.25,
+                                                                fontWeight: isStepActive
+                                                                    ? FontWeight
+                                                                        .w700
+                                                                    : FontWeight
+                                                                        .w500,
+                                                                color: isStepActive
+                                                                    ? textPrimary
+                                                                    : (isStepDone
+                                                                        ? textMuted
+                                                                            .withValues(
+                                                                            alpha:
+                                                                                0.65,
+                                                                          )
+                                                                        : textSecondary),
+                                                                decoration: isStepDone &&
+                                                                        !isStepActive
+                                                                    ? TextDecoration
+                                                                        .lineThrough
+                                                                    : TextDecoration
+                                                                        .none,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 6,
+                                                          ),
+                                                          Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                              top: 1,
+                                                            ),
+                                                            child: Text(
+                                                              isStepDone
+                                                                  ? '✓'
+                                                                  : '~${stepItem.etaLabel}',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 9.5,
+                                                                fontWeight: isStepActive ||
+                                                                        isStepDone
+                                                                    ? FontWeight
+                                                                        .w700
+                                                                    : FontWeight
+                                                                        .w500,
+                                                                color: isStepDone
+                                                                    ? accentEmerald
+                                                                    : (isStepActive
+                                                                        ? accentCyan
+                                                                        : textMuted),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
                                 );
                               },
                             ),
@@ -1111,7 +1494,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 cpIdx,
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
+                                padding: const EdgeInsets.fromLTRB(10, 3, 8, 3),
                                 child: Text(
                                   '+ Add Build Task...',
                                   style: GoogleFonts.jetBrainsMono(
@@ -1133,7 +1516,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
   }
 
-  Widget _buildFeatureMainCanvas(TierDocument rel, {bool shrinkWrap = false}) {
+  Widget _buildFeatureMainCanvas(
+    TierDocument rel, {
+    bool shrinkWrap = false,
+    bool isHalfScreenOverlayMode = false,
+  }) {
     final feat = widget.workbench.selectedFeature;
     if (feat == null) {
       return Center(
@@ -1194,6 +1581,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 i,
                 activeFocusIndex: effectiveFocusIndex,
                 viewportHeight: viewportHeight,
+                isHalfScreenOverlayMode: isHalfScreenOverlayMode,
               ),
         ],
       );
@@ -1224,7 +1612,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 return SingleChildScrollView(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: viewportConstraints.maxHeight,
                       minWidth: viewportConstraints.maxWidth,
                     ),
                     child: buildBody(viewportConstraints.maxHeight),
@@ -2070,6 +2457,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     int index, {
     required int activeFocusIndex,
     double viewportHeight = 680,
+    bool isHalfScreenOverlayMode = false,
   }) {
     final node = states[index];
     final isDone = node.isCompleted;
@@ -2213,712 +2601,778 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── GREYSCALE-VALIDATED BOXLESS FOCUSED STEP VIEW (Centered 860px Studio Column + Single Bottom Verify/Playtest Dock) ──
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: viewportHeight > 580 ? viewportHeight - 4 : 580,
+                // ── GREYSCALE-VALIDATED COHESIVE 3-ZONE FOCUSED STEP VIEW (Centered 780px Studio Column) ──
+                Container(
+                  key: ValueKey(
+                    'task_sheet_active_step_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
                   ),
-                  child: Container(
-                    key: ValueKey(
-                      'task_sheet_active_step_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                    ),
-                    color: bgBase,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // ── TOP BUILD CLUSTER: Header + Step Title + Boxless FEATURE GOAL + Instruction/Why + External Path Caption + Recessed Code Well ──
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // 1. Fixed 44px De-Boxed Header Bar (Borderless Step Dropdown + Progress & Typographic Unreal Mode Switch)
-                            Container(
-                              height: 44,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 28),
-                              decoration: BoxDecoration(
-                                color: bgBase,
-                                border: Border(
-                                  bottom: BorderSide(color: borderSubtle),
-                                ),
-                              ),
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 860),
+                  color: bgBase,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 1. Fixed 44px Header Bar ([ ☰ Outline ] in Half-Screen + Step Dropdown + Progress & Typographic Unreal Mode Switch)
+                      Container(
+                        height: 44,
+                        padding: const EdgeInsets.symmetric(horizontal: 28),
+                        decoration: BoxDecoration(
+                          color: bgBase,
+                          border: Border(
+                            bottom: BorderSide(color: borderSubtle),
+                          ),
+                        ),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 780),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Flexible(
                                   child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      PopupMenuButton<int>(
-                                        key: ValueKey(
-                                          'step_dropdown_${node.id}_$selectedTaskIdx',
-                                        ),
-                                        tooltip: 'Switch Step',
-                                        color: bgSurface,
-                                        shape: RoundedRectangleBorder(
+                                      if (isHalfScreenOverlayMode) ...[
+                                        InkWell(
+                                          key: ValueKey(
+                                            'halfscreen_outliner_trigger_${node.id}',
+                                          ),
+                                          onTap: () {
+                                            setState(() {
+                                              _isHalfScreenOutlinerOpen =
+                                                  !_isHalfScreenOutlinerOpen;
+                                            });
+                                          },
                                           borderRadius:
-                                              BorderRadius.circular(6),
-                                          side: BorderSide(color: borderBright),
-                                        ),
-                                        onSelected: (selectedIdx) {
-                                          setState(() {
-                                            _selectedTaskIndexByCheckpoint[
-                                                node.id] = selectedTaskIdx;
-                                            _selectedSubStepIndexByTask[
-                                                    '${node.id}_$selectedTaskIdx'] =
-                                                selectedIdx;
-                                          });
-                                        },
-                                        itemBuilder: (context) => [
-                                          for (int sIdx = 0;
-                                              sIdx <
-                                                  selectedHowTo.subSteps.length;
-                                              sIdx++)
-                                            PopupMenuItem<int>(
-                                              value: sIdx,
-                                              height: 36,
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      '${(sIdx + 1).toString().padLeft(2, '0')} · ${selectedHowTo.subSteps[sIdx].shortTitle}',
-                                                      style: GoogleFonts.inter(
-                                                        fontSize: 12,
-                                                        fontWeight: sIdx ==
-                                                                activeSubStepIdx
-                                                            ? FontWeight.w700
-                                                            : FontWeight.w500,
-                                                        color: sIdx ==
-                                                                activeSubStepIdx
+                                              BorderRadius.circular(5),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: _isHalfScreenOutlinerOpen
+                                                  ? accentCyan.withValues(
+                                                      alpha: 0.14,
+                                                    )
+                                                  : bgSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: _isHalfScreenOutlinerOpen
+                                                    ? accentCyan
+                                                    : borderBright,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.menu_open_rounded,
+                                                  size: 13,
+                                                  color: _isHalfScreenOutlinerOpen
+                                                      ? accentCyan
+                                                      : textPrimary,
+                                                ),
+                                                const SizedBox(width: 5),
+                                                Text(
+                                                  'Outline',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    color:
+                                                        _isHalfScreenOutlinerOpen
                                                             ? accentCyan
-                                                            : (selectedHowTo
-                                                                    .subSteps[
-                                                                        sIdx]
-                                                                    .subtask
-                                                                    .completed
-                                                                ? textMuted
-                                                                : textPrimary),
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
+                                                            : textPrimary,
                                                   ),
-                                                  const SizedBox(width: 12),
-                                                  Text(
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Container(
+                                          width: 1,
+                                          height: 14,
+                                          color: borderSubtle,
+                                        ),
+                                        const SizedBox(width: 10),
+                                      ],
+                                      Flexible(
+                                        child: PopupMenuButton<int>(
+                                          key: ValueKey(
+                                            'step_dropdown_${node.id}_$selectedTaskIdx',
+                                          ),
+                                          tooltip: 'Switch Step',
+                                          color: bgSurface,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            side:
+                                                BorderSide(color: borderBright),
+                                          ),
+                                          onSelected: (selectedIdx) {
+                                            setState(() {
+                                              _selectedTaskIndexByCheckpoint[
+                                                  node.id] = selectedTaskIdx;
+                                              _selectedSubStepIndexByTask[
+                                                      '${node.id}_$selectedTaskIdx'] =
+                                                  selectedIdx;
+                                            });
+                                          },
+                                          itemBuilder: (context) => [
+                                            for (int sIdx = 0;
+                                                sIdx <
                                                     selectedHowTo
-                                                            .subSteps[sIdx]
-                                                            .subtask
-                                                            .completed
-                                                        ? '✓'
-                                                        : '~${selectedHowTo.subSteps[sIdx].etaLabel}',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 10.5,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: selectedHowTo
+                                                        .subSteps.length;
+                                                sIdx++)
+                                              PopupMenuItem<int>(
+                                                value: sIdx,
+                                                height: 36,
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        '${(sIdx + 1).toString().padLeft(2, '0')} · ${selectedHowTo.subSteps[sIdx].shortTitle}',
+                                                        style:
+                                                            GoogleFonts.inter(
+                                                          fontSize: 12,
+                                                          fontWeight: sIdx ==
+                                                                  activeSubStepIdx
+                                                              ? FontWeight.w700
+                                                              : FontWeight.w500,
+                                                          color: sIdx ==
+                                                                  activeSubStepIdx
+                                                              ? accentCyan
+                                                              : (selectedHowTo
+                                                                      .subSteps[
+                                                                          sIdx]
+                                                                      .subtask
+                                                                      .completed
+                                                                  ? textMuted
+                                                                  : textPrimary),
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Text(
+                                                      selectedHowTo
                                                               .subSteps[sIdx]
                                                               .subtask
                                                               .completed
-                                                          ? accentEmerald
-                                                          : textSecondary,
+                                                          ? '✓'
+                                                          : '~${selectedHowTo.subSteps[sIdx].etaLabel}',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: selectedHowTo
+                                                                .subSteps[sIdx]
+                                                                .subtask
+                                                                .completed
+                                                            ? accentEmerald
+                                                            : textSecondary,
+                                                      ),
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
+                                          ],
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 6,
                                             ),
-                                        ],
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 6,
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w800,
-                                                  letterSpacing: 0.4,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      letterSpacing: 0.4,
+                                                      color: activeSubStep
+                                                              .subtask.completed
+                                                          ? accentEmerald
+                                                          : accentCyan,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 5),
+                                                Icon(
+                                                  Icons
+                                                      .keyboard_arrow_down_rounded,
+                                                  size: 15,
                                                   color: activeSubStep
                                                           .subtask.completed
                                                       ? accentEmerald
                                                       : accentCyan,
                                                 ),
-                                              ),
-                                              const SizedBox(width: 5),
-                                              Icon(
-                                                Icons
-                                                    .keyboard_arrow_down_rounded,
-                                                size: 15,
-                                                color: activeSubStep
-                                                        .subtask.completed
-                                                    ? accentEmerald
-                                                    : accentCyan,
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            '$doneSubStepCount / ${selectedHowTo.subSteps.length} Done',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: doneSubStepCount ==
-                                                      selectedHowTo
-                                                          .subSteps.length
-                                                  ? accentEmerald
-                                                  : textSecondary,
-                                            ),
-                                          ),
-                                          if (selectedHowTo.engineLabel ==
-                                              'UNREAL 5') ...[
-                                            const SizedBox(width: 14),
-                                            Container(
-                                              key: ValueKey(
-                                                'unreal_mode_toggle_${node.id}',
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  InkWell(
-                                                    key: ValueKey(
-                                                      'unreal_bp_btn_${node.id}',
-                                                    ),
-                                                    onTap: () {
-                                                      setState(() {
-                                                        _unrealCppMode = false;
-                                                      });
-                                                    },
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            4),
-                                                    child: Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 3,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        border: Border(
-                                                          bottom: BorderSide(
-                                                            color:
-                                                                !_unrealCppMode
-                                                                    ? accentCyan
-                                                                    : Colors
-                                                                        .transparent,
-                                                            width: 1.5,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: Text(
-                                                        'Blueprint',
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 10.5,
-                                                          fontWeight:
-                                                              !_unrealCppMode
-                                                                  ? FontWeight
-                                                                      .w800
-                                                                  : FontWeight
-                                                                      .w600,
-                                                          color: !_unrealCppMode
-                                                              ? accentCyan
-                                                              : textMuted,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Padding(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 4,
-                                                    ),
-                                                    child: Text(
-                                                      '/',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 10.5,
-                                                        color: textMuted,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  InkWell(
-                                                    key: ValueKey(
-                                                      'unreal_cpp_btn_${node.id}',
-                                                    ),
-                                                    onTap: () {
-                                                      setState(() {
-                                                        _unrealCppMode = true;
-                                                      });
-                                                    },
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            4),
-                                                    child: Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 3,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        border: Border(
-                                                          bottom: BorderSide(
-                                                            color:
-                                                                _unrealCppMode
-                                                                    ? accentCyan
-                                                                    : Colors
-                                                                        .transparent,
-                                                            width: 1.5,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: Text(
-                                                        'C++',
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 10.5,
-                                                          fontWeight:
-                                                              _unrealCppMode
-                                                                  ? FontWeight
-                                                                      .w800
-                                                                  : FontWeight
-                                                                      .w600,
-                                                          color: _unrealCppMode
-                                                              ? accentCyan
-                                                              : textMuted,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ],
                                       ),
                                     ],
                                   ),
                                 ),
-                              ),
-                            ),
-
-                            // 2. Centered 860px Studio Column (Step Title + Boxless FEATURE GOAL + Instruction/Why + External Path Caption + Single Borderless Recessed Code Well)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(28, 26, 28, 0),
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 860),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      // Step Title (24px bold Inter)
-                                      Text(
-                                        activeSubStep.shortTitle,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.45,
-                                          height: 1.2,
-                                          color: textPrimary,
-                                        ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '$doneSubStepCount / ${selectedHowTo.subSteps.length} Done',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: doneSubStepCount ==
+                                                selectedHowTo.subSteps.length
+                                            ? accentEmerald
+                                            : textSecondary,
                                       ),
-                                      const SizedBox(height: 5),
-
-                                      // Boxless FEATURE GOAL Directly Under Step Title (Zero border, zero background box)
+                                    ),
+                                    if (selectedHowTo.engineLabel ==
+                                        'UNREAL 5') ...[
+                                      const SizedBox(width: 14),
                                       Container(
                                         key: ValueKey(
-                                          'task_sheet_feature_goal_${node.id}',
+                                          'unreal_mode_toggle_${node.id}',
                                         ),
-                                        child: Text.rich(
-                                          TextSpan(
-                                            style: GoogleFonts.inter(
-                                              fontSize: 12.5,
-                                              height: 1.45,
-                                              color: textSecondary,
-                                            ),
-                                            children: [
-                                              TextSpan(
-                                                text: 'FEATURE GOAL · ',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w800,
-                                                  letterSpacing: 0.4,
-                                                  color: accentCyan,
-                                                ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            InkWell(
+                                              key: ValueKey(
+                                                'unreal_bp_btn_${node.id}',
                                               ),
-                                              TextSpan(text: featureGoalText),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 18),
-
-                                      // Action Instruction + Why Explanation (Zero fixed-height clamp)
-                                      Text.rich(
-                                        _buildSemanticStepSpan(
-                                          text: activeSubStep.instruction,
-                                          baseStyle: GoogleFonts.inter(
-                                            fontSize: 15.5,
-                                            height: 1.6,
-                                            color: textPrimary,
-                                          ),
-                                          tuningItems: tuningItems,
-                                          edgeItems: edgeItems,
-                                          isCodeBlock: false,
-                                        ),
-                                      ),
-                                      if (activeSubStep.explainConcept
-                                          .trim()
-                                          .isNotEmpty) ...[
-                                        const SizedBox(height: 8),
-                                        Text.rich(
-                                          _buildSemanticStepSpan(
-                                            text: activeSubStep.explainConcept,
-                                            baseStyle: GoogleFonts.inter(
-                                              fontSize: 13,
-                                              height: 1.5,
-                                              color: textSecondary,
-                                            ),
-                                            tuningItems: tuningItems,
-                                            edgeItems: edgeItems,
-                                            isCodeBlock: false,
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 26),
-
-                                      // External Path & Copy/Edit Caption Bar (Outside the Code Well — eliminates box-inside-box)
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              '📍 ${activeSubStep.stepPath.isNotEmpty ? activeSubStep.stepPath : selectedHowTo.whereLocation}',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                color: accentCyan,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              InkWell(
-                                                key: ValueKey(
-                                                  'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                                              onTap: () {
+                                                setState(() {
+                                                  _unrealCppMode = false;
+                                                });
+                                              },
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 4,
+                                                  vertical: 3,
                                                 ),
-                                                onTap: () =>
-                                                    _copySubStepCodeFormula(
-                                                  selectedTaskIdx,
-                                                  activeSubStepIdx,
-                                                  activeSubStep.codeFormula,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                child: Padding(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                                  child: Text(
-                                                    'Copy',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 10.5,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: textSecondary,
+                                                decoration: BoxDecoration(
+                                                  border: Border(
+                                                    bottom: BorderSide(
+                                                      color: !_unrealCppMode
+                                                          ? accentCyan
+                                                          : Colors.transparent,
+                                                      width: 1.5,
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                              if (activeSubStepIdx != 1)
-                                                Offstage(
-                                                  offstage: true,
-                                                  child: InkWell(
-                                                    key: ValueKey(
-                                                      'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
-                                                    ),
-                                                    onTap: () =>
-                                                        _copySubStepCodeFormula(
-                                                      selectedTaskIdx,
-                                                      1,
-                                                      selectedHowTo.subSteps
-                                                                  .length >
-                                                              1
-                                                          ? selectedHowTo
-                                                              .subSteps[1]
-                                                              .codeFormula
-                                                          : activeSubStep
-                                                              .codeFormula,
-                                                    ),
-                                                    child:
-                                                        const SizedBox.shrink(),
+                                                child: Text(
+                                                  'Blueprint',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10.5,
+                                                    fontWeight: !_unrealCppMode
+                                                        ? FontWeight.w800
+                                                        : FontWeight.w600,
+                                                    color: !_unrealCppMode
+                                                        ? accentCyan
+                                                        : textMuted,
                                                   ),
                                                 ),
-                                              Text(
-                                                '·',
+                                              ),
+                                            ),
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 4,
+                                              ),
+                                              child: Text(
+                                                '/',
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 10.5,
                                                   color: textMuted,
                                                 ),
                                               ),
-                                              InkWell(
-                                                key: ValueKey(
-                                                  'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                                            ),
+                                            InkWell(
+                                              key: ValueKey(
+                                                'unreal_cpp_btn_${node.id}',
+                                              ),
+                                              onTap: () {
+                                                setState(() {
+                                                  _unrealCppMode = true;
+                                                });
+                                              },
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 4,
+                                                  vertical: 3,
                                                 ),
-                                                onTap: () =>
-                                                    _promptEditHowToSubStepDialog(
+                                                decoration: BoxDecoration(
+                                                  border: Border(
+                                                    bottom: BorderSide(
+                                                      color: _unrealCppMode
+                                                          ? accentCyan
+                                                          : Colors.transparent,
+                                                      width: 1.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  'C++',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10.5,
+                                                    fontWeight: _unrealCppMode
+                                                        ? FontWeight.w800
+                                                        : FontWeight.w600,
+                                                    color: _unrealCppMode
+                                                        ? accentCyan
+                                                        : textMuted,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // 2. Centered 780px Cohesive 3-Zone Studio Column
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(32, 32, 32, 40),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 780),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // ── ZONE 1: Step Title + Boxless FEATURE GOAL (with subtle 1px hairline) + Instruction + Why ──
+                                Text(
+                                  activeSubStep.shortTitle,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.45,
+                                    height: 1.2,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+
+                                // Boxless FEATURE GOAL Directly Under Step Title + subtle 1px bottom hairline
+                                Container(
+                                  key: ValueKey(
+                                    'task_sheet_feature_goal_${node.id}',
+                                  ),
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: borderSubtle.withValues(
+                                          alpha: 0.65,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  child: Text.rich(
+                                    TextSpan(
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        height: 1.45,
+                                        color: textSecondary,
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text: 'FEATURE GOAL · ',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.4,
+                                            color: accentCyan,
+                                          ),
+                                        ),
+                                        TextSpan(text: featureGoalText),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+
+                                // Action Instruction + Why Explanation
+                                Text.rich(
+                                  _buildSemanticStepSpan(
+                                    text: activeSubStep.instruction,
+                                    baseStyle: GoogleFonts.inter(
+                                      fontSize: 15.5,
+                                      height: 1.6,
+                                      color: textPrimary,
+                                    ),
+                                    tuningItems: tuningItems,
+                                    edgeItems: edgeItems,
+                                    isCodeBlock: false,
+                                  ),
+                                ),
+                                if (activeSubStep.explainConcept
+                                    .trim()
+                                    .isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text.rich(
+                                    _buildSemanticStepSpan(
+                                      text: activeSubStep.explainConcept,
+                                      baseStyle: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        height: 1.5,
+                                        color: textSecondary,
+                                      ),
+                                      tuningItems: tuningItems,
+                                      edgeItems: edgeItems,
+                                      isCodeBlock: false,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 22),
+
+                                // ── ZONE 2: External Path & Copy/Edit Caption Bar + Single L2 Elevated Slate Code Well ──
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '📍 ${activeSubStep.stepPath.isNotEmpty ? activeSubStep.stepPath : selectedHowTo.whereLocation}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: accentCyan,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        InkWell(
+                                          key: ValueKey(
+                                            'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                                          ),
+                                          onTap: () => _copySubStepCodeFormula(
+                                            selectedTaskIdx,
+                                            activeSubStepIdx,
+                                            activeSubStep.codeFormula,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            child: Text(
+                                              'Copy',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        if (activeSubStepIdx != 1)
+                                          Offstage(
+                                            offstage: true,
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
+                                              ),
+                                              onTap: () =>
+                                                  _copySubStepCodeFormula(
+                                                selectedTaskIdx,
+                                                1,
+                                                selectedHowTo.subSteps.length >
+                                                        1
+                                                    ? selectedHowTo
+                                                        .subSteps[1].codeFormula
+                                                    : activeSubStep.codeFormula,
+                                              ),
+                                              child: const SizedBox.shrink(),
+                                            ),
+                                          ),
+                                        Text(
+                                          '·',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                        InkWell(
+                                          key: ValueKey(
+                                            'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                                          ),
+                                          onTap: () =>
+                                              _promptEditHowToSubStepDialog(
+                                            feat,
+                                            states,
+                                            node,
+                                            selectedTaskIdx,
+                                            activeSubStepIdx,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            child: Text(
+                                              'Edit',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 7),
+
+                                // Single L2 Elevated Slate Code Well (bgSurface + 3px left accentCyan bar, zero inner header box)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: bgSurface,
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(8),
+                                      bottomRight: Radius.circular(8),
+                                    ),
+                                    border: Border(
+                                      left: BorderSide(
+                                        color: accentCyan,
+                                        width: 3,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Text.rich(
+                                    _buildSemanticStepSpan(
+                                      text: activeSubStep.codeFormula,
+                                      baseStyle: GoogleFonts.jetBrainsMono(
+                                        fontSize: 12.5,
+                                        height: 1.65,
+                                        color: isDark
+                                            ? const Color(0xFFE5E7EB)
+                                            : textPrimary,
+                                      ),
+                                      tuningItems: tuningItems,
+                                      edgeItems: edgeItems,
+                                      isCodeBlock: true,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 22),
+
+                                // ── ZONE 3: Cohesive Verify + [ ✓ Complete & Next Step → ] Row (22px directly below Code Well) + Playtest Footnote ──
+                                Container(
+                                  padding: const EdgeInsets.only(top: 20),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      top: BorderSide(color: borderSubtle),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '✓ VERIFY BEFORE CHECKING',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: 0.4,
+                                                    color: accentEmerald,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text.rich(
+                                                  _buildSemanticStepSpan(
+                                                    text: activeSubStep
+                                                        .verifyResult,
+                                                    baseStyle:
+                                                        GoogleFonts.inter(
+                                                      fontSize: 13.5,
+                                                      height: 1.45,
+                                                      color: textPrimary,
+                                                    ),
+                                                    tuningItems: tuningItems,
+                                                    edgeItems: edgeItems,
+                                                    isCodeBlock: false,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 5),
+                                                RichText(
+                                                  text: TextSpan(
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 11.5,
+                                                      color: textMuted,
+                                                      height: 1.35,
+                                                    ),
+                                                    children: [
+                                                      TextSpan(
+                                                        text: 'Tip: ',
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10.5,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: accentAmber,
+                                                        ),
+                                                      ),
+                                                      TextSpan(
+                                                        text:
+                                                            pitfallOrGuardText,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 20),
+                                          ElevatedButton.icon(
+                                            key: ValueKey(
+                                              'one_click_complete_next_btn_${node.id}',
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: accentEmerald,
+                                              foregroundColor:
+                                                  const Color(0xFF052E16),
+                                              elevation: 0,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 20,
+                                                vertical: 14,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                            ),
+                                            onPressed: () {
+                                              if (!activeSubStep
+                                                  .subtask.completed) {
+                                                _toggleHowToSubStepCompletion(
                                                   feat,
                                                   states,
                                                   node,
                                                   selectedTaskIdx,
                                                   activeSubStepIdx,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                child: Padding(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                                  child: Text(
-                                                    'Edit',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 10.5,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: textSecondary,
-                                                    ),
-                                                  ),
-                                                ),
+                                                );
+                                              }
+                                              _advanceToNextStep(
+                                                feat,
+                                                states,
+                                                node,
+                                                selectedTaskIdx,
+                                                activeSubStepIdx,
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.check_rounded,
+                                              size: 16,
+                                            ),
+                                            label: Text(
+                                              isFinalCheckpointStep
+                                                  ? 'Complete Feature & Continue →'
+                                                  : 'Complete & Next Step →',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
                                               ),
-                                            ],
+                                            ),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 8),
-
-                                      // Single Borderless Recessed Code Well (Zero outer 1px border, zero inner header box)
+                                      const SizedBox(height: 16),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 18,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: bgRecessed,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                        key: ValueKey(
+                                          'task_sheet_playtest_check_${node.id}',
                                         ),
                                         child: Text.rich(
-                                          _buildSemanticStepSpan(
-                                            text: activeSubStep.codeFormula,
-                                            baseStyle:
-                                                GoogleFonts.jetBrainsMono(
-                                              fontSize: 12.5,
-                                              height: 1.65,
-                                              color: isDark
-                                                  ? const Color(0xFFE5E7EB)
-                                                  : textPrimary,
+                                          TextSpan(
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11.5,
+                                              height: 1.4,
+                                              color: textMuted,
                                             ),
-                                            tuningItems: tuningItems,
-                                            edgeItems: edgeItems,
-                                            isCodeBlock: true,
+                                            children: [
+                                              TextSpan(
+                                                text: 'PLAYTEST CHECK · ',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 0.4,
+                                                  color: accentEmerald,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: resolvedPlaytestCheck,
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // ── SINGLE PINNED BOTTOM DOCK: Verify Before Checking + Playtest Check + [ ✓ Complete & Next Step → ] ──
-                        Container(
-                          margin: const EdgeInsets.only(top: 32),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 28,
-                            vertical: 20,
-                          ),
-                          decoration: BoxDecoration(
-                            color: bgRecessed,
-                            border: Border(
-                              top: BorderSide(color: borderSubtle),
-                            ),
-                          ),
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 860),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '✓ VERIFY BEFORE CHECKING',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.4,
-                                            color: accentEmerald,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text.rich(
-                                          _buildSemanticStepSpan(
-                                            text: activeSubStep.verifyResult,
-                                            baseStyle: GoogleFonts.inter(
-                                              fontSize: 13.5,
-                                              height: 1.45,
-                                              color: textPrimary,
-                                            ),
-                                            tuningItems: tuningItems,
-                                            edgeItems: edgeItems,
-                                            isCodeBlock: false,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        RichText(
-                                          text: TextSpan(
-                                            style: GoogleFonts.inter(
-                                              fontSize: 11.5,
-                                              color: textMuted,
-                                              height: 1.35,
-                                            ),
-                                            children: [
-                                              TextSpan(
-                                                text: 'Tip: ',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: accentAmber,
-                                                ),
-                                              ),
-                                              TextSpan(text: pitfallOrGuardText),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Container(
-                                          key: ValueKey(
-                                            'task_sheet_playtest_check_${node.id}',
-                                          ),
-                                          child: Text.rich(
-                                            TextSpan(
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                height: 1.4,
-                                                color: textMuted,
-                                              ),
-                                              children: [
-                                                TextSpan(
-                                                  text: 'PLAYTEST CHECK · ',
-                                                  style:
-                                                      GoogleFonts.jetBrainsMono(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w800,
-                                                    letterSpacing: 0.5,
-                                                    color: accentEmerald,
-                                                  ),
-                                                ),
-                                                TextSpan(
-                                                  text: resolvedPlaytestCheck,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 24),
-                                  ElevatedButton.icon(
-                                    key: ValueKey(
-                                      'one_click_complete_next_btn_${node.id}',
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: accentEmerald,
-                                      foregroundColor: const Color(0xFF052E16),
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 20,
-                                        vertical: 14,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      if (!activeSubStep.subtask.completed) {
-                                        _toggleHowToSubStepCompletion(
-                                          feat,
-                                          states,
-                                          node,
-                                          selectedTaskIdx,
-                                          activeSubStepIdx,
-                                        );
-                                      }
-                                      _advanceToNextStep(
-                                        feat,
-                                        states,
-                                        node,
-                                        selectedTaskIdx,
-                                        activeSubStepIdx,
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.check_rounded,
-                                      size: 16,
-                                    ),
-                                    label: Text(
-                                      isFinalCheckpointStep
-                                          ? 'Complete Feature & Continue →'
-                                          : 'Complete & Next Step →',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 // ── Zero-height test hooks for legacy task/step controls ──
