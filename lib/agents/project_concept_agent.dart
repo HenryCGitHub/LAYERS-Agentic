@@ -992,14 +992,6 @@ Return ONLY valid JSON:
             ? 'High-speed grappling hook parkour roguelite'
             : cleanInput);
 
-    final deterministic = buildDeterministicSparkIntake(
-      rawIdea: seedIdea,
-      refinementText: isRefinement ? cleanInput : null,
-      existingIntake: existingIntake,
-      suggestionVariantOffset: suggestionVariantOffset,
-      isUpdateAction: existingIntake != null,
-    );
-
     final isExplicitRename = isRefinement &&
         RegExp(
           r'^(?:please\s+)?(?:rename|change\s+title|set\s+title|title|call\s+it)\s*(?:to|:)?\s+(.+)$',
@@ -1007,13 +999,23 @@ Return ONLY valid JSON:
         ).hasMatch(cleanInput);
 
     if (GeminiAgentClient.hasKey(apiKey) && !isExplicitRename) {
+      final selectedCardAdditions = existingIntake == null
+          ? const <String>[]
+          : existingIntake.expansionCards
+              .where((c) => c.isSelected)
+              .map((c) => '${c.title}: ${c.additionSummary}')
+              .toList();
+      final selectedContext = selectedCardAdditions.isEmpty
+          ? ''
+          : '\nSelected Idea Additions to Fold In: ${selectedCardAdditions.join(' | ')}';
+
       final prompt = '''
 You are an indie game producer summarizing a developer's game idea before building the blueprint.
-${existingIntake != null ? 'Previous Title: "${existingIntake.workingTitle}"\nPrevious Summary: "${existingIntake.baseSummary}"\n${cleanInput.isNotEmpty ? 'User Update Direction: "$cleanInput"' : 'Action: Fold any newly selected mechanics into Previous Summary and propose 3 fresh expansion cards.'}\nUpdated Mechanics: ${deterministic.mechanics.join(', ')}' : 'Raw Idea: "${deterministic.rawIdea}"'}
+${existingIntake != null ? 'Original Premise: "${existingIntake.rawIdea}"\nPrevious Title: "${existingIntake.workingTitle}"\nPrevious Summary: "${existingIntake.baseSummary}"\nPrevious Mechanics: ${existingIntake.mechanics.join(', ')}$selectedContext\n${cleanInput.isNotEmpty ? 'User Update Direction: "$cleanInput"' : 'Action: Fold any Selected Idea Additions into Previous Summary and propose 3 fresh expansion cards.'}' : 'Raw Idea: "$seedIdea"'}
 ${GeminiAgentClient.compactStyleRules}
 - `workingTitle` MUST be a concrete 2-3 word game title naming the setting/role/mechanic (NEVER just copy the first 3 words of the user's sentence).
 - `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop in game-design language (NEVER quote, echo, or replace the summary with the user's raw input sentence verbatim).
-${existingIntake != null ? '- When updating an existing summary, preserve the core premise of `Previous Summary` and smoothly integrate `User Update Direction` into it.' : ''}
+${existingIntake != null ? '- Preserve the core genre, role, and setting of `Previous Summary` while smoothly integrating `User Update Direction` (never switch to an unrelated genre).' : ''}
 
 Return ONLY valid JSON:
 {
@@ -1071,18 +1073,31 @@ Return ONLY valid JSON:
           }
         }
         if (summary.isNotEmpty && cards.length == 3) {
+          final updatedRawIdea = existingIntake != null
+              ? (cleanInput.isNotEmpty ? '${existingIntake.rawIdea}, $cleanInput' : existingIntake.rawIdea)
+              : seedIdea;
           return SparkIdeaIntakeResult(
-            rawIdea: deterministic.rawIdea,
-            workingTitle: wTitle.isNotEmpty ? wTitle : deterministic.workingTitle,
+            rawIdea: updatedRawIdea,
+            workingTitle: wTitle.isNotEmpty
+                ? wTitle
+                : (existingIntake?.workingTitle ?? _derivePunchyTitle(updatedRawIdea)),
             baseSummary: summary,
-            mechanics: mechs.isNotEmpty ? mechs : deterministic.mechanics,
+            mechanics: mechs.isNotEmpty
+                ? mechs
+                : (existingIntake?.mechanics ?? _deterministicMechanicsForIdea(updatedRawIdea)),
             expansionCards: cards,
           );
         }
       }
     }
 
-    return deterministic;
+    return buildDeterministicSparkIntake(
+      rawIdea: seedIdea,
+      refinementText: isRefinement ? cleanInput : null,
+      existingIntake: existingIntake,
+      suggestionVariantOffset: suggestionVariantOffset,
+      isUpdateAction: existingIntake != null,
+    );
   }
 
   static List<String> _deterministicMechanicsForIdea(String idea) {
@@ -1091,18 +1106,18 @@ Return ONLY valid JSON:
         lower.contains('hook') ||
         lower.contains('swing') ||
         lower.contains('tether');
-    final hasParkourOrCourier = lower.contains('parkour') ||
+    final hasParkour = lower.contains('parkour') ||
         lower.contains('wall-run') ||
-        lower.contains('wallrun') ||
-        lower.contains('cargo') ||
+        lower.contains('wallrun');
+    final hasCourierOrCargo = lower.contains('cargo') ||
         lower.contains('courier') ||
-        lower.contains('haul');
+        lower.contains('haul') ||
+        lower.contains('settlement') ||
+        lower.contains('supply') ||
+        lower.contains('deliver');
 
-    if (hasParkourOrCourier && !hasGrapple) {
-      if (lower.contains('cargo') ||
-          lower.contains('haul') ||
-          lower.contains('courier') ||
-          lower.contains('deliver')) {
+    if (hasParkour && !hasGrapple) {
+      if (hasCourierOrCargo) {
         return const [
           'Fluid Parkour & Wall-Running',
           'Cargo Haul Protection',
@@ -1115,32 +1130,18 @@ Return ONLY valid JSON:
         'High-Speed Traversal Combat',
       ];
     }
+    if (hasCourierOrCargo && !hasGrapple) {
+      return const [
+        'Settlement Supply Delivery',
+        'Zone Looting & Hidden Caches',
+        'Ranged Enemy Combat',
+      ];
+    }
     if (hasGrapple) {
       return const [
         'Momentum Grapple Swing',
         'Mid-Air Dash Cancel',
         'Fast Arena Reset',
-      ];
-    }
-    if (lower.contains('sub') || lower.contains('ocean') || lower.contains('sea') || lower.contains('salvage')) {
-      return const [
-        'Submarine Depth Navigation',
-        'Sonar & Salvage Pickup',
-        'Dock Hull Upgrades',
-      ];
-    }
-    if (lower.contains('katana') || lower.contains('deflect') || lower.contains('boss') || lower.contains('parry')) {
-      return const [
-        'Timed Parry & Deflect',
-        'Dash-Strike Counter',
-        'Multi-Phase Boss Telegraph',
-      ];
-    }
-    if (lower.contains('farm') || lower.contains('crop') || lower.contains('shop') || lower.contains('alchemy')) {
-      return const [
-        'Resource Gathering & Plots',
-        'Recipe Processing',
-        'Shop Customer Orders',
       ];
     }
     return const [
@@ -1169,7 +1170,9 @@ Return ONLY valid JSON:
         lower.contains('wallrun');
     final hasCargo = lower.contains('cargo') ||
         lower.contains('haul') ||
-        lower.contains('courier');
+        lower.contains('courier') ||
+        lower.contains('settlement') ||
+        lower.contains('supply');
 
     if (hasParkour && hasCargo) {
       final setting = lower.contains('metropolis')
@@ -1189,12 +1192,14 @@ Return ONLY valid JSON:
       return 'Traverse $setting to retrieve and transport high-value cargo through lethal sectors using $traversalPhrase. Chain rooftop routes to outrun or fight off $threat, bank completed deliveries at safe zones, and upgrade your runner gear between runs.';
     }
 
-    if (lower.contains('submarine') ||
-        (lower.contains('ocean') && lower.contains('salvage'))) {
+    if (hasCargo && !hasParkour) {
+      final setting = lower.contains('settlement')
+          ? 'isolated settlements and hostile zones'
+          : 'contested supply routes';
       if (variantOffset % 2 == 1) {
-        return 'Pilot a deep-sea submarine through dark ocean trenches to photograph rare marine life and winch sunken salvage to the surface. Manage hull pressure and battery drain on every dive, then cash in your haul at the dock to upgrade sonar, floodlights, and ballast.';
+        return 'Run high-risk supply courier contracts across $setting while fighting off enemies and looting required quest items. Push deeper into each zone to hunt down hidden caches and earn extra combat credits before extracting to upgrade your loadout.';
       }
-      return 'Explore dark ocean trenches in a deep-sea submarine, combining marine photography and wreck salvage under hull pressure hazards. Balance floodlight battery drain and winch tow weight during each dive, then return to the surface dock to upgrade your hull and sonar between runs.';
+      return 'Travel between $setting as a supply courier, fighting off hostile enemies and scavenging zones to fulfill item delivery quests. Risk staying longer in dangerous sectors to clear enemies for bonus credits and uncover hidden loot caches before extracting.';
     }
 
     final mechs = _deterministicMechanicsForIdea(normalized);
@@ -1511,57 +1516,6 @@ Return ONLY valid JSON:
           description:
               'Clear a room under the par timer to unlock a bonus vault exit with high-tier movement augments.',
           additionSummary: 'Par-time shortcut vaults between arenas',
-          accentType: 'neutral',
-        ),
-      ];
-    } else if (lower.contains('sub') || lower.contains('ocean') || lower.contains('salvage')) {
-      pool = [
-        SparkExpansionCard(
-          badge: '01 · CORE MECHANIC TWIST',
-          title: 'Winch Tether & Heavy Tow',
-          description:
-              'Latch a physical winch cable onto sunken cargo or sea creatures, adjusting sub ballast to tow heavy loads.',
-          additionSummary: 'Physical winch tether and ballast tow physics',
-          accentType: 'amber',
-        ),
-        SparkExpansionCard(
-          badge: '02 · RISK / REWARD HOOK',
-          title: 'Depth Pressure & Floodlight Drain',
-          description:
-              'Diving into deeper trenches yields rare salvage, but high pressure drains battery floodlights faster.',
-          additionSummary: 'Deep-trench hull pressure and battery drain trade-off',
-          accentType: 'emerald',
-        ),
-        SparkExpansionCard(
-          badge: '03 · LOOP PAYOFF & UPGRADE',
-          title: 'Drydock Sonar & Hull Bay',
-          description:
-              'Cash in photos and salvage at the surface dock to upgrade sonar pulse range, floodlights, and cargo bays.',
-          additionSummary: 'Surface drydock sonar and hull upgrade bay',
-          accentType: 'neutral',
-        ),
-        SparkExpansionCard(
-          badge: '01 · CORE MECHANIC TWIST',
-          title: 'Acoustic Decoy Beacon',
-          description:
-              'Deploy sound beacons that lure territorial trench creatures away from high-value wreck sites.',
-          additionSummary: 'Acoustic decoy beacons for stealth salvage',
-          accentType: 'amber',
-        ),
-        SparkExpansionCard(
-          badge: '02 · RISK / REWARD HOOK',
-          title: 'Overweight Cargo Ballast',
-          description:
-              'Carrying extra salvage beyond capacity slows vertical ascent speed when returning to the surface.',
-          additionSummary: 'Overweight cargo ascent speed penalty',
-          accentType: 'emerald',
-        ),
-        SparkExpansionCard(
-          badge: '03 · LOOP PAYOFF & UPGRADE',
-          title: 'Marine Codex Bounties',
-          description:
-              'Complete photo sets of rare trench species to unlock specialized camera lenses and thrusters.',
-          additionSummary: 'Marine photo codex bounties and lens unlocks',
           accentType: 'neutral',
         ),
       ];

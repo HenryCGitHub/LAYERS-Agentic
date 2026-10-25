@@ -1342,16 +1342,32 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await provider.ingestOrRefineSparkIdea('rename to Metro Runner');
         expect(provider.sparkIntake!.workingTitle, 'Metro Runner');
 
-        // 7. Flow 2: Full new game pitch (>10 words) replaces the concept cleanly
+        // 7. Regression: Settlement supply courier + "searching for caches hidden" never triggers submarine/sonar
+        provider.clearSparkIdeaIntake();
         await provider.ingestOrRefineSparkIdea(
-          'A deep-sea submarine salvage and photography game across dark ocean trenches with hull pressure hazards',
+          'A supply courier that goes from settlement to settlement shooting enemies and looting the area to finish the required item quests',
         );
-        final afterNewPitch = provider.sparkIntake!;
+        await provider.ingestOrRefineSparkIdea(
+          'staying longer in the zone to get more credits for killing enemies and searching for caches hidden',
+        );
+        final afterCourierSearch = provider.sparkIntake!;
         expect(
-          afterNewPitch.workingTitle.toLowerCase(),
-          anyOf(contains('submarine'), contains('ocean'), contains('salvage')),
+          afterCourierSearch.baseSummary.toLowerCase(),
+          isNot(contains('submarine')),
         );
-        expect(afterNewPitch.baseSummary.toLowerCase(), contains('submarine'));
+        expect(
+          afterCourierSearch.baseSummary.toLowerCase(),
+          isNot(contains('sonar')),
+        );
+        expect(
+          afterCourierSearch.mechanics
+              .any((m) => m.toLowerCase().contains('submarine') || m.toLowerCase().contains('sonar')),
+          isFalse,
+        );
+        expect(
+          afterCourierSearch.baseSummary.toLowerCase(),
+          contains('courier'),
+        );
       },
     );
   });
