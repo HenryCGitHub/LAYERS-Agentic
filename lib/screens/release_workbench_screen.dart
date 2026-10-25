@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../agents/workspace_agent_tools.dart';
+import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
@@ -311,7 +312,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       color: bgSurface,
                       tooltip: 'Switch Release View or Evolve Scope',
                       onSelected: (value) {
-                        if (value == '__evolve__') {
+                        if (value == '__progressive_release__') {
+                          _showProgressiveNextReleaseModal(context);
+                        } else if (value == '__evolve__') {
                           widget.workbench.advanceToNextRelease();
                         } else if (value == '__replan__') {
                           widget.workbench.reopenCurrentReleasePlanGate();
@@ -508,7 +511,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             enabled: false,
                             height: 24,
                             child: Text(
-                              'STAGE 2 · RELEASE PLAN GATE',
+                              'PROGRESSIVE AI RELEASES',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
@@ -518,12 +521,37 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             ),
                           ),
                           PopupMenuItem<String>(
+                            value: '__progressive_release__',
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '+ New Progressive Release (${widget.workbench.nextProgressiveVersionLabel})',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentEmerald,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'AI Co-Pilot ✦',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentEmerald,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<String>(
                             value: '__replan__',
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  '✎ Edit $activeVer Scope in Gate',
+                                  '✎ Edit $activeVer Scope',
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -532,35 +560,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Stage 2',
+                                  activeVer,
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9.5,
                                     color: textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem<String>(
-                            value: '__evolve__',
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '+ Plan Next Release Milestone',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: accentEmerald,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Stage 2 ✦',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: accentEmerald,
                                   ),
                                 ),
                               ],
@@ -819,6 +822,38 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               },
             ),
           ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+          child: InkWell(
+            key: const ValueKey('outliner_new_progressive_release_btn'),
+            onTap: () => _showProgressiveNextReleaseModal(context),
+            borderRadius: BorderRadius.circular(5),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '+ New Release (${widget.workbench.nextProgressiveVersionLabel})',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: accentEmerald,
+                    ),
+                  ),
+                  Text(
+                    '✦ AI',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: accentCyan,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ],
     );
 
@@ -1700,6 +1735,336 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showProgressiveNextReleaseModal(BuildContext context) async {
+    await widget.workbench.prepareProgressiveNextReleaseDraft();
+    if (!context.mounted) return;
+
+    final directiveCtrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final bp = widget.workbench.releaseBlueprint;
+            final nextVer = bp?.releaseVersionTag ??
+                widget.workbench.nextProgressiveVersionLabel;
+            final upgradeFeats = <({ProposedBeatBlueprint beat, ProposedFeatureBlueprint feat})>[];
+            final newFeats = <({ProposedBeatBlueprint beat, ProposedFeatureBlueprint feat})>[];
+            if (bp != null) {
+              for (final b in bp.beats) {
+                for (final f in b.features) {
+                  if (f.lifecycle == FeatureLifecycleStatus.upgrade) {
+                    upgradeFeats.add((beat: b, feat: f));
+                  } else if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
+                    newFeats.add((beat: b, feat: f));
+                  }
+                }
+              }
+            }
+
+            return AlertDialog(
+              key: const ValueKey('progressive_next_release_modal'),
+              backgroundColor: bgSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: borderBright),
+              ),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        color: accentCyan,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Progressive AI Release · $nextVer',
+                        style: GoogleFonts.inter(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '${bp?.totalIncludedHours ?? 0}h · ${bp?.totalIncludedFeatures ?? 0} features',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: accentEmerald,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 580,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'The Agent analyzed your live game tree and recommends what to Upgrade (UPGRADE) and what New Systems (NEW) to add in $nextVer:',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          color: textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: const ValueKey(
+                                'progressive_release_prompt_input',
+                              ),
+                              controller: directiveCtrl,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                color: textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Tell the Agent what direction to take in $nextVer (e.g., "Add enemy wave variety")...',
+                                hintStyle: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: textMuted,
+                                ),
+                                filled: true,
+                                fillColor: bgRecessed,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                  borderSide: BorderSide(color: borderSubtle),
+                                ),
+                              ),
+                              onSubmitted: (val) async {
+                                if (val.trim().isEmpty) return;
+                                await widget.workbench
+                                    .sendReleasePlanChatMessage(val.trim());
+                                directiveCtrl.clear();
+                                if (ctx.mounted) setModalState(() {});
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            key: const ValueKey(
+                              'progressive_release_ask_agent_btn',
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: accentCyan,
+                              side: BorderSide(
+                                color: accentCyan.withValues(alpha: 0.5),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 11,
+                              ),
+                            ),
+                            onPressed: widget.workbench.isAgentBusy
+                                ? null
+                                : () async {
+                                    final text = directiveCtrl.text.trim();
+                                    if (text.isEmpty) return;
+                                    await widget.workbench
+                                        .sendReleasePlanChatMessage(text);
+                                    directiveCtrl.clear();
+                                    if (ctx.mounted) setModalState(() {});
+                                  },
+                            child: Text(
+                              'Ask Agent ✦',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (upgradeFeats.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          'UPGRADE EXISTING FEATURES (${upgradeFeats.length})',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.7,
+                            color: accentAmber,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        for (final item in upgradeFeats)
+                          InkWell(
+                            onTap: () {
+                              widget.workbench.toggleProposedFeatureScope(
+                                item.beat.id,
+                                item.feat.id,
+                                !item.feat.included,
+                              );
+                              setModalState(() {});
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    item.feat.included
+                                        ? Icons.check_box_rounded
+                                        : Icons.check_box_outline_blank_rounded,
+                                    size: 16,
+                                    color: item.feat.included
+                                        ? accentAmber
+                                        : textMuted,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _formatOutlineFeatureDisplayTitle(
+                                        item.feat.title,
+                                        item.beat.title,
+                                      ),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: item.feat.included
+                                            ? textPrimary
+                                            : textMuted,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    'UPGRADE · +${item.feat.activeDeltaHours}h',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: accentAmber,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                      if (newFeats.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          'ADD NEW FEATURES (${newFeats.length})',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.7,
+                            color: accentEmerald,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        for (final item in newFeats)
+                          InkWell(
+                            onTap: () {
+                              widget.workbench.toggleProposedFeatureScope(
+                                item.beat.id,
+                                item.feat.id,
+                                !item.feat.included,
+                              );
+                              setModalState(() {});
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    item.feat.included
+                                        ? Icons.check_box_rounded
+                                        : Icons.check_box_outline_blank_rounded,
+                                    size: 16,
+                                    color: item.feat.included
+                                        ? accentEmerald
+                                        : textMuted,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _formatOutlineFeatureDisplayTitle(
+                                        item.feat.title,
+                                        item.beat.title,
+                                      ),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: item.feat.included
+                                            ? textPrimary
+                                            : textMuted,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    'NEW · +${item.feat.activeDeltaHours}h',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: accentEmerald,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: textSecondary,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  key: const ValueKey('confirm_progressive_release_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accentEmerald,
+                    foregroundColor: const Color(0xFF052E16),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    await widget.workbench.approveAndExecuteReleasePlan();
+                  },
+                  child: Text(
+                    'Build $nextVer in Workbench →',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -3591,6 +3956,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          Text(feat.title),
                           Text(
                             '${selectedHowTo.numLabel} · ${selectedHowTo.cleanTitle}',
                           ),

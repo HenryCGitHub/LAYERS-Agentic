@@ -160,7 +160,6 @@ class WorkbenchShell extends StatelessWidget {
         .length;
 
     final String? stage1Badge = draft != null ? '✓' : null;
-    final String? stage2Badge = bp?.releaseVersionTag;
     final String? stage3Badge = targetBadgeFeatIds.isNotEmpty
         ? '$doneFeatCount/${targetBadgeFeatIds.length}'
         : (rel != null ? '${workbench.getDocumentProgress(rel.id)}%' : null);
@@ -392,26 +391,7 @@ class WorkbenchShell extends StatelessWidget {
                       ),
                     ),
                     _buildStagePill(
-                      label: '2. Release Plan',
-                      badge: stage2Badge,
-                      stage: WorkbenchStage.releasePlanGate,
-                      isCompleted: allFeats.isNotEmpty,
-                      onTap: workbench.releaseBlueprint != null
-                          ? () => workbench.setStage(WorkbenchStage.releasePlanGate)
-                          : null,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Text(
-                        '▸',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9,
-                          color: textMuted,
-                        ),
-                      ),
-                    ),
-                    _buildStagePill(
-                      label: '3. Workbench',
+                      label: '2. Workbench',
                       badge: stage3Badge,
                       stage: WorkbenchStage.releaseWorkbench,
                       isCompleted: workbench.isActiveReleaseComplete,
@@ -1506,7 +1486,9 @@ class WorkbenchShell extends StatelessWidget {
     VoidCallback? onTap,
   }) {
     final isDark = workbench.isDark;
-    final isActive = stage == workbench.currentStage;
+    final isActive = stage == workbench.currentStage ||
+        (stage == WorkbenchStage.releaseWorkbench &&
+            workbench.currentStage == WorkbenchStage.releasePlanGate);
     final isCheckBadge = badge == '✓';
     final activeDotColor = AppTheme.focalAccentFor(isDark);
     final completedColor = AppTheme.accentGreenFor(isDark);

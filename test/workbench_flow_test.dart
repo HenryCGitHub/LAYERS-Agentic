@@ -198,90 +198,44 @@ void main() {
         await tester.tap(synthBtn);
         await tester.pumpAndSettle();
 
-        // ── Stage 1C: Step 10 Full Blueprint Review & Release Train ──
+        // ── Stage 1C: Step 10 Full Blueprint Review & Progressive Releases ──
         expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
         expect(find.text('STEP 10 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
         expect(find.text('v0.1: Core Movement & Game Loop - Prototype'), findsOneWidget);
+        expect(find.text('1. Concept'), findsOneWidget);
+        expect(find.text('2. Workbench'), findsOneWidget);
+        expect(find.text('2. Release Plan'), findsNothing);
+
+        // Clicking "Approve & Build v0.1 →" builds v0.1 and jumps directly into 2. Workbench (2-Stage Workflow)
         final approveConceptBtn = find.byKey(const ValueKey('approve_concept_plan_release_btn'));
         await tester.ensureVisible(approveConceptBtn);
         await tester.pumpAndSettle();
         await tester.tap(approveConceptBtn);
         await tester.pumpAndSettle();
+        expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
 
-        // ── Stage 2: Antigravity Release Plan Gate (De-Boxed Flat Section Stepper) ──
-        expect(find.byKey(const ValueKey('stage2_left_outliner_rail')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_step_goal')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_step_questions')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_beat_jump_bar')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_step_queued')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_all_beats_chip')), findsOneWidget);
-        expect(find.byKey(const ValueKey('toggle_all_feat_specs_btn')), findsOneWidget);
-        expect(find.text('Staging & Loadout Prep Mechanics & Controls'), findsOneWidget);
-
-        // Stage 2 defaults to dedicated 1-Beat-at-a-Time Focus (B01) with zero top Gate Banner or Clarifying Questions stacked above it
-        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_next_beat_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsNothing);
-        expect(find.byKey(const ValueKey('release_question_card_0_0')), findsNothing);
-
-        // Step to `01 Release Goal & Budget` in the Left Stepper and verify it displays the Gate Banner & Budget Bar
-        await tester.tap(find.byKey(const ValueKey('stage2_step_goal')));
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
-        expect(find.byKey(const ValueKey('release_hour_budget_bar')), findsOneWidget);
-        expect(find.text('STAGE 2 · RELEASE PLAN GATE'), findsOneWidget);
-
-        // Step to `02 Playtest Priorities` in the Left Stepper and verify the Clarifying Questions & Answered Decisions Strip
-        await tester.tap(find.byKey(const ValueKey('stage2_step_questions')));
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('answered_decisions_strip')), findsOneWidget);
-        expect(find.byKey(const ValueKey('toggle_release_questions_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('release_question_card_0_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('release_question_card_0_1')), findsOneWidget);
-        expect(find.byKey(const ValueKey('release_question_card_0_2')), findsOneWidget);
-
-        // Switch to `◫ Full Release Review` at the bottom of the Left Stepper
-        final fullReleaseReviewBtn = find.byKey(const ValueKey('stage2_all_beats_chip'));
-        await tester.ensureVisible(fullReleaseReviewBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(fullReleaseReviewBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('stage2_step_by_beat_card')), findsNothing);
-        expect(find.byKey(const ValueKey('release_plan_gate_banner')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_scope_guard_section')), findsOneWidget);
-        expect(find.text('IN V0.1 ✓'), findsWidgets);
-        expect(find.text('Defer to v0.2 ↪'), findsWidgets);
-
-        // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into Stage 2 (8 included features across 7 beats, 0 pre-deferred filler)
+        // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into the Release Blueprint (8 included features across 7 beats)
         expect(provider.releaseBlueprint!.beats.length, 7);
         expect(provider.releaseBlueprint!.totalIncludedFeatures, 8);
         expect(provider.releaseBlueprint!.totalDeferredFeatures, 0);
-        expect(find.byKey(const ValueKey('release_sticky_bottom_dock')), findsOneWidget);
-
-        // Verify Expandable Build Tasks & Playtest Preview Drawer on Beat 1 Feature 1 (seeds 3 Build Tasks: 01, 02, 03)
         final firstProposedFeat = provider.releaseBlueprint!.beats.first.features.first;
         expect(firstProposedFeat.checkpoints.first.tasks.length, 3);
-        final firstProposedFeatId = firstProposedFeat.id;
-        final inspectBtn = find.byKey(ValueKey('inspect_feat_$firstProposedFeatId'));
-        expect(find.byKey(ValueKey('inspect_feat_drawer_$firstProposedFeatId')), findsNothing);
-        await tester.ensureVisible(inspectBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(inspectBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(ValueKey('inspect_feat_drawer_$firstProposedFeatId')), findsOneWidget);
-        expect(find.text('FEATURE GOAL & PLAYTEST'), findsOneWidget);
-        expect(find.text('01 · '), findsWidgets);
-        expect(find.text('02 · '), findsWidgets);
-        expect(find.text('03 · '), findsWidgets);
 
-        final buildRelBtn = find.byKey(const ValueKey('approve_and_build_release_btn'));
-        await tester.ensureVisible(buildRelBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(buildRelBtn);
-        await tester.pumpAndSettle();
+        // Verify Singular-Focused Feature Titles & Progressive AI Release button in 2. Workbench
+        expect(
+          MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+            firstProposedFeat.title,
+            beatTitle: provider.releaseBlueprint!.beats.first.title,
+          ),
+          equals('Weapon Equip'),
+        );
+        expect(
+          find.byKey(const ValueKey('outliner_new_progressive_release_btn')),
+          findsOneWidget,
+        );
 
-        // ── Stage 3: Active Release Workbench (Left Sidebar Outline View + Single-Feature Workspace) ──
+        // ── Stage 2 (Workbench): Active Release Workbench (Left Outliner + Open-Canvas Workspace) ──
         expect(find.text('OUTLINE', skipOffstage: false), findsOneWidget);
         expect(find.byKey(const ValueKey('outline_release_eta_summary')), findsOneWidget);
         final firstBeatId = provider.activeReleaseBeats.first.id;

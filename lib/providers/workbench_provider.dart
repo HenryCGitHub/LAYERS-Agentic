@@ -1929,6 +1929,54 @@ class WorkbenchProvider extends ChangeNotifier {
     await openReleasePlanGate(releaseId: releaseId);
   }
 
+  /// 2-Stage Flow (`1. Concept` -> `2. Workbench`): Synthesizes the Release Blueprint and
+  /// immediately executes it into the active Workbench in one click.
+  Future<void> approveConceptAndBuildRelease({String? releaseId}) async {
+    await openReleasePlanGate(releaseId: releaseId);
+    if (_releaseBlueprint != null) {
+      await approveAndExecuteReleasePlan();
+    }
+  }
+
+  /// Next progressive version tag (`v0.2`, `v0.3`, etc.) based on how many releases have been built.
+  String get nextProgressiveVersionLabel {
+    final builtCount = projectReleases.where((r) => r.childrenIds.isNotEmpty).length;
+    return 'v0.${builtCount + 1}';
+  }
+
+  /// Prepares the next Progressive Release (`v0.2`, `v0.3+`) blueprint in-memory while keeping
+  /// the user inside `2. Workbench`, optionally applying a natural-language directive from the
+  /// Agentic Next-Release Co-Pilot.
+  Future<ReleaseBlueprint?> prepareProgressiveNextReleaseDraft({
+    String? agentDirective,
+  }) async {
+    await advanceToNextRelease();
+    _currentStage = WorkbenchStage.releaseWorkbench;
+    if (agentDirective != null && agentDirective.trim().isNotEmpty) {
+      await sendReleasePlanChatMessage(agentDirective.trim());
+    }
+    notifyListeners();
+    return _releaseBlueprint;
+  }
+
+  /// Executes the prepared (or newly synthesized) next Progressive Release (`v0.2`, `v0.3+`)
+  /// directly into `2. Workbench`.
+  Future<void> buildProgressiveNextRelease({String? agentDirective}) async {
+    final currentBp = _releaseBlueprint;
+    final activeRel = activeRelease;
+    if (currentBp == null ||
+        (activeRel != null &&
+            currentBp.releaseDocId == activeRel.id &&
+            activeRel.childrenIds.isNotEmpty)) {
+      await prepareProgressiveNextReleaseDraft(agentDirective: agentDirective);
+    } else if (agentDirective != null && agentDirective.trim().isNotEmpty) {
+      await sendReleasePlanChatMessage(agentDirective.trim());
+    }
+    if (_releaseBlueprint != null) {
+      await approveAndExecuteReleasePlan();
+    }
+  }
+
   /// Re-opens Stage 2 (`Release Plan Gate`) for the currently active Release using the existing
   /// `ReleaseBlueprint` if available, or plans it if none exists.
   Future<void> reopenCurrentReleasePlanGate() async {

@@ -247,16 +247,16 @@ class MechanicArchetypeProfile {
           contextLower.contains('reward') ||
           contextLower.contains('choice') ||
           beatIndex == 2) {
-        return 'Upgrade Reroll & Stat Buffs';
+        return 'Upgrade Reroll';
       }
       if (contextLower.contains('reset') ||
           contextLower.contains('clear') ||
           contextLower.contains('resolution') ||
           contextLower.contains('resolve') ||
           beatIndex == 3) {
-        return 'Run Summary & Fast Restart';
+        return 'Run Summary';
       }
-      return 'Starting Weapon Pedestals';
+      return 'Weapon Pedestal';
     }
 
     final isGenericMechanicsSuffix =
@@ -265,36 +265,42 @@ class MechanicArchetypeProfile {
         cleanFeat.toLowerCase().endsWith('mechanics & controls');
 
     if (!isGenericMechanicsSuffix) {
+      if (stripped.contains(' & ')) {
+        final firstPart = stripped.split(' & ').first.trim();
+        if (firstPart.split(RegExp(r'\s+')).length >= 2) {
+          return firstPart;
+        }
+      }
       return stripped;
     }
 
     if (contextLower.contains('shield') || contextLower.contains('boss')) {
-      return 'Boss Shield & Weakpoint';
+      return 'Boss Shield Break';
     }
     if (contextLower.contains('grappl') ||
         contextLower.contains('hook') ||
         contextLower.contains('swing') ||
         contextLower.contains('tether')) {
-      return 'Grapple Hook & Swing';
+      return 'Grapple Hook';
     }
     if (contextLower.contains('entry') ||
         contextLower.contains('traversal') ||
         contextLower.contains('dash') ||
         contextLower.contains('locomotion') ||
         contextLower.contains('parkour')) {
-      return 'Movement & Dash Controls';
+      return 'Player Dash';
     }
     if (contextLower.contains('loadout') ||
         contextLower.contains('prep') ||
         contextLower.contains('staging') ||
         contextLower.contains('equip')) {
-      return 'Weapon & Ability Equip';
+      return 'Weapon Equip';
     }
     if (contextLower.contains('hazard') ||
         contextLower.contains('enemy') ||
         contextLower.contains('escalation') ||
         contextLower.contains('counter')) {
-      return 'Enemy Wave & Hazard Spawner';
+      return 'Enemy Wave Spawner';
     }
     if (contextLower.contains('combat') ||
         contextLower.contains('weapon') ||
@@ -304,20 +310,20 @@ class MechanicArchetypeProfile {
         contextLower.contains('active gameplay') ||
         contextLower.contains('gameplay beat') ||
         contextLower.contains('skill execution')) {
-      return 'Movement & Weapon Firing';
+      return 'Weapon Firing';
     }
     if (contextLower.contains('drop') ||
         contextLower.contains('pickup') ||
         contextLower.contains('loot') ||
         contextLower.contains('tally')) {
-      return 'Loot Drop & Pickup';
+      return 'Loot Pickup';
     }
     if (contextLower.contains('upgrade') ||
         contextLower.contains('reward') ||
         contextLower.contains('resource') ||
         contextLower.contains('perk') ||
         contextLower.contains('choice')) {
-      return 'Wave-Clear Upgrade Pick';
+      return 'Upgrade Card Pick';
     }
     if (contextLower.contains('reset') ||
         contextLower.contains('resolution') ||
@@ -326,37 +332,37 @@ class MechanicArchetypeProfile {
         contextLower.contains('next wave') ||
         contextLower.contains('next-wave') ||
         contextLower.contains('clear')) {
-      return 'Round Clear & Wave Reset';
+      return 'Wave Reset';
     }
     if (contextLower.contains('crop') ||
         contextLower.contains('farm') ||
         contextLower.contains('plant') ||
         contextLower.contains('harvest')) {
-      return 'Crop Plot & Growth Timer';
+      return 'Crop Plot Timer';
     }
     if (contextLower.contains('shop') ||
         contextLower.contains('buy') ||
         contextLower.contains('sell') ||
         contextLower.contains('smelt') ||
         contextLower.contains('craft')) {
-      return 'Shop Buy & Sell';
+      return 'Shop Purchase';
     }
     if (contextLower.contains('grid') ||
         contextLower.contains('build') ||
         contextLower.contains('place') ||
         contextLower.contains('tile')) {
-      return 'Grid Snap & Placement';
+      return 'Grid Placement';
     }
 
     switch (beatIndex % 4) {
       case 0:
-        return 'Weapon & Ability Equip';
+        return 'Weapon Equip';
       case 1:
-        return 'Movement & Weapon Firing';
+        return 'Weapon Firing';
       case 2:
-        return 'Wave-Clear Upgrade Pick';
+        return 'Upgrade Card Pick';
       default:
-        return 'Round Clear & Wave Reset';
+        return 'Wave Reset';
     }
   }
 
@@ -2646,7 +2652,7 @@ class TaskHowToBlueprint {
                 shortTitle: isFoundationTask
                     ? 'Create $cppClass C++ Class'
                     : (isStateLogicTask
-                        ? 'Define State Enum & Properties'
+                        ? 'Define State Enum'
                         : 'Bind Player Interaction Input'),
                 instruction: isFoundationTask
                     ? 'In the Unreal Editor top menu, click Tools → New C++ Class... → choose Actor as the parent class → name it $pascalAsset and click Create Class.'
@@ -2668,7 +2674,7 @@ class TaskHowToBlueprint {
                         ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION FUNCTION'
                         : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE IN C++'),
                 shortTitle: isFoundationTask
-                    ? 'Create Mesh & Collision Subobjects'
+                    ? 'Attach Mesh Subobject'
                     : (isStateLogicTask
                         ? 'Build State Transition Function'
                         : 'Cast Interaction LineTrace'),
@@ -2740,7 +2746,7 @@ class TaskHowToBlueprint {
                     ? 'Initialize Default Component State'
                     : (isStateLogicTask
                         ? 'Step State with Interpolation Logic'
-                        : 'Connect Cooldown & Range Check'),
+                        : 'Add Cooldown Timer'),
                 instruction:
                     'In $pascalAsset.cpp, implement the trigger and state interpolation for "$cleanTitle" using FMath::FInterpConstantTo driven by $primaryVarName.',
                 verify:
@@ -2757,7 +2763,7 @@ class TaskHowToBlueprint {
                         ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
                         : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (ALT+P)'),
                 shortTitle: isFoundationTask
-                    ? 'Compile & Verify Actor in Level'
+                    ? 'Verify Actor in Level'
                     : (isStateLogicTask
                         ? 'Add Invalid-State Transition Guard'
                         : 'Playtest Full Loop in Viewport (Alt+P)'),
@@ -2783,7 +2789,7 @@ class TaskHowToBlueprint {
                 shortTitle: isFoundationTask
                     ? 'Create $bpAsset'
                     : (isStateLogicTask
-                        ? 'Define State Enum & Variables'
+                        ? 'Define State Enum'
                         : 'Bind Player Interaction Input'),
                 instruction: isFoundationTask
                     ? 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Actor, and name it $bpAsset.'
@@ -2805,7 +2811,7 @@ class TaskHowToBlueprint {
                         ? 'STEP $taskNum.2 · BUILD STATE TRANSITION FUNCTION'
                         : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE BY CHANNEL'),
                 shortTitle: isFoundationTask
-                    ? 'Attach Mesh & BoxCollision'
+                    ? 'Attach BoxCollision'
                     : (isStateLogicTask
                         ? 'Build State Transition Function'
                         : 'Cast Interaction LineTrace'),
@@ -2890,7 +2896,7 @@ class TaskHowToBlueprint {
                     ? 'Initialize Default Component State'
                     : (isStateLogicTask
                         ? 'Step State with Interpolation Logic'
-                        : 'Connect Cooldown & Range Check'),
+                        : 'Add Cooldown Timer'),
                 instruction:
                     'Open the Event Graph tab. Right-click InteractBox → Add Event → OnComponentBeginOverlap (or Input Action) → connect a Branch node → Set bIsActive = true and update the active state using $primaryVarName.',
                 verify:
@@ -2907,7 +2913,7 @@ class TaskHowToBlueprint {
                         ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
                         : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (ALT+P)'),
                 shortTitle: isFoundationTask
-                    ? 'Compile & Verify Actor in Level'
+                    ? 'Verify Actor in Level'
                     : (isStateLogicTask
                         ? 'Add Invalid-State Transition Guard'
                         : 'Playtest Full Loop in Viewport (Alt+P)'),
@@ -2938,7 +2944,7 @@ class TaskHowToBlueprint {
               shortTitle: isFoundationTask
                   ? 'Create $pascalAsset.cs'
                   : (isStateLogicTask
-                      ? 'Define State Enum & Variables'
+                      ? 'Define State Enum'
                       : 'Bind Player Interaction Input'),
               instruction: isFoundationTask
                   ? 'In the Project window (bottom panel), right-click inside Assets/Scripts → Create → C# Script, and name it $pascalAsset.'
@@ -2960,7 +2966,7 @@ class TaskHowToBlueprint {
                       ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION METHOD'
                       : 'STEP $taskNum.2 · CAST PHYSICS RAYCAST TO TARGET'),
               shortTitle: isFoundationTask
-                  ? 'Add Mesh & BoxCollider'
+                  ? 'Attach BoxCollider'
                   : (isStateLogicTask
                       ? 'Build State Transition Function'
                       : 'Cast Interaction Raycast'),
@@ -3021,7 +3027,7 @@ class TaskHowToBlueprint {
                   ? 'Initialize Default Component State'
                   : (isStateLogicTask
                       ? 'Step State with Interpolation Logic'
-                      : 'Connect Cooldown & Range Check'),
+                      : 'Add Cooldown Timer'),
               instruction:
                   'Inside $pascalAsset.cs, implement Update() / FixedUpdate() to read input with Input.GetButton("Fire1") and advance state using Time.fixedDeltaTime and $primaryVarName.',
               verify:
@@ -3038,7 +3044,7 @@ class TaskHowToBlueprint {
                       ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
                       : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN EDITOR (CTRL+P)'),
               shortTitle: isFoundationTask
-                  ? 'Compile & Verify in Scene'
+                  ? 'Verify Prefab in Scene'
                   : (isStateLogicTask
                       ? 'Add Invalid-State Transition Guard'
                       : 'Playtest Full Loop in Editor (Ctrl+P)'),
@@ -3065,9 +3071,9 @@ class TaskHowToBlueprint {
                     ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $snakeAsset.gd'
                     : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $snakeAsset.gd'),
             shortTitle: isFoundationTask
-                ? 'Create $snakeAsset.tscn & .gd'
+                ? 'Create $snakeAsset.tscn'
                 : (isStateLogicTask
-                    ? 'Define State Enum & Variables'
+                    ? 'Define State Enum'
                     : 'Bind Player Interaction Input'),
             instruction: isFoundationTask
                 ? 'In the Scene dock (top-left), click + Other Node → select Node2D / CharacterBody2D → name it "$pascalAsset". Save the scene as res://scenes/$snakeAsset.tscn, then click the Attach Script icon to create res://scripts/$snakeAsset.gd.'
@@ -3089,7 +3095,7 @@ class TaskHowToBlueprint {
                     ? 'STEP $taskNum.2 · BUILD SET_STATE() TRANSITION FUNCTION'
                     : 'STEP $taskNum.2 · CAST RAYCAST2D / AREA2D QUERY'),
             shortTitle: isFoundationTask
-                ? 'Add Sprite2D & Area2D/CollisionShape2D'
+                ? 'Attach CollisionShape2D'
                 : (isStateLogicTask
                     ? 'Build State Transition Function'
                     : 'Cast Interaction RayCast2D'),
@@ -3150,7 +3156,7 @@ class TaskHowToBlueprint {
                 ? 'Initialize Default Node State'
                 : (isStateLogicTask
                     ? 'Step State with Interpolation Logic'
-                    : 'Connect Cooldown & Range Check'),
+                    : 'Add Cooldown Timer'),
             instruction:
                 'Inside $snakeAsset.gd, add func _physics_process(delta: float) -> void: to check Input.is_action_pressed("primary_action") and step the value using move_toward and $primaryVarName.',
             verify:
@@ -3167,7 +3173,7 @@ class TaskHowToBlueprint {
                     ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
                     : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (F5)'),
             shortTitle: isFoundationTask
-                ? 'Save & Verify Scene in Viewport'
+                ? 'Verify Scene in Viewport'
                 : (isStateLogicTask
                     ? 'Add Invalid-State Transition Guard'
                     : 'Playtest Full Loop in Viewport (F5)'),

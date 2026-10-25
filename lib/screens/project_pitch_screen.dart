@@ -177,12 +177,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     _SectionConfig(
       numLabel: '09',
       optionKey: 'prototypeRelease',
-      shortTitle: 'Prototype Release',
-      title: 'Phase 1: Prototype Release',
-      purpose: 'Focuses strictly on proving the Core Loop first. Subsequent phases (MVPs per Beat → Vertical Slice → Full Production) unlock as each phase completes.',
-      question: 'How should we scope Phase 1 (Prototype) before unlocking MVP Beat Releases?',
+      shortTitle: 'Releases (v0.1+)',
+      title: 'Progressive Releases (v0.1 → v0.2+)',
+      purpose: 'Start with a playable v0.1 core loop in the Workbench, then evolve to v0.2 → v0.3+ guided by Agentic AI.',
+      question: 'How should we scope v0.1 before evolving progressively into v0.2+?',
       options: [
-        'Single v0.1 Greybox: Single Greybox Prototype (v0.1) proving the Core Loop Beats work together',
+        'Single v0.1 Core Loop: Build the complete greybox core loop in v0.1, then evolve systems in v0.2+',
         'Two-Step v0.1 → v0.2: v0.1 Player Movement & Controls → v0.2 Full Core Loop Arena',
       ],
     ),
@@ -4000,69 +4000,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     bool isReadOnlySummary = false,
   }) {
     final releases = draft.releaseTrainTitles;
-    const lockedPhases = [
-      ProductionPhase.mvp,
-      ProductionPhase.verticalSlice,
-      ProductionPhase.fullProduction,
-    ];
-
-    Widget buildLockedPhaseCard(int pIdx) {
-      final phase = lockedPhases[pIdx];
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: borderSubtle),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 112,
-              child: Text(
-                'LOCKED · PHASE ${pIdx + 2}',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: textSecondary.withValues(alpha: 0.8),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    phase.label,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    phase.summary,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: textSecondary.withValues(alpha: 0.78),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Active Phase 1: Prototype Release(s) (Boxless Left-Bar Editorial Layout)
         Container(
           padding: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
@@ -4072,7 +4013,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                ProductionPhase.prototype.label,
+                'PROGRESSIVE AI RELEASE TRACK (v0.1 → v0.2 → v0.3+)',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -4080,11 +4021,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 ),
               ),
               Text(
-                'ACTIVE PHASE',
+                'ACTIVE TARGET · v0.1',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 9.5,
                   fontWeight: FontWeight.w800,
-                  color: accentAmber,
+                  color: accentCyan,
                 ),
               ),
             ],
@@ -4092,7 +4033,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         ),
         const SizedBox(height: 6),
         Text(
-          ProductionPhase.prototype.summary,
+          'Approving this Concept immediately builds v0.1 in the Workbench. For v0.2 → v0.3+, the Agentic AI guides which existing features to Upgrade and which New Systems to add next.',
           style: GoogleFonts.inter(
             fontSize: 12.5,
             color: textSecondary,
@@ -4106,7 +4047,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             isFirst: i == 0,
             index: i,
             onTap: () => _showDirectSectionTextEditDialog(
-              title: 'Prototype Release v0.${i + 1}',
+              title: 'Release v0.${i + 1}',
               initialText: releases[i],
               onSave: (val) => widget.workbench.updateConceptDraft((d) {
                 final next = List<String>.from(d.releaseTrainTitles);
@@ -4116,9 +4057,57 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             ),
           ),
         if (!isReadOnlySummary) ...[
-          const SizedBox(height: 14),
-          for (int pIdx = 0; pIdx < lockedPhases.length; pIdx++)
-            buildLockedPhaseCard(pIdx),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: accentEmerald, width: 2),
+                bottom: BorderSide(color: borderSubtle),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 116,
+                  child: Text(
+                    'v0.2 → v0.3+ · AI',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: accentEmerald,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Progressive Agentic Releases Inside the Workbench',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Click "+ New Release (v0.2) ✦" in the Workbench at any time—the Agent recommends which existing features to Upgrade (UPGRADE), which New Features (NEW) to add, and what direction to take next.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ],
     );
@@ -4427,7 +4416,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       key: key,
       onPressed: widget.workbench.isAgentBusy
           ? null
-          : () => widget.workbench.openReleasePlanGate(),
+          : () => widget.workbench.approveConceptAndBuildRelease(),
       style: ElevatedButton.styleFrom(
         backgroundColor: focalAccent,
         foregroundColor: focalAccentFg,
@@ -4443,8 +4432,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       ),
       child: Text(
         widget.workbench.isAgentBusy
-            ? 'Generating Release Plan...'
-            : 'Approve & Plan v0.1 Release →',
+            ? 'Building v0.1 Workbench...'
+            : 'Approve & Build v0.1 →',
         style: GoogleFonts.inter(
           fontSize: 13,
           fontWeight: FontWeight.w800,
