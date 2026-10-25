@@ -56,10 +56,10 @@ RULES:
     }.toList();
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
-    // Skip billed thinking tokens on 'LOW' JSON turns; only enable thinkingConfig on MEDIUM or HIGH
-    final preferThinking =
-        normalizedThinking == 'MEDIUM' || normalizedThinking == 'HIGH';
-    final thinkingOrder = preferThinking ? const [true, false] : const [false];
+    // Always pass explicit thinkingConfig (including 'LOW') first so Gemini 3.8/4 models
+    // do not fall back to their default HIGH thinking budget; retry without if unsupported.
+    final thinkingOrder =
+        normalizedThinking.isNotEmpty ? const [true, false] : const [false];
 
     for (final model in modelsToTry) {
       for (final includeThinking in thinkingOrder) {

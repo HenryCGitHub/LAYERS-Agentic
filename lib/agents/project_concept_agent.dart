@@ -597,7 +597,7 @@ Return ONLY valid JSON:
     return 'Single-Arena Loop: Build a playable $title prototype where you master $phrase, chain core movement and combat actions, and complete a full arena loop.';
   }
 
-  /// Extracts a concise synthesized premise phrase from `spark` (never echoing raw "X game but in a Y" brain dumps).
+  /// Extracts a concise synthesized premise phrase from `spark` (never echoing raw user sentences verbatim).
   static String _shortSparkPhrase(String spark, String fallbackTitle) {
     var base = ProjectConceptBlueprint.normalizeCommonTypos(spark.trim());
     final dashIdx = base.indexOf(' — ');
@@ -617,20 +617,11 @@ Return ONLY valid JSON:
       final twist = butInMatch.group(2)!.trim().toLowerCase();
       return 'high-speed $twist arena combat and movement';
     }
-    final usingMatch = RegExp(
-      r'\b(?:using|with)\s+([a-z0-9,\s-]+?)(?=\s+(?:against|across|in\b|to\b)|[.,;]|$)',
-      caseSensitive: false,
-    ).firstMatch(base);
-    if (usingMatch != null) {
-      final mechClause = usingMatch.group(1)!.trim();
-      if (mechClause.length >= 6 && mechClause.length <= 68) {
-        return mechClause.toLowerCase();
-      }
+    final mechs = _deterministicMechanicsForIdea(base);
+    if (mechs.isNotEmpty && mechs.first != 'Responsive Core Controls') {
+      return '${mechs.first.toLowerCase()} and ${mechs.length > 1 ? mechs[1].toLowerCase() : 'tactical positioning'}';
     }
-    if (base.isEmpty || base.length > 72) {
-      return '${fallbackTitle.toLowerCase()} mechanics';
-    }
-    return base.toLowerCase();
+    return '${fallbackTitle.toLowerCase()} mechanics';
   }
 
   static String _derivePunchyTitle(
@@ -1018,10 +1009,11 @@ Return ONLY valid JSON:
     if (GeminiAgentClient.hasKey(apiKey) && !isExplicitRename) {
       final prompt = '''
 You are an indie game producer summarizing a developer's game idea before building the blueprint.
-${existingIntake != null ? 'Previous Title: "${existingIntake.workingTitle}"\nPrevious Summary: "${existingIntake.baseSummary}"\nUpdated Idea Premise: "${deterministic.rawIdea}"\n${cleanInput.isNotEmpty ? 'User Update Direction: "$cleanInput"' : 'Action: Refresh summary and propose 3 new expansion cards.'}' : 'Idea: "${deterministic.rawIdea}"'}
+${existingIntake != null ? 'Previous Title: "${existingIntake.workingTitle}"\nPrevious Summary: "${existingIntake.baseSummary}"\n${cleanInput.isNotEmpty ? 'User Update Direction: "$cleanInput"' : 'Action: Fold any newly selected mechanics into Previous Summary and propose 3 fresh expansion cards.'}\nUpdated Mechanics: ${deterministic.mechanics.join(', ')}' : 'Raw Idea: "${deterministic.rawIdea}"'}
 ${GeminiAgentClient.compactStyleRules}
 - `workingTitle` MUST be a concrete 2-3 word game title naming the setting/role/mechanic (NEVER just copy the first 3 words of the user's sentence).
-- `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop (NEVER quote or repeat the user's raw sentence verbatim).
+- `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop in game-design language (NEVER quote, echo, or replace the summary with the user's raw input sentence verbatim).
+${existingIntake != null ? '- When updating an existing summary, preserve the core premise of `Previous Summary` and smoothly integrate `User Update Direction` into it.' : ''}
 
 Return ONLY valid JSON:
 {
@@ -1159,13 +1151,14 @@ Return ONLY valid JSON:
   }
 
   /// Synthesizes a natural, plain-English 2-sentence game summary from `cleanIdea`
-  /// without ever quoting or echoing the user's raw sentence verbatim.
+  /// without ever quoting or splicing the user's raw sentence verbatim.
   static String _synthesizeNaturalSparkSummary(
     String cleanIdea,
     String title, {
     int variantOffset = 0,
   }) {
-    final normalized = ProjectConceptBlueprint.normalizeCommonTypos(cleanIdea.trim());
+    final normalized =
+        ProjectConceptBlueprint.normalizeCommonTypos(cleanIdea.trim());
     final lower = normalized.toLowerCase();
 
     final hasGrapple = lower.contains('grappl') ||
@@ -1178,7 +1171,7 @@ Return ONLY valid JSON:
         lower.contains('haul') ||
         lower.contains('courier');
 
-    if (hasParkour && hasCargo && !hasGrapple) {
+    if (hasParkour && hasCargo) {
       final setting = lower.contains('metropolis')
           ? 'a ruined metropolis'
           : (lower.contains('city') ? 'a contested city' : 'hazardous zones');
@@ -1187,10 +1180,13 @@ Return ONLY valid JSON:
           : (lower.contains('drone')
               ? 'patrol drones hunting your haul'
               : 'hostile ambush squads along your route');
+      final traversalPhrase = hasGrapple
+          ? 'fluid parkour, wall-running, and grapple swings'
+          : 'fluid parkour, wall-running, and high-speed combat';
       if (variantOffset % 2 == 1) {
-        return 'Sprint and wall-run across $setting to secure vital cargo and extract it past $threat. Combine high-speed parkour momentum with close-quarters combat to protect your haul, cash in deliveries at safe-zone terminals, and unlock upgraded movement rigs between runs.';
+        return 'Sprint and wall-run across $setting to secure vital cargo and extract it past $threat. Combine $traversalPhrase to protect your haul, cash in deliveries at safe-zone terminals, and unlock upgraded movement rigs between runs.';
       }
-      return 'Traverse $setting to retrieve and transport high-value cargo through lethal sectors using fluid parkour, wall-running, and high-speed combat. Chain rooftop and wall-run routes to outrun or fight off $threat, bank completed deliveries at safe zones, and upgrade your runner gear between runs.';
+      return 'Traverse $setting to retrieve and transport high-value cargo through lethal sectors using $traversalPhrase. Chain rooftop routes to outrun or fight off $threat, bank completed deliveries at safe zones, and upgrade your runner gear between runs.';
     }
 
     if (lower.contains('submarine') ||
@@ -1201,40 +1197,17 @@ Return ONLY valid JSON:
       return 'Explore dark ocean trenches in a deep-sea submarine, combining marine photography and wreck salvage under hull pressure hazards. Balance floodlight battery drain and winch tow weight during each dive, then return to the surface dock to upgrade your hull and sonar between runs.';
     }
 
-    // General clause extraction: setting ("across/in/through ..."), mechanics ("using/with ..."), threats ("against ...")
-    final settingMatch = RegExp(
-      r'\b(?:across|in|through|inside)\s+([a-z0-9\s-]+?)(?=\s+(?:using|with|where|while|against|to\b)|[.,;]|$)',
-      caseSensitive: false,
-    ).firstMatch(normalized);
-    final usingMatch = RegExp(
-      r'\b(?:using|with|via)\s+([a-z0-9,\s-]+?)(?=\s+(?:against|to\b|across|in\b|while|where)|[.,;]|$)',
-      caseSensitive: false,
-    ).firstMatch(normalized);
-    final againstMatch = RegExp(
-      r'\b(?:against|versus|fighting|battling)\s+([a-z0-9\s-]+?)(?=[.,;]|$)',
-      caseSensitive: false,
-    ).firstMatch(normalized);
-
-    if (usingMatch != null) {
-      final mechClause = usingMatch.group(1)!.trim();
-      final settingClause = settingMatch != null
-          ? ' across ${settingMatch.group(1)!.trim()}'
-          : '';
-      final threatClause = againstMatch != null
-          ? ' against ${againstMatch.group(1)!.trim()}'
-          : ' across escalating encounters';
-      final coreSubject = title.toLowerCase();
-      if (variantOffset % 2 == 1) {
-        return 'Master $coreSubject gameplay$settingClause using $mechClause while fending off threats$threatClause. Complete escalating round objectives, bank run rewards, and upgrade your loadout between runs.';
-      }
-      return 'Navigate high-risk $coreSubject arenas$settingClause using $mechClause with responsive controls and clear on-screen feedback. Overcome hazards$threatClause, secure round rewards, and upgrade your loadout between runs.';
-    }
-
-    final shortPremise = _shortSparkPhrase(normalized, title);
+    final mechs = _deterministicMechanicsForIdea(normalized);
+    final primaryMech = mechs.isNotEmpty
+        ? mechs.first.toLowerCase()
+        : '${title.toLowerCase()} controls';
+    final secondaryMech = mechs.length > 1
+        ? mechs[1].toLowerCase()
+        : 'tactical positioning';
     if (variantOffset % 2 == 1) {
-      return 'Master $shortPremise in fast, repeatable arena runs with crisp input response and clear telegraphs. Complete round objectives under pressure, pick run-modifying upgrades, and reset cleanly between runs.';
+      return 'Master $primaryMech and $secondaryMech in fast, repeatable ${title.toLowerCase()} runs with crisp input response and clear telegraphs. Complete escalating round objectives under pressure, pick run-modifying upgrades, and reset cleanly between runs.';
     }
-    return 'Execute responsive $shortPremise controls across escalating arena encounters with immediate visual and audio feedback. Chain core movement and combat actions to clear each round objective, earn run-modifying upgrades, and reset cleanly between runs.';
+    return 'Execute responsive $primaryMech and $secondaryMech across escalating ${title.toLowerCase()} encounters with immediate visual and audio feedback. Clear each round objective to secure rewards, unlock loadout upgrades, and reset cleanly between runs.';
   }
 
   static SparkIdeaIntakeResult buildDeterministicSparkIntake({
@@ -1248,6 +1221,8 @@ Return ONLY valid JSON:
         ? 'High-speed grappling hook parkour roguelite'
         : rawIdea.trim();
     String? explicitTitleOverride;
+    String? replacedOldSub;
+    String? replacedNewSub;
     final addedTags = <String>[];
     final addedSentences = <String>[];
 
@@ -1295,10 +1270,11 @@ Return ONLY valid JSON:
       ).firstMatch(cleanRef);
 
       final refWords = cleanRef.split(RegExp(r'\s+'));
-      final isRefinementCommand = RegExp(
-        r'^(?:please\s+|can\s+we\s+|let\x27s\s+)?(?:add|include|remove|cut|change|replace|swap|instead|make|use|focus|with|also|more|less)\b',
-        caseSensitive: false,
-      ).hasMatch(cleanRef);
+      final isExplicitNewGamePitch = refWords.length >= 10 &&
+          RegExp(
+            r'^(?:(?:new\s+(?:game|idea|pitch)\s*:?\s*)|(?:(?:a|an)\s+[a-z0-9\s-]+\bgame\b))',
+            caseSensitive: false,
+          ).hasMatch(cleanRef);
 
       if (renameMatch != null) {
         final rawNewTitle =
@@ -1310,6 +1286,8 @@ Return ONLY valid JSON:
         final m = (insteadMatch ?? replaceMatch)!;
         final oldSub = m.group(1)!.trim();
         final newSub = m.group(2)!.trim();
+        replacedOldSub = oldSub;
+        replacedNewSub = newSub;
         if (RegExp(RegExp.escape(oldSub), caseSensitive: false)
             .hasMatch(effectiveIdea)) {
           effectiveIdea = effectiveIdea.replaceAll(
@@ -1325,8 +1303,8 @@ Return ONLY valid JSON:
             .map((w) => w.isNotEmpty ? w[0].toUpperCase() + w.substring(1) : '')
             .join(' ');
         if (capNew.isNotEmpty) addedTags.add(capNew);
-      } else if (refWords.length >= 10 && !isRefinementCommand) {
-        // User pasted a full revised/new game pitch into the input box
+      } else if (isExplicitNewGamePitch) {
+        // User explicitly entered a brand-new "A <genre> game..." pitch
         effectiveIdea = cleanRef;
         isFullNewPitch = true;
       } else {
@@ -1378,16 +1356,45 @@ Return ONLY valid JSON:
       }
     }
 
-    var summary = _synthesizeNaturalSparkSummary(
-      effectiveIdea,
-      title,
-      variantOffset: isUpdateAction ? suggestionVariantOffset : 0,
-    );
-    if (addedSentences.isNotEmpty) {
-      final combinedAdditions = addedSentences.join(' and ');
-      if (!summary.toLowerCase().contains(combinedAdditions.toLowerCase())) {
-        summary =
-            '$summary Incorporates $combinedAdditions directly into the core loop.';
+    // Preserve and evolve `existingIntake.baseSummary` on Update Summary instead of replacing it
+    final hasLegacyQuotedSummary = existingIntake != null &&
+        existingIntake.baseSummary.contains('centers on "');
+    String summary;
+    if (existingIntake != null &&
+        isUpdateAction &&
+        !isFullNewPitch &&
+        !hasLegacyQuotedSummary) {
+      summary = existingIntake.baseSummary;
+      if (replacedOldSub != null && replacedNewSub != null) {
+        if (RegExp(RegExp.escape(replacedOldSub), caseSensitive: false)
+            .hasMatch(summary)) {
+          summary = summary.replaceAll(
+            RegExp(RegExp.escape(replacedOldSub), caseSensitive: false),
+            replacedNewSub,
+          );
+        } else {
+          summary = '$summary Incorporates $replacedNewSub into the core loop.';
+        }
+      }
+      if (addedSentences.isNotEmpty) {
+        final combinedAdditions = addedSentences.join(' and ');
+        if (!summary.toLowerCase().contains(combinedAdditions.toLowerCase())) {
+          summary =
+              '$summary Incorporates $combinedAdditions directly into the core loop.';
+        }
+      }
+    } else {
+      summary = _synthesizeNaturalSparkSummary(
+        effectiveIdea,
+        title,
+        variantOffset: isUpdateAction ? suggestionVariantOffset : 0,
+      );
+      if (addedSentences.isNotEmpty) {
+        final combinedAdditions = addedSentences.join(' and ');
+        if (!summary.toLowerCase().contains(combinedAdditions.toLowerCase())) {
+          summary =
+              '$summary Incorporates $combinedAdditions directly into the core loop.';
+        }
       }
     }
 
