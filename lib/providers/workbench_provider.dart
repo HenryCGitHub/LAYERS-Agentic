@@ -2668,11 +2668,20 @@ Return ONLY a JSON object with this schema:
     notifyListeners();
   }
 
+  static final RegExp _mvpEpicLabelRegex =
+      RegExp(r'MVP Epic\s*\d+(?:\s*\([^)]+\))?', caseSensitive: false);
+
+  /// Extracts or resolves the canonical version tag (`v0.1`, `v0.2`, `v1.0`) for a Release document.
+  String releaseVersionTagFor(TierDocument relDoc) {
+    final explicitTag = relDoc.sections['versionTag']?.trim();
+    if (explicitTag != null && explicitTag.isNotEmpty) return explicitTag;
+    return ReleasePlannerAgent.extractReleaseVersionTag(relDoc.title);
+  }
+
   String get activeReleaseVersionTag {
     final rel = activeRelease;
     if (rel == null) return 'v0.1';
-    return rel.sections['versionTag'] ??
-        ReleasePlannerAgent.extractReleaseVersionTag(rel.title);
+    return releaseVersionTagFor(rel);
   }
 
   /// Concise milestone subtitle for the Stage 3 Release Dropdown and header pill.
@@ -2682,9 +2691,7 @@ Return ONLY a JSON object with this schema:
     if (protoPart == '2') return 'Prototype (Part 2)';
     final phase = relDoc.sections['phase'] ?? '';
     if (phase == ProductionPhase.mvp.name) {
-      final match =
-          RegExp(r'MVP Epic\s*\d+(?:\s*\([^)]+\))?', caseSensitive: false)
-              .firstMatch(relDoc.title);
+      final match = _mvpEpicLabelRegex.firstMatch(relDoc.title);
       if (match != null) return match.group(0)!.trim();
       final idx =
           (int.tryParse(relDoc.sections['targetEpicIndex'] ?? '') ?? 0) + 1;
@@ -2733,8 +2740,7 @@ Return ONLY a JSON object with this schema:
     // For a Release document, scope progress to active (non-STABLE) Epics so new releases start at 0%
     if (doc.tier == TierType.release) {
       if (doc.id != _activeReleaseId) {
-        final relVer = doc.sections['versionTag'] ??
-            ReleasePlannerAgent.extractReleaseVersionTag(doc.title);
+        final relVer = releaseVersionTagFor(doc);
         int relTotal = 0;
         int relDone = 0;
         for (final beatId in doc.childrenIds) {
@@ -2865,10 +2871,7 @@ Return ONLY a JSON object with this schema:
     final nextIdx = currentIdx + 1;
     if (nextIdx >= 0 && nextIdx < releases.length) {
       final nextRel = releases[nextIdx];
-      final nextVer =
-          nextRel.sections['versionTag'] ??
-          RegExp(r'v\d+\.\d+').firstMatch(nextRel.title)?.group(0) ??
-          'v0.${nextIdx + 1}';
+      final nextVer = releaseVersionTagFor(nextRel);
       if (nextRel.sections['phase'] == ProductionPhase.mvp.name) {
         final epicIdx =
             (int.tryParse(nextRel.sections['targetEpicIndex'] ?? '') ?? 0) + 1;

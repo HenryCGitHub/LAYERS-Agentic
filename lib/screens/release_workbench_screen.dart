@@ -27,15 +27,16 @@ class ReleaseWorkbenchScreen extends StatefulWidget {
 
 class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     with WorkbenchThemeMixin {
+  static final RegExp _assetTokenRegex = RegExp(
+    r'\b(?:BP_[A-Za-z0-9_]+|A[A-Z][A-Za-z0-9_]+Actor|[A-Za-z0-9_]+\.(?:uasset|tscn|gd|cs|h|cpp)|InteractBox|VisualMesh|DefaultSceneRoot|InteractTrigger|HitBox|CollisionShape2D|BoxCollider)\b',
+  );
+
   final Set<String> _expandedDoneCheckpoints = {};
   final Set<String> _awaitingPlaytestVerification = {};
   int? _manualCheckpointFocusIndex;
   bool _criticalPathOnly = false;
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
-  final Set<String> _collapsedOutlineFeatureIds = {};
-  final Set<String> _expandedOutlineFeatureIds = {};
-  final Map<String, int> _lastOutlineTapMsByKey = {};
   bool _unrealCppMode = false;
   double _outlinerWidth = 340.0;
   bool _isHalfScreenOutlinerOpen = false;
@@ -54,32 +55,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       beatTitle: beatTitle,
       beatIndex: beatIndex,
     );
-  }
-
-  bool _isDoubleClickOnOutlineItem(String key) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final prev = _lastOutlineTapMsByKey[key];
-    _lastOutlineTapMsByKey[key] = now;
-    return prev != null && (now - prev) <= 340;
-  }
-
-  bool _isFeatureExpandedInOutline(String featId, {required bool isSelected}) {
-    if (_expandedOutlineFeatureIds.contains(featId)) return true;
-    if (_collapsedOutlineFeatureIds.contains(featId)) return false;
-    return isSelected;
-  }
-
-  void _toggleFeatureExpandedInOutline(
-    String featId, {
-    required bool currentlyExpanded,
-  }) {
-    if (currentlyExpanded) {
-      _expandedOutlineFeatureIds.remove(featId);
-      _collapsedOutlineFeatureIds.add(featId);
-    } else {
-      _collapsedOutlineFeatureIds.remove(featId);
-      _expandedOutlineFeatureIds.add(featId);
-    }
   }
 
   @override
@@ -376,10 +351,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   final r = releases[rIdx];
                                   final isCurrent = r.id == rel.id;
                                   final isBuilt = r.childrenIds.isNotEmpty;
-                                  final rVer = r.sections['versionTag'] ??
-                                      (r.title.contains(':')
-                                          ? r.title.split(':').first.trim()
-                                          : 'v0.${rIdx + 1}');
+                                  final rVer =
+                                      widget.workbench.releaseVersionTagFor(r);
                                   final rScopeLabel =
                                       widget.workbench.releaseConciseLabel(r);
                                   final rProg = widget.workbench.getDocumentProgress(r.id);
@@ -890,8 +863,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     int globalFeatureIndex = 0,
   }) {
     final isSelected = widget.workbench.selectedFeatureId == feat.id;
-    final isExpanded =
-        _isFeatureExpandedInOutline(feat.id, isSelected: isSelected);
     final progress = widget.workbench.getDocumentProgress(feat.id);
     final featRemMins = _computeFeatureRemainingMinutes(feat);
     final featRemLabel =
@@ -930,17 +901,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             InkWell(
               key: ValueKey('rail_feat_${feat.id}'),
               onTap: () {
-                final isDouble = _isDoubleClickOnOutlineItem('feat_${feat.id}');
                 setState(() {
                   _manualCheckpointFocusIndex = null;
-                  if (isDouble) {
-                    _toggleFeatureExpandedInOutline(
-                      feat.id,
-                      currentlyExpanded: isExpanded,
-                    );
-                  } else {
-                    _collapsedOutlineFeatureIds.remove(feat.id);
-                  }
                 });
                 widget.workbench.selectFeature(feat.id);
               },
@@ -970,11 +932,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                         key: ValueKey('outline_feat_chevron_${feat.id}'),
                         onTap: () {
                           setState(() {
-                            _toggleFeatureExpandedInOutline(
-                              feat.id,
-                              currentlyExpanded: isExpanded,
-                            );
+                            _manualCheckpointFocusIndex = null;
                           });
+                          widget.workbench.selectFeature(feat.id);
                         },
                         borderRadius: BorderRadius.circular(4),
                         child: SizedBox(
@@ -1277,28 +1237,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       key: ValueKey(
                                         'complete_task_group_${node.id}_$tIdx',
                                       ),
-                                      onTap: () {
-                                        final markDone = !task.completed;
-                                        task.completed = markDone;
-                                        for (final c in task.children) {
-                                          c.completed = markDone;
-                                        }
-                                        setState(() {
-                                          final nextTaskIdx = node.checklist
-                                              .indexWhere((t) => !t.completed);
-                                          if (markDone && nextTaskIdx != -1) {
-                                            _selectedTaskIndexByCheckpoint[
-                                                node.id] = nextTaskIdx;
-                                            _selectedSubStepIndexByTask[
-                                                '${node.id}_$nextTaskIdx'] = 0;
-                                          } else {
-                                            _selectedTaskIndexByCheckpoint[
-                                                node.id] = tIdx;
-                                          }
-                                        });
-                                        widget.workbench
-                                            .updateFeatureStates(feat.id, states);
-                                      },
+                                      onTap: () => _toggleTaskGroupCompletion(
+                                        feat,
+                                        states,
+                                        node,
+                                        tIdx,
+                                      ),
                                       borderRadius: BorderRadius.circular(3),
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
@@ -2358,6 +2302,40 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     widget.workbench.updateFeatureStates(feat.id, states);
   }
 
+  void _toggleTaskGroupCompletion(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureStateNode node,
+    int tIdx,
+  ) {
+    if (tIdx < 0 || tIdx >= node.checklist.length) return;
+    final task = node.checklist[tIdx];
+    final markDone = !task.completed;
+    task.completed = markDone;
+    for (final c in task.children) {
+      c.completed = markDone;
+    }
+    setState(() {
+      final nextTaskIdx = node.checklist.indexWhere((t) => !t.completed);
+      if (markDone && nextTaskIdx != -1) {
+        _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
+        _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
+      } else {
+        _selectedTaskIndexByCheckpoint[node.id] = tIdx;
+      }
+    });
+    widget.workbench.updateFeatureStates(feat.id, states);
+  }
+
+  void _completeAllCheckpointTasks(FeatureStateNode node) {
+    for (final task in node.checklist) {
+      task.completed = true;
+      for (final child in task.children) {
+        child.completed = true;
+      }
+    }
+  }
+
   void _advanceToNextStep(
     TierDocument feat,
     List<FeatureStateNode> states,
@@ -2398,12 +2376,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     }
 
     // All tasks & steps in this Checkpoint are 100% done! Verify Checkpoint & Continue
-    for (final task in node.checklist) {
-      task.completed = true;
-      for (final child in task.children) {
-        child.completed = true;
-      }
-    }
+    _completeAllCheckpointTasks(node);
     setState(() {
       _awaitingPlaytestVerification.remove(node.id);
       _expandedDoneCheckpoints.remove(node.id);
@@ -2954,12 +2927,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                           'fast_track_checkpoint_btn_${node.id}',
                                         ),
                                         onTap: () {
-                                          for (final task in node.checklist) {
-                                            task.completed = true;
-                                            for (final child in task.children) {
-                                              child.completed = true;
-                                            }
-                                          }
+                                          _completeAllCheckpointTasks(node);
                                           _advanceToNextStep(
                                             feat,
                                             states,
@@ -3711,10 +3679,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     }
 
     // 3. Concrete asset & component names -> 'asset' (Cyan)
-    final assetRegex = RegExp(
-      r'\b(?:BP_[A-Za-z0-9_]+|A[A-Z][A-Za-z0-9_]+Actor|[A-Za-z0-9_]+\.(?:uasset|tscn|gd|cs|h|cpp)|InteractBox|VisualMesh|DefaultSceneRoot|InteractTrigger|HitBox|CollisionShape2D|BoxCollider)\b',
-    );
-    for (final m in assetRegex.allMatches(text)) {
+    for (final m in _assetTokenRegex.allMatches(text)) {
       final matchStr = m.group(0)!;
       tokenKindByLiteral.putIfAbsent(matchStr, () => 'asset');
     }
