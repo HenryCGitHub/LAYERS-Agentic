@@ -423,6 +423,38 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.textContaining('HookRay'), findsWidgets);
         expect(find.textContaining('RopeVisual'), findsWidgets);
+
+        // Verify Full-Width vs. Half-Width Streamlined Open-Canvas Workbench layout
+        expect(
+          find.byKey(ValueKey('work_area_step_timeline_$cp0Id')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('task_sheet_feature_goal_$cp0Id')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('step_dropdown_${cp0Id}_0')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('✓ Verify: '), findsOneWidget);
+        expect(find.text('Complete & Next →'), findsOneWidget);
+
+        // Resize to Half-Width (720px) and verify 1-Line Unified Context Bar + Step Dropdown
+        tester.view.physicalSize = const Size(720, 900);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(ValueKey('work_area_step_timeline_$cp0Id')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(ValueKey('halfscreen_outliner_trigger_$cp0Id')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('step_dropdown_${cp0Id}_0')),
+          findsOneWidget,
+        );
       },
     );
 

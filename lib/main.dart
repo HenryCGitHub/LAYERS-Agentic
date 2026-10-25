@@ -181,9 +181,15 @@ class WorkbenchShell extends StatelessWidget {
             color: bgRecessed,
             border: Border(bottom: BorderSide(color: borderColor)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+          child: LayoutBuilder(
+            builder: (context, barConstraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: barConstraints.maxWidth),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -580,6 +586,10 @@ class WorkbenchShell extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+                ),
+              );
+            },
           ),
         ),
       ),
