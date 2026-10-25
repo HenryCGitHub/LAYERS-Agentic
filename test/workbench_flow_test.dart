@@ -722,6 +722,23 @@ void main() {
           engineHint: 'Godot 4.3 GDScript 2D',
         );
         expect(tComplex.subSteps.length, greaterThanOrEqualTo(10));
+
+        // Verify deriveConcreteAssetName strips "Checkpoint" and deduplicates repeated words
+        final terminalAsset = TaskHowToBlueprint.deriveConcreteAssetName(
+          'Create Terminal interaction (2h) Checkpoint 1: Terminal Interaction & Contract',
+        );
+        expect(terminalAsset.pascalName, 'TerminalContractActor');
+        expect(terminalAsset.pascalName, isNot(contains('Checkpoint')));
+
+        // Verify deriveConcreteGuardStepSpec formats underscore bracket tags as clean Title Case
+        final spamGuard = TaskHowToBlueprint.deriveConcreteGuardStepSpec(
+          rawGuard: '[INPUT_SPAM GUARD] Ignore rapid interact clicks',
+          targetAssetName: 'BP_TerminalContractActor',
+          engineLabel: 'UNREAL 5',
+          unrealCppMode: false,
+          primaryVarName: 'interactCooldown',
+        );
+        expect(spamGuard.shortTitle, 'Guard: Input Spam');
       },
     );
 

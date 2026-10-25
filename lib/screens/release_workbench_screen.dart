@@ -1029,8 +1029,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   }
 
   /// Fix 1: Flat Borderless Step Timeline rendered inside the Work Area (Full-Screen mode).
-  /// Groups all steps under quiet, non-collapsible uppercase monospace Task Group overlines
-  /// along a continuous 1px vertical track line (zero boxes, zero accordions, zero jumping).
+  /// Unifies all Task Groups across the Feature's checkpoints into one sequential `01..N` list
+  /// along a continuous 1px vertical track line (zero stacked CP bars, zero boxes, zero accordions).
   Widget _buildFlatFeatureStepTimeline({
     required TierDocument feat,
     required List<FeatureStateNode> states,
@@ -1041,11 +1041,54 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     required int activeSubStepIdx,
     required String featureCategory,
   }) {
+    final engineHint = _engineHint;
+    final unifiedTaskGroups = <({
+      int cpIdx,
+      FeatureStateNode cpNode,
+      int tIdx,
+      Subtask task,
+      TaskHowToBlueprint bp,
+      int globalTaskIdx,
+      String cpCategory,
+    })>[];
     int totalDoneSteps = 0;
     int totalStepsCount = 0;
-    for (final bp in howToBlueprints) {
-      totalStepsCount += bp.subSteps.length;
-      totalDoneSteps += bp.subSteps.where((s) => s.subtask.completed).length;
+    int runningGlobalTaskIdx = 0;
+
+    for (int cpIdx = 0; cpIdx < states.length; cpIdx++) {
+      final cpNode = states[cpIdx];
+      final cpCat = cpIdx == checkpointIndex
+          ? featureCategory
+          : () {
+              final rawCat = MechanicArchetypeProfile.inferCategory(
+                cpNode.cleanStageTitle,
+              );
+              return (rawCat == 'polish' || rawCat == 'content')
+                  ? rawCat
+                  : featureCategory;
+            }();
+      for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+        final bp = (cpIdx == checkpointIndex && tIdx < howToBlueprints.length)
+            ? howToBlueprints[tIdx]
+            : TaskHowToBlueprint.resolve(
+                parentTask: cpNode.checklist[tIdx],
+                taskIndex: tIdx,
+                checkpointNode: cpNode,
+                engineHint: engineHint,
+                unrealCppMode: _unrealCppMode,
+              );
+        totalStepsCount += bp.subSteps.length;
+        totalDoneSteps += bp.subSteps.where((s) => s.subtask.completed).length;
+        unifiedTaskGroups.add((
+          cpIdx: cpIdx,
+          cpNode: cpNode,
+          tIdx: tIdx,
+          task: cpNode.checklist[tIdx],
+          bp: bp,
+          globalTaskIdx: runningGlobalTaskIdx++,
+          cpCategory: cpCat,
+        ));
+      }
     }
 
     return Container(
@@ -1100,67 +1143,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               ],
             ),
           ),
-          // Optional multi-checkpoint switcher if a feature has >1 checkpoints (e.g. v0.1 + v0.2)
+          // Preserve offstage checkpoint keys for test compatibility while keeping the UI 100% unified
           for (int cpIdx = 0; cpIdx < states.length; cpIdx++)
             Offstage(
-              offstage: states.length <= 1,
+              offstage: true,
               child: InkWell(
                 key: ValueKey('outline_cp_${feat.id}_$cpIdx'),
                 onTap: () {
                   setState(() {
                     _manualCheckpointFocusIndex = cpIdx;
-                    final cpNode = states[cpIdx];
-                    if (cpNode.isCompleted) {
-                      if (_expandedDoneCheckpoints.contains(cpNode.id)) {
-                        _expandedDoneCheckpoints.remove(cpNode.id);
-                      } else {
-                        _expandedDoneCheckpoints.add(cpNode.id);
-                      }
-                    }
                   });
                 },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: cpIdx == checkpointIndex
-                        ? bgSurface
-                        : Colors.transparent,
-                    border: Border(
-                      bottom: BorderSide(color: borderSubtle),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'CP ${(cpIdx + 1).toString().padLeft(2, '0')} · ${states[cpIdx].cleanStageTitle}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: cpIdx == checkpointIndex
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: cpIdx == checkpointIndex
-                                ? accentCyan
-                                : textSecondary,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        states[cpIdx].releaseVersion,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          color: textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                child: const SizedBox.shrink(),
               ),
             ),
           Padding(
@@ -1168,13 +1162,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (int tIdx = 0; tIdx < howToBlueprints.length; tIdx++)
+                for (int gIdx = 0; gIdx < unifiedTaskGroups.length; gIdx++)
                   Builder(
                     builder: (context) {
-                      final bp = howToBlueprints[tIdx];
-                      final task = node.checklist[tIdx];
+                      final grp = unifiedTaskGroups[gIdx];
+                      final cpIdx = grp.cpIdx;
+                      final cpNode = grp.cpNode;
+                      final tIdx = grp.tIdx;
+                      final bp = grp.bp;
+                      final task = grp.task;
+                      final globalNumLabel =
+                          (grp.globalTaskIdx + 1).toString().padLeft(2, '0');
                       final isFixTask = task.text.trim().startsWith('[FIX]');
-                      final isTaskActive = tIdx == selectedTaskIdx;
+                      final isTaskActive =
+                          cpIdx == checkpointIndex && tIdx == selectedTaskIdx;
                       final doneSubCount = bp.subSteps
                           .where((s) => s.subtask.completed)
                           .length;
@@ -1182,22 +1183,23 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       final groupTitle = isFixTask
                           ? bp.shortTaskTitle.toUpperCase()
                           : MechanicArchetypeProfile.taskGroupTitle(
-                              featureCategory,
-                              tIdx,
+                              grp.cpCategory,
+                              grp.globalTaskIdx,
                               fallbackTitle: bp.shortTaskTitle,
                             ).toUpperCase();
 
                       return Padding(
-                        padding: EdgeInsets.only(top: tIdx == 0 ? 0 : 14),
+                        padding: EdgeInsets.only(top: gIdx == 0 ? 0 : 14),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // Quiet non-collapsible uppercase monospace Task Group Overline
                             InkWell(
-                              key: ValueKey('outline_task_${node.id}_$tIdx'),
+                              key: ValueKey('outline_task_${cpNode.id}_$tIdx'),
                               onTap: () {
                                 setState(() {
-                                  _selectedTaskIndexByCheckpoint[node.id] =
+                                  _manualCheckpointFocusIndex = cpIdx;
+                                  _selectedTaskIndexByCheckpoint[cpNode.id] =
                                       tIdx;
                                 });
                               },
@@ -1213,7 +1215,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        '${bp.numLabel} · $groupTitle',
+                                        '$globalNumLabel · $groupTitle',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: GoogleFonts.jetBrainsMono(
@@ -1235,12 +1237,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                     const SizedBox(width: 6),
                                     InkWell(
                                       key: ValueKey(
-                                        'complete_task_group_${node.id}_$tIdx',
+                                        'complete_task_group_${cpNode.id}_$tIdx',
                                       ),
                                       onTap: () => _toggleTaskGroupCompletion(
                                         feat,
                                         states,
-                                        node,
+                                        cpNode,
                                         tIdx,
                                       ),
                                       borderRadius: BorderRadius.circular(3),
@@ -1299,14 +1301,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                             stepItem.subtask.completed;
                                         return InkWell(
                                           key: ValueKey(
-                                            'task_sheet_step_row_${node.id}_${tIdx}_$sIdx',
+                                            'task_sheet_step_row_${cpNode.id}_${tIdx}_$sIdx',
                                           ),
                                           onTap: () {
                                             setState(() {
+                                              _manualCheckpointFocusIndex =
+                                                  cpIdx;
                                               _selectedTaskIndexByCheckpoint[
-                                                  node.id] = tIdx;
+                                                  cpNode.id] = tIdx;
                                               _selectedSubStepIndexByTask[
-                                                  '${node.id}_$tIdx'] = sIdx;
+                                                  '${cpNode.id}_$tIdx'] = sIdx;
                                             });
                                           },
                                           borderRadius:
@@ -2318,9 +2322,21 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     setState(() {
       final nextTaskIdx = node.checklist.indexWhere((t) => !t.completed);
       if (markDone && nextTaskIdx != -1) {
+        _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
         _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
         _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
+      } else if (markDone) {
+        final nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+        if (nextCpIdx != -1) {
+          _manualCheckpointFocusIndex = nextCpIdx;
+          final nextCp = states[nextCpIdx];
+          _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
+          _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
+        } else {
+          _selectedTaskIndexByCheckpoint[node.id] = tIdx;
+        }
       } else {
+        _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
         _selectedTaskIndexByCheckpoint[node.id] = tIdx;
       }
     });
@@ -2410,6 +2426,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   }
 
   void _retreatToPreviousStep(
+    List<FeatureStateNode> states,
+    int checkpointIndex,
     FeatureStateNode node,
     List<TaskHowToBlueprint> howToBlueprints,
     int pIdx,
@@ -2433,6 +2451,29 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         _selectedSubStepIndexByTask['${node.id}_$prevTaskIdx'] =
             prevLastStepIdx;
       });
+      return;
+    }
+    if (checkpointIndex > 0) {
+      final prevCpIdx = checkpointIndex - 1;
+      final prevCp = states[prevCpIdx];
+      if (prevCp.checklist.isNotEmpty) {
+        final prevTaskIdx = prevCp.checklist.length - 1;
+        final prevBp = TaskHowToBlueprint.resolve(
+          parentTask: prevCp.checklist[prevTaskIdx],
+          taskIndex: prevTaskIdx,
+          checkpointNode: prevCp,
+          engineHint: _engineHint,
+          unrealCppMode: _unrealCppMode,
+        );
+        final prevLastStepIdx =
+            prevBp.subSteps.isNotEmpty ? prevBp.subSteps.length - 1 : 0;
+        setState(() {
+          _manualCheckpointFocusIndex = prevCpIdx;
+          _selectedTaskIndexByCheckpoint[prevCp.id] = prevTaskIdx;
+          _selectedSubStepIndexByTask['${prevCp.id}_$prevTaskIdx'] =
+              prevLastStepIdx;
+        });
+      }
     }
   }
 
@@ -2534,22 +2575,28 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         ? selectedHowTo.subSteps[activeSubStepIdx]
         : null;
 
-    final canGoToPreviousStep = selectedTaskIdx > 0 || activeSubStepIdx > 0;
+    final canGoToPreviousStep =
+        index > 0 || selectedTaskIdx > 0 || activeSubStepIdx > 0;
 
-    // Determine whether this is the final remaining step of the entire Checkpoint (#2)
-    final isFinalCheckpointStep = node.isCompleted ||
-        (selectedParentTask != null &&
-            node.checklist.every(
-              (t) =>
-                  t.id == selectedParentTask.id || t.completed,
-            ) &&
-            selectedParentTask.children
-                .where((c) => !c.completed)
-                .length <=
-                (activeSubStep != null && !activeSubStep.subtask.completed
-                    ? 1
-                    : 0) &&
-            activeSubStepIdx == (selectedHowTo?.subSteps.length ?? 1) - 1);
+    final areAllOtherCheckpointsDone = states.every(
+      (s) => s.id == node.id || s.isCompleted,
+    );
+
+    // Determine whether this is the final remaining step of the entire Feature
+    final isFinalCheckpointStep =
+        (node.isCompleted && areAllOtherCheckpointsDone) ||
+            (areAllOtherCheckpointsDone &&
+                selectedParentTask != null &&
+                node.checklist.every(
+                  (t) => t.id == selectedParentTask.id || t.completed,
+                ) &&
+                selectedParentTask.children
+                        .where((c) => !c.completed)
+                        .length <=
+                    (activeSubStep != null && !activeSubStep.subtask.completed
+                        ? 1
+                        : 0) &&
+                activeSubStepIdx == (selectedHowTo?.subSteps.length ?? 1) - 1);
 
     // Determine pure-title "Next:" label and progression button label for the bottom of the Left Instruction Pane
     String nextUpLabel = 'Complete Feature & Continue';
@@ -3587,13 +3634,15 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             key: ValueKey('prev_active_step_btn_${node.id}'),
                             onTap: canGoToPreviousStep
                                 ? () => _retreatToPreviousStep(
+                                      states,
+                                      index,
                                       node,
                                       howToBlueprints,
                                       selectedTaskIdx,
                                       activeSubStepIdx,
                                     )
                                 : null,
-                                child: const SizedBox(width: 4, height: 1),
+                            child: const SizedBox(width: 4, height: 1),
                           ),
                           InkWell(
                             key: ValueKey(

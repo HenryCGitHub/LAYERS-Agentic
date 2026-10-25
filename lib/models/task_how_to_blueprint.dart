@@ -957,7 +957,7 @@ class MechanicArchetypeProfile {
       case 'loadout':
         entry = switch ((grp, stepIdx)) {
           (0, 0) => (
-              title: 'Create $targetAsset & Slot Struct',
+              title: 'Create $targetAsset Class',
               instr: 'Create $targetAsset and define the weapon and ability slot fields (EquippedWeaponId, CurrentAmmo, bIsSlotReady).',
               verify: '$targetAsset compiles cleanly with weapon slot properties ready in the editor.',
               codeLead: '// Loadout Slot Data on $targetAsset',
@@ -2173,17 +2173,33 @@ class TaskHowToBlueprint {
       'logic',
       'pass',
       'stage',
+      'checkpoint',
+      'checkpoints',
+      'milestone',
+      'phase',
+      'step',
+      'task',
+      'version',
+      'system',
+      'feature',
       'structure',
       'base',
       'properties',
       'actor',
       'node',
     };
-    final words = _identifierWordRegex
-        .allMatches(clean)
-        .map((m) => m.group(0)!)
-        .where((w) => w.length > 1 && !stopWords.contains(w.toLowerCase()))
-        .toList();
+    final seenLower = <String>{};
+    final words = <String>[];
+    for (final m in _identifierWordRegex.allMatches(clean)) {
+      final w = m.group(0)!;
+      final lowerW = w.toLowerCase();
+      if (w.length > 1 &&
+          !stopWords.contains(lowerW) &&
+          !RegExp(r'^\d+$').hasMatch(w) &&
+          seenLower.add(lowerW)) {
+        words.add(w);
+      }
+    }
     final chosen = words.isNotEmpty
         ? words.take(3).toList()
         : <String>['Grid', 'Tile', 'Actor'];
@@ -2270,11 +2286,11 @@ class TaskHowToBlueprint {
       };
       if (!genericTags.contains(upperTag)) {
         final cleanedTag = rawTag
-            .replaceFirst(RegExp(r'\s+GUARD$', caseSensitive: false), '')
+            .replaceFirst(RegExp(r'[\s_]+GUARD$', caseSensitive: false), '')
             .trim();
         if (cleanedTag.isNotEmpty) {
           final titleCased = cleanedTag
-              .split(RegExp(r'\s+'))
+              .split(RegExp(r'[\s_]+'))
               .where((w) => w.isNotEmpty)
               .map((w) {
                 if (w.toUpperCase() == 'LOS' ||
