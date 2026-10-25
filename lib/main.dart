@@ -525,7 +525,9 @@ class WorkbenchShell extends StatelessWidget {
                         ),
                         Container(width: 1, height: 12, color: borderColor),
                         Tooltip(
-                          message: 'AI Model Routing & API Key Settings',
+                          message: workbench.aiLastErrorStatus != null
+                              ? 'AI API Key Notice (${workbench.aiLastErrorStatus}) — Click to update key'
+                              : 'AI Model Routing & API Key Settings',
                           child: InkWell(
                             key: const ValueKey('ai_settings_btn'),
                             onTap: () => _showAiSettingsDialog(context),
@@ -1152,7 +1154,7 @@ class WorkbenchShell extends StatelessWidget {
                         ),
                       const SizedBox(height: 14),
                       Text(
-                        '02 · RELEASE ARCHITECTURE MODEL (STAGE 2)',
+                        '02 · RELEASE PLAN CREATION MODEL (STAGE 2 ONE-SHOT)',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
@@ -1165,7 +1167,7 @@ class WorkbenchShell extends StatelessWidget {
                         _buildModelOptionTile(
                           modelId: m,
                           subtitle: m == 'gemini-4-argon'
-                              ? 'Default — Gemini 4 Argon for Release Blueprints & Evolution'
+                              ? 'Default — Gemini 4 Argon (One-Shot Release Plan creation only; chat uses Flash)'
                               : m == 'gemini-flash-latest'
                                   ? 'Gemini Flash Latest (Fastest single-model mode)'
                                   : 'Gemini 3.8 Flash',
@@ -1234,6 +1236,28 @@ class WorkbenchShell extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      if (workbench.aiLastErrorStatus != null) ...[
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: accentAmber.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: accentAmber.withValues(alpha: 0.45)),
+                          ),
+                          child: Text(
+                            workbench.aiLastErrorStatus == 'HTTP 402'
+                                ? 'API Notice (HTTP 402): AI Studio prepayment credits are depleted on the current key. Using built-in synthesizer fallback until credits are topped up or a new key is saved below.'
+                                : 'API Notice (${workbench.aiLastErrorStatus}): Live Gemini call returned an auth/quota error. Using built-in synthesizer fallback.',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              height: 1.35,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
                       Text(
                         '04 · GEMINI API KEY',
                         style: GoogleFonts.jetBrainsMono(

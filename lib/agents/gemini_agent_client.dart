@@ -56,11 +56,9 @@ RULES:
     }.toList();
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
-    // Skip billed thinking tokens on fast 'LOW' JSON turns unless running Stage 2 architecture models
-    final preferThinking = normalizedThinking == 'MEDIUM' ||
-        normalizedThinking == 'HIGH' ||
-        preferredModel.contains('argon') ||
-        preferredModel.contains('pro');
+    // Skip billed thinking tokens on 'LOW' JSON turns; only enable thinkingConfig on MEDIUM or HIGH
+    final preferThinking =
+        normalizedThinking == 'MEDIUM' || normalizedThinking == 'HIGH';
     final thinkingOrder = preferThinking ? const [true, false] : const [false];
 
     for (final model in modelsToTry) {

@@ -1060,10 +1060,22 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             ? v.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
             : <String>[];
 
-        final inScope = toStrList(fMap['inScope']);
-        final outOfScope = toStrList(fMap['outOfScope']);
-        final tuning = toStrList(fMap['tuningParams']);
-        final edges = toStrList(fMap['edgeCases']);
+        final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+          fTitle,
+          beatTitle: bTitle,
+          beatDescription: bGoal,
+        );
+        final rawInScope = toStrList(fMap['inScope']);
+        final rawOutOfScope = toStrList(fMap['outOfScope']);
+        final rawTuning = toStrList(fMap['tuningParams']);
+        final rawEdges = toStrList(fMap['edgeCases']);
+
+        final inScope = rawInScope.isNotEmpty ? rawInScope : archetype.inScope;
+        final outOfScope =
+            rawOutOfScope.isNotEmpty ? rawOutOfScope : archetype.outOfScope;
+        final tuning =
+            rawTuning.isNotEmpty ? rawTuning : archetype.tuningParams;
+        final edges = rawEdges.isNotEmpty ? rawEdges : archetype.edgeCases;
 
         final checkpoints = <ProposedCheckpointBlueprint>[];
         final rawCps = fMap['checkpoints'];
@@ -1073,19 +1085,22 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             if (cMap is! Map) continue;
             final cpTitle =
                 (cMap['title'] ?? 'Stage ${cIdx + 1}').toString().trim();
-            final cpCriteria =
-                (cMap['playtestCriteria'] ?? fDone).toString().trim();
+            final cpCriteria = (cMap['playtestCriteria'] ??
+                    (fDone.isNotEmpty ? fDone : archetype.cp1Playtest))
+                .toString()
+                .trim();
             final cpVer =
                 (cMap['releaseVersion'] ?? versionTag).toString().trim();
             final cpTasks = toStrList(cMap['tasks']);
+            final resolvedTasks = cpTasks.length >= 2
+                ? cpTasks
+                : (cIdx == 0 ? archetype.cp1Tasks : archetype.cp2Tasks);
             checkpoints.add(
               ProposedCheckpointBlueprint(
                 title: cpTitle,
                 playtestCriteria: cpCriteria,
                 releaseVersion: cpVer,
-                tasks: cpTasks.isNotEmpty
-                    ? cpTasks
-                    : ['Implement $cpTitle (${(hours / 2).ceil().clamp(1, 8)}h)'],
+                tasks: resolvedTasks,
                 coveredScope: toStrList(cMap['coveredScope']).isNotEmpty
                     ? toStrList(cMap['coveredScope'])
                     : inScope,
@@ -1105,10 +1120,11 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             lifecycle != FeatureLifecycleStatus.superseded) {
           checkpoints.add(
             ProposedCheckpointBlueprint(
-              title: fTitle,
-              playtestCriteria: fDone,
+              title: archetype.cp1Title,
+              playtestCriteria:
+                  fDone.isNotEmpty ? fDone : archetype.cp1Playtest,
               releaseVersion: versionTag,
-              tasks: ['Implement $fTitle (${hours > 0 ? hours : 4}h)'],
+              tasks: archetype.cp1Tasks,
               coveredScope: inScope,
               tuningParams: tuning,
               edgeCases: edges,
@@ -1120,8 +1136,8 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           ProposedFeatureBlueprint(
             id: (fMap['id'] ?? 'feat_${bIdx + 1}_${fIdx + 1}').toString(),
             title: fTitle,
-            goal: fGoal,
-            doneWhen: fDone,
+            goal: fGoal.isNotEmpty ? fGoal : archetype.goal,
+            doneWhen: fDone.isNotEmpty ? fDone : archetype.doneWhen,
             estimatedHours: hours,
             included: included,
             lifecycle: lifecycle,
@@ -1432,7 +1448,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     required ReleaseBlueprint blueprint,
     required String userMessage,
     String apiKey = '',
-    String modelName = 'gemini-4-argon',
+    String modelName = 'gemini-flash-latest',
     String thinkingLevel = 'LOW',
   }) async {
     final cleanMsg = userMessage.trim();

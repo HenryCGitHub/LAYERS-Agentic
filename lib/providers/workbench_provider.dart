@@ -728,7 +728,10 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String _apiKey = GeminiAgentClient.resolveDefaultApiKey();
   String get apiKey => _apiKey;
-  bool get hasLiveAiKey => GeminiAgentClient.hasKey(_apiKey);
+  bool get hasLiveAiKey =>
+      GeminiAgentClient.hasKey(_apiKey) &&
+      GeminiAgentClient.lastErrorStatus == null;
+  String? get aiLastErrorStatus => GeminiAgentClient.lastErrorStatus;
 
   String _conversationModel = 'gemini-flash-latest';
   String get conversationModel => _conversationModel;
@@ -772,6 +775,7 @@ class WorkbenchProvider extends ChangeNotifier {
   }) {
     if (apiKey != null) {
       _apiKey = apiKey.trim();
+      GeminiAgentClient.lastErrorStatus = null;
     }
     if (conversationModel != null && conversationModel.trim().isNotEmpty) {
       _conversationModel = conversationModel.trim();
@@ -2044,7 +2048,7 @@ class WorkbenchProvider extends ChangeNotifier {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Refining Release Plan ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
+        'Refining Release Plan ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
@@ -2052,7 +2056,7 @@ class WorkbenchProvider extends ChangeNotifier {
         blueprint: bp,
         userMessage: message,
         apiKey: _apiKey,
-        modelName: _planningModel,
+        modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
       _syncActiveProjectMetadata();

@@ -617,14 +617,29 @@ Return ONLY valid JSON:
       final twist = butInMatch.group(2)!.trim().toLowerCase();
       return 'high-speed $twist arena combat and movement';
     }
+    final usingMatch = RegExp(
+      r'\b(?:using|with)\s+([a-z0-9,\s-]+?)(?=\s+(?:against|across|in\b|to\b)|[.,;]|$)',
+      caseSensitive: false,
+    ).firstMatch(base);
+    if (usingMatch != null) {
+      final mechClause = usingMatch.group(1)!.trim();
+      if (mechClause.length >= 6 && mechClause.length <= 68) {
+        return mechClause.toLowerCase();
+      }
+    }
     if (base.isEmpty || base.length > 72) {
       return '${fallbackTitle.toLowerCase()} mechanics';
     }
-    return base;
+    return base.toLowerCase();
   }
 
   static String _derivePunchyTitle(String spark) {
-    final normalized = ProjectConceptBlueprint.normalizeCommonTypos(spark);
+    var normalized = ProjectConceptBlueprint.normalizeCommonTypos(spark.trim());
+    final dashIdx = normalized.indexOf(' — ');
+    if (dashIdx > 0) {
+      normalized = normalized.substring(0, dashIdx).trim();
+    }
+
     // If spark has "but in a <twist>" or "instead of <old> we use <twist>", lead with the twist!
     final twistMatch = RegExp(
       r'\b(?:but\s+(?:in|with|as)\s+(?:a\s+|an\s+|the\s+)?|instead\s+of\s+[a-z]+\s+(?:we\s+)?use\s+)([a-zA-Z0-9-]+)',
@@ -634,26 +649,130 @@ Return ONLY valid JSON:
     const stopWords = {
       'the', 'and', 'with', 'for', 'game', 'about', 'fast', 'that', 'also',
       'combines', 'like', 'where', 'you', 'can', 'into', 'from', 'but',
-      'instead', 'use', 'using',
+      'instead', 'use', 'using', 'brave', 'areas', 'area', 'too', 'lethal',
+      'ordinary', 'survivors', 'survivor', 'retrieve', 'deliver', 'vital',
+      'across', 'ruined', 'fluid', 'high-speed', 'high', 'speed', 'against',
+      'hunting', 'your', 'play', 'playing', 'player', 'players', 'explore',
+      'exploring', 'survive', 'surviving', 'navigate', 'navigating', 'build',
+      'building', 'fight', 'fighting', 'through', 'over', 'under', 'between',
+      'around', 'while', 'when', 'every', 'each', 'other', 'their', 'have',
+      'has', 'make', 'making', 'take', 'taking', 'keep', 'keeping', 'find',
+      'finding', 'must', 'will', 'need', 'needs', 'very', 'more', 'most',
+      'some', 'many', 'full', 'deep', 'cozy', 'dark', 'tiny', 'huge', 'giant',
+      'small', 'world', 'zones', 'zone',
     };
-    final words = normalized
-        .replaceAll(RegExp(r'[^\w\s-]'), '')
+
+    const settingKeywords = {
+      'metropolis': 'Metropolis',
+      'city': 'City',
+      'ruins': 'Ruin',
+      'ruin': 'Ruin',
+      'arena': 'Arena',
+      'dungeon': 'Dungeon',
+      'trench': 'Trench',
+      'ocean': 'Ocean',
+      'sea': 'Deep-Sea',
+      'space': 'Space',
+      'station': 'Station',
+      'outpost': 'Outpost',
+      'vault': 'Vault',
+      'tower': 'Tower',
+      'cyber': 'Cyber',
+      'neon': 'Neon',
+      'sector': 'Sector',
+    };
+
+    const mechanicAndRoleKeywords = {
+      'cargo': 'Cargo',
+      'courier': 'Courier',
+      'parkour': 'Parkour',
+      'wall-running': 'Wall-Run',
+      'wall-run': 'Wall-Run',
+      'wallrun': 'Wall-Run',
+      'haul': 'Haul',
+      'scavengers': 'Scavenger',
+      'scavenger': 'Scavenger',
+      'grapple': 'Grapple',
+      'grappling': 'Grapple',
+      'hook': 'Hook',
+      'submarine': 'Submarine',
+      'salvage': 'Salvage',
+      'photography': 'Photo',
+      'katana': 'Katana',
+      'blade': 'Blade',
+      'parry': 'Parry',
+      'deflection': 'Deflect',
+      'deflect': 'Deflect',
+      'boss': 'Boss',
+      'rush': 'Rush',
+      'vehicle': 'Vehicle',
+      'vehicles': 'Vehicle',
+      'mech': 'Mech',
+      'mecha': 'Mecha',
+      'drift': 'Drift',
+      'farm': 'Farm',
+      'farming': 'Farm',
+      'alchemy': 'Alchemy',
+      'shop': 'Shop',
+      'deck': 'Deck',
+      'stealth': 'Stealth',
+      'heist': 'Heist',
+      'roguelite': 'Roguelite',
+      'runner': 'Runner',
+    };
+
+    final rawTokens = normalized
+        .replaceAll(RegExp(r'[^\w\s-]'), ' ')
         .split(RegExp(r'\s+'))
-        .where((w) => w.length > 2 && !stopWords.contains(w.toLowerCase()))
-        .take(3)
+        .where((w) => w.length > 2)
         .toList();
-    if (words.isEmpty) return 'Core Prototype';
-    if (twistMatch != null && words.isNotEmpty) {
-      final twistWord = twistMatch.group(1)!.trim();
-      if (twistWord.length >= 3) {
-        words[0] = twistWord.toLowerCase().endsWith('s') && twistWord.length > 3
-            ? twistWord.substring(0, twistWord.length - 1)
-            : twistWord;
+
+    final picked = <String>[];
+    void addUnique(String label) {
+      if (label.isEmpty) return;
+      if (!picked.any((p) => p.toLowerCase() == label.toLowerCase())) {
+        picked.add(label);
       }
     }
-    return words
-        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
-        .join(' ');
+
+    if (twistMatch != null) {
+      final twistWord = twistMatch.group(1)!.trim();
+      if (twistWord.length >= 3) {
+        final cleanTwist = twistWord.toLowerCase().endsWith('s') && twistWord.length > 3
+            ? twistWord.substring(0, twistWord.length - 1)
+            : twistWord;
+        addUnique(cleanTwist[0].toUpperCase() + cleanTwist.substring(1).toLowerCase());
+      }
+    }
+
+    for (final token in rawTokens) {
+      final lower = token.toLowerCase();
+      if (settingKeywords.containsKey(lower)) {
+        addUnique(settingKeywords[lower]!);
+        break;
+      }
+    }
+
+    for (final token in rawTokens) {
+      final lower = token.toLowerCase();
+      if (mechanicAndRoleKeywords.containsKey(lower)) {
+        addUnique(mechanicAndRoleKeywords[lower]!);
+        if (picked.length >= 3) break;
+      }
+    }
+
+    if (picked.length < 2) {
+      for (final token in rawTokens) {
+        final lower = token.toLowerCase();
+        if (!stopWords.contains(lower)) {
+          addUnique(token[0].toUpperCase() + token.substring(1).toLowerCase());
+          if (picked.length >= 3) break;
+        }
+      }
+    }
+
+    if (picked.isEmpty) return 'Core Prototype';
+    return picked.take(3).join(' ');
   }
 
   static List<String> _defaultGameSpec() {
@@ -722,6 +841,23 @@ Return ONLY valid JSON:
   }
 
   static List<String> _defaultCoreLoopForSpark(String spark) {
+    final lower = spark.toLowerCase();
+    final isParkourOrCourier = (lower.contains('parkour') ||
+            lower.contains('wall-run') ||
+            lower.contains('wallrun') ||
+            lower.contains('cargo') ||
+            lower.contains('courier') ||
+            lower.contains('haul')) &&
+        !lower.contains('grappl') &&
+        !lower.contains('hook');
+    if (isParkourOrCourier) {
+      return [
+        'Contract & Loadout Prep: Select delivery contract, cargo weight load, and runner gear in the safe zone',
+        'Parkour & Wall-Run Traversal: Chain wall-runs, rooftop vaults, and slides across ruined city sectors',
+        'Scavenger Ambush & High-Speed Combat: Evade or fight through scavenger packs hunting your active cargo haul',
+        'Cargo Dropoff & Loadout Upgrade: Reach the safe-zone terminal with cargo intact to bank credits and upgrade gear',
+      ];
+    }
     return [
       'Staging & Loadout Prep: Select active tool or movement modifier in the starting zone',
       'Arena Entry & Traversal: Enter the arena and chain primary movement impulses across terrain',
@@ -855,6 +991,8 @@ Return ONLY valid JSON:
 You are an indie game producer summarizing a developer's game idea before building the blueprint.
 ${isRefinement ? 'Title: "${existingIntake.workingTitle}"\nSummary: "${existingIntake.baseSummary}"\nRefinement: "$cleanInput"' : 'Idea: "$seedIdea"'}
 ${GeminiAgentClient.compactStyleRules}
+- `workingTitle` MUST be a concrete 2-3 word game title naming the setting/role/mechanic (NEVER just copy the first 3 words of the user's sentence).
+- `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop (NEVER quote or repeat the user's raw sentence verbatim).
 
 Return ONLY valid JSON:
 {
@@ -935,7 +1073,35 @@ Return ONLY valid JSON:
 
   static List<String> _deterministicMechanicsForIdea(String idea) {
     final lower = idea.toLowerCase();
-    if (lower.contains('grappl') || lower.contains('parkour') || lower.contains('swing')) {
+    final hasGrapple = lower.contains('grappl') ||
+        lower.contains('hook') ||
+        lower.contains('swing') ||
+        lower.contains('tether');
+    final hasParkourOrCourier = lower.contains('parkour') ||
+        lower.contains('wall-run') ||
+        lower.contains('wallrun') ||
+        lower.contains('cargo') ||
+        lower.contains('courier') ||
+        lower.contains('haul');
+
+    if (hasParkourOrCourier && !hasGrapple) {
+      if (lower.contains('cargo') ||
+          lower.contains('haul') ||
+          lower.contains('courier') ||
+          lower.contains('deliver')) {
+        return const [
+          'Fluid Parkour & Wall-Running',
+          'Cargo Haul Protection',
+          'High-Speed Scavenger Combat',
+        ];
+      }
+      return const [
+        'Fluid Parkour & Wall-Running',
+        'Momentum Vault & Slide',
+        'High-Speed Traversal Combat',
+      ];
+    }
+    if (hasGrapple) {
       return const [
         'Momentum Grapple Swing',
         'Mid-Air Dash Cancel',
@@ -970,6 +1136,61 @@ Return ONLY valid JSON:
     ];
   }
 
+  /// Synthesizes a natural, plain-English 2-sentence game summary from `cleanIdea`
+  /// without ever quoting or echoing the user's raw sentence verbatim.
+  static String _synthesizeNaturalSparkSummary(String cleanIdea, String title) {
+    final normalized = ProjectConceptBlueprint.normalizeCommonTypos(cleanIdea.trim());
+    final lower = normalized.toLowerCase();
+
+    final hasGrapple = lower.contains('grappl') ||
+        lower.contains('hook') ||
+        lower.contains('tether');
+    final hasParkour = lower.contains('parkour') ||
+        lower.contains('wall-run') ||
+        lower.contains('wallrun');
+    final hasCargo = lower.contains('cargo') ||
+        lower.contains('haul') ||
+        lower.contains('courier');
+
+    if (hasParkour && hasCargo && !hasGrapple) {
+      final setting = lower.contains('metropolis')
+          ? 'a ruined metropolis'
+          : (lower.contains('city') ? 'a contested city' : 'hazardous zones');
+      final threat = lower.contains('scavenger')
+          ? 'scavengers hunting your haul'
+          : 'hostile ambush squads along your route';
+      return 'Traverse $setting to retrieve and transport high-value cargo through lethal sectors using fluid parkour, wall-running, and high-speed combat. Chain rooftop and wall-run routes to outrun or fight off $threat, bank completed deliveries at safe zones, and upgrade your runner gear between runs.';
+    }
+
+    // General clause extraction: setting ("across/in/through ..."), mechanics ("using/with ..."), threats ("against ...")
+    final settingMatch = RegExp(
+      r'\b(?:across|in|through|inside)\s+((?:a|an|the)\s+[a-z0-9\s-]+?)(?=\s+(?:using|with|where|while|against|to\b)|[.,;]|$)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+    final usingMatch = RegExp(
+      r'\b(?:using|with|via)\s+([a-z0-9,\s-]+?)(?=\s+(?:against|to\b|across|in\b|while|where)|[.,;]|$)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+    final againstMatch = RegExp(
+      r'\b(?:against|versus|fighting|battling)\s+([a-z0-9\s-]+?)(?=[.,;]|$)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+
+    if (usingMatch != null) {
+      final mechClause = usingMatch.group(1)!.trim();
+      final settingClause = settingMatch != null
+          ? ' across ${settingMatch.group(1)!.trim()}'
+          : '';
+      final threatClause = againstMatch != null
+          ? ' against ${againstMatch.group(1)!.trim()}'
+          : ' across escalating encounters';
+      return 'Navigate high-risk arenas$settingClause using $mechClause with responsive controls and clear on-screen feedback. Overcome hazards$threatClause, secure round rewards, and upgrade your loadout between runs.';
+    }
+
+    final shortPremise = _shortSparkPhrase(normalized, title);
+    return 'Execute responsive $shortPremise controls across escalating arena encounters with immediate visual and audio feedback. Chain core movement and combat actions to clear each round objective, earn run-modifying upgrades, and reset cleanly between runs.';
+  }
+
   static SparkIdeaIntakeResult buildDeterministicSparkIntake({
     required String rawIdea,
     String? refinementText,
@@ -996,13 +1217,75 @@ Return ONLY valid JSON:
         mechs.add(shortTag);
       }
     } else {
-      summary =
-          '$title centers on "$cleanIdea" — players execute responsive core controls, clear escalating round objectives with immediate visual/audio feedback, and reset or upgrade cleanly between runs.';
+      summary = _synthesizeNaturalSparkSummary(cleanIdea, title);
     }
 
     final lower = cleanIdea.toLowerCase();
+    final hasGrapple = lower.contains('grappl') ||
+        lower.contains('hook') ||
+        lower.contains('swing') ||
+        lower.contains('tether');
+    final hasParkourOrCourier = (lower.contains('parkour') ||
+            lower.contains('wall-run') ||
+            lower.contains('wallrun') ||
+            lower.contains('cargo') ||
+            lower.contains('courier') ||
+            lower.contains('haul')) &&
+        !hasGrapple;
+
     final List<SparkExpansionCard> pool;
-    if (lower.contains('grappl') || lower.contains('parkour') || lower.contains('swing')) {
+    if (hasParkourOrCourier) {
+      pool = [
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Wall-Run Chain & Vault Boost',
+          description:
+              'Chain consecutive wall-runs, rooftop vaults, and slides without touching street level to build a sprint speed boost.',
+          additionSummary: 'Wall-run chain and rooftop vault speed boost',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Cargo Weight & Scavenger Heat',
+          description:
+              'Carrying heavier high-payout cargo shifts balance and draws aggressive scavenger ambush packs along your route.',
+          additionSummary: 'Cargo weight balance and scavenger ambush heat',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: 'Safe-Zone Dropoff & Rig Upgrades',
+          description:
+              'Bank completed cargo deliveries at safe-zone terminals to unlock kinetic boots, shock rigs, and quick-draw weapons.',
+          additionSummary: 'Safe-zone cargo dropoff and runner rig upgrades',
+          accentType: 'neutral',
+        ),
+        SparkExpansionCard(
+          badge: '01 · CORE MECHANIC TWIST',
+          title: 'Momentum Slide & Rooftop Kick',
+          description:
+              'Convert wall-run landing speed into a low slide or knockback kick that launches blocking scavengers off ledges.',
+          additionSummary: 'Momentum slide and rooftop knockback kick',
+          accentType: 'amber',
+        ),
+        SparkExpansionCard(
+          badge: '02 · RISK / REWARD HOOK',
+          title: 'Fragile High-Payout Contraband',
+          description:
+              'Optional fragile cargo pays 2x credits at extraction but loses integrity whenever you take a hard fall or direct hit.',
+          additionSummary: 'Fragile contraband integrity risk/reward',
+          accentType: 'emerald',
+        ),
+        SparkExpansionCard(
+          badge: '03 · LOOP PAYOFF & UPGRADE',
+          title: 'District Shortcut Ziplines',
+          description:
+              'Spend delivery credits to permanently unlock rooftop shortcut ramps and stash terminals across metropolis sectors.',
+          additionSummary: 'Permanent rooftop shortcut and stash unlocks',
+          accentType: 'neutral',
+        ),
+      ];
+    } else if (hasGrapple) {
       pool = [
         SparkExpansionCard(
           badge: '01 · CORE MECHANIC TWIST',

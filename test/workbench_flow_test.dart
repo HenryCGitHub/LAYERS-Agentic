@@ -1275,5 +1275,42 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await provider.approveAndExecuteReleasePlan();
       },
     );
+
+    test(
+      'Stage 1A Idea Summarizer extracts domain nouns for Working Title, synthesizes natural non-quoting summary, and matches parkour/courier mechanics without grapple hooks',
+      () async {
+        const courierPitch =
+            'Brave areas too lethal for ordinary survivors to retrieve and deliver vital cargo across a ruined metropolis using fluid parkour, wall-running, and high-speed combat against scavengers hunting your haul.';
+        final intake = ProjectConceptAgent.buildDeterministicSparkIntake(
+          rawIdea: courierPitch,
+        );
+
+        // 1. Working Title extracts domain/mechanic nouns instead of copying first 3 words ("Brave Areas Too")
+        expect(intake.workingTitle, isNot('Brave Areas Too'));
+        expect(intake.workingTitle, 'Metropolis Cargo Parkour');
+
+        // 2. Summary is natural and never quotes the raw pitch verbatim
+        expect(intake.baseSummary, isNot(contains('"Brave areas too')));
+        expect(intake.baseSummary, isNot(contains('centers on "')));
+        expect(intake.baseSummary.toLowerCase(), contains('metropolis'));
+        expect(intake.baseSummary.toLowerCase(), contains('parkour'));
+
+        // 3. Mechanics and Expansion Cards reflect parkour/courier/scavengers, NOT grapple hooks
+        expect(intake.mechanics, contains('Fluid Parkour & Wall-Running'));
+        expect(intake.mechanics, contains('Cargo Haul Protection'));
+        expect(
+          intake.mechanics.any((m) => m.toLowerCase().contains('grapple')),
+          isFalse,
+        );
+        expect(
+          intake.expansionCards.any((c) => c.title.toLowerCase().contains('grapple')),
+          isFalse,
+        );
+        expect(
+          intake.expansionCards.first.title,
+          'Wall-Run Chain & Vault Boost',
+        );
+      },
+    );
   });
 }
