@@ -2690,7 +2690,9 @@ class TaskHowToBlueprint {
                         : 'LineTrace hits $cppClass InteractBox within interaction range.'),
                 path: 'Source/Project/$pascalAsset.cpp :: $cppClass()',
                 code: isFoundationTask
-                    ? '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>("VisualMesh");\n  VisualMesh->SetupAttachment(RootComponent);\n  InteractBox = CreateDefaultSubobject<UBoxComponent>("InteractBox");\n  InteractBox->InitBoxExtent(FVector(50.f, 50.f, 20.f));\n  InteractBox->SetupAttachment(RootComponent);\n}'
+                    ? (effectiveCategory == 'ui'
+                        ? '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  CameraBoom = CreateDefaultSubobject<USpringArmComponent>("CameraBoom");\n  CameraBoom->SetupAttachment(RootComponent);\n  CameraBoom->TargetArmLength = 400.f;\n  FollowCamera = CreateDefaultSubobject<UCameraComponent>("FollowCamera");\n  FollowCamera->SetupAttachment(CameraBoom);\n}'
+                        : '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>("VisualMesh");\n  VisualMesh->SetupAttachment(RootComponent);\n  InteractBox = CreateDefaultSubobject<UBoxComponent>("InteractBox");\n  InteractBox->InitBoxExtent(FVector(50.f, 50.f, 20.f));\n  InteractBox->SetupAttachment(RootComponent);\n}')
                     : (isStateLogicTask
                         ? 'void $cppClass::SetMechanicState(EMechanicState NewState) {\n  if (ActiveState == NewState) return;\n  ActiveState = NewState;\n  OnStateChanged(ActiveState);\n}'
                         : 'FHitResult Hit;\nGetWorld()->LineTraceSingleByChannel(Hit, StartLoc, EndLoc, ECC_Visibility);\nif ($cppClass* Target = Cast<$cppClass>(Hit.GetActor())) {\n  Target->Interact();\n}'),
@@ -2829,7 +2831,11 @@ class TaskHowToBlueprint {
                     ? '$bpAsset → Components Panel (Top-Left)'
                     : '$bpAsset → Functions / Event Graph',
                 code: isFoundationTask
-                    ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)'
+                    ? (effectiveCategory == 'ui'
+                        ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ CameraBoom   (SpringArmComponent: TargetArmLength = 400.0)\n     │   └─ FollowCamera (CameraComponent)\n     └─ HudCanvas    (WidgetComponent: Screen Space)'
+                        : (effectiveCategory == 'combat'
+                            ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ WeaponMesh  (StaticMeshComponent)\n     ├─ MuzzlePoint (SceneComponent)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)'
+                            : '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)'))
                     : (isStateLogicTask
                         ? '[Function: AdvanceState]\n   └──► [Switch on E_State]\n           ├──► Idle   ──► [Set CurrentState = Active]\n           └──► Active ──► [Set CurrentState = Complete]'
                         : '[IA_Interact (Started)] ──► [LineTraceByChannel (Camera → +400cm)]\n   └──► [Break Hit Result (Hit Actor)]'),
@@ -2978,7 +2984,11 @@ class TaskHowToBlueprint {
               verify:
                   'Selecting $pascalAsset in the Scene view shows a green wireframe BoxCollider outline.',
               path: 'Hierarchy → $pascalAsset → Inspector → Add Component',
-              code: '$pascalAsset (GameObject)\n ├─ VisualMesh      (MeshFilter + MeshRenderer / SpriteRenderer)\n ├─ InteractTrigger (BoxCollider: isTrigger = true)\n └─ $pascalAsset    (MonoBehaviour Script)',
+              code: isFoundationTask
+                  ? (effectiveCategory == 'ui'
+                      ? '$pascalAsset (GameObject)\n ├─ CameraArm  (Transform + Camera)\n ├─ HudCanvas  (Canvas + CanvasScaler + GraphicRaycaster)\n └─ $pascalAsset (MonoBehaviour Script)'
+                      : '$pascalAsset (GameObject)\n ├─ VisualMesh      (MeshFilter + MeshRenderer / SpriteRenderer)\n ├─ InteractTrigger (BoxCollider: isTrigger = true)\n └─ $pascalAsset    (MonoBehaviour Script)')
+                  : 'public void ExecuteStep(float delta) {\n    // Step 2: Core State / Raycast\n}',
               explain: 'The Renderer draws the object on screen, the BoxCollider detects overlaps/clicks, and the Script runs your C# logic.',
             );
           case 2:
@@ -3107,7 +3117,11 @@ class TaskHowToBlueprint {
             verify:
                 'The 2D Viewport shows your visible shape surrounded by a light-blue rectangle collision outline (no yellow warning triangle).',
             path: 'Scene Dock (Top-Left) → $pascalAsset Hierarchy',
-            code: '$pascalAsset (Node2D / CharacterBody2D)\n ├─ Visual (Sprite2D / ColorRect: 64x64)\n └─ HitBox (Area2D)\n     └─ CollisionShape2D (RectangleShape2D)',
+            code: isFoundationTask
+                ? (effectiveCategory == 'ui'
+                    ? '$pascalAsset (Node2D / CharacterBody2D)\n ├─ FollowCamera (Camera2D: Position Smoothing = On)\n └─ HudCanvas    (CanvasLayer)\n     └─ StatusLabel (Label)'
+                    : '$pascalAsset (Node2D / CharacterBody2D)\n ├─ Visual (Sprite2D / ColorRect: 64x64)\n └─ HitBox (Area2D)\n     └─ CollisionShape2D (RectangleShape2D)')
+                : 'func set_mechanic_state(new_state: int) -> void:\n    current_state = new_state',
             explain: 'Sprite2D/ColorRect makes the object visible on screen, while Area2D + CollisionShape2D lets Godot detect overlaps and clicks.',
           );
         case 2:
@@ -3527,6 +3541,8 @@ class TaskHowToBlueprint {
                       c.text.toUpperCase().contains('SWAP VISUAL MATERIAL') ||
                       c.text.toUpperCase().contains('SWAP MATERIAL') ||
                       c.text.toUpperCase().contains('STEP STATE WITH INTERPOLATION'))) ||
+              (effectiveCategory == 'ui' &&
+                  (c.codeSnippet ?? '').contains('Shape_Plane / Cube')) ||
               (c.codeSnippet ?? '').contains('ValidateGuard_') ||
               (c.codeSnippet ?? '').contains('_validate_guard_') ||
               (c.codeSnippet ?? '').contains('!IsBoundaryBlocked')),
