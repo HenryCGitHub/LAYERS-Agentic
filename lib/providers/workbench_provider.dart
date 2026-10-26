@@ -108,6 +108,8 @@ class WorkbenchProvider extends ChangeNotifier {
         onSync: (remoteDocs) {
           _lastCloudSyncAt = DateTime.now();
           if (remoteDocs.isEmpty && !initialLocalPushDone) return;
+          // Skip intermediate snapshot reconciliation while local batch writes or agent operations are in flight
+          if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) return;
           // Reconcile remote deletions once initial local push has finished
           if (initialLocalPushDone && remoteDocs.isNotEmpty) {
             final removedIds = documents.keys
@@ -689,6 +691,7 @@ class WorkbenchProvider extends ChangeNotifier {
   }
 
   final Map<String, Timer> _persistTimers = {};
+  final Set<String> _pendingCloudWriteDocIds = {};
 
   void _persistDocument(TierDocument doc, {bool debounce = false}) {
     _persistTimers.remove(doc.id)?.cancel();
@@ -696,7 +699,10 @@ class WorkbenchProvider extends ChangeNotifier {
       LocalVaultService.saveDocument(doc);
       final user = _authService.currentUser;
       if (user != null) {
-        _firestoreService.saveDocument(uid: user.uid, doc: doc);
+        _pendingCloudWriteDocIds.add(doc.id);
+        _firestoreService.saveDocument(uid: user.uid, doc: doc).whenComplete(() {
+          _pendingCloudWriteDocIds.remove(doc.id);
+        });
       }
     }
 
@@ -1880,12 +1886,17 @@ class WorkbenchProvider extends ChangeNotifier {
         draft.tradeOffs.map((t) => '• $t').join('\n');
 
     final releaseIds = <String>[];
-    final isSplitPrototype = draft.releaseTrainTitles.length > 1;
-    for (int i = 0; i < draft.releaseTrainTitles.length; i++) {
+    final trainTitles = draft.releaseTrainTitles.isNotEmpty
+        ? draft.releaseTrainTitles
+        : <String>[
+            'v0.1: ${draft.title.trim().isEmpty ? "Game" : draft.title.trim()} Core Loop - Prototype',
+          ];
+    final isSplitPrototype = trainTitles.length > 1;
+    for (int i = 0; i < trainTitles.length; i++) {
       final relId = projId == 'proj_main'
           ? 'rel_v0_${i + 1}'
           : '${projId}_rel_v0_${i + 1}';
-      final relTitle = draft.releaseTrainTitles[i];
+      final relTitle = trainTitles[i];
       final existingRel = documents[relId];
 
       if (existingRel != null) {
@@ -1972,10 +1983,30 @@ class WorkbenchProvider extends ChangeNotifier {
   /// 2-Stage Flow (`1. Concept` -> `2. Workbench`): Synthesizes the Release Blueprint and
   /// immediately executes it into the active Workbench in one click without visiting any middle gate screen.
   Future<void> approveConceptAndBuildRelease({String? releaseId}) async {
+    if (_conceptDraft != null) {
+      _commitConceptToVault(_conceptDraft!);
+    }
+    _currentStage = WorkbenchStage.releaseWorkbench;
+    _releaseViewFilter = 'active';
+    notifyListeners();
+
     await openReleasePlanGate(
       releaseId: releaseId,
       transitionToGateStage: false,
     );
+    if (_releaseBlueprint == null) {
+      final proj = activeProject;
+      final relDoc = activeRelease;
+      if (proj != null && relDoc != null) {
+        _releaseBlueprint = await ReleasePlannerAgent.planRelease(
+          projectDoc: proj,
+          releaseDoc: relDoc,
+          apiKey: '',
+          modelName: _planningModel,
+          thinkingLevel: _thinkingLevel,
+        );
+      }
+    }
     if (_releaseBlueprint != null) {
       await approveAndExecuteReleasePlan();
     }
@@ -2040,7 +2071,7 @@ class WorkbenchProvider extends ChangeNotifier {
     String? releaseId,
     bool transitionToGateStage = true,
   }) async {
-    if (_conceptDraft != null && _activeProjectId == null) {
+    if (_conceptDraft != null) {
       _commitConceptToVault(_conceptDraft!);
     }
 
@@ -2919,10 +2950,11 @@ Return ONLY a JSON object with this schema:
         _persistDocument(d);
       }
       _persistDocument(relDoc);
-      _syncActiveProjectMetadata();
 
       // Auto-select the first Feature that has incomplete checkpoints (or Beat 1 / Feature 1)
+      // before syncing project metadata so selected_beat_id / selected_feature_id are persisted together.
       _selectFirstIncompleteFeatureInActiveRelease();
+      _syncActiveProjectMetadata();
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;

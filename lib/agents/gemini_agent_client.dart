@@ -72,9 +72,15 @@ RULES:
             'responseMimeType': 'application/json',
           };
           if (includeThinking && normalizedThinking.isNotEmpty) {
-            genConfig['thinkingConfig'] = {
-              'thinkingLevel': normalizedThinking,
-            };
+            final isFlash25 = model == 'gemini-flash-latest' ||
+                model.startsWith('gemini-2.5');
+            genConfig['thinkingConfig'] = isFlash25
+                ? <String, dynamic>{
+                    'thinkingBudget': normalizedThinking == 'LOW' ? 0 : 1024,
+                  }
+                : <String, dynamic>{
+                    'thinkingLevel': normalizedThinking,
+                  };
           }
 
           final response = await http
@@ -92,7 +98,7 @@ RULES:
                   'generationConfig': genConfig,
                 }),
               )
-              .timeout(const Duration(seconds: 25));
+              .timeout(const Duration(seconds: 8));
 
           if (response.statusCode == 200) {
             lastErrorStatus = null;
