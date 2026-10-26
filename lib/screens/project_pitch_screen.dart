@@ -175,18 +175,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         'No-Explain Playtest: A playtester picks up the controls, reads the primary objective from on-screen cues alone, and completes a full round',
       ],
     ),
-    _SectionConfig(
-      numLabel: '09',
-      optionKey: 'prototypeRelease',
-      shortTitle: 'Releases (v0.1+)',
-      title: 'Progressive Releases (v0.1 → v0.2+)',
-      purpose: 'Start with a playable v0.1 core loop in the Workbench, then evolve to v0.2 → v0.3+ guided by Agentic AI.',
-      question: 'How should we scope v0.1 before evolving progressively into v0.2+?',
-      options: [
-        'Single v0.1 Core Loop: Build the complete greybox core loop in v0.1, then evolve systems in v0.2+',
-        'Two-Step v0.1 → v0.2: v0.1 Player Movement & Controls → v0.2 Full Core Loop Arena',
-      ],
-    ),
   ];
 
   List<String> _optionsForSection(ProjectConceptBlueprint draft, int sectionIdx) {
@@ -1214,24 +1202,54 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                         ),
                       ],
                     ),
-                    InkWell(
-                      key: const ValueKey('clear_idea_summary_btn'),
-                      onTap: () => widget.workbench.clearSparkIdeaIntake(),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        child: Text(
-                          'Reset ×',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: textMuted,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        InkWell(
+                          key: const ValueKey('fast_track_concept_review_btn'),
+                          onTap: widget.workbench.isAgentBusy
+                              ? null
+                              : () => widget.workbench.startConceptInterview(
+                                    _sparkController.text,
+                                    true,
+                                  ),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            child: Text(
+                              'Fast-Track to Review ◫',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: accentEmerald,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          key: const ValueKey('clear_idea_summary_btn'),
+                          onTap: () => widget.workbench.clearSparkIdeaIntake(),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            child: Text(
+                              'Reset ×',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: textMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1741,7 +1759,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '$verifiedCount/9 ✓',
+                      '$verifiedCount/${_sections.length} ✓',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
@@ -1962,7 +1980,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               SizedBox(
                 width: 24,
                 child: Text(
-                  '10',
+                  '09',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w800,
@@ -1983,7 +2001,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                       ),
                     ),
                     Text(
-                      'Inspect all 9 sections ($verifiedCount/9)',
+                      'Inspect all ${_sections.length} sections ($verifiedCount/${_sections.length})',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         color: textMuted,
@@ -2203,7 +2221,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'SECTION ${sec.numLabel} / 09',
+                            'SECTION ${sec.numLabel} / 08',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w800,
@@ -2472,7 +2490,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                         ),
                       ),
                       child: Text(
-                        '← Back to Section 09',
+                        '← Back to Section 08',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -2490,7 +2508,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                         ),
                       ),
                       child: Text(
-                        'ALL 9 SECTIONS READY',
+                        'ALL 8 SECTIONS READY',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
@@ -4253,7 +4271,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'STEP 10 · FINAL BLUEPRINT VERIFICATION',
+                      'STEP 09 · FINAL BLUEPRINT VERIFICATION',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
@@ -4416,7 +4434,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 },
               ),
 
-              // 04 Design Pillars through 09 Prototype Release
+              // 04 Design Pillars through 08 Done When
               for (int idx = 3; idx < _sections.length; idx++) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 22),
@@ -4436,6 +4454,18 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   ),
                 ),
               ],
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 22),
+                child: Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: borderSubtle,
+                ),
+              ),
+              _buildReleaseTrainPipeline(
+                draft,
+                isReadOnlySummary: true,
+              ),
             ],
           ),
         ],

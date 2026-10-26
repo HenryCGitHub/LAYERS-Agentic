@@ -95,6 +95,7 @@ void main() {
         expect(find.byKey(const ValueKey('spark_card_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_card_2')), findsOneWidget);
         expect(find.byKey(const ValueKey('shuffle_spark_ideas_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('fast_track_concept_review_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('start_concept_interview_btn')), findsOneWidget);
         expect(find.text('STEP 1A · NEW PROJECT'), findsOneWidget);
 
@@ -122,7 +123,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('start_concept_interview_btn')));
         await tester.pumpAndSettle();
 
-        // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..09) ──
+        // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..08) ──
         expect(find.byKey(const ValueKey('top_bar_project_title')), findsOneWidget);
         expect(find.byKey(const ValueKey('project_switcher_dropdown_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('cloud_sync_auth_btn')), findsOneWidget);
@@ -135,7 +136,7 @@ void main() {
         expect(find.byKey(const ValueKey('agent_option_card_0_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('agent_option_card_0_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('agent_option_card_0_2')), findsOneWidget);
-        expect(find.text('SECTION 01 / 09'), findsOneWidget);
+        expect(find.text('SECTION 01 / 08'), findsOneWidget);
         expect(find.text('Goal'), findsWidgets);
         // Verify Option A structured Goal card + 3 Scannable Clause Cards (01, 02, 03)
         expect(find.byKey(const ValueKey('stage1_goal_structured_card')), findsOneWidget);
@@ -155,21 +156,21 @@ void main() {
         // Step to Section 02 (Game Spec) and verify 2x2 KV grid labels
         await tester.tap(find.byKey(const ValueKey('next_section_btn')));
         await tester.pumpAndSettle();
-        expect(find.text('SECTION 02 / 09'), findsOneWidget);
+        expect(find.text('SECTION 02 / 08'), findsOneWidget);
         expect(find.text('CAMERA VIEW'), findsOneWidget);
         expect(find.text('CONTROLS'), findsOneWidget);
 
         // Step to Section 03 (Tech Spec) and verify 2x2 KV grid labels
         await tester.tap(find.byKey(const ValueKey('next_section_btn')));
         await tester.pumpAndSettle();
-        expect(find.text('SECTION 03 / 09'), findsOneWidget);
+        expect(find.text('SECTION 03 / 08'), findsOneWidget);
         expect(find.text('ENGINE'), findsOneWidget);
         expect(find.text('PLATFORM'), findsOneWidget);
 
         // Step to Section 04 (Design Pillars — plain label, never "Load-Bearing")
         await tester.tap(find.byKey(const ValueKey('next_section_btn')));
         await tester.pumpAndSettle();
-        expect(find.text('SECTION 04 / 09'), findsOneWidget);
+        expect(find.text('SECTION 04 / 08'), findsOneWidget);
         expect(find.text('Design Pillars'), findsWidgets);
         expect(find.textContaining('Load-Bearing'), findsNothing);
         // Verify Stage 1 + / ✓ Multi-Select Playing Cards on Section 04
@@ -190,7 +191,7 @@ void main() {
           contains('Tactical Positioning'),
         );
 
-        // Jump to Step 10: Full Blueprint Review using the prominent bottom dock button
+        // Jump to Step 09: Full Blueprint Review using the prominent bottom dock button
         expect(find.byKey(const ValueKey('skip_to_full_review_btn')), findsOneWidget);
         final synthBtn = find.byKey(const ValueKey('synthesize_concept_btn'));
         await tester.ensureVisible(synthBtn);
@@ -198,10 +199,10 @@ void main() {
         await tester.tap(synthBtn);
         await tester.pumpAndSettle();
 
-        // ── Stage 1C: Step 10 Full Blueprint Review & Progressive Releases ──
+        // ── Stage 1C: Step 09 Full Blueprint Review & Progressive Releases ──
         expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
-        expect(find.text('STEP 10 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
+        expect(find.text('STEP 09 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
         expect(find.text('v0.1: Core Movement & Game Loop - Prototype'), findsOneWidget);
         expect(find.text('1. Concept'), findsOneWidget);
         expect(find.text('2. Workbench'), findsOneWidget);
@@ -393,6 +394,22 @@ void main() {
         );
         expect(
           find.byKey(ValueKey('inline_step_copilot_tailor_btn_$cp0Id')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('inline_step_copilot_log_issue_btn_$cp0Id')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('rail_add_feat_to_beat_$firstBeatId')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('workbench_rename_feature_btn_${activeFeat.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('workbench_remove_feature_btn_${activeFeat.id}')),
           findsOneWidget,
         );
         expect(find.textContaining('✓ Verify: '), findsOneWidget);
@@ -1524,6 +1541,42 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             reason: 'v0.1 feature "${feat.title}" must start at 0% progress',
           );
         }
+
+        // Category 1 & 2 Streamlining: Fast-Track to Full Review + Live Workbench Feature CRUD (Add, Rename, Defer/Remove)
+        final fastTrackProvider = WorkbenchProvider();
+        await fastTrackProvider.startConceptInterview(
+          'A tactical mech extraction shooter',
+          true,
+        );
+        expect(fastTrackProvider.jumpToFullReviewPending, isTrue);
+
+        final firstBeatDoc = courierProvider.activeReleaseBeats.first;
+        final initialBeatFeatCount =
+            courierProvider.featuresForBeat(firstBeatDoc.id).length;
+        final newLiveFeatId = courierProvider.addLiveFeatureToBeat(
+          firstBeatDoc.id,
+          'Zipline Anchor & Detach',
+        );
+        expect(newLiveFeatId, isNotNull);
+        expect(courierProvider.selectedFeatureId, newLiveFeatId);
+        expect(
+          courierProvider.featuresForBeat(firstBeatDoc.id).length,
+          initialBeatFeatCount + 1,
+        );
+        courierProvider.renameLiveFeature(
+          newLiveFeatId!,
+          'Zipline Boost & Detach',
+        );
+        expect(
+          courierProvider.documents[newLiveFeatId]!.title,
+          'Zipline Boost & Detach',
+        );
+        final removed = courierProvider.removeLiveFeature(newLiveFeatId);
+        expect(removed, isTrue);
+        expect(
+          courierProvider.featuresForBeat(firstBeatDoc.id).length,
+          initialBeatFeatCount,
+        );
       },
     );
   });

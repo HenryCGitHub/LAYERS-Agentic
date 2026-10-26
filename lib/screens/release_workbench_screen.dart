@@ -737,29 +737,49 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 ),
                               ),
                             ),
-                            if (beatFeats.isNotEmpty) ...[
-                              const SizedBox(width: 8),
-                              Builder(
-                                builder: (context) {
-                                  final allBeatStable = beatFeats.every(
-                                    (f) => f.sections['lifecycle'] == 'stable',
-                                  );
-                                  return Text(
-                                    allBeatStable
-                                        ? 'STABLE ✓'
-                                        : '$doneBeatCount/${beatFeats.length}',
+                              if (beatFeats.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Builder(
+                                  builder: (context) {
+                                    final allBeatStable = beatFeats.every(
+                                      (f) => f.sections['lifecycle'] == 'stable',
+                                    );
+                                    return Text(
+                                      allBeatStable
+                                          ? 'STABLE ✓'
+                                          : '$doneBeatCount/${beatFeats.length}',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: allBeatDone || allBeatStable
+                                            ? accentEmerald
+                                            : textMuted,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                              const SizedBox(width: 6),
+                              InkWell(
+                                key: ValueKey('rail_add_feat_to_beat_${beat.id}'),
+                                onTap: () => _showAddLiveFeatureDialog(beat),
+                                borderRadius: BorderRadius.circular(3),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                    vertical: 1,
+                                  ),
+                                  child: Text(
+                                    '+',
                                     style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: allBeatDone || allBeatStable
-                                          ? accentEmerald
-                                          : textMuted,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: accentCyan,
                                     ),
-                                  );
-                                },
+                                  ),
+                                ),
                               ),
                             ],
-                          ],
                         ),
                       ),
                     ),
@@ -3224,6 +3244,52 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    InkWell(
+                                      key: ValueKey(
+                                        'workbench_rename_feature_btn_${feat.id}',
+                                      ),
+                                      onTap: () =>
+                                          _showRenameLiveFeatureDialog(feat),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 2,
+                                        ),
+                                        child: Text(
+                                          '✎ Rename',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'workbench_remove_feature_btn_${feat.id}',
+                                      ),
+                                      onTap: () => widget.workbench
+                                          .removeLiveFeature(feat.id),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 2,
+                                        ),
+                                        child: Text(
+                                          '× Defer',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
                                     Text(
                                       '$doneSubStepCount/${selectedHowTo.subSteps.length} steps done',
                                       style: GoogleFonts.jetBrainsMono(
@@ -4076,6 +4142,31 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                         ),
                                       ),
                                     ),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'inline_step_copilot_log_issue_btn_${node.id}',
+                                      ),
+                                      onTap: () => _showLogPlaytestIssueDialog(
+                                        feat,
+                                        states,
+                                        index,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 3,
+                                        ),
+                                        child: Text(
+                                          '🐞 Log Playtest Issue',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: accentAmber,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -4689,6 +4780,243 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
           .where((s) => s.isNotEmpty)
           .toList();
       widget.workbench.updateFeatureStates(feat.id, states);
+    }
+  }
+
+  Future<void> _showAddLiveFeatureDialog(TierDocument beat) async {
+    final ctrl = TextEditingController();
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          'Add Playable Feature to ${_formatOutlineBeatDisplayTitle(beat.title)}',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: TextField(
+            key: const ValueKey('workbench_add_live_feature_input'),
+            controller: ctrl,
+            autofocus: true,
+            style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+            decoration: InputDecoration(
+              hintText: 'e.g., Grapple Swing Release, Shield Parry, Dash Reload',
+              hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
+              filled: true,
+              fillColor: bgRecessed,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: borderSubtle),
+              ),
+            ),
+            onSubmitted: (v) => Navigator.of(ctx).pop(v),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_workbench_add_live_feature_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentCyan,
+              foregroundColor: const Color(0xFF06131F),
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text(
+              '+ Add Feature',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (saved != null && saved.trim().isNotEmpty && mounted) {
+      setState(() {
+        _manualCheckpointFocusIndex = null;
+      });
+      widget.workbench.addLiveFeatureToBeat(beat.id, saved.trim());
+    }
+  }
+
+  Future<void> _showRenameLiveFeatureDialog(TierDocument feat) async {
+    final ctrl = TextEditingController(text: feat.title);
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          'Rename Playable Feature',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: TextField(
+            key: const ValueKey('workbench_rename_live_feature_input'),
+            controller: ctrl,
+            autofocus: true,
+            style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: bgRecessed,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: borderSubtle),
+              ),
+            ),
+            onSubmitted: (v) => Navigator.of(ctx).pop(v),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_workbench_rename_live_feature_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text(
+              'Save',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (saved != null && saved.trim().isNotEmpty && mounted) {
+      widget.workbench.renameLiveFeature(feat.id, saved.trim());
+    }
+  }
+
+  Future<void> _showLogPlaytestIssueDialog(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    int checkpointIndex,
+  ) async {
+    final ctrl = TextEditingController();
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Text(
+          '🐞 Log Playtest Issue',
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Describe the bug or feel issue observed in the game viewport. The Agent will append a 3-step [FIX] task group and a [PLAYTEST GUARD] rule:',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: textSecondary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const ValueKey('workbench_log_playtest_issue_input'),
+                controller: ctrl,
+                autofocus: true,
+                style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                decoration: InputDecoration(
+                  hintText: 'e.g., Dash clips through thin arena walls on diagonal input',
+                  hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
+                  filled: true,
+                  fillColor: bgRecessed,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: borderSubtle),
+                  ),
+                ),
+                onSubmitted: (v) => Navigator.of(ctx).pop(v),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_workbench_log_playtest_issue_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentAmber,
+              foregroundColor: const Color(0xFF1F1300),
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: Text(
+              '+ Add [FIX] Task & Guard',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (saved != null && saved.trim().isNotEmpty && mounted) {
+      final newIdx = widget.workbench.logPlaytestIssueOnCheckpoint(
+        featureId: feat.id,
+        states: states,
+        checkpointIndex: checkpointIndex,
+        issueDescription: saved.trim(),
+      );
+      if (newIdx >= 0 && checkpointIndex < states.length) {
+        final cpNode = states[checkpointIndex];
+        setState(() {
+          _manualCheckpointFocusIndex = checkpointIndex;
+          _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
+          _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+        });
+      }
     }
   }
 }

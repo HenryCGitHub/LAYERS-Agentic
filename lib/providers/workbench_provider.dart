@@ -1781,8 +1781,12 @@ class WorkbenchProvider extends ChangeNotifier {
     createNewProject();
   }
 
-  /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 9-section Concept Blueprint.
-  Future<void> startConceptInterview([String sparkText = '']) async {
+  /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 8-section Concept Blueprint.
+  /// When [jumpToFullReview] is true, lands directly on Full Concept Review (`09 · Full Concept Review`).
+  Future<void> startConceptInterview([
+    String sparkText = '',
+    bool jumpToFullReview = false,
+  ]) async {
     final cleanText = sparkText.trim();
     final effectiveSpark = cleanText.isNotEmpty
         ? cleanText
@@ -1802,6 +1806,9 @@ class WorkbenchProvider extends ChangeNotifier {
         thinkingLevel: _thinkingLevel,
       );
       if (_conceptDraft != null) {
+        if (jumpToFullReview) {
+          _jumpToFullReviewPending = true;
+        }
         _commitConceptToVault(_conceptDraft!);
       }
     } finally {
@@ -2404,6 +2411,202 @@ class WorkbenchProvider extends ChangeNotifier {
         return;
       }
     }
+  }
+
+  /// Adds a new Playable Feature directly into an active Epic (`beatId`) inside `2. Workbench`,
+  /// synthesizing its cohesive Checkpoint (`FeatureStateNode`), 3 task groups, numeric tuning
+  /// variables, and `[GUARD]` rules via [MechanicArchetypeProfile], and selects it immediately.
+  String? addLiveFeatureToBeat(String beatId, String rawTitle) {
+    final beatDoc = documents[beatId];
+    final cleanTitle = rawTitle.trim();
+    if (beatDoc == null || cleanTitle.isEmpty) return null;
+    _pushAgentUndoSnapshot();
+
+    final versionTag = activeReleaseVersionTag;
+    final featId =
+        'feat_${beatDoc.id}_${beatDoc.childrenIds.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+    final archetype = MechanicArchetypeProfile.fromFeatureTitle(
+      cleanTitle,
+      beatTitle: beatDoc.title,
+      beatDescription: beatDoc.sections['scope'] ?? '',
+    );
+
+    final inScopeText = archetype.inScope.map((s) => '• $s').join('\n');
+    final outScopeText = archetype.outOfScope.map((s) => '• $s').join('\n');
+    final tuningText = archetype.tuningParams.map((t) => '• $t').join('\n');
+    final edgeText = archetype.edgeCases.map((e) => '• $e').join('\n');
+
+    final featDoc = TierDocument(
+      id: featId,
+      title: cleanTitle,
+      tier: TierType.feature,
+      parentId: beatDoc.id,
+      estimatedDuration: '4h',
+      sections: {
+        'originVersion': versionTag,
+        'activeReleaseVersion': versionTag,
+        'lifecycle': FeatureLifecycleStatus.newFeature.name,
+        'scope': 'Goal: ${archetype.goal}\n\n'
+            'In Scope:\n$inScopeText\n\n'
+            '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
+            'Done When: ${archetype.doneWhen}',
+        'variables': tuningText,
+        'tuning': tuningText,
+        'edge_cases': edgeText,
+      },
+    );
+
+    final checklist = <Subtask>[
+      for (int tIdx = 0; tIdx < archetype.cp1Tasks.length; tIdx++)
+        Subtask(
+          id: '${featId}_${versionTag}_cp1_t${tIdx + 1}',
+          text: archetype.cp1Tasks[tIdx],
+          completed: false,
+        ),
+    ];
+
+    final stateNode = FeatureStateNode(
+      id: '${featId}_${versionTag}_cp_1',
+      name: 'Checkpoint 1: ${archetype.cp1Title}',
+      trigger: 'Playtest: ${archetype.cp1Playtest}',
+      order: 0,
+      checklist: checklist,
+      coveredScope: List<String>.from(archetype.inScope),
+      tuningParams: List<String>.from(archetype.tuningParams),
+      edgeCases: List<String>.from(archetype.edgeCases),
+      parameters: {'releaseVersion': versionTag},
+    );
+
+    FeatureStateNode.saveStatesToDocument(featDoc, [stateNode]);
+    documents[featId] = featDoc;
+    beatDoc.childrenIds.add(featId);
+    _persistDocument(featDoc);
+    _persistDocument(beatDoc);
+
+    // Keep _releaseBlueprint in sync if present
+    final bp = _releaseBlueprint;
+    if (bp != null) {
+      for (final b in bp.beats) {
+        if (b.id == beatId ||
+            b.title.toLowerCase().trim() ==
+                beatDoc.title.toLowerCase().trim()) {
+          b.features.add(
+            ProposedFeatureBlueprint(
+              id: featId,
+              title: cleanTitle,
+              goal: archetype.goal,
+              doneWhen: archetype.doneWhen,
+              estimatedHours: 4,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.newFeature,
+              originVersion: versionTag,
+              inScope: archetype.inScope,
+              outOfScope: archetype.outOfScope,
+              tuningParams: archetype.tuningParams,
+              edgeCases: archetype.edgeCases,
+              checkpoints: [
+                ProposedCheckpointBlueprint(
+                  title: archetype.cp1Title,
+                  playtestCriteria: archetype.cp1Playtest,
+                  tasks: archetype.cp1Tasks,
+                  coveredScope: archetype.inScope,
+                  tuningParams: archetype.tuningParams,
+                  edgeCases: archetype.edgeCases,
+                  releaseVersion: versionTag,
+                ),
+              ],
+            ),
+          );
+          break;
+        }
+      }
+    }
+
+    _recordAgentTrace(AgentRunTrace(
+      agentRole: 'Systems & Engine Architect',
+      userGoal: 'Add Feature "$cleanTitle" to ${beatDoc.title}',
+      reasoning:
+          'Synthesized Build Tasks, ${archetype.tuningParams.length} numeric tuning variables, and ${archetype.edgeCases.length} [GUARD] rules in 2. Workbench.',
+      toolCalls: [
+        AgentToolCall(
+          toolName: 'create_live_feature_in_workbench',
+          targetTitle: cleanTitle,
+          summary: 'Added "$cleanTitle" (4h) with ${archetype.cp1Title}',
+        ),
+      ],
+    ));
+
+    selectFeature(featId);
+    _syncActiveProjectMetadata();
+    return featId;
+  }
+
+  /// Renames an active Feature document directly inside `2. Workbench` and syncs `_releaseBlueprint`.
+  void renameLiveFeature(String featureId, String newTitle) {
+    final featDoc = documents[featureId];
+    final cleanTitle = newTitle.trim();
+    if (featDoc == null || cleanTitle.isEmpty) return;
+    _pushAgentUndoSnapshot();
+
+    final oldTitle = featDoc.title;
+    featDoc.title = cleanTitle;
+    _persistDocument(featDoc);
+
+    final bp = _releaseBlueprint;
+    if (bp != null) {
+      for (final b in bp.beats) {
+        for (final f in b.features) {
+          if (f.id == featureId ||
+              f.title.toLowerCase().trim() == oldTitle.toLowerCase().trim()) {
+            f.title = cleanTitle;
+          }
+        }
+      }
+    }
+    _syncActiveProjectMetadata();
+    notifyListeners();
+  }
+
+  /// Removes/defers a Feature document from its parent Epic inside `2. Workbench`
+  /// and automatically selects the next available Feature.
+  bool removeLiveFeature(String featureId) {
+    final featDoc = documents[featureId];
+    if (featDoc == null) return false;
+    final parentBeatId = featDoc.parentId;
+    final beatDoc = parentBeatId != null ? documents[parentBeatId] : null;
+
+    // Prevent deleting the very last feature in the entire release so the Workbench never empties
+    final allFeats = <TierDocument>[
+      for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
+    ];
+    if (allFeats.length <= 1) return false;
+
+    _pushAgentUndoSnapshot();
+    if (beatDoc != null) {
+      beatDoc.childrenIds.remove(featureId);
+      _persistDocument(beatDoc);
+    }
+    documents.remove(featureId);
+
+    final bp = _releaseBlueprint;
+    if (bp != null) {
+      for (final b in bp.beats) {
+        for (final f in b.features) {
+          if (f.id == featureId ||
+              f.title.toLowerCase().trim() ==
+                  featDoc.title.toLowerCase().trim()) {
+            f.included = false;
+          }
+        }
+      }
+    }
+
+    if (_selectedFeatureId == featureId) {
+      _selectFirstIncompleteFeatureInActiveRelease();
+    }
+    _syncActiveProjectMetadata();
+    notifyListeners();
+    return true;
   }
 
   /// Updates the active Release Blueprint's top-level `goal` or `doneWhen` in Stage 2 (`Release Plan Gate`).
