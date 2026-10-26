@@ -14,7 +14,8 @@ class GeminiAgentClient {
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~55 tokens vs ~220 tokens).
   static const String compactStyleRules = '''
 RULES:
-- Use plain, literal 2-4 word game-dev titles (e.g. "Crop Farming & Storage", "Shop Buy & Sell", "Vehicle Arena Combat").
+- Use plain, literal 2-4 word game-dev titles naming the observable player or world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").
+- NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").
 - NEVER use archaic/lore words ("Husbandry", "Homestead", "Expedition", "Wasteland", "Adrenaline", "Ordinance") or corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
 - Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.
 - `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").

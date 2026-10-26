@@ -13,8 +13,14 @@ class MechanicArchetypeProfile {
     return cleaned.isNotEmpty ? cleaned : rawBeatTitle.trim();
   }
 
-  /// Strips redundant leading `<BeatTitle>:` prefixes from a Feature title
-  /// while preserving the exact AI-generated or user-entered feature title.
+  static final RegExp _trailingTechSuffixRegex = RegExp(
+    r'\s+(?:Controller|System|Systems|Mechanic|Mechanics|Manager|Component|Subsystem|Handler)s?$',
+    caseSensitive: false,
+  );
+
+  /// Strips redundant leading `<BeatTitle>:` prefixes and trailing technical
+  /// class suffixes (`Controller`, `System`, `Mechanic`, `Manager`, etc.)
+  /// while preserving the concrete AI-generated or user-entered feature title.
   static String concreteFeatureTitleForBeat(
     String rawTitle, {
     String? beatTitle,
@@ -31,6 +37,11 @@ class MechanicArchetypeProfile {
     }
     if (trimmed.contains(' — ')) {
       trimmed = trimmed.split(' — ').first.trim();
+    }
+    while (_trailingTechSuffixRegex.hasMatch(trimmed)) {
+      final stripped = trimmed.replaceFirst(_trailingTechSuffixRegex, '').trim();
+      if (stripped.isEmpty) break;
+      trimmed = stripped;
     }
     return trimmed;
   }

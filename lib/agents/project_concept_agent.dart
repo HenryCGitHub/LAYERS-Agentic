@@ -90,8 +90,8 @@ You are an indie game producer creating a Stage 1 Concept Blueprint for this spa
 ${GeminiAgentClient.compactStyleRules}
 - Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) ordered by PLAYABLE DEVELOPER IMPACT ("Fastest Path to the Fun"):
   1. Beat 1 MUST be the Core Toy & Primary Control (the #1 interactive verb on screen 80% of the time—e.g. Player Movement & Grapple/Dash, Vehicle Handling, Grid Placement/Harvest, or Card Play/Targeting).
-  2. Beats 2–3 MUST be Primary Action & Reactive Challenge (weapons/skills and enemies/hazards/orders that push back).
-  3. Subsequent Beats cover Reward/Pickup, Objective/Upgrade, Pre-Run Loadout/Staging Prep (built after the core mechanics exist), and Loop Reset.
+  2. Next Beats cover Primary Action & Reactive Challenge (always pair player weapons/defenses with active enemies/hazards that push back so the beat is testable on screen).
+  3. Final Beats cover Reward/Pickup, Extraction/Upgrade payoff, and continuing or resetting into the next run/route so the loop never dead-ends.
 - Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
 
 Return ONLY valid JSON:

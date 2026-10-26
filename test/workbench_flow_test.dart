@@ -2555,6 +2555,24 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           ),
           'Deck Draw',
         );
+        expect(
+          MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+            'Truck Physics Controller',
+          ),
+          'Truck Physics',
+        );
+        expect(
+          MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+            'Automated Turret System',
+          ),
+          'Automated Turret',
+        );
+        expect(
+          MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+            'Cargo Pickup Mechanic',
+          ),
+          'Cargo Pickup',
+        );
 
         // Verify custom_snippet sub-steps preserve custom verification (verifyResult) & codeLanguage (stepPath)
         final sampleFeat = courierProvider
