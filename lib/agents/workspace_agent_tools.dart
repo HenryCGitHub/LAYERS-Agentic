@@ -1168,9 +1168,12 @@ Return ONLY valid JSON:
         lower.contains('leaderboard') ||
         lower.contains('shop') ||
         lower.contains('menu') ||
-        lower.contains('loadout');
+        lower.contains('loadout') ||
+        lower.contains('staging') ||
+        lower.contains('prep');
 
     final isFoundationKeyword = lower.contains('movement') ||
+        lower.contains('traversal') ||
         lower.contains('control') ||
         lower.contains('grapple') ||
         lower.contains('dash') ||
@@ -1178,7 +1181,14 @@ Return ONLY valid JSON:
         lower.contains('camera') ||
         lower.contains('physics') ||
         lower.contains('aim') ||
-        lower.contains('locomotion');
+        lower.contains('locomotion') ||
+        lower.contains('drive') ||
+        lower.contains('drift') ||
+        lower.contains('steer') ||
+        lower.contains('plant') ||
+        lower.contains('harvest') ||
+        lower.contains('card play') ||
+        lower.contains('placement');
 
     if (isStubbableKeyword && beatIndex > 0) {
       return (

@@ -87,7 +87,10 @@ You are an indie game producer creating a Stage 1 Concept Blueprint for this spa
 "$cleanSpark"
 
 ${GeminiAgentClient.compactStyleRules}
-- Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) covering the full loop from entry/prep to reset.
+- Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) ordered by PLAYABLE DEVELOPER IMPACT ("Fastest Path to the Fun"):
+  1. Beat 1 MUST be the Core Toy & Primary Control (the #1 interactive verb on screen 80% of the time—e.g. Player Movement & Grapple/Dash, Vehicle Handling, Grid Placement/Harvest, or Card Play/Targeting).
+  2. Beats 2–3 MUST be Primary Action & Reactive Challenge (weapons/skills and enemies/hazards/orders that push back).
+  3. Subsequent Beats cover Reward/Pickup, Objective/Upgrade, Pre-Run Loadout/Staging Prep (built after the core mechanics exist), and Loop Reset.
 - Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
 
 Return ONLY valid JSON:
@@ -157,11 +160,13 @@ Return ONLY valid JSON:
                 .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
             buildDefaultTradeOffsForSpark(cleanSpark, resolvedTitle),
-        coreLoopBeats: (json['coreLoopBeats'] as List?)
-                ?.map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty && s != '...')
-                .toList() ??
-            _defaultCoreLoopForSpark(cleanSpark),
+        coreLoopBeats: sortBeatsByDeveloperImpact(
+          (json['coreLoopBeats'] as List?)
+                  ?.map((e) => e.toString().trim())
+                  .where((s) => s.isNotEmpty && s != '...')
+                  .toList() ??
+              _defaultCoreLoopForSpark(cleanSpark),
+        ),
         exclusions: (json['exclusions'] as List?)
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty && s != '...')
@@ -343,7 +348,7 @@ Return ONLY valid JSON:
       }
       final beats = cleanList(json['coreLoopBeats']);
       if (beats != null) {
-        draft.coreLoopBeats = beats;
+        draft.coreLoopBeats = sortBeatsByDeveloperImpact(beats);
         updated.add('Core Loop');
       }
       final excl = cleanList(json['exclusions']);
@@ -522,11 +527,11 @@ Return ONLY valid JSON:
           newSubject.toLowerCase().contains('mech');
       if (draft.coreLoopBeats.isNotEmpty) {
         draft.coreLoopBeats[0] = isVehicular
-            ? '$capSingularNew Loadout & Arena Entry: Select active $singularNew chassis and weapon mount in the starting zone'
-            : '$capSingularNew Loadout & Entry: Spawn in the starting zone and test primary $singularNew controls';
+            ? 'High-Speed Arena Driving & Traversal: Drive, drift, and boost $newSubject across arena terrain while maintaining momentum'
+            : 'Primary $capSingularNew Movement & Controls: Spawn in the arena and test responsive $singularNew movement and controls';
         if (draft.coreLoopBeats.length > 1 && isVehicular) {
           draft.coreLoopBeats[1] =
-              'High-Speed Arena Driving & Traversal: Drive, drift, and boost across arena terrain while maintaining momentum';
+              '$capSingularNew Weapon & Combat Timing: Fire mounted weapons at arena targets while weaving through hazards';
         }
       }
 
@@ -1137,6 +1142,86 @@ Return ONLY valid JSON:
     ];
   }
 
+  /// Ranks a Core Loop Beat by Playable Developer Impact ("Fastest Path to the Fun"):
+  /// - `0`: Core Toy & Primary Control (Movement, Traversal, Parkour, Grapple, Driving, Grid/Planting, Card Play)
+  /// - `1`: Primary Action & Reactive Challenge (Combat, Weapons, Enemies, Hazards, Orders)
+  /// - `2`: Mid-Loop Reward & Objective Escalation (Loot, Drops, Pickup, Wave Clear, Upgrade Choice)
+  /// - `3`: Pre-Match Prep / Loadout / Staging Multipliers (Staging, Loadout, Equipment Prep, Shop Menu)
+  /// - `4`: Loop Closure & Reset (Summary, Tally, Reset, Restart)
+  static int developerImpactTierForBeat(String rawBeat) {
+    final head = rawBeat.split(':').first.toLowerCase();
+    final full = rawBeat.toLowerCase();
+
+    final isResetOrSummary = head.contains('reset') ||
+        head.contains('resolution') ||
+        head.contains('summary') ||
+        head.contains('tally') ||
+        head.contains('dropoff');
+    if (isResetOrSummary) return 4;
+
+    final isPrepOrLoadout = (head.contains('staging') ||
+            head.contains('loadout') ||
+            head.contains('prep') ||
+            head.contains('contract') ||
+            head.contains('menu') ||
+            head.contains('rig select')) &&
+        !head.contains('traversal') &&
+        !head.contains('movement') &&
+        !head.contains('driving') &&
+        !head.contains('parkour');
+    if (isPrepOrLoadout) return 3;
+
+    final isCoreToyOrControl = head.contains('traversal') ||
+        head.contains('movement') ||
+        head.contains('locomotion') ||
+        head.contains('parkour') ||
+        head.contains('wall-run') ||
+        head.contains('grappl') ||
+        head.contains('driving') ||
+        head.contains('steering') ||
+        head.contains('control') ||
+        head.contains('plant') ||
+        head.contains('harvest') ||
+        head.contains('card play') ||
+        head.contains('placement') ||
+        full.contains('primary movement') ||
+        full.contains('chain wall-runs');
+    if (isCoreToyOrControl) return 0;
+
+    final isActionOrChallenge = head.contains('combat') ||
+        head.contains('weapon') ||
+        head.contains('hazard') ||
+        head.contains('wave') ||
+        head.contains('ambush') ||
+        head.contains('enemy') ||
+        head.contains('strike') ||
+        head.contains('attack') ||
+        head.contains('shoot');
+    if (isActionOrChallenge) return 1;
+
+    return 2;
+  }
+
+  /// Ensures `coreLoopBeats` starts with the highest-impact Core Toy & Primary Control beat
+  /// and places low-impact Staging/Loadout Prep beats after the core gameplay mechanics exist.
+  static List<String> sortBeatsByDeveloperImpact(List<String> beats) {
+    if (beats.length <= 1) return beats;
+    final firstTier = developerImpactTierForBeat(beats.first);
+    final hasHigherImpactLater =
+        beats.skip(1).any((b) => developerImpactTierForBeat(b) < firstTier);
+    if (!hasHigherImpactLater) return beats;
+
+    final indexed = <({int index, int tier, String beat})>[
+      for (int i = 0; i < beats.length; i++)
+        (index: i, tier: developerImpactTierForBeat(beats[i]), beat: beats[i]),
+    ];
+    indexed.sort((a, b) {
+      final cmp = a.tier.compareTo(b.tier);
+      return cmp != 0 ? cmp : a.index.compareTo(b.index);
+    });
+    return [for (final item in indexed) item.beat];
+  }
+
   static List<String> _defaultCoreLoopForSpark(String spark) {
     final lower = spark.toLowerCase();
     final isParkourOrCourier = (lower.contains('parkour') ||
@@ -1149,19 +1234,19 @@ Return ONLY valid JSON:
         !lower.contains('hook');
     if (isParkourOrCourier) {
       return [
-        'Contract & Loadout Prep: Select delivery contract, cargo weight load, and runner gear in the safe zone',
         'Parkour & Wall-Run Traversal: Chain wall-runs, rooftop vaults, and slides across ruined city sectors',
         'Scavenger Ambush & High-Speed Combat: Evade or fight through scavenger packs hunting your active cargo haul',
+        'Contract & Loadout Prep: Select delivery contract, cargo weight load, and runner gear in the safe zone',
         'Cargo Dropoff & Loadout Upgrade: Reach the safe-zone terminal with cargo intact to bank credits and upgrade gear',
       ];
     }
     return [
-      'Staging & Loadout Prep: Select active tool or movement modifier in the starting zone',
       'Arena Entry & Traversal: Enter the arena and chain primary movement impulses across terrain',
-      'Hazard & Wave Spawning: Trigger room encounters with telegraphed enemy waves and active hazards',
       'Primary Combat & Timing: Strike targets using momentum windows, deflection, and dodge recovery',
+      'Hazard & Wave Spawning: Trigger room encounters with telegraphed enemy waves and active hazards',
       'Resource Drop & Pickup: Collect dropped energy, ammo, or health orbs mid-encounter',
       'Room Clear & Upgrade Choice: Complete wave objective and select a run-modifying upgrade',
+      'Staging & Loadout Prep: Select active tool or movement modifier in the starting zone',
       'Loop Resolution & Instant Reset: Bank round results or trigger 1-key arena reset on failure',
     ];
   }
@@ -1226,9 +1311,9 @@ Return ONLY valid JSON:
       ],
       'tradeOffs': buildTradeOffOptionsForSpark(spark, title),
       'coreLoop': [
-        'Complete 4-Beat Loop: Prep & Loadout → Arena Movement & Combat → Loot & Upgrade Choice → Round Clear & Reset',
-        'Direct Action Loop: Arena Drop-In → High-Speed Movement & Combat → Wave Objective Clear → Score & Loot Tally → Instant Reset',
-        'Skill Mastery Loop: Loadout & Positioning → Primary Weapon & Dash → Hazard Dodge & Counter → Upgrade Pick → Next Wave',
+        'Complete 4-Beat Loop: Arena Movement & Controls → Primary Combat & Hazards → Loot & Upgrade Choice → Loadout Prep & Reset',
+        'Direct Action Loop: Core Toy & Traversal → High-Speed Combat & Waves → Objective Clear & Loot → Instant Arena Reset',
+        'Skill Mastery Loop: Primary Weapon & Dash → Hazard Dodge & Counter → Upgrade Pick & Loadout Swap → Next Wave Reset',
       ],
       'exclusions': buildExclusionOptionsForSpark(spark, title),
       'doneWhen': [

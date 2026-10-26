@@ -1541,9 +1541,9 @@ class WorkbenchProvider extends ChangeNotifier {
         break;
       case 'coreLoop':
         fresh = [
-          'Loadout Select: Pick primary movement rig in staging room · Arena Drop: Enter active hazard zone · High-Speed Objective: Clear 3 targets before timer expires · Extraction & Reset: Bank score and restart in 1 key press',
-          'Scout & Aim: Survey obstacle layout from launch pad · Chain Movement: Grapple and vault across hazard gaps · Combat Burst: Defeat elite blocker to unlock exit · Upgrade & Loop: Pick 1 modifier and start next wave',
-          'Warmup Room: Test controls in safe hub · Wave Escalation: Survive 3 escalating 45-second waves · Boss/Climax Check: Break core shield under pressure · Run Summary & Reset: Review best time and loop immediately',
+          'Core Toy & Controls ($offset): Chain primary movement in arena · High-Speed Action: Engage reactive targets · Objective Clear: Bank score under pressure · Loadout Prep & Reset: Swap modifier and restart in 1 key press',
+          'Momentum & Action ($offset): Grapple and vault across hazard gaps · Combat Burst: Defeat elite blocker to unlock exit · Upgrade & Loadout: Pick 1 modifier for next wave · Loop Reset: Instant arena restart',
+          'Immediate Sandbox ($offset): Test primary controls and weapon feel · Wave Escalation: Survive 3 escalating 45-second waves · Climax Check: Break core shield under pressure · Run Summary & Reset: Review best time and loop immediately',
         ];
         break;
       case 'exclusions':

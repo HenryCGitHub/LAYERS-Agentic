@@ -134,6 +134,7 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
+- IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics and Features by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Enemies, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later in the loop.
 - Under each active Beat, generate `1–2` Singular-Focused Playable Features (`"included": true`) needed for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
 - SINGULAR-FOCUSED FEATURE TITLES: Every Feature must represent 1 concrete mechanic (`2–3` plain game-dev words, e.g., `"Weapon Equip"`, `"Player Dash"`, `"Enemy Wave Spawner"`, `"Loot Pickup"`, `"Wave Reset"`). NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.

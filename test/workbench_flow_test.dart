@@ -19,6 +19,17 @@ void main() {
       expect(draft.isInterviewComplete, isTrue);
       expect(draft.lastAgentReply, isNotEmpty);
       expect(draft.coreLoopBeats.length, greaterThanOrEqualTo(6));
+      // Impact-First Ordering: Beat 1 starts with Core Toy / Traversal (never pre-match Staging & Loadout Prep)
+      expect(draft.coreLoopBeats.first, startsWith('Arena Entry & Traversal:'));
+      expect(
+        ProjectConceptAgent.sortBeatsByDeveloperImpact([
+          'Staging & Loadout Prep: Choose weapon in safe room',
+          'Grapple & Wall-Run Traversal: Swing and wall-run across arena gaps',
+          'Primary Combat & Wave Clear: Defeat enemy wave',
+          'Loop Resolution & Reset: Tally score and restart',
+        ]).first,
+        startsWith('Grapple & Wall-Run Traversal:'),
+      );
       expect(draft.releaseTrainTitles.length, 1);
 
       // Send a user turn in the chat and verify the Blueprint updates in real time
@@ -229,7 +240,7 @@ void main() {
             firstProposedFeat.title,
             beatTitle: provider.releaseBlueprint!.beats.first.title,
           ),
-          equals('Weapon Equip'),
+          equals('Player Dash'),
         );
         expect(
           find.byKey(const ValueKey('outliner_new_progressive_release_btn')),
@@ -243,7 +254,7 @@ void main() {
         expect(find.byKey(ValueKey('rail_beat_$firstBeatId')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_single_col_0')), findsOneWidget);
-        expect(find.textContaining('Staging & Loadout Prep Mechanics & Controls'), findsWidgets);
+        expect(find.textContaining('Arena Entry & Traversal Mechanics & Controls'), findsWidgets);
 
         // The Pinned Active Step Window is always visible at the top of the work area in Single-Panel mode
         final activeFeat0 = provider.selectedFeature!;
@@ -512,7 +523,7 @@ void main() {
         // All 7 Stage 1 Core Loop Beats carry into Stage 2 & Stage 3!
         expect(v1Beats.length, provider.conceptDraft!.coreLoopBeats.length);
         final v1FirstFeat = provider.featuresForBeat(v1Beats.first.id).first;
-        expect(v1FirstFeat.title, 'Staging & Loadout Prep Mechanics & Controls');
+        expect(v1FirstFeat.title, 'Arena Entry & Traversal Mechanics & Controls');
 
         // Advance to v0.2 Plan Gate
         await provider.advanceToNextRelease();
