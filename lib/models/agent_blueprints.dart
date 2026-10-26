@@ -127,9 +127,9 @@ class ProjectConceptBlueprint {
       'Offline-Only Local Save',
     ],
     this.designPillars = const [
-      'Every cycle rewards decisive movement and timing over hesitation',
-      'Mistakes feel immediately readable and recoverable in a single button press',
-      'Core controls feel responsive from the very first second on screen',
+      'Decisive Momentum: Every cycle rewards decisive movement and timing over hesitation',
+      'Instant Recovery: Mistakes feel immediately readable and recoverable in a single button press',
+      'Responsive Controls: Core controls feel responsive from the very first second on screen',
     ],
     this.tradeOffs = const [
       'Immediate arcade responsiveness over realistic physics inertia',
@@ -147,6 +147,12 @@ class ProjectConceptBlueprint {
     Map<String, List<String>>? sectionOptions,
   })  : goal = sanitizeGoalText(goal),
         sectionOptions = sectionOptions ?? <String, List<String>>{} {
+    if (designPillars.isNotEmpty) {
+      designPillars = [
+        for (int i = 0; i < designPillars.length; i++)
+          ensureNamedPillar(designPillars[i], i),
+      ];
+    }
     // Auto-repair any legacy Beat 01 that copy-pasted raw "instead of..." user instructions
     if (coreLoopBeats.isNotEmpty &&
         RegExp(r'^Core Focus:\s*instead of\b', caseSensitive: false)
@@ -154,6 +160,113 @@ class ProjectConceptBlueprint {
       coreLoopBeats[0] =
           'Primary Vehicle & Loadout Control: Spawn in the arena and test responsive steering, boost, and primary fire';
     }
+  }
+
+  /// Parses a Design Pillar string into a concrete `(title, body)` pair,
+  /// synthesizing a descriptive 2-3 word name whenever the raw pillar lacks a `Title:` prefix
+  /// (or uses a generic `Pillar 01` placeholder).
+  static ({String title, String body}) parsePillarTitleAndBody(
+    String raw,
+    int index,
+  ) {
+    final clean = raw.trim();
+    if (clean.isEmpty) {
+      const fallbackTitles = [
+        'Core Loop Tension',
+        'Tactile Control Feel',
+        'Readable Threat Cues',
+        'Fast Loop Recovery',
+      ];
+      return (
+        title: fallbackTitles[index % fallbackTitles.length],
+        body: 'Every action provides immediate, readable player feedback.',
+      );
+    }
+
+    String body = clean;
+    final colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < 48 && colonIdx < clean.length - 1) {
+      final head = clean.substring(0, colonIdx).trim();
+      final tail = clean.substring(colonIdx + 1).trim();
+      final isGenericPillarLabel = RegExp(
+        r'^(?:pillar|design\s+pillar|p)\s*[#·\-]?\s*\d*$',
+        caseSensitive: false,
+      ).hasMatch(head);
+      if (head.isNotEmpty && tail.isNotEmpty && !isGenericPillarLabel) {
+        return (title: head, body: tail);
+      }
+      if (tail.isNotEmpty) {
+        body = tail;
+      }
+    }
+
+    final lower = body.toLowerCase();
+    String synthesizedTitle;
+    if (lower.contains('cargo') || lower.contains('courier')) {
+      synthesizedTitle = 'High-Stakes Cargo';
+    } else if (lower.contains('gamble') ||
+        lower.contains('greed') ||
+        lower.contains('high-stakes') ||
+        lower.contains('stakes') ||
+        (lower.contains('risk') && lower.contains('survival'))) {
+      synthesizedTitle = 'High-Stakes Tension';
+    } else if (lower.contains('scaveng') ||
+        lower.contains('loot weight') ||
+        lower.contains('weapon handling') ||
+        lower.contains('tactile') ||
+        lower.contains('grounded and impactful')) {
+      synthesizedTitle = 'Tactile Scavenging';
+    } else if (lower.contains('careful observation') ||
+        lower.contains('reckless rushing') ||
+        (lower.contains('dangerous') && lower.contains('unpredictable'))) {
+      synthesizedTitle = 'Deliberate Threat Reading';
+    } else if (lower.contains('momentum') ||
+        lower.contains('velocity') ||
+        lower.contains('flow-state') ||
+        lower.contains('stop moving') ||
+        lower.contains('wall-run') ||
+        lower.contains('parkour')) {
+      synthesizedTitle = 'Flow-State Momentum';
+    } else if (lower.contains('telegraph') ||
+        lower.contains('readable') ||
+        lower.contains('chaos') ||
+        lower.contains('clarity')) {
+      synthesizedTitle = 'Readable Threat Cues';
+    } else if (lower.contains('recover') ||
+        lower.contains('mistake') ||
+        lower.contains('failure') ||
+        lower.contains('teaches') ||
+        lower.contains('repeatable')) {
+      synthesizedTitle = 'Fast Fair Recovery';
+    } else if (lower.contains('decisive') || lower.contains('hesitation')) {
+      synthesizedTitle = 'Decisive Momentum';
+    } else if (lower.contains('position') || lower.contains('tactical')) {
+      synthesizedTitle = 'Tactical Positioning';
+    } else if (lower.contains('control') ||
+        lower.contains('responsive') ||
+        lower.contains('first second')) {
+      synthesizedTitle = 'Immediate Control Feel';
+    } else if (lower.contains('chain') ||
+        lower.contains('combo') ||
+        lower.contains('mastery')) {
+      synthesizedTitle = 'Chain-Reaction Mastery';
+    } else {
+      const fallbackTitles = [
+        'Core Loop Tension',
+        'Tactile Control Feel',
+        'Readable Threat Cues',
+        'Fast Loop Recovery',
+      ];
+      synthesizedTitle = fallbackTitles[index % fallbackTitles.length];
+    }
+
+    return (title: synthesizedTitle, body: body);
+  }
+
+  /// Ensures a Design Pillar string always carries a concrete `Name: Experience` prefix.
+  static String ensureNamedPillar(String raw, int index) {
+    final parsed = parsePillarTitleAndBody(raw, index);
+    return '${parsed.title}: ${parsed.body}';
   }
 
   /// Normalizes common game-dev typos in conversational user input (e.g. "vehicals" -> "vehicles").

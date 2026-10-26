@@ -398,6 +398,29 @@ void main() {
         expect(find.textContaining('✓ Verify: '), findsOneWidget);
         expect(find.text('Complete & Next →'), findsOneWidget);
 
+        // Regression: Completing a task group and clicking back onto the completed task never shows a blank workbench
+        final completeTask0Btn = find.byKey(
+          ValueKey('complete_task_group_${cp0Id}_0'),
+        );
+        await tester.ensureVisible(completeTask0Btn);
+        await tester.pumpAndSettle();
+        await tester.tap(completeTask0Btn);
+        await tester.pumpAndSettle();
+        final task0Header = find.byKey(ValueKey('outline_task_${cp0Id}_0'));
+        await tester.tap(task0Header);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(ValueKey('pinned_active_step_window_$cp0Id')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('work_area_step_timeline_$cp0Id')),
+          findsOneWidget,
+        );
+        // Uncheck Task 0 to restore clean state
+        await tester.tap(completeTask0Btn);
+        await tester.pumpAndSettle();
+
         // Verify Progressive AI Release Co-Pilot Modal (+ New Release (v0.2) ✦) with 1-click AI Direction Presets
         final newProgRelBtn = find.byKey(
           const ValueKey('outliner_new_progressive_release_btn'),
@@ -1394,6 +1417,91 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           afterCourierSearch.baseSummary.toLowerCase(),
           contains('courier'),
         );
+      },
+    );
+
+    test(
+      'Items 2-4 Regressions: Named Design Pillars, Premise-Specific Trade-Offs & Exclusions, and 0% Initial v0.1 Feature Checkpoints',
+      () async {
+        // Item 4: Default & unprefixed Design Pillars always receive concrete 2-3 word names (never "Pillar 01")
+        final defaultBlueprint = ProjectConceptBlueprint(
+          sparkIdea: 'A fast top-down action game.',
+          title: 'Test Project',
+          goal: 'Playable prototype loop.',
+          coreLoopBeats: ['Move', 'Attack', 'Extract'],
+          exclusions: ['No online multiplayer'],
+          doneWhen: 'Loop completes cleanly',
+          releaseTrainTitles: ['v0.1 Prototype'],
+          questions: const [],
+        );
+        for (int i = 0; i < defaultBlueprint.designPillars.length; i++) {
+          final parsed = ProjectConceptBlueprint.parsePillarTitleAndBody(
+            defaultBlueprint.designPillars[i],
+            i,
+          );
+          expect(parsed.title.toLowerCase(), isNot(startsWith('pillar ')));
+          expect(parsed.title, isNotEmpty);
+          expect(parsed.body, isNotEmpty);
+        }
+        final unprefixedParsed = ProjectConceptBlueprint.parsePillarTitleAndBody(
+          'Every run feels tense as cargo weight slows your movement',
+          0,
+        );
+        expect(unprefixedParsed.title.toLowerCase(), isNot(startsWith('pillar ')));
+        expect(unprefixedParsed.title, 'High-Stakes Cargo');
+
+        // Item 4: Different game premises generate distinct Trade-Offs (05) and Out of Scope Exclusions (07)
+        final courierProvider = WorkbenchProvider();
+        await courierProvider.startConceptInterview(
+          'A supply courier traveling from settlement to settlement shooting enemies and looting item quests',
+        );
+        final courierDraft = courierProvider.conceptDraft!;
+
+        final farmProvider = WorkbenchProvider();
+        await farmProvider.startConceptInterview(
+          'A cozy alchemy shop where you grow crops, brew potions, and haggle with townsfolk',
+        );
+        final farmDraft = farmProvider.conceptDraft!;
+
+        expect(courierDraft.tradeOffs, isNot(equals(farmDraft.tradeOffs)));
+        expect(courierDraft.exclusions, isNot(equals(farmDraft.exclusions)));
+        expect(
+          courierDraft.sectionOptions['tradeOffs'],
+          isNot(equals(farmDraft.sectionOptions['tradeOffs'])),
+        );
+        expect(
+          courierDraft.sectionOptions['exclusions'],
+          isNot(equals(farmDraft.sectionOptions['exclusions'])),
+        );
+
+        // Item 2: v0.1 features always start at 0% progress with 1 cohesive greybox checkpoint (never 50% / 15/30 DONE)
+        await courierProvider.openReleasePlanGate();
+        await courierProvider.approveAndExecuteReleasePlan();
+        // Even if openReleasePlanGate + approveAndExecuteReleasePlan is triggered a second time on v0.1,
+        // features must still start at 0% with 1 checkpoint and zero pre-completed tasks.
+        await courierProvider.openReleasePlanGate();
+        await courierProvider.approveAndExecuteReleasePlan();
+
+        final v01Feats = [
+          for (final b in courierProvider.activeReleaseBeats)
+            ...courierProvider.featuresForBeat(b.id),
+        ];
+        expect(v01Feats, isNotEmpty);
+        for (final feat in v01Feats) {
+          final states = FeatureStateNode.getStatesForDocument(feat);
+          expect(
+            states.length,
+            1,
+            reason:
+                'v0.1 feature "${feat.title}" should have exactly 1 cohesive greybox checkpoint',
+          );
+          expect(states.first.isCompleted, isFalse);
+          expect(
+            courierProvider.getDocumentProgress(feat.id),
+            0.0,
+            reason: 'v0.1 feature "${feat.title}" must start at 0% progress',
+          );
+        }
       },
     );
   });

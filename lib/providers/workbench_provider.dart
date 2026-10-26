@@ -516,6 +516,9 @@ class WorkbenchProvider extends ChangeNotifier {
         _conceptDraft = ProjectConceptBlueprint.fromJson(
           jsonDecode(rawConcept) as Map<String, dynamic>,
         );
+        if (_conceptDraft != null) {
+          ProjectConceptAgent.upgradeLegacyConceptDraftIfNeeded(_conceptDraft!);
+        }
       } catch (e) {
         debugPrint('Restore concept_blueprint_json error: $e');
       }
@@ -577,6 +580,37 @@ class WorkbenchProvider extends ChangeNotifier {
               );
               documents[clonedId] = clonedDoc;
               b.childrenIds[cIdx] = clonedId;
+            }
+          }
+        }
+      }
+
+      // Self-heal any v0.1 features that suffered from the duplicate-checkpoint 50% completion bug
+      final isInitialV01 = activeReleaseVersionTag == 'v0.1' &&
+          (activeRelease?.sections['prototypePart'] ?? '') != '2';
+      if (isInitialV01) {
+        for (final b in beats) {
+          for (final f in featuresForBeat(b.id)) {
+            final states = FeatureStateNode.getStatesForDocument(f);
+            if (states.length >= 2) {
+              final cleanNode = !states.last.isCompleted
+                  ? states.last
+                  : states.first;
+              final cleanedTitle = cleanNode.cleanStageTitle;
+              final healedNode = FeatureStateNode(
+                id: '${f.id}_v0.1_cp_1',
+                name: 'Checkpoint 1: $cleanedTitle',
+                trigger: cleanNode.trigger,
+                order: 0,
+                checklist: cleanNode.checklist,
+                coveredScope: cleanNode.coveredScope,
+                tuningParams: cleanNode.tuningParams,
+                edgeCases: cleanNode.edgeCases,
+                parameters: Map<String, String>.from(cleanNode.parameters)
+                  ..['releaseVersion'] = 'v0.1',
+              );
+              FeatureStateNode.saveStatesToDocument(f, [healedNode]);
+              _persistDocument(f);
             }
           }
         }
@@ -1494,11 +1528,11 @@ class WorkbenchProvider extends ChangeNotifier {
         ];
         break;
       case 'tradeOffs':
-        fresh = [
-          'Snappy 1-frame input cancel over long realistic animation windups · Single-screen clarity over sprawling multi-zone maps in v0.1 · Hardcoded tuning constants over complex data tables',
-          'Deterministic arcade physics over unpredictable ragdoll simulation · Fast greybox blockouts over final environment art in v0.1 · Instant restart loop over persistent save trees',
-          'Deep core movement verb over having 10 shallow weapon types · Clear silhouette contrast over heavy post-processing shaders · Tight 3-minute run loop over marathon sessions',
-        ];
+        fresh = ProjectConceptAgent.buildTradeOffOptionsForSpark(
+          draft.sparkIdea,
+          title,
+          offset: offset,
+        );
         break;
       case 'coreLoop':
         fresh = [
@@ -1508,11 +1542,11 @@ class WorkbenchProvider extends ChangeNotifier {
         ];
         break;
       case 'exclusions':
-        fresh = [
-          'No online multiplayer or leaderboards in v0.1 · No branching dialogue or story cutscenes in v0.1 · No crafting or inventory weight menus in v0.1',
-          'No procedural biome generation in v0.1 · No skill trees with >3 nodes in v0.1 · No custom shader pipelines before core loop sign-off',
-          'No save-file migration or cloud profiles in v0.1 · No companion AI party members in v0.1 · No multi-floor minimap UI in v0.1',
-        ];
+        fresh = ProjectConceptAgent.buildExclusionOptionsForSpark(
+          draft.sparkIdea,
+          title,
+          offset: offset,
+        );
         break;
       case 'doneWhen':
         fresh = [
@@ -2006,17 +2040,22 @@ class WorkbenchProvider extends ChangeNotifier {
         (proj.childrenIds.isNotEmpty ? proj.childrenIds.first : null);
     if (targetRelId == null) return;
 
-    // Collect existing live Beats & Features from the currently active (or prior) release
-    // so evolving to v0.2+ preserves the single live game tree!
+    // Collect existing live Beats & Features from prior releases (never from targetRelId itself,
+    // and never when planning the initial v0.1 release) so v0.1 starts clean at 0% and v0.2+ preserves the single live game tree!
+    final isFirstPrototypeRelease =
+        proj.childrenIds.isEmpty || proj.childrenIds.first == targetRelId;
     final existingBeats = <TierDocument>[];
     final existingFeaturesByBeat = <String, List<TierDocument>>{};
-    for (final rel in projectReleases) {
-      if (rel.childrenIds.isNotEmpty) {
-        for (final beatId in rel.childrenIds) {
-          final bDoc = documents[beatId];
-          if (bDoc != null && !existingBeats.any((b) => b.id == bDoc.id)) {
-            existingBeats.add(bDoc);
-            existingFeaturesByBeat[bDoc.id] = featuresForBeat(bDoc.id);
+    if (!isFirstPrototypeRelease) {
+      for (final rel in projectReleases) {
+        if (rel.id == targetRelId) continue;
+        if (rel.childrenIds.isNotEmpty) {
+          for (final beatId in rel.childrenIds) {
+            final bDoc = documents[beatId];
+            if (bDoc != null && !existingBeats.any((b) => b.id == bDoc.id)) {
+              existingBeats.add(bDoc);
+              existingFeaturesByBeat[bDoc.id] = featuresForBeat(bDoc.id);
+            }
           }
         }
       }

@@ -96,16 +96,19 @@ Return ONLY valid JSON:
   "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
   "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
   "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
-  "designPillars": ["Experiential pillar 1", "Experiential pillar 2", "Experiential pillar 3"],
-  "tradeOffs": ["X over Y rule 1", "X over Y rule 2", "X over Y rule 3"],
+  "designPillars": ["2-3 Word Pillar Name: Experiential player feeling 1", "2-3 Word Pillar Name: Experiential player feeling 2", "2-3 Word Pillar Name: Experiential player feeling 3"],
+  "tradeOffs": ["Concrete X over Y rule tailored to $cleanSpark", "Concrete X over Y rule 2", "Concrete X over Y rule 3"],
   "coreLoopBeats": ["Beat Name: Literal action and response", "..."],
-  "exclusions": ["Prototype exclusion 1", "Prototype exclusion 2", "Prototype exclusion 3"],
+  "exclusions": ["Specific prototype exclusion for $cleanSpark", "Specific prototype exclusion 2", "Specific prototype exclusion 3"],
   "doneWhen": "Concrete playtest completion condition",
   "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"],
   "sectionOptions": {
     "goal": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."],
     "designPillars": ["Title 1: Experience...", "Title 2: Experience...", "Title 3: Experience..."],
-    "coreLoop": ["Title 1: Beat A → Beat B → Beat C → Beat D", "Title 2: ...", "Title 3: ..."]
+    "tradeOffs": ["Rule Title 1: Specific X over Y rule for $cleanSpark", "Rule Title 2: Specific X over Y rule", "Rule Title 3: Specific X over Y rule"],
+    "coreLoop": ["Title 1: Beat A → Beat B → Beat C → Beat D", "Title 2: ...", "Title 3: ..."],
+    "exclusions": ["Cut Title 1: Specific prototype cut for $cleanSpark", "Cut Title 2: Specific prototype cut", "Cut Title 3: Specific prototype cut"],
+    "doneWhen": ["Playtest Gate 1: Observable completion condition", "Playtest Gate 2: ...", "Playtest Gate 3: ..."]
   }
 }
 ''';
@@ -148,12 +151,12 @@ Return ONLY valid JSON:
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
-            _defaultDesignPillars(),
+            buildDefaultDesignPillarsForSpark(cleanSpark, resolvedTitle),
         tradeOffs: (json['tradeOffs'] as List?)
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
-            _defaultTradeOffs(),
+            buildDefaultTradeOffsForSpark(cleanSpark, resolvedTitle),
         coreLoopBeats: (json['coreLoopBeats'] as List?)
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty && s != '...')
@@ -163,7 +166,7 @@ Return ONLY valid JSON:
                 ?.map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty && s != '...')
                 .toList() ??
-            _defaultExclusions(),
+            buildDefaultExclusionsForSpark(cleanSpark, resolvedTitle),
         doneWhen: json['doneWhen']?.toString() ??
             'Playtester completes a full core loop cycle with responsive controls and clear feedback.',
         firstReleasePreset: ReleaseScope.featurePrototype,
@@ -197,10 +200,10 @@ Return ONLY valid JSON:
       goal: _synthesizeInitialGoalForSpark(cleanSpark, shortTitle),
       gameSpec: _defaultGameSpec(),
       techSpec: _defaultTechSpec(),
-      designPillars: _defaultDesignPillars(),
-      tradeOffs: _defaultTradeOffs(),
+      designPillars: buildDefaultDesignPillarsForSpark(cleanSpark, shortTitle),
+      tradeOffs: buildDefaultTradeOffsForSpark(cleanSpark, shortTitle),
       coreLoopBeats: _defaultCoreLoopForSpark(cleanSpark),
-      exclusions: _defaultExclusions(),
+      exclusions: buildDefaultExclusionsForSpark(cleanSpark, shortTitle),
       doneWhen: 'A playtester can complete a full core loop cycle with responsive controls and clear hit/motion feedback.',
       firstReleasePreset: ReleaseScope.featurePrototype,
       releaseTrainTitles: _defaultReleaseTrain(shortTitle),
@@ -318,7 +321,10 @@ Return ONLY valid JSON:
       }
       final pillars = cleanList(json['designPillars']);
       if (pillars != null) {
-        draft.designPillars = pillars;
+        draft.designPillars = [
+          for (int i = 0; i < pillars.length; i++)
+            ProjectConceptBlueprint.ensureNamedPillar(pillars[i], i),
+        ];
         updated.add('Design Pillars');
       }
       final tradeOffs = cleanList(json['tradeOffs']);
@@ -404,7 +410,12 @@ Return ONLY valid JSON:
       draft.exclusions.add(cleanTurn);
       updated.add('Exclusions');
     } else if (lower.contains('pillar')) {
-      draft.designPillars.add(cleanTurn);
+      draft.designPillars.add(
+        ProjectConceptBlueprint.ensureNamedPillar(
+          cleanTurn,
+          draft.designPillars.length,
+        ),
+      );
       updated.add('Design Pillars');
     } else if (lower.contains('over ')) {
       draft.tradeOffs.add(cleanTurn);
@@ -804,20 +815,295 @@ Return ONLY valid JSON:
     ];
   }
 
-  static List<String> _defaultDesignPillars() {
+  static List<String> buildDefaultDesignPillarsForSpark(
+    String spark,
+    String title,
+  ) {
+    final lower = '$spark $title'.toLowerCase();
+    final hasCourierOrCargo = lower.contains('cargo') ||
+        lower.contains('courier') ||
+        lower.contains('haul') ||
+        lower.contains('settlement') ||
+        lower.contains('supply') ||
+        lower.contains('scaveng');
+    final hasFarmOrShop = lower.contains('farm') ||
+        lower.contains('crop') ||
+        lower.contains('alchemy') ||
+        lower.contains('shop') ||
+        lower.contains('forag');
+    if (hasCourierOrCargo) {
+      return [
+        'High-Stakes Tension: Every supply run feels like a high-stakes gamble between pushing deeper for caches and extracting alive.',
+        'Tactile Scavenging: Loot weight and weapon handling feel grounded and impactful during every encounter.',
+        'Deliberate Threat Reading: Hostile zones feel dangerous and readable, rewarding careful observation over reckless rushing.',
+      ];
+    }
+    if (hasFarmOrShop) {
+      return [
+        'Tactile Crafting Loop: Every harvested resource immediately feeds into a visible, satisfying craft or shop upgrade.',
+        'Readable Risk & Yield: Foraging deeper into hostile zones offers clear risk-reward trade-offs before nightfall.',
+        'Cozy Hub Contrast: Returning to the shop feels warm, fast to organize, and immediately rewarding.',
+      ];
+    }
     return [
-      'Flow-State Momentum: Never force the player to stop moving to act or aim.',
-      'Readable Chaos: Every hazard and attack is clearly telegraphed before impact.',
-      'Every Run Teaches Something: Failures feel fair, fast to recover from, and immediately repeatable.',
+      'Flow-State Momentum: Never force the player to stop moving to act or aim in $title.',
+      'Readable Chaos: Every hazard and attack in $title is clearly telegraphed before impact.',
+      'Fast Fair Recovery: Failures feel fair, fast to recover from, and immediately repeatable.',
     ];
   }
 
-  static List<String> _defaultTradeOffs() {
+  static List<String> buildDefaultTradeOffsForSpark(
+    String spark,
+    String title,
+  ) {
+    return buildTradeOffOptionsForSpark(spark, title)
+        .map(
+          (opt) => opt.contains(':')
+              ? opt.substring(opt.indexOf(':') + 1).trim()
+              : opt,
+        )
+        .toList();
+  }
+
+  static List<String> buildTradeOffOptionsForSpark(
+    String spark,
+    String title, {
+    int offset = 0,
+  }) {
+    final lower = '$spark $title'.toLowerCase();
+    final hasCourierOrCargo = lower.contains('cargo') ||
+        lower.contains('courier') ||
+        lower.contains('haul') ||
+        lower.contains('settlement') ||
+        lower.contains('supply') ||
+        lower.contains('scaveng') ||
+        lower.contains('cache');
+    final hasGrappleOrParkour = lower.contains('grappl') ||
+        lower.contains('hook') ||
+        lower.contains('parkour') ||
+        lower.contains('wall-run') ||
+        lower.contains('wallrun');
+    final hasFarmOrShop = lower.contains('farm') ||
+        lower.contains('crop') ||
+        lower.contains('alchemy') ||
+        lower.contains('shop') ||
+        lower.contains('forag');
+    final hasVehicleOrMech = lower.contains('vehic') ||
+        lower.contains('car') ||
+        lower.contains('moto') ||
+        lower.contains('mech') ||
+        lower.contains('drift');
+
+    final List<String> pool;
+    if (hasCourierOrCargo) {
+      pool = [
+        'Tactile Haul Weight: Physical cargo weight and movement penalty over weightless bottomless inventory bags',
+        'Extraction Tension: High-stakes extraction risk and cache hunting over safe mid-zone checkpoint saves',
+        'Readable Gunplay & Loot: Clear enemy threat silhouettes and loot highlights over dense environmental clutter in $title',
+        'Fast Contract Turnaround: 1-screen settlement terminal turn-in over multi-building town walking menus',
+        'Scavenger Ambush Pacing: Reactive zone threat escalation over static pre-scripted enemy spawns',
+        'Slot-Cap Decisions: Hard carry-slot limits that force on-the-spot loot choices over spreadsheet sorting',
+      ];
+    } else if (hasFarmOrShop) {
+      pool = [
+        'Instant Plot Actions: 1-button planting, harvesting, and brewing over multi-step tool durability menus',
+        'Direct Ingredient Value: Clear 1-to-1 ingredient-to-potion recipes over sprawling randomized crafting trees in $title',
+        'Fast Day/Night Cycle: Snappy 3-minute foraging and shop cycles over real-time waiting timers',
+        'Readable Shop Queue: Immediate customer request icons over long text dialogue negotiations',
+        'Compact Hub Layout: Single-screen farm and shop layout over sprawling town walking distances',
+        'Guaranteed Drop Clarity: Predictable monster/plant resource drops over low-probability grind tables',
+      ];
+    } else if (hasVehicleOrMech) {
+      pool = [
+        'Arcade Drift Control: Responsive arcade drift and boost recovery over punishing simulation tire spinout',
+        'Readable Lock-On & Telegraphs: High-contrast target lock and incoming missile warnings over realistic cockpit occlusion in $title',
+        'Instant Bay Refit: Fast 3-slot chassis loadout swap over granular part-by-part weight math',
+        'High-Speed Collision Grace: Glancing wall-scrape momentum preservation over full-stop crash penalties',
+        'Clear Weapon Cooldowns: Reticle-mounted heat/ammo bars over corner HUD text readouts',
+        '1-Key Arena Reset: Instant arena wave reset over garage loading screens',
+      ];
+    } else if (hasGrappleOrParkour) {
+      pool = [
+        'Momentum Preservation: Continuous grapple/wall-run momentum carry over realistic pendulum/ledge stop frames',
+        'Generous Anchor Aim: Forgiving hook/ledge snap targeting at high speed over pixel-strict aim checks in $title',
+        '1-Key Run Restart: Sub-second arena reset on fall or death over multi-screen game-over menus',
+        'Airborne Control Authority: Responsive mid-air directional redirect over locked ballistic trajectories',
+        'High-Contrast Climb Surfaces: Color-coded grapple/wall-run geometry over noisy background detail in v0.1',
+        'Aggressive Forward Recovery: Dashing or grappling forward to recover stamina over passive cover waiting',
+      ];
+    } else {
+      final mechs = _deterministicMechanicsForIdea(spark);
+      final primaryMech = mechs.isNotEmpty ? mechs.first : title;
+      final secondaryMech =
+          mechs.length > 1 ? mechs[1] : 'Tactical Positioning';
+      pool = [
+        'Responsive $primaryMech: Snappy $primaryMech input response over slow realistic animation windups in $title',
+        '$secondaryMech Clarity: Readable $secondaryMech telegraphs and hit confirmation over dense visual effects in v0.1',
+        'Fast $title Loop Reset: 1-key $title round reset and loadout retry over multi-screen menu flows',
+        'Single-Arena Depth: Deepening $primaryMech interactions in 1 test arena over building multiple empty levels',
+        'Exposed Tuning Knobs: Direct inspector tuning variables for $primaryMech over hardcoded magic numbers',
+        'Playable Greybox First: Proven $title core loop feel in greybox over premature art polish',
+      ];
+    }
+
+    final start = (offset * 3) % pool.length;
     return [
-      'Instant arcade responsiveness over realistic physics inertia',
-      'Clear visual silhouette readability over dense particle clutter',
-      'Fast 1-key loop reset over multi-screen menu flows',
+      for (int i = 0; i < 3; i++) pool[(start + i) % pool.length],
     ];
+  }
+
+  static List<String> buildDefaultExclusionsForSpark(
+    String spark,
+    String title,
+  ) {
+    return buildExclusionOptionsForSpark(spark, title)
+        .map(
+          (opt) => opt.contains(':')
+              ? opt.substring(opt.indexOf(':') + 1).trim()
+              : opt,
+        )
+        .toList();
+  }
+
+  static List<String> buildExclusionOptionsForSpark(
+    String spark,
+    String title, {
+    int offset = 0,
+  }) {
+    final lower = '$spark $title'.toLowerCase();
+    final hasCourierOrCargo = lower.contains('cargo') ||
+        lower.contains('courier') ||
+        lower.contains('haul') ||
+        lower.contains('settlement') ||
+        lower.contains('supply') ||
+        lower.contains('scaveng') ||
+        lower.contains('cache');
+    final hasGrappleOrParkour = lower.contains('grappl') ||
+        lower.contains('hook') ||
+        lower.contains('parkour') ||
+        lower.contains('wall-run') ||
+        lower.contains('wallrun');
+    final hasFarmOrShop = lower.contains('farm') ||
+        lower.contains('crop') ||
+        lower.contains('alchemy') ||
+        lower.contains('shop') ||
+        lower.contains('forag');
+    final hasVehicleOrMech = lower.contains('vehic') ||
+        lower.contains('car') ||
+        lower.contains('moto') ||
+        lower.contains('mech') ||
+        lower.contains('drift');
+
+    final List<String> pool;
+    if (hasCourierOrCargo) {
+      pool = [
+        'No Vehicles or Fast-Travel: No drivable vehicles, mount systems, or multi-region world map fast-travel in the $title v0.1 Prototype',
+        'No Faction Politics or Morality: No multi-settlement faction reputation trees or branching NPC dialogue quests in v0.1',
+        'No Base Building or Co-Op: No player settlement construction, companion AI squads, or online co-op in v0.1',
+        'No Weapon Crafting Bench: No part-by-part weapon crafting, durability repair benches, or ammo reloading presses in v0.1',
+        'No Dynamic Weather Simulation: No procedural storm simulation, day/night survival hunger meters, or sleep schedules in v0.1',
+        'No Multi-Zone Open World: No seamless open-world streaming across multiple settlements in v0.1 (prove 1 courier route + 1 hostile zone first)',
+      ];
+    } else if (hasFarmOrShop) {
+      pool = [
+        'No Town Romance or NPC Schedules: No villager relationship meters, marriage quests, or 24-hour town walking schedules in $title v0.1',
+        'No Multi-Biome Dungeons: No procedural multi-biome world map or multi-phase boss dungeons in v0.1',
+        'No Livestock or Cooking Minigames: No animal breeding barns, fishing minigames, or furniture decoration editors in v0.1',
+        'No Online Trading Market: No multiplayer item trading, auction houses, or seasonal festival cutscenes in v0.1',
+        'No Complex Soil Chemistry: No multi-variable soil pH/fertilizer simulation in v0.1 (keep growth timers direct and readable)',
+        'No Hiring Staff Automation: No AI shopkeeper employees or automated conveyor farm pipelines in v0.1',
+      ];
+    } else if (hasVehicleOrMech) {
+      pool = [
+        'No Open-World Highway Traffic: No open-world city traffic simulation or multi-kilometer highway streaming in $title v0.1',
+        'No Granular Engine Tuning Garage: No 50-part transmission/suspension tuning sliders or paint decal editors in v0.1',
+        'No Online Ranked Matchmaking: No online multiplayer lobbies, ghost leaderboards, or replay theater in v0.1',
+        'No On-Foot Pilot Sections: No exiting the chassis for on-foot walking hubs or NPC story cutscenes in v0.1',
+        'No Soft-Body Mesh Deformation: No realistic per-panel mesh deformation physics in v0.1 (use clear hull health states)',
+        'No Multi-Track Career Calendar: No multi-season tournament calendar or sponsor contract negotiations in v0.1',
+      ];
+    } else if (hasGrappleOrParkour) {
+      pool = [
+        'No Open-World City Streaming: No sprawling open-world city districts or procedural biome generation in the $title v0.1 Prototype',
+        'No Skill Trees or Gear Crafting: No multi-branch RPG skill trees, loot rarity tables, or inventory crafting menus in v0.1',
+        'No Co-Op or Story Cutscenes: No online multiplayer race lobbies, ghost replays, or voiced NPC story cutscenes in v0.1',
+        'No Stealth Vision Cones: No complex enemy stealth detection cones or disguise mechanics in v0.1',
+        'No Custom Level Editor: No in-game track/arena map editor or Steam Workshop sharing in v0.1',
+        'No Multi-Phase Boss Cinematics: No scripted multi-stage boss cutscenes before proving core grapple/movement flow in v0.1',
+      ];
+    } else {
+      final mechs = _deterministicMechanicsForIdea(spark);
+      final primaryMech = mechs.isNotEmpty ? mechs.first : title;
+      pool = [
+        'No Multi-Biome World Map: No sprawling multi-zone world map or procedural biome generation before proving $primaryMech in 1 $title arena',
+        'No Deep RPG Skill Trees: No multi-branch skill trees, deep inventory crafting, or equipment rarity tables in $title v0.1',
+        'No Online Co-Op or Cutscenes: No online multiplayer netcode, leaderboards, or cinematic NPC dialogue trees in $title v0.1',
+        'No Meta-Progression Save Shop: No permanent cross-run currency shops or unlock trees in v0.1',
+        'No Companion AI Systems: No allied AI squadmates, pet systems, or base-building sub-games in v0.1',
+        'No Custom Shaders or Localization: No final production shaders, voice acting, or multi-language localization in v0.1',
+      ];
+    }
+
+    final start = (offset * 3) % pool.length;
+    return [
+      for (int i = 0; i < 3; i++) pool[(start + i) % pool.length],
+    ];
+  }
+
+  /// Upgrades any saved `ProjectConceptBlueprint` whose Pillars lack names or whose
+  /// `tradeOffs` / `exclusions` still hold the legacy static placeholder lists.
+  static void upgradeLegacyConceptDraftIfNeeded(ProjectConceptBlueprint draft) {
+    final spark = draft.sparkIdea.trim().isNotEmpty
+        ? draft.sparkIdea
+        : draft.title;
+    final title = draft.title;
+
+    // 1. Ensure every Design Pillar has a concrete 2-4 word name (never "Pillar 01")
+    draft.designPillars = [
+      for (int i = 0; i < draft.designPillars.length; i++)
+        ProjectConceptBlueprint.ensureNamedPillar(draft.designPillars[i], i),
+    ];
+
+    // 2. Upgrade legacy static Trade-Offs & Section 05 options if they match old hardcoded defaults
+    final joinedTradeOffs = draft.tradeOffs.join(' | ').toLowerCase();
+    final hasLegacyTradeOffs = draft.tradeOffs.isEmpty ||
+        (joinedTradeOffs.contains('realistic physics inertia') &&
+            (joinedTradeOffs.contains('dense particle clutter') ||
+                joinedTradeOffs.contains('complex visual shaders')));
+    if (hasLegacyTradeOffs) {
+      draft.tradeOffs = buildDefaultTradeOffsForSpark(spark, title);
+    }
+
+    final existingTradeOffOpts =
+        (draft.sectionOptions['tradeOffs'] ?? const <String>[])
+            .join(' | ')
+            .toLowerCase();
+    if (existingTradeOffOpts.isEmpty ||
+        (existingTradeOffOpts.contains('instant input response:') &&
+            existingTradeOffOpts.contains('animation commitment:'))) {
+      draft.sectionOptions['tradeOffs'] =
+          buildTradeOffOptionsForSpark(spark, title);
+    }
+
+    // 3. Upgrade legacy static Exclusions & Section 07 options if they match old hardcoded defaults
+    final joinedExclusions = draft.exclusions.join(' | ').toLowerCase();
+    final hasLegacyExclusions = draft.exclusions.isEmpty ||
+        (joinedExclusions.contains('multi-branch skill trees') &&
+            joinedExclusions.contains('online multiplayer matchmaking'));
+    if (hasLegacyExclusions) {
+      draft.exclusions = buildDefaultExclusionsForSpark(spark, title);
+    }
+
+    final existingExclOpts =
+        (draft.sectionOptions['exclusions'] ?? const <String>[])
+            .join(' | ')
+            .toLowerCase();
+    if (existingExclOpts.isEmpty ||
+        (existingExclOpts.contains('cut trees, co-op & story:') &&
+            existingExclOpts.contains('defer bosses & crafting:'))) {
+      draft.sectionOptions['exclusions'] =
+          buildExclusionOptionsForSpark(spark, title);
+    }
   }
 
   static List<AgentQuestion> _defaultQuestionsForSpark(String spark) {
@@ -880,14 +1166,6 @@ Return ONLY valid JSON:
     ];
   }
 
-  static List<String> _defaultExclusions() {
-    return [
-      'Multi-branch skill trees and deep inventory crafting menus',
-      'Online multiplayer matchmaking and netcode replication',
-      'Cinematic story cutscenes and NPC dialogue trees',
-    ];
-  }
-
   static List<String> _defaultReleaseTrain(String title) {
     return [
       'v0.1: Core Movement & Game Loop - Prototype',
@@ -946,21 +1224,13 @@ Return ONLY valid JSON:
         'Tactical Positioning: Prioritize deliberate positioning decisions and high-clarity feedback for $title',
         'Chain-Reaction Mastery: Prioritize fast chain-reactions and rewarding loop mastery for $title',
       ],
-      'tradeOffs': [
-        'Instant Input Response: Instant arcade input response over realistic physics inertia',
-        'Animation Commitment: Deliberate animation commitment over instant cancelable movement',
-        'Greybox Readability: Clean greybox readability over heavy visual shaders in v0.1',
-      ],
+      'tradeOffs': buildTradeOffOptionsForSpark(spark, title),
       'coreLoop': [
         'Complete 4-Beat Loop: Prep & Loadout → Arena Movement & Combat → Loot & Upgrade Choice → Round Clear & Reset',
         'Direct Action Loop: Arena Drop-In → High-Speed Movement & Combat → Wave Objective Clear → Score & Loot Tally → Instant Reset',
         'Skill Mastery Loop: Loadout & Positioning → Primary Weapon & Dash → Hazard Dodge & Counter → Upgrade Pick → Next Wave',
       ],
-      'exclusions': [
-        'Cut Trees, Co-Op & Story: Cut multi-branch skill trees, online co-op, and story cutscenes from the $title Prototype',
-        'Defer Bosses & Crafting: Defer deep inventory crafting and multi-phase bosses until MVP releases',
-        'Defer Meta-Save & Audio: Defer persistent meta-progression save files and custom audio menus until MVP',
-      ],
+      'exclusions': buildExclusionOptionsForSpark(spark, title),
       'doneWhen': [
         'All Beats & Clean Reset: Playtester spawns in, executes every $title core loop beat from start to finish, and resets the arena cleanly',
         '3 Consecutive Runs: Playtester completes 3 back-to-back $title loop cycles with clear win/fail resolution and zero soft-locks',

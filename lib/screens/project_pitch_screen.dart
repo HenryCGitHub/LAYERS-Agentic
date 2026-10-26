@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
@@ -193,6 +194,18 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     final dynamicOpts = draft.sectionOptions[sec.optionKey];
     if (dynamicOpts != null && dynamicOpts.isNotEmpty) {
       return dynamicOpts;
+    }
+    if (sec.optionKey == 'tradeOffs') {
+      return ProjectConceptAgent.buildTradeOffOptionsForSpark(
+        draft.sparkIdea,
+        draft.title,
+      );
+    }
+    if (sec.optionKey == 'exclusions') {
+      return ProjectConceptAgent.buildExclusionOptionsForSpark(
+        draft.sparkIdea,
+        draft.title,
+      );
     }
     return sec.options;
   }
@@ -3484,23 +3497,20 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
 
     Widget buildPillarRow(int idx) {
       final raw = pillars[idx];
-      final colonIdx = raw.indexOf(':');
-      final String title = (colonIdx > 0 && colonIdx < 48)
-          ? raw.substring(0, colonIdx).trim()
-          : 'Pillar 0${idx + 1}';
-      final String body = (colonIdx > 0 && colonIdx < 48)
-          ? raw.substring(colonIdx + 1).trim()
-          : raw;
+      final parsedPillar =
+          ProjectConceptBlueprint.parsePillarTitleAndBody(raw, idx);
+      final String title = parsedPillar.title;
+      final String body = parsedPillar.body;
 
       return Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _showDirectSectionTextEditDialog(
             title: 'P·${(idx + 1).toString().padLeft(2, '0')} Design Pillar',
-            initialText: raw,
+            initialText: '${parsedPillar.title}: ${parsedPillar.body}',
             onSave: (val) => widget.workbench.updateConceptDraft((d) {
               final next = List<String>.from(d.designPillars);
-              next[idx] = val;
+              next[idx] = ProjectConceptBlueprint.ensureNamedPillar(val, idx);
               d.designPillars = next;
             }),
           ),
@@ -3592,7 +3602,13 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               title: 'Add Design Pillar',
               initialText: 'Every Choice Echoes: Player actions leave visible feedback in the arena.',
               onSave: (val) => widget.workbench.updateConceptDraft((d) {
-                d.designPillars = [...d.designPillars, val];
+                d.designPillars = [
+                  ...d.designPillars,
+                  ProjectConceptBlueprint.ensureNamedPillar(
+                    val,
+                    d.designPillars.length,
+                  ),
+                ];
               }),
             ),
           ),

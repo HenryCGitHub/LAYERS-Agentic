@@ -1116,6 +1116,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           }
         }
 
+        if (versionTag == 'v0.1' && checkpoints.length > 1) {
+          checkpoints.removeRange(1, checkpoints.length);
+        }
+
         if (checkpoints.isEmpty &&
             lifecycle != FeatureLifecycleStatus.stable &&
             lifecycle != FeatureLifecycleStatus.superseded) {
@@ -1670,19 +1674,55 @@ class ReleaseExecutorAgent {
     onProgress?.call('Locking in ${blueprint.releaseTitle} ($versionTag) scope & exclusions...');
     await Future<void>.delayed(const Duration(milliseconds: 40));
 
+    final isInitialPrototypeRelease = versionTag == 'v0.1' &&
+        (releaseDoc.sections['prototypePart'] ?? '') != '2';
+
+    // Scope existing document lookup strictly to the active project so Beat/Feature IDs or titles
+    // from other projects in the vault never collide or auto-complete v0.1 tasks!
+    final validReleaseIds = <String>{releaseDoc.id};
+    final parentProjId = releaseDoc.parentId;
+    if (parentProjId != null) {
+      final projDoc = existingDocuments[parentProjId];
+      if (projDoc != null) {
+        validReleaseIds.addAll(projDoc.childrenIds);
+      }
+      for (final doc in existingDocuments.values) {
+        if (doc.tier == TierType.release && doc.parentId == parentProjId) {
+          validReleaseIds.add(doc.id);
+        }
+      }
+    }
+    final validBeatIds = <String>{};
+    for (final relId in validReleaseIds) {
+      final rDoc = existingDocuments[relId];
+      if (rDoc != null) {
+        validBeatIds.addAll(rDoc.childrenIds);
+      }
+    }
+    for (final doc in existingDocuments.values) {
+      if (doc.tier == TierType.epic &&
+          doc.parentId != null &&
+          validReleaseIds.contains(doc.parentId)) {
+        validBeatIds.add(doc.id);
+      }
+    }
+
     // Index any existing Beats and Features by ID and normalized title for non-destructive merge
+    final projectScopedDocs = <String, TierDocument>{};
     final existingBeatsByTitle = <String, TierDocument>{};
     final existingFeaturesByTitle = <String, TierDocument>{};
     final existingFeaturesByBeatAndTitle = <String, TierDocument>{};
     for (final doc in existingDocuments.values) {
-      if (doc.tier == TierType.epic) {
+      if (doc.tier == TierType.epic && validBeatIds.contains(doc.id)) {
+        projectScopedDocs[doc.id] = doc;
         existingBeatsByTitle[doc.title.toLowerCase().trim()] = doc;
-      } else if (doc.tier == TierType.feature) {
+      } else if (doc.tier == TierType.feature &&
+          doc.parentId != null &&
+          validBeatIds.contains(doc.parentId)) {
+        projectScopedDocs[doc.id] = doc;
         final normTitle = doc.title.toLowerCase().trim();
         existingFeaturesByTitle[normTitle] = doc;
-        if (doc.parentId != null) {
-          existingFeaturesByBeatAndTitle['${doc.parentId}::$normTitle'] = doc;
-        }
+        existingFeaturesByBeatAndTitle['${doc.parentId}::$normTitle'] = doc;
       }
     }
 
@@ -1698,7 +1738,7 @@ class ReleaseExecutorAgent {
       onProgress?.call('Syncing Core Loop Epic ${bIdx + 1}: ${beatBp.title}...');
       await Future<void>.delayed(const Duration(milliseconds: 40));
 
-      final existingBeat = existingDocuments[beatBp.id] ??
+      final existingBeat = projectScopedDocs[beatBp.id] ??
           existingBeatsByTitle[beatBp.title.toLowerCase().trim()];
       final beatId = existingBeat?.id ?? 'epic_${releaseDoc.id}_${bIdx + 1}';
 
@@ -1728,7 +1768,7 @@ class ReleaseExecutorAgent {
       for (final supFeat in beatBp.features.where(
         (f) => f.lifecycle == FeatureLifecycleStatus.superseded,
       )) {
-        final existingSup = existingDocuments[supFeat.id] ??
+        final existingSup = projectScopedDocs[supFeat.id] ??
             existingFeaturesByTitle[supFeat.title.toLowerCase().trim()];
         if (existingSup != null) {
           existingSup.sections['lifecycle'] = FeatureLifecycleStatus.superseded.name;
@@ -1763,7 +1803,7 @@ class ReleaseExecutorAgent {
           beatGoal: beatBp.goal,
           beatIndex: bIdx,
         );
-        final existingById = existingDocuments[featBp.id];
+        final existingById = projectScopedDocs[featBp.id];
         final existingFeat = (existingById != null &&
                 (existingById.parentId == null ||
                     existingById.parentId == beatDoc.id))
@@ -1775,7 +1815,8 @@ class ReleaseExecutorAgent {
         final featId = existingFeat?.id ?? 'feat_${beatId}_${fIdx + 1}';
 
         // If STABLE and already exists in vault, preserve its existing document & mark prior checkpoints verified!
-        if (featBp.lifecycle == FeatureLifecycleStatus.stable &&
+        if (!isInitialPrototypeRelease &&
+            featBp.lifecycle == FeatureLifecycleStatus.stable &&
             existingFeat != null) {
           existingFeat.parentId = beatDoc.id;
           existingFeat.sections['lifecycle'] = FeatureLifecycleStatus.stable.name;
@@ -1799,9 +1840,12 @@ class ReleaseExecutorAgent {
           continue;
         }
 
-        // Merge scope, tuning, and edge cases with any existing feature data
-        final existingStates = existingFeat != null
+        // Merge scope, tuning, and edge cases with any existing feature data (only for v0.2+ evolutions;
+        // v0.1 initial prototype features always start clean at 0% with 0 pre-completed checkpoints!)
+        final existingStates = (!isInitialPrototypeRelease && existingFeat != null)
             ? FeatureStateNode.getStatesForDocument(existingFeat)
+                .where((s) => s.releaseVersion != versionTag)
+                .toList()
             : <FeatureStateNode>[];
         if (existingStates.isNotEmpty) {
           for (final s in existingStates) {

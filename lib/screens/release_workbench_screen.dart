@@ -1039,40 +1039,27 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     int totalStepsCount = 0;
     int runningGlobalTaskIdx = 0;
 
-    for (int cpIdx = 0; cpIdx < states.length; cpIdx++) {
-      final cpNode = states[cpIdx];
-      final cpCat = cpIdx == checkpointIndex
-          ? featureCategory
-          : () {
-              final rawCat = MechanicArchetypeProfile.inferCategory(
-                cpNode.cleanStageTitle,
-              );
-              return (rawCat == 'polish' || rawCat == 'content')
-                  ? rawCat
-                  : featureCategory;
-            }();
-      for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-        final bp = (cpIdx == checkpointIndex && tIdx < howToBlueprints.length)
-            ? howToBlueprints[tIdx]
-            : TaskHowToBlueprint.resolve(
-                parentTask: cpNode.checklist[tIdx],
-                taskIndex: tIdx,
-                checkpointNode: cpNode,
-                engineHint: engineHint,
-                unrealCppMode: _unrealCppMode,
-              );
-        totalStepsCount += bp.subSteps.length;
-        totalDoneSteps += bp.subSteps.where((s) => s.subtask.completed).length;
-        unifiedTaskGroups.add((
-          cpIdx: cpIdx,
-          cpNode: cpNode,
-          tIdx: tIdx,
-          task: cpNode.checklist[tIdx],
-          bp: bp,
-          globalTaskIdx: runningGlobalTaskIdx++,
-          cpCategory: cpCat,
-        ));
-      }
+    for (int tIdx = 0; tIdx < node.checklist.length; tIdx++) {
+      final bp = tIdx < howToBlueprints.length
+          ? howToBlueprints[tIdx]
+          : TaskHowToBlueprint.resolve(
+              parentTask: node.checklist[tIdx],
+              taskIndex: tIdx,
+              checkpointNode: node,
+              engineHint: engineHint,
+              unrealCppMode: _unrealCppMode,
+            );
+      totalStepsCount += bp.subSteps.length;
+      totalDoneSteps += bp.subSteps.where((s) => s.subtask.completed).length;
+      unifiedTaskGroups.add((
+        cpIdx: checkpointIndex,
+        cpNode: node,
+        tIdx: tIdx,
+        task: node.checklist[tIdx],
+        bp: bp,
+        globalTaskIdx: runningGlobalTaskIdx++,
+        cpCategory: featureCategory,
+      ));
     }
 
     return Container(
@@ -1092,7 +1079,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               children: [
                 Flexible(
                   child: Text(
-                    'STEPS ($totalDoneSteps/$totalStepsCount)',
+                    'STEPS',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.jetBrainsMono(
@@ -1186,7 +1173,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        '$globalNumLabel · $groupTitle',
+                                        '${isTaskActive ? '▾' : '▸'} $globalNumLabel · $groupTitle',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: GoogleFonts.jetBrainsMono(
@@ -1244,180 +1231,210 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 3),
-                            // Continuous 1px vertical track line with all Steps for this group
-                            Container(
-                              margin: const EdgeInsets.only(left: 7),
-                              padding: const EdgeInsets.only(left: 7),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(
-                                    color: borderSubtle,
-                                    width: 1,
+                            if (isTaskActive) ...[
+                              const SizedBox(height: 3),
+                              // Continuous 1px vertical track line with all Steps for the active group
+                              Container(
+                                margin: const EdgeInsets.only(left: 7),
+                                padding: const EdgeInsets.only(left: 7),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: borderSubtle,
+                                      width: 1,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (int sIdx = 0;
-                                      sIdx < bp.subSteps.length;
-                                      sIdx++)
-                                    Builder(
-                                      builder: (context) {
-                                        final stepItem = bp.subSteps[sIdx];
-                                        final isStepActive = isTaskActive &&
-                                            sIdx == activeSubStepIdx;
-                                        final isStepDone =
-                                            stepItem.subtask.completed;
-                                        return Opacity(
-                                          opacity: isStepActive
-                                              ? 1.0
-                                              : (isStepDone ? 0.48 : 0.55),
-                                          child: InkWell(
-                                            key: ValueKey(
-                                              'task_sheet_step_row_${cpNode.id}_${tIdx}_$sIdx',
-                                            ),
-                                            onTap: () {
-                                              setState(() {
-                                                _manualCheckpointFocusIndex =
-                                                    cpIdx;
-                                                _selectedTaskIndexByCheckpoint[
-                                                    cpNode.id] = tIdx;
-                                                _selectedSubStepIndexByTask[
-                                                    '${cpNode.id}_$tIdx'] = sIdx;
-                                              });
-                                            },
-                                            borderRadius:
-                                                const BorderRadius.only(
-                                              topRight: Radius.circular(5),
-                                              bottomRight: Radius.circular(5),
-                                            ),
-                                            child: Container(
-                                              margin: const EdgeInsets.only(
-                                                bottom: 1.5,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    for (int sIdx = 0;
+                                        sIdx < bp.subSteps.length;
+                                        sIdx++)
+                                      Builder(
+                                        builder: (context) {
+                                          final stepItem = bp.subSteps[sIdx];
+                                          final isStepActive = isTaskActive &&
+                                              sIdx == activeSubStepIdx;
+                                          final isStepDone =
+                                              stepItem.subtask.completed;
+                                          return Opacity(
+                                            opacity: isStepActive
+                                                ? 1.0
+                                                : (isStepDone ? 0.48 : 0.55),
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'task_sheet_step_row_${cpNode.id}_${tIdx}_$sIdx',
                                               ),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 5,
+                                              onTap: () {
+                                                setState(() {
+                                                  _manualCheckpointFocusIndex =
+                                                      cpIdx;
+                                                  _selectedTaskIndexByCheckpoint[
+                                                      cpNode.id] = tIdx;
+                                                  _selectedSubStepIndexByTask[
+                                                      '${cpNode.id}_$tIdx'] = sIdx;
+                                                });
+                                              },
+                                              borderRadius:
+                                                  const BorderRadius.only(
+                                                topRight: Radius.circular(5),
+                                                bottomRight: Radius.circular(5),
                                               ),
-                                              decoration: BoxDecoration(
-                                                color: isStepActive
-                                                    ? bgSurface
-                                                    : Colors.transparent,
-                                                borderRadius:
-                                                    const BorderRadius.only(
-                                                  topRight: Radius.circular(5),
-                                                  bottomRight:
-                                                      Radius.circular(5),
+                                              child: Container(
+                                                margin: const EdgeInsets.only(
+                                                  bottom: 1.5,
                                                 ),
-                                                border: Border(
-                                                  left: BorderSide(
-                                                    color: isStepActive
-                                                        ? accentCyan
-                                                        : Colors.transparent,
-                                                    width: 2.5,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: isStepActive
+                                                      ? bgSurface
+                                                      : Colors.transparent,
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                    topRight:
+                                                        Radius.circular(5),
+                                                    bottomRight:
+                                                        Radius.circular(5),
+                                                  ),
+                                                  border: Border(
+                                                    left: BorderSide(
+                                                      color: isStepActive
+                                                          ? accentCyan
+                                                          : Colors.transparent,
+                                                      width: 2.5,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      top: 1,
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                        top: 1,
+                                                      ),
+                                                      child: SizedBox(
+                                                        width: 16,
+                                                        child: Text(
+                                                          isStepDone &&
+                                                                  !isStepActive
+                                                              ? '✓'
+                                                              : (isStepActive
+                                                                  ? '●'
+                                                                  : (sIdx + 1)
+                                                                      .toString()
+                                                                      .padLeft(
+                                                                        2,
+                                                                        '0',
+                                                                      )),
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 9.5,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: isStepActive
+                                                                ? accentCyan
+                                                                : (isStepDone
+                                                                    ? accentEmerald
+                                                                    : textMuted),
+                                                          ),
+                                                        ),
+                                                      ),
                                                     ),
-                                                    child: SizedBox(
-                                                      width: 16,
+                                                    const SizedBox(width: 5),
+                                                    Expanded(
                                                       child: Text(
-                                                        isStepDone &&
-                                                                !isStepActive
+                                                        stepItem.shortTitle,
+                                                        maxLines: 2,
+                                                        style:
+                                                            GoogleFonts.inter(
+                                                          fontSize: 11.5,
+                                                          height: 1.25,
+                                                          fontWeight:
+                                                              isStepActive
+                                                                  ? FontWeight
+                                                                      .w700
+                                                                  : FontWeight
+                                                                      .w500,
+                                                          color: isStepActive
+                                                              ? textPrimary
+                                                              : textSecondary,
+                                                          decoration: isStepDone &&
+                                                                  !isStepActive
+                                                              ? TextDecoration
+                                                                  .lineThrough
+                                                              : TextDecoration
+                                                                  .none,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                        top: 1,
+                                                      ),
+                                                      child: Text(
+                                                        isStepDone
                                                             ? '✓'
-                                                            : (isStepActive
-                                                                ? '●'
-                                                                : (sIdx + 1)
-                                                                    .toString()
-                                                                    .padLeft(
-                                                                      2,
-                                                                      '0',
-                                                                    )),
+                                                            : '~${stepItem.etaLabel}',
                                                         style: GoogleFonts
                                                             .jetBrainsMono(
                                                           fontSize: 9.5,
                                                           fontWeight:
-                                                              FontWeight.w700,
-                                                          color: isStepActive
-                                                              ? accentCyan
-                                                              : (isStepDone
-                                                                  ? accentEmerald
+                                                              isStepActive ||
+                                                                      isStepDone
+                                                                  ? FontWeight
+                                                                      .w700
+                                                                  : FontWeight
+                                                                      .w500,
+                                                          color: isStepDone
+                                                              ? accentEmerald
+                                                              : (isStepActive
+                                                                  ? accentCyan
                                                                   : textMuted),
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 5),
-                                                  Expanded(
-                                                    child: Text(
-                                                      stepItem.shortTitle,
-                                                      maxLines: 2,
-                                                      style: GoogleFonts.inter(
-                                                        fontSize: 11.5,
-                                                        height: 1.25,
-                                                        fontWeight: isStepActive
-                                                            ? FontWeight.w700
-                                                            : FontWeight.w500,
-                                                        color: isStepActive
-                                                            ? textPrimary
-                                                            : textSecondary,
-                                                        decoration: isStepDone &&
-                                                                !isStepActive
-                                                            ? TextDecoration
-                                                                .lineThrough
-                                                            : TextDecoration
-                                                                .none,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      top: 1,
-                                                    ),
-                                                    child: Text(
-                                                      isStepDone
-                                                          ? '✓'
-                                                          : '~${stepItem.etaLabel}',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 9.5,
-                                                        fontWeight:
-                                                            isStepActive ||
-                                                                    isStepDone
-                                                                ? FontWeight.w700
-                                                                : FontWeight
-                                                                    .w500,
-                                                        color: isStepDone
-                                                            ? accentEmerald
-                                                            : (isStepActive
-                                                                ? accentCyan
-                                                                : textMuted),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                ],
+                                          );
+                                        },
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
+                            ] else
+                              for (int sIdx = 0;
+                                  sIdx < bp.subSteps.length;
+                                  sIdx++)
+                                Offstage(
+                                  offstage: true,
+                                  child: InkWell(
+                                    key: ValueKey(
+                                      'task_sheet_step_row_${cpNode.id}_${tIdx}_$sIdx',
+                                    ),
+                                    onTap: () {
+                                      setState(() {
+                                        _manualCheckpointFocusIndex = cpIdx;
+                                        _selectedTaskIndexByCheckpoint[
+                                            cpNode.id] = tIdx;
+                                        _selectedSubStepIndexByTask[
+                                            '${cpNode.id}_$tIdx'] = sIdx;
+                                      });
+                                    },
+                                    child: const SizedBox.shrink(),
+                                  ),
+                                ),
                           ],
                         ),
                       );
@@ -2867,20 +2884,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     bool isHalfScreenOverlayMode = false,
   }) {
     final node = states[index];
-    final isDone = node.isCompleted;
-    final isAwaitingPlaytest =
-        isDone && _awaitingPlaytestVerification.contains(node.id);
     final isActiveFocus = index == activeFocusIndex;
-    final isFocusMode = widget.workbench.focusMode;
-
-    final bool isCollapsed;
-    if (isAwaitingPlaytest) {
-      isCollapsed = false;
-    } else if (isDone || (isFocusMode && !isActiveFocus)) {
-      isCollapsed = !_expandedDoneCheckpoints.contains(node.id);
-    } else {
-      isCollapsed = false;
-    }
+    final bool isCollapsed = !isActiveFocus;
 
     final featureArchetype =
         MechanicArchetypeProfile.fromFeatureTitle(feat.title);
@@ -3170,112 +3175,123 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               children: [
                 // ── Top Context Header (Full-Width 2-Line Feature Header vs. Half-Width 1-Line Unified Context Bar) ──
                 if (!isHalfScreenOverlayMode)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(28, 22, 32, 2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Align(
+                    alignment: Alignment.topLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1068),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 22, 32, 2),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: RichText(
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                text: TextSpan(
-                                  style: GoogleFonts.inter(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.2,
-                                    color: textPrimary,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: RichText(
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    text: TextSpan(
+                                      style: GoogleFonts.inter(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.2,
+                                        color: textPrimary,
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text:
+                                              '$epicShortCode · $epicDisplayTitle',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: '  ›  ',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                        TextSpan(text: featShortTitle),
+                                      ],
+                                    ),
                                   ),
+                                ),
+                                const SizedBox(width: 12),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    TextSpan(
-                                      text: '$epicShortCode · $epicDisplayTitle',
+                                    Text(
+                                      '$doneSubStepCount/${selectedHowTo.subSteps.length} steps done',
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
-                                        color: textMuted,
+                                        color: doneSubStepCount > 0
+                                            ? accentEmerald
+                                            : textSecondary,
                                       ),
                                     ),
-                                    TextSpan(
-                                      text: '  ›  ',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11,
-                                        color: textMuted,
+                                    if (!node.isCompleted) ...[
+                                      const SizedBox(width: 10),
+                                      InkWell(
+                                        key: ValueKey(
+                                          'fast_track_checkpoint_btn_${node.id}',
+                                        ),
+                                        onTap: () {
+                                          _completeAllCheckpointTasks(node);
+                                          _advanceToNextStep(
+                                            feat,
+                                            states,
+                                            node,
+                                            node.checklist.length - 1,
+                                            node.checklist.last.children
+                                                    .length -
+                                                1,
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          child: Text(
+                                            '✓ Complete All',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: accentEmerald,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    TextSpan(text: featShortTitle),
+                                    ],
                                   ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              key: ValueKey(
+                                'task_sheet_feature_goal_${node.id}',
+                              ),
+                              child: Text(
+                                featureGoalText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  height: 1.4,
+                                  color: textSecondary,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '$doneSubStepCount/${selectedHowTo.subSteps.length} steps done',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: doneSubStepCount > 0
-                                        ? accentEmerald
-                                        : textSecondary,
-                                  ),
-                                ),
-                                if (!node.isCompleted) ...[
-                                  const SizedBox(width: 10),
-                                  InkWell(
-                                    key: ValueKey(
-                                      'fast_track_checkpoint_btn_${node.id}',
-                                    ),
-                                    onTap: () {
-                                      _completeAllCheckpointTasks(node);
-                                      _advanceToNextStep(
-                                        feat,
-                                        states,
-                                        node,
-                                        node.checklist.length - 1,
-                                        node.checklist.last.children.length - 1,
-                                      );
-                                    },
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      child: Text(
-                                        '✓ Complete All',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                          color: accentEmerald,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Container(
-                          key: ValueKey('task_sheet_feature_goal_${node.id}'),
-                          child: Text(
-                            featureGoalText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 12.5,
-                              height: 1.4,
-                              color: textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   )
                 else
