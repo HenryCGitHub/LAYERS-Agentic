@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/workspace_agent_tools.dart';
@@ -8,6 +9,7 @@ import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
+import 'package:layers_agentic/screens/project_pitch_screen.dart';
 
 void main() {
   group('LAYERS-Agentic 3-Stage End-to-End Flow Tests', () {
@@ -93,6 +95,47 @@ void main() {
         expect(find.byKey(const ValueKey('spark_card_2')), findsNothing);
         expect(find.byKey(const ValueKey('shuffle_spark_ideas_btn')), findsNothing);
         expect(find.byKey(const ValueKey('start_concept_interview_btn')), findsNothing);
+
+        // Verify 70-character line wrapping and Shift+Enter line skipping in the pitch input
+        const longPitch =
+            'A high-speed grappling hook parkour roguelite where players swing across floating ruins and chain aerial combos';
+        final wrappedPitch = MaxColumnLineWrapFormatter.wrapTextAtColumn(
+          longPitch,
+          maxCharsPerLine: 70,
+        );
+        expect(wrappedPitch.split('\n').length, greaterThan(1));
+        for (final line in wrappedPitch.split('\n')) {
+          expect(line.length, lessThanOrEqualTo(70));
+        }
+
+        await tester.tap(find.byKey(const ValueKey('spark_input_field')));
+        await tester.pump();
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_input_field')),
+          longPitch,
+        );
+        await tester.pump();
+        final sparkField = tester.widget<TextField>(
+          find.byKey(const ValueKey('spark_input_field')),
+        );
+        expect(sparkField.maxLines, isNull);
+        expect(sparkField.controller!.text, contains('\n'));
+        for (final line in sparkField.controller!.text.split('\n')) {
+          expect(line.length, lessThanOrEqualTo(70));
+        }
+
+        // Verify Shift + Enter skips to a new line instead of submitting
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_input_field')),
+          'High-speed grappling hook',
+        );
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pump();
+        expect(sparkField.controller!.text, equals('High-speed grappling hook\n'));
+        expect(find.byKey(const ValueKey('agent_idea_summary_card')), findsNothing);
 
         // Input a raw game idea and verify the Agent ingests & summarizes it back AND generates the 3 Concept Expansion Cards
         await tester.enterText(

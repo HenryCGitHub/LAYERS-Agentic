@@ -6,6 +6,66 @@ import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 
+/// Wraps each line of text at [maxCharsPerLine] (default 70 characters),
+/// breaking cleanly at the last space before column 70 (or at column 70 for
+/// continuous words) while preserving manual `Shift + Enter` newlines.
+class MaxColumnLineWrapFormatter extends TextInputFormatter {
+  final int maxCharsPerLine;
+
+  const MaxColumnLineWrapFormatter({this.maxCharsPerLine = 70});
+
+  static String wrapTextAtColumn(String input, {int maxCharsPerLine = 70}) {
+    if (input.isEmpty) return input;
+    final rawLines = input.split('\n');
+    final wrappedLines = <String>[];
+
+    for (final line in rawLines) {
+      if (line.length <= maxCharsPerLine) {
+        wrappedLines.add(line);
+        continue;
+      }
+      var remaining = line;
+      while (remaining.length > maxCharsPerLine) {
+        final window = remaining.substring(0, maxCharsPerLine + 1);
+        final lastSpace = window.lastIndexOf(' ');
+        if (lastSpace > 0) {
+          wrappedLines.add(remaining.substring(0, lastSpace));
+          remaining = remaining.substring(lastSpace + 1);
+        } else {
+          wrappedLines.add(remaining.substring(0, maxCharsPerLine));
+          remaining = remaining.substring(maxCharsPerLine);
+        }
+      }
+      wrappedLines.add(remaining);
+    }
+    return wrappedLines.join('\n');
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+    final hasLongLine =
+        text.split('\n').any((line) => line.length > maxCharsPerLine);
+    if (!hasLongLine) return newValue;
+
+    final wrapped = wrapTextAtColumn(text, maxCharsPerLine: maxCharsPerLine);
+    final lengthDelta = wrapped.length - text.length;
+    final rawOffset = newValue.selection.baseOffset;
+    final nextOffset = rawOffset < 0
+        ? wrapped.length
+        : (rawOffset + lengthDelta).clamp(0, wrapped.length);
+
+    return TextEditingValue(
+      text: wrapped,
+      selection: TextSelection.collapsed(offset: nextOffset),
+    );
+  }
+}
+
 /// Metadata and Agent guidance for each of the 9 focused sections in Stage 1.
 class _SectionConfig {
   final String numLabel;
@@ -50,6 +110,37 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final TextEditingController _agentPromptController = TextEditingController();
   final TextEditingController _inlineReviewPromptController =
       TextEditingController();
+  final FocusNode _sparkFocusNode = FocusNode();
+  final FocusNode _conceptChatFocusNode = FocusNode();
+
+  KeyEventResult _handleMultilinePitchKeyEvent(
+    KeyEvent event,
+    TextEditingController controller, {
+    required VoidCallback onSubmit,
+  }) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (!isEnter) return KeyEventResult.ignored;
+
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      final text = controller.text;
+      final selection = controller.selection;
+      final start = selection.isValid ? selection.start : text.length;
+      final end = selection.isValid ? selection.end : text.length;
+      final newText = text.replaceRange(start, end, '\n');
+      controller.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: start + 1),
+      );
+      return KeyEventResult.handled;
+    }
+
+    onSubmit();
+    return KeyEventResult.handled;
+  }
 
   /// Active step index: `0`..`8` for sections `01`..`09`, and `9` for `10 · Full Review`.
   int _currentStep = 0;
@@ -254,6 +345,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     _sparkController.dispose();
     _agentPromptController.dispose();
     _inlineReviewPromptController.dispose();
+    _sparkFocusNode.dispose();
+    _conceptChatFocusNode.dispose();
     super.dispose();
   }
 
@@ -671,7 +764,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     TextEditingController? controller,
   }) async {
     final activeController = controller ?? _agentPromptController;
-    final text = activeController.text.trim();
+    final text = activeController.text
+        .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+        .trim();
     if (text.isEmpty || widget.workbench.isAgentBusy) return;
     activeController.clear();
 
@@ -1009,7 +1104,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     final expansionCards = intake?.expansionCards ?? const [];
 
     Future<void> submitIdeaToAgent() async {
-      final text = _sparkController.text.trim();
+      final text = _sparkController.text
+          .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+          .trim();
       if (text.isEmpty && intake == null) return;
       _sparkController.clear();
       await widget.workbench.ingestOrRefineSparkIdea(text);
@@ -1294,35 +1391,68 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         ],
           const SizedBox(height: 14),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: TextField(
-                  key: const ValueKey('spark_input_field'),
-                  controller: _sparkController,
-                  style: GoogleFonts.inter(fontSize: 14, color: textPrimary),
-                  decoration: InputDecoration(
-                    hintText: intake == null
-                        ? 'Pitch your game idea to the Agent (e.g., Cozy 2D submarine salvage & photo game)...'
-                        : 'Tell the Agent what to change or add to this summary...',
-                    hintStyle: GoogleFonts.inter(fontSize: 13, color: textMuted),
-                    filled: true,
-                    fillColor: bgRecessed,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderSubtle),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderSubtle),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderBright, width: 1.5),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 640),
+                    child: Focus(
+                      onKeyEvent: (node, event) =>
+                          _handleMultilinePitchKeyEvent(
+                        event,
+                        _sparkController,
+                        onSubmit: submitIdeaToAgent,
+                      ),
+                      child: TextField(
+                        key: const ValueKey('spark_input_field'),
+                        controller: _sparkController,
+                        focusNode: _sparkFocusNode,
+                        minLines: 1,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        inputFormatters: const [
+                          MaxColumnLineWrapFormatter(maxCharsPerLine: 70),
+                        ],
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintMaxLines: 1,
+                          hintText: intake == null
+                              ? 'Pitch your game idea (70 chars/line · Shift+Enter for new line)...'
+                              : 'Tell the Agent what to change or add (Shift+Enter for new line)...',
+                          hintStyle: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: textMuted,
+                          ),
+                          filled: true,
+                          fillColor: bgRecessed,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: borderSubtle),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: borderSubtle),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide:
+                                BorderSide(color: borderBright, width: 1.5),
+                          ),
+                        ),
+                        onSubmitted: (_) => submitIdeaToAgent(),
+                      ),
                     ),
                   ),
-                  onSubmitted: (_) => submitIdeaToAgent(),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1396,7 +1526,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   onPressed: widget.workbench.isAgentBusy
                       ? null
                       : () => widget.workbench.startConceptInterview(
-                            _sparkController.text,
+                            _sparkController.text
+                                .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+                                .trim(),
                           ),
                   child: Text(
                     widget.workbench.isAgentBusy
@@ -2600,30 +2732,51 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: TextField(
-                              key: const ValueKey('concept_chat_input_field'),
-                              controller: _agentPromptController,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: textPrimary,
+                            child: Focus(
+                              onKeyEvent: (node, event) =>
+                                  _handleMultilinePitchKeyEvent(
+                                event,
+                                _agentPromptController,
+                                onSubmit: () =>
+                                    _submitSectionPrompt(draft, sectionIdx),
                               ),
-                              decoration: InputDecoration(
-                                hintText:
-                                    'Tell the Agent how to change or expand ${sec.title}...',
-                                hintStyle: GoogleFonts.inter(
-                                  fontSize: 12.5,
-                                  color: textMuted,
+                              child: TextField(
+                                key: const ValueKey('concept_chat_input_field'),
+                                controller: _agentPromptController,
+                                focusNode: _conceptChatFocusNode,
+                                minLines: 1,
+                                maxLines: null,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.newline,
+                                inputFormatters: const [
+                                  MaxColumnLineWrapFormatter(
+                                    maxCharsPerLine: 70,
+                                  ),
+                                ],
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  height: 1.4,
+                                  color: textPrimary,
                                 ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                filled: false,
-                                isDense: true,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 8),
+                                decoration: InputDecoration(
+                                  hintMaxLines: 1,
+                                  hintText:
+                                      'Tell the Agent how to change or expand ${sec.title} (70 chars/line · Shift+Enter for new line)...',
+                                  hintStyle: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    color: textMuted,
+                                  ),
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  filled: false,
+                                  isDense: true,
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                onSubmitted: (_) =>
+                                    _submitSectionPrompt(draft, sectionIdx),
                               ),
-                              onSubmitted: (_) =>
-                                  _submitSectionPrompt(draft, sectionIdx),
                             ),
                           ),
                         ],
