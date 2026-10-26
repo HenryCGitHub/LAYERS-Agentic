@@ -216,6 +216,31 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 ],
               ),
               const SizedBox(height: 14),
+              if (widget.workbench.agentProgressStep != null &&
+                  widget.workbench.agentProgressStep!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 14,
+                        color: accentCyan,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.workbench.agentProgressStep!,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: accentCyan,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               for (final step in widget.workbench.executionLog)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -1006,6 +1031,48 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
+                    if (isSelected) ...[
+                      InkWell(
+                        key: ValueKey('rail_rename_feat_${feat.id}'),
+                        onTap: () => _showRenameLiveFeatureDialog(feat),
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 3,
+                            vertical: 1,
+                          ),
+                          child: Text(
+                            '✎',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      InkWell(
+                        key: ValueKey('rail_remove_feat_${feat.id}'),
+                        onTap: () => widget.workbench.removeLiveFeature(feat.id),
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 3,
+                            vertical: 1,
+                          ),
+                          child: Text(
+                            '×',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
@@ -2552,6 +2619,41 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        if (widget.workbench
+                                            .isSynthesizingFeatureSteps(
+                                          feat.id,
+                                        )) ...[
+                                          Container(
+                                            key: ValueKey(
+                                              'synthesizing_steps_badge_${feat.id}',
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: accentCyan.withValues(
+                                                alpha: 0.12,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: accentCyan.withValues(
+                                                  alpha: 0.35,
+                                                ),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '✦ Synthesizing Engine Steps...',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: accentCyan,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
                                         if (selectedHowTo.engineLabel ==
                                             'UNREAL 5') ...[
                                           Container(

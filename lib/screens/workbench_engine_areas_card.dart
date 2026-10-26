@@ -61,35 +61,56 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         : cleanSetupLines.join('\n').trim();
 
     // Classify the active step based on its actual content & step context
-    final isTreeHierarchyStep =
-        rawCode.contains('└─') || rawCode.contains('├─');
+    final lowerPath = stepPath.toLowerCase();
+    final isTreeHierarchyStep = rawCode.contains('└─') ||
+        rawCode.contains('├─') ||
+        lowerPath.contains('scene dock') ||
+        lowerPath.contains('hierarchy') ||
+        lowerPath.contains('add child node') ||
+        lowerPath.contains('create empty') ||
+        lowerPath.contains('components panel');
     final isCppConstructorSubobjectsStep = isUnrealCpp &&
         rawCode.contains('CreateDefaultSubobject<');
     final isLevelPlacementStep = !isTreeHierarchyStep &&
         (rawCode.contains('Instance:') ||
             rawCode.contains('Transform.position = new Vector3') ||
             rawCode.contains('Instanced Node:') ||
-            stepPath.contains('World Outliner') ||
-            stepPath.contains('Instantiate Child Scene') ||
+            lowerPath.contains('world outliner') ||
+            lowerPath.contains('instantiate child scene') ||
             (selectedTaskIdx == 0 && activeSubStepIdx == 2));
     final isBlueprintAssetCreationStep = isUnrealBp &&
         !isTreeHierarchyStep &&
         !isLevelPlacementStep &&
-        (rawCode.contains('Asset Name:') || rawCode.contains('Parent Class:'));
+        (rawCode.contains('Asset Name:') ||
+            rawCode.contains('Parent Class:') ||
+            lowerPath.contains('blueprint class'));
     final isBlueprintVariableStep = isUnrealBp &&
         !isTreeHierarchyStep &&
         !isLevelPlacementStep &&
         !isBlueprintAssetCreationStep &&
         (rawCode.contains('Instance Editable') ||
-            stepPath.contains('Variables'));
+            lowerPath.contains('variables'));
     final isCodeVariableStep = !isUnrealBp &&
         (rawCode.contains('UPROPERTY(') ||
             rawCode.contains('[SerializeField]') ||
-            rawCode.contains('@export var'));
+            rawCode.contains('@export var') ||
+            lowerPath.contains('inspector') ||
+            lowerPath.contains('details panel'));
     final isScriptCreationStep = !isUnrealBp &&
         selectedTaskIdx == 0 &&
         activeSubStepIdx == 0 &&
-        !isTreeHierarchyStep;
+        !isTreeHierarchyStep &&
+        !isCodeVariableStep;
+
+    final matchedTunings = tuningItems.where((t) {
+      final key = t.split(':').first.trim().toLowerCase();
+      return key.isNotEmpty &&
+          (rawCode.toLowerCase().contains(key) ||
+              activeSubStep.instruction.toLowerCase().contains(key));
+    }).toList();
+    final effectiveTuningLabel = matchedTunings.isNotEmpty
+        ? matchedTunings.join('  ·  ')
+        : primaryTuningLabel;
 
     String? compWhere;
     String? compBody;
@@ -275,7 +296,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               ? 'UPROPERTY(EditAnywhere, BlueprintReadWrite)'
               : (isUnity ? '[SerializeField] private float' : '@export var'),
         ),
-        (key: 'Default Tuning Value', value: primaryTuningLabel),
+        (key: 'Default Tuning Value', value: effectiveTuningLabel),
       ]);
       codeWhere = stepPath;
       codeBody = rawCode;
@@ -308,11 +329,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       if (activeSubStep.isGuardStep) {
         inspRows.addAll([
           (key: 'Guard Rule', value: primaryGuardLabel),
-          (key: 'Tuning Context', value: primaryTuningLabel),
+          (key: 'Tuning Context', value: effectiveTuningLabel),
         ]);
       } else {
         inspRows.addAll([
-          (key: 'Tuning Parameter', value: primaryTuningLabel),
+          (key: 'Tuning Parameter', value: effectiveTuningLabel),
           (key: 'Guard Rule', value: primaryGuardLabel),
         ]);
       }

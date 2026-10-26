@@ -1565,9 +1565,7 @@ class WorkbenchShell extends StatelessWidget {
     VoidCallback? onTap,
   }) {
     final isDark = workbench.isDark;
-    final isActive = stage == workbench.currentStage ||
-        (stage == WorkbenchStage.releaseWorkbench &&
-            workbench.currentStage == WorkbenchStage.releasePlanGate);
+    final isActive = stage == workbench.currentStage;
     final isCheckBadge = badge == '✓';
     final activeDotColor = AppTheme.focalAccentFor(isDark);
     final completedColor = AppTheme.accentGreenFor(isDark);
@@ -1655,7 +1653,6 @@ class WorkbenchShell extends StatelessWidget {
     switch (workbench.currentStage) {
       case WorkbenchStage.projectPitch:
         return ProjectPitchScreen(workbench: workbench);
-      case WorkbenchStage.releasePlanGate:
       case WorkbenchStage.releaseWorkbench:
         return ReleaseWorkbenchScreen(workbench: workbench);
     }

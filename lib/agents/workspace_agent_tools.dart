@@ -494,7 +494,7 @@ class WorkspaceAgentOrchestrator {
   ///   2. `rebalance_tuning_params` (supports cross-feature tuning updates across sibling features!)
   ///   3. `add_edge_case_guards`
   ///   4. `add_implementation_task`
-  static Future<AgentRunTrace> runStage3CoPilotTools({
+  static Future<AgentRunTrace?> runStage3CoPilotTools({
     required String userDirective,
     required TierDocument activeFeature,
     required List<FeatureStateNode> activeStates,
@@ -512,19 +512,21 @@ class WorkspaceAgentOrchestrator {
         ? activeCheckpointIndex
         : (activeStates.isNotEmpty ? 0 : -1);
 
-    // Try surgical low-token Gemini Tool-Calling JSON first when API key is configured
-    if (GeminiAgentClient.hasKey(apiKey) && targetIdx != -1) {
-      final cp = activeStates[targetIdx];
-      final siblingSummary = siblingFeatures
-          .where((f) => f.id != activeFeature.id)
-          .map((f) {
-            final st = FeatureStateNode.getStatesForDocument(f);
-            final firstTuning = st.isNotEmpty ? st.first.tuningParams.join(', ') : '';
-            return '${f.id} ("${f.title}") [Tuning: $firstTuning]';
-          })
-          .join('; ');
+    if (!GeminiAgentClient.hasKey(apiKey) || targetIdx == -1) {
+      return null;
+    }
 
-      final prompt = '''
+    final cp = activeStates[targetIdx];
+    final siblingSummary = siblingFeatures
+        .where((f) => f.id != activeFeature.id)
+        .map((f) {
+          final st = FeatureStateNode.getStatesForDocument(f);
+          final firstTuning = st.isNotEmpty ? st.first.tuningParams.join(', ') : '';
+          return '${f.id} ("${f.title}") [Tuning: $firstTuning]';
+        })
+        .join('; ');
+
+    final prompt = '''
 You are an autonomous Game Production & Systems Agent operating on a live game workbench.
 Engine: $engineLabel | Release: $releaseVersionTag
 Active Feature: "${activeFeature.title}" (id: ${activeFeature.id})
@@ -557,56 +559,45 @@ Return ONLY valid JSON:
 }
 ''';
 
-      final json = await GeminiAgentClient.generateJson(
-        prompt: prompt,
-        apiKey: apiKey,
-        preferredModel: modelName,
-        thinkingLevel: thinkingLevel,
-        temperature: 0.3,
-      );
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: modelName,
+      thinkingLevel: thinkingLevel,
+      temperature: 0.3,
+    );
 
-      final rawCalls = json?['toolCalls'];
-      if (rawCalls is List && rawCalls.isNotEmpty) {
-        final executedCalls = <AgentToolCall>[];
-        for (final item in rawCalls) {
-          if (item is Map<String, dynamic>) {
-            final call = AgentToolCall.fromJson(item);
-            _executeSingleStage3ToolCall(
-              call: call,
-              activeFeature: activeFeature,
-              activeStates: activeStates,
-              targetIdx: targetIdx,
-              siblingFeatures: siblingFeatures,
-              releaseVersionTag: releaseVersionTag,
-              onSaveStates: onSaveStates,
-            );
-            executedCalls.add(call);
-          }
-        }
-        if (executedCalls.isNotEmpty) {
-          onSaveStates(activeFeature.id, activeStates);
-          return AgentRunTrace(
-            agentRole: 'Stage 3 Systems & Feel Agent',
-            userGoal: cleanDirective,
-            reasoning: json?['reasoning']?.toString() ??
-                'Executed surgical workspace tool calls on ${activeFeature.title}.',
-            toolCalls: executedCalls,
+    final rawCalls = json?['toolCalls'];
+    if (rawCalls is List && rawCalls.isNotEmpty) {
+      final executedCalls = <AgentToolCall>[];
+      for (final item in rawCalls) {
+        if (item is Map<String, dynamic>) {
+          final call = AgentToolCall.fromJson(item);
+          _executeSingleStage3ToolCall(
+            call: call,
+            activeFeature: activeFeature,
+            activeStates: activeStates,
+            targetIdx: targetIdx,
+            siblingFeatures: siblingFeatures,
+            releaseVersionTag: releaseVersionTag,
+            onSaveStates: onSaveStates,
           );
+          executedCalls.add(call);
         }
+      }
+      if (executedCalls.isNotEmpty) {
+        onSaveStates(activeFeature.id, activeStates);
+        return AgentRunTrace(
+          agentRole: 'Stage 3 Systems & Feel Agent',
+          userGoal: cleanDirective,
+          reasoning: json?['reasoning']?.toString() ??
+              'Executed surgical workspace tool calls on ${activeFeature.title}.',
+          toolCalls: executedCalls,
+        );
       }
     }
 
-    // Fast, zero-latency deterministic Multi-Tool Execution (offline / test / preset fallback)
-    return _runDeterministicStage3Tools(
-      cleanDirective: cleanDirective,
-      activeFeature: activeFeature,
-      activeStates: activeStates,
-      targetIdx: targetIdx,
-      siblingFeatures: siblingFeatures,
-      engineLabel: engineLabel,
-      releaseVersionTag: releaseVersionTag,
-      onSaveStates: onSaveStates,
-    );
+    return null;
   }
 
   static void _executeSingleStage3ToolCall({
@@ -719,180 +710,6 @@ Return ONLY valid JSON:
         }
         break;
     }
-  }
-
-  static AgentRunTrace _runDeterministicStage3Tools({
-    required String cleanDirective,
-    required TierDocument activeFeature,
-    required List<FeatureStateNode> activeStates,
-    required int targetIdx,
-    required List<TierDocument> siblingFeatures,
-    required String engineLabel,
-    required String releaseVersionTag,
-    required void Function(String featId, List<FeatureStateNode> updatedStates) onSaveStates,
-  }) {
-    final lower = cleanDirective.toLowerCase();
-    final toolCalls = <AgentToolCall>[];
-    String reasoning =
-        'Inspected ${activeFeature.title} ($engineLabel) and applied surgical workspace tools.';
-
-    if (cleanDirective == 'add_polish_checkpoint' ||
-        lower.contains('checkpoint') ||
-        lower.contains('stage') ||
-        lower.contains('split')) {
-      final customTitle = (cleanDirective != 'add_polish_checkpoint' &&
-              cleanDirective.isNotEmpty &&
-              !lower.startsWith('split'))
-          ? cleanDirective
-          : 'Screen Feedback & Feel Pass';
-      final newCp = FeatureStateNode(
-        id: generateUniqueId('cp'),
-        name: 'Stage ${activeStates.length + 1}: $customTitle',
-        trigger:
-            'Trigger ${activeFeature.title} in the scene and verify immediate visual and audio feedback with zero frame hitches.',
-        parameters: {'releaseVersion': releaseVersionTag},
-        tuningParams: const [
-          'hit_flash_ms: 85 ms',
-          'sfx_pitch_jitter: ±0.06',
-        ],
-        edgeCases: const [
-          '[GUARD] Cancel active tween cleanly when interrupted',
-        ],
-        checklist: [
-          Subtask(
-            id: generateUniqueId('check'),
-            text: 'Hook up visual flash and sound cue for ${activeFeature.title} (1h)',
-            completed: false,
-          ),
-          Subtask(
-            id: generateUniqueId('check'),
-            text: 'Playtest rapid repeated inputs and tune timing values (1h)',
-            completed: false,
-          ),
-        ],
-      );
-      activeStates.add(newCp);
-      toolCalls.add(
-        AgentToolCall(
-          toolName: 'add_or_split_checkpoint',
-          targetTitle: activeFeature.title,
-          summary: 'Created Checkpoint ${activeStates.length} (${newCp.cleanStageTitle}) with 2 tasks & tuning',
-        ),
-      );
-      reasoning =
-          'Added a dedicated 60/40 Playable Checkpoint to isolate feedback and feel verification for ${activeFeature.title}.';
-    } else if (cleanDirective == 'suggest_tuning' ||
-        lower.contains('tune') ||
-        lower.contains('tuning') ||
-        lower.contains('snappier') ||
-        lower.contains('faster') ||
-        lower.contains('slower') ||
-        lower.contains('rebalance')) {
-      if (targetIdx != -1) {
-        final node = activeStates[targetIdx];
-        final currentTuning = List<String>.from(node.tuningParams);
-        final candidates = <String>[
-          'response_window_ms: 90 ms',
-          'cooldown_sec: 0.35 s',
-          'lerp_damping: 14.0',
-        ];
-        for (final c in candidates) {
-          if (!currentTuning.contains(c)) {
-            currentTuning.add(c);
-          }
-        }
-        node.tuningParams = currentTuning;
-        toolCalls.add(
-          AgentToolCall(
-            toolName: 'rebalance_tuning_params',
-            targetTitle: '${activeFeature.title} · Checkpoint ${targetIdx + 1}',
-            summary: 'Injected response_window_ms, cooldown_sec, and lerp_damping tuning variables',
-          ),
-        );
-
-        // If directive mentions cross-feature rebalance/feel, also synchronize a coupled sibling feature!
-        final coupledSibling = siblingFeatures
-            .where((f) => f.id != activeFeature.id)
-            .firstOrNull;
-        if (coupledSibling != null &&
-            (lower.contains('rebalance') ||
-                lower.contains('snappier') ||
-                lower.contains('faster') ||
-                lower.contains('sync'))) {
-          final sibStates = FeatureStateNode.getStatesForDocument(coupledSibling);
-          if (sibStates.isNotEmpty) {
-            final sibTuning = List<String>.from(sibStates.first.tuningParams);
-            const syncParam = 'coupled_sync_window_ms: 90 ms';
-            if (!sibTuning.contains(syncParam)) {
-              sibTuning.add(syncParam);
-              sibStates.first.tuningParams = sibTuning;
-              onSaveStates(coupledSibling.id, sibStates);
-            }
-            toolCalls.add(
-              AgentToolCall(
-                toolName: 'rebalance_tuning_params',
-                targetTitle: coupledSibling.title,
-                summary: 'Synchronized coupled_sync_window_ms: 90 ms on sibling feature',
-              ),
-            );
-          }
-        }
-        reasoning =
-            'Synthesized numeric inspector variables so you can tune ${activeFeature.title} live in $engineLabel.';
-      }
-    } else if (cleanDirective == 'add_edge_guards' ||
-        lower.contains('guard') ||
-        lower.contains('edge')) {
-      if (targetIdx != -1) {
-        final node = activeStates[targetIdx];
-        final currentEdges = List<String>.from(node.edgeCases);
-        final candidates = <String>[
-          '[GUARD] Ignore duplicate input while state transition is active',
-          '[GUARD] Clamp velocity and position within arena bounds on frame spike',
-        ];
-        for (final c in candidates) {
-          if (!currentEdges.contains(c)) {
-            currentEdges.add(c);
-          }
-        }
-        node.edgeCases = currentEdges;
-        toolCalls.add(
-          AgentToolCall(
-            toolName: 'add_edge_case_guards',
-            targetTitle: '${activeFeature.title} · Checkpoint ${targetIdx + 1}',
-            summary: 'Appended 2 [GUARD] boundary rules against duplicate input and frame spikes',
-          ),
-        );
-        reasoning =
-            'Added boundary guards to prevent state corruption and collision tunneling during playtest.';
-      }
-    } else if (targetIdx != -1 && cleanDirective.isNotEmpty) {
-      final node = activeStates[targetIdx];
-      node.checklist.add(
-        Subtask(
-          id: generateUniqueId('check'),
-          text: cleanDirective,
-          completed: false,
-        ),
-      );
-      toolCalls.add(
-        AgentToolCall(
-          toolName: 'add_implementation_task',
-          targetTitle: '${activeFeature.title} · Checkpoint ${targetIdx + 1}',
-          summary: 'Added task "$cleanDirective" with 3 engine-aware How-To sub-steps',
-        ),
-      );
-      reasoning =
-          'Added observable implementation task to Checkpoint ${targetIdx + 1} and bound $engineLabel How-To steps.';
-    }
-
-    onSaveStates(activeFeature.id, activeStates);
-    return AgentRunTrace(
-      agentRole: 'Stage 3 Systems & Feel Agent',
-      userGoal: cleanDirective,
-      reasoning: reasoning,
-      toolCalls: toolCalls,
-    );
   }
 
   /// Option 1: Generates a complete, ready-to-drop Starter Script Bundle (`.gd`, `.cs`, or `.cpp`)

@@ -375,6 +375,15 @@ class TaskHowToBlueprint {
       'task',
       'version',
       'system',
+      'systems',
+      'controller',
+      'controllers',
+      'mechanic',
+      'manager',
+      'managers',
+      'module',
+      'handler',
+      'service',
       'feature',
       'structure',
       'base',
@@ -396,14 +405,7 @@ class TaskHowToBlueprint {
     }
     final chosen = words.isNotEmpty
         ? words.take(3).toList()
-        : <String>['Feature', 'Controller'];
-    if (!chosen.any((w) =>
-        w.toLowerCase() == 'actor' ||
-        w.toLowerCase() == 'controller' ||
-        w.toLowerCase() == 'node' ||
-        w.toLowerCase() == 'manager')) {
-      chosen.add('Controller');
-    }
+        : <String>['Feature', 'Node'];
     final pascal = chosen
         .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
         .join();
@@ -533,128 +535,6 @@ class TaskHowToBlueprint {
         rawGuard.replaceFirst(_leadingBracketTagRegex, '').trim();
     final lower = shortGuard.toLowerCase();
 
-    // 1. Stack / Cap / Max Limit Guard
-    if (lower.contains('stack') ||
-        (lower.contains('cap') && lower.contains('limit')) ||
-        lower.contains('max capacity')) {
-      final code = engineLabel == 'UNREAL 5'
-          ? (unrealCppMode
-              ? 'if (currentBuffStacks >= maxBuffStacks) return;\ncurrentBuffStacks++;'
-              : '[Branch: currentBuffStacks < maxBuffStacks]\n   └──► (True)  ──► [Increment currentBuffStacks] ──► [Apply Stat Buff ($primaryVarName)]\n   └──► (False) ──► [Return / Skip Buff]')
-          : (engineLabel == 'UNITY C#'
-              ? 'if (currentBuffStacks >= maxBuffStacks) return;\ncurrentBuffStacks++;'
-              : 'if current_buff_stacks >= max_buff_stacks:\n    return\ncurrent_buff_stacks += 1');
-      final condToken = engineLabel == 'GODOT 4'
-          ? 'current_buff_stacks < max_buff_stacks'
-          : 'currentBuffStacks < maxBuffStacks';
-      return (
-        shortTitle: _formatConciseGuardShortTitle(
-          rawGuard,
-          'Guard: Max Stack Cap',
-        ),
-        highlightTokens: const [
-          'currentBuffStacks < maxBuffStacks',
-          'currentBuffStacks >= maxBuffStacks',
-          'current_buff_stacks < max_buff_stacks',
-          'current_buff_stacks >= max_buff_stacks',
-          'currentBuffStacks',
-          'maxBuffStacks',
-          'current_buff_stacks',
-          'max_buff_stacks',
-        ],
-        instruction:
-            'In $targetAssetName, check $condToken before applying the effect so stacks cannot exceed the cap.',
-        explain:
-            'Prevents runaway stat scaling when the player triggers the same upgrade or effect repeatedly.',
-        code: code,
-        verify:
-            'Trigger the effect repeatedly in Play mode and confirm $condToken stops additional stacks once the cap is reached.',
-        pitfall:
-            'Check $condToken before modifying player attributes so capped picks exit cleanly.',
-      );
-    }
-
-    // 2. Despawn / Cleanup / Clear Unchosen Widgets Guard
-    if (lower.contains('despawn') ||
-        lower.contains('unchosen') ||
-        lower.contains('cleanup') ||
-        lower.contains('orphan')) {
-      final code = engineLabel == 'UNREAL 5'
-          ? (unrealCppMode
-              ? 'if (!bCardsActive) return;\nbCardsActive = false;\nDespawnUnchosenCards();'
-              : '[Branch: bCardsActive]\n   └──► (True) ──► [Set bCardsActive = false]\n                   [Call DespawnUnchosenCards()]')
-          : (engineLabel == 'UNITY C#'
-              ? 'if (!bCardsActive) return;\nbCardsActive = false;\nDespawnUnchosenCards();'
-              : 'if not cards_active:\n    return\ncards_active = false\ndespawn_unchosen_cards()');
-      final fnToken = engineLabel == 'GODOT 4'
-          ? 'despawn_unchosen_cards()'
-          : 'DespawnUnchosenCards()';
-      final flagToken =
-          engineLabel == 'GODOT 4' ? 'cards_active' : 'bCardsActive';
-      return (
-        shortTitle: _formatConciseGuardShortTitle(
-          rawGuard,
-          'Guard: Clear Unchosen Cards',
-        ),
-        highlightTokens: const [
-          'DespawnUnchosenCards()',
-          'despawn_unchosen_cards()',
-          'bCardsActive = false',
-          'cards_active = false',
-          'bCardsActive',
-          'cards_active',
-        ],
-        instruction:
-            'After applying the selection in $targetAssetName, check $flagToken and call $fnToken so remaining unchosen cards are removed immediately.',
-        explain:
-            'Prevents leftover upgrade cards from lingering on screen or being clicked a second time after a choice is made.',
-        code: code,
-        verify:
-            'Select 1 of the spawned upgrade cards in Play mode and confirm $fnToken removes all remaining cards immediately.',
-        pitfall:
-            'Set $flagToken = false before calling $fnToken so rapid clicks during close animations are ignored.',
-      );
-    }
-
-    // 3.Occupied / Solid Tile / Grid Boundary Guard
-    if (lower.contains('tile') ||
-        lower.contains('occupied') ||
-        lower.contains('solid') ||
-        lower.contains('boundary') ||
-        lower.contains('bounds')) {
-      final code = engineLabel == 'UNREAL 5'
-          ? (unrealCppMode
-              ? 'if (IsTileBlocked(targetCell)) return;\nStepTowardCell(targetCell, $primaryVarName);'
-              : '[Branch: NOT IsTileBlocked(targetCell)]\n   └──► (True) ──► [Step Toward targetCell ($primaryVarName)]')
-          : (engineLabel == 'UNITY C#'
-              ? 'if (IsTileBlocked(targetCell)) return;\nStepTowardCell(targetCell, $primaryVarName);'
-              : 'if is_tile_blocked(target_cell):\n    return\nstep_toward_cell(target_cell, $primaryVarName)');
-      final fnToken = engineLabel == 'GODOT 4'
-          ? 'is_tile_blocked(target_cell)'
-          : 'IsTileBlocked(targetCell)';
-      return (
-        shortTitle: _formatConciseGuardShortTitle(
-          rawGuard,
-          'Guard: Blocked Tile Check',
-        ),
-        highlightTokens: const [
-          'NOT IsTileBlocked(targetCell)',
-          'IsTileBlocked(targetCell)',
-          'is_tile_blocked(target_cell)',
-        ],
-        instruction:
-            'Before stepping $targetAssetName into the target cell, check $fnToken so movement into occupied or solid tiles is blocked.',
-        explain:
-            'Prevents $targetAssetName from clipping into walls or overlapping occupied grid cells.',
-        code: code,
-        verify:
-            'Attempt to move into an occupied or solid cell in Play mode and confirm $fnToken blocks the move cleanly.',
-        pitfall:
-            'Check $fnToken before starting interpolation so blocked moves never shift the actor position.',
-      );
-    }
-
-    // 4. Default / Lock Selection / Duplicate Trigger / Cooldown Guard
     final isResetGuard = lower.contains('reset') || lower.contains('restart');
     final flagName = engineLabel == 'GODOT 4'
         ? (isResetGuard ? 'reset_in_progress' : 'selection_locked')
@@ -698,23 +578,6 @@ class TaskHowToBlueprint {
   /// Returns all concrete guard highlight tokens across `edgeItems` for semantic syntax highlighting.
   static List<String> extractGuardHighlightTokens(List<String> edgeItems) {
     final tokens = <String>{
-      'currentBuffStacks < maxBuffStacks',
-      'currentBuffStacks >= maxBuffStacks',
-      'current_buff_stacks < max_buff_stacks',
-      'current_buff_stacks >= max_buff_stacks',
-      'currentBuffStacks',
-      'maxBuffStacks',
-      'current_buff_stacks',
-      'max_buff_stacks',
-      'DespawnUnchosenCards()',
-      'despawn_unchosen_cards()',
-      'bCardsActive = false',
-      'cards_active = false',
-      'bCardsActive',
-      'cards_active',
-      'NOT IsTileBlocked(targetCell)',
-      'IsTileBlocked(targetCell)',
-      'is_tile_blocked(target_cell)',
       'NOT bSelectionLocked',
       '!bSelectionLocked',
       'not selection_locked',
@@ -1808,134 +1671,5 @@ class TaskHowToBlueprint {
       blueprint: result,
     );
     return result;
-  }
-
-  /// Tailors `parentTask.children` (Step X.1, X.2, X.3) to the developer's exact scene/node/script context
-  /// (e.g. "CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual") and marks each sub-step
-  /// with `codeTargetFile = 'custom_snippet'` so it persists across re-renders.
-  static void tailorSubStepsForContext({
-    required Subtask parentTask,
-    required int taskIndex,
-    required FeatureStateNode checkpointNode,
-    required String userContext,
-    String? engineHint,
-  }) {
-    resolve(
-      parentTask: parentTask,
-      taskIndex: taskIndex,
-      checkpointNode: checkpointNode,
-      engineHint: engineHint,
-    );
-
-    final taskNum = taskIndex + 1;
-    final cleanTitle = extractCleanTitle(parentTask.text);
-    final engineLabel = detectEngineLabel(engineHint);
-    final effectiveTuningParams = checkpointNode.tuningParams;
-    final effectiveEdgeCases = checkpointNode.edgeCases;
-
-    final primaryVar = effectiveTuningParams.isNotEmpty
-        ? effectiveTuningParams[taskIndex % effectiveTuningParams.length]
-        : 'responseTime: 0.12 s';
-    final primaryVarName = primaryVar.split(':').first.trim();
-    final primaryGuard = effectiveEdgeCases.isNotEmpty
-        ? effectiveEdgeCases[taskIndex % effectiveEdgeCases.length]
-        : '[STATE GUARD] Prevent duplicate trigger while active';
-
-    final stopWords = <String>{
-      'using',
-      'with',
-      'named',
-      'and',
-      'the',
-      'for',
-      'inside',
-      'from',
-      'into',
-      'node',
-      'script',
-      'class',
-      'component',
-      'scene',
-    };
-    final tokens = RegExp(r'[A-Za-z_][A-Za-z0-9_]{2,}')
-        .allMatches(userContext)
-        .map((m) => m.group(0)!)
-        .where((w) => !stopWords.contains(w.toLowerCase()))
-        .toList();
-
-    final primaryNode = tokens.isNotEmpty ? tokens.first : 'PlayerController';
-    final secondaryNode = tokens.length > 1 ? tokens[1] : primaryNode;
-    final tertiaryNode = tokens.length > 2 ? tokens[2] : secondaryNode;
-
-    String step1Code;
-    String step2Code;
-    String step3Code;
-
-    if (engineLabel == 'UNITY C#') {
-      step1Code =
-          '// Context: $userContext\nif (Input.GetButton("Fire1") && $secondaryNode != null && CanEnterState()) {\n    activeState = MechanicState.Active;\n}';
-      step2Code =
-          '$primaryNode.ExecuteStep($secondaryNode, $primaryVarName * Time.fixedDeltaTime);\n$tertiaryNode.SyncVisualState(activeState);';
-      step3Code =
-          'if (!$primaryNode.IsValidState($secondaryNode) || cooldownTimer > 0f) return; // Guard: $primaryGuard';
-    } else if (engineLabel == 'UNREAL 5') {
-      step1Code =
-          '// Context: $userContext\nif (bInputPressed && IsValid($secondaryNode) && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n}';
-      step2Code =
-          '$primaryNode->ExecuteStep($secondaryNode, DeltaTime * $primaryVarName);\n$tertiaryNode->SyncVisualState(ActiveState);';
-      step3Code =
-          'if (!$primaryNode->IsValidState($secondaryNode) || CooldownTimer > 0.f) return; // Guard: $primaryGuard';
-    } else {
-      step1Code =
-          '# Context: $userContext\nif Input.is_action_pressed("primary_action") and is_instance_valid($secondaryNode) and can_enter_state():\n    activeState = State.ACTIVE';
-      step2Code =
-          '$primaryNode.apply_mechanic_step($secondaryNode, $primaryVarName * delta)\n$tertiaryNode.sync_visual_state(activeState)';
-      step3Code =
-          'if not $primaryNode.is_valid_state($secondaryNode) or cooldownTimer > 0.0:\n    return # Guard: $primaryGuard';
-    }
-
-    for (int idx = 0; idx < parentTask.children.length; idx++) {
-      final isFirst = idx == 0;
-      final isLast = idx == parentTask.children.length - 1;
-      if (isFirst) {
-        parentTask.children[idx].text =
-            'STEP $taskNum.1 · BIND INPUT & VALIDATE ${secondaryNode.toUpperCase()} IN ${primaryNode.toUpperCase()}';
-        parentTask.children[idx].specNotes =
-            'Inside $primaryNode, read player input and validate $secondaryNode before entering "$cleanTitle" ($userContext):';
-        parentTask.children[idx].codeSnippet = step1Code;
-      } else if (isLast) {
-        parentTask.children[idx].text =
-            'STEP $taskNum.${idx + 1} · ENFORCE GUARD CHECK ON ${secondaryNode.toUpperCase()} & PLAYTEST';
-        parentTask.children[idx].specNotes =
-            'Guard $primaryNode / $secondaryNode against invalid state or rapid re-triggers to satisfy "$primaryGuard":';
-        parentTask.children[idx].codeSnippet = step3Code;
-      } else if (idx == 1) {
-        parentTask.children[idx].text =
-            'STEP $taskNum.2 · APPLY ${primaryVarName.toUpperCase()} LOGIC ACROSS ${primaryNode.toUpperCase()} & ${tertiaryNode.toUpperCase()}';
-        parentTask.children[idx].specNotes =
-            'Drive "$cleanTitle" on $primaryNode / $secondaryNode using inspector parameter $primaryVarName and update $tertiaryNode:';
-        parentTask.children[idx].codeSnippet = step2Code;
-      } else if (idx == 2) {
-        parentTask.children[idx].text =
-            'STEP $taskNum.3 · SYNC ${tertiaryNode.toUpperCase()} VISUAL STATE FROM ${primaryNode.toUpperCase()}';
-        parentTask.children[idx].specNotes =
-            'Update $tertiaryNode visual feedback whenever $primaryNode / $secondaryNode changes state:';
-        parentTask.children[idx].codeSnippet = step2Code;
-      } else if (idx == 3) {
-        parentTask.children[idx].text =
-            'STEP $taskNum.4 · EXPOSE ${primaryVarName.toUpperCase()} ON ${primaryNode.toUpperCase()}';
-        parentTask.children[idx].specNotes =
-            'Expose $primaryVarName on $primaryNode so you can tune $secondaryNode and $tertiaryNode live in the editor:';
-        parentTask.children[idx].codeSnippet = step2Code;
-      } else {
-        parentTask.children[idx].text =
-            'STEP $taskNum.${idx + 1} · STEP ${secondaryNode.toUpperCase()} INTERPOLATION IN ${primaryNode.toUpperCase()}';
-        parentTask.children[idx].specNotes =
-            'Advance $secondaryNode and $tertiaryNode each physics tick inside $primaryNode using $primaryVarName:';
-        parentTask.children[idx].codeSnippet = step2Code;
-      }
-      parentTask.children[idx].codeTargetFile = 'custom_snippet';
-    }
-    _blueprintCache.remove('${checkpointNode.id}_${parentTask.id}_$taskIndex');
   }
 }

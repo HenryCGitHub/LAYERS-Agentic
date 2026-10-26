@@ -352,9 +352,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       case 7:
         _initialSectionDefaults[7] = draft.doneWhen;
         break;
-      case 8:
-        _initialSectionDefaults[8] = List<String>.from(draft.releaseTrainTitles);
-        break;
     }
   }
 
@@ -386,11 +383,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           break;
         case 7:
           if (saved is String) d.doneWhen = saved;
-          break;
-        case 8:
-          if (saved is List<String>) {
-            d.releaseTrainTitles = List<String>.from(saved);
-          }
           break;
       }
     });
@@ -597,90 +589,36 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           break;
         case 1:
           final specParts = optionText
-              .split('·')
+              .split(RegExp(r'\s*[·|]\s*'))
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
               .toList();
-          if (specParts.length >= 3) {
+          if (specParts.isNotEmpty) {
             d.gameSpec = [
               specParts[0],
-              specParts[1],
-              specParts.length >= 4 ? specParts[2] : 'Singleplayer',
-              specParts.last,
-            ];
-          } else if (optIdx == 0) {
-            d.gameSpec = [
-              '2D Top-Down',
-              'Twin-Stick (WASD + Aim)',
-              'Singleplayer',
-              'Single-Screen Wave Arena',
-            ];
-          } else if (optIdx == 1) {
-            d.gameSpec = [
-              '2D Side-Scrolling',
-              'Precision Controls',
-              'Singleplayer',
-              'Multi-Room Stages',
-            ];
-          } else {
-            d.gameSpec = [
-              '3D First-Person',
-              'Mouse + WASD',
-              'Singleplayer',
-              'Enclosed Sandbox',
+              specParts.length > 1 ? specParts[1] : (d.gameSpec.length > 1 ? d.gameSpec[1] : 'Standard Controls'),
+              specParts.length >= 4 ? specParts[2] : (d.gameSpec.length > 2 ? d.gameSpec[2] : 'Singleplayer'),
+              specParts.length >= 3 ? specParts.last : (d.gameSpec.length > 3 ? d.gameSpec[3] : 'Core Arena'),
             ];
           }
           break;
         case 2:
           final techParts = optionText
-              .split('·')
+              .split(RegExp(r'\s*[·|]\s*'))
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
               .toList();
-          if (techParts.length >= 4) {
-            d.techSpec = techParts.take(4).toList();
-          } else if (optIdx == 0) {
+          if (techParts.isNotEmpty) {
             d.techSpec = [
-              'Godot 4 (2D)',
-              'PC (Steam / Desktop)',
-              '2D Sprites + Particles',
-              'Offline-Only Local Save',
-            ];
-          } else if (optIdx == 1) {
-            d.techSpec = [
-              'Unity 6',
-              'PC & Steam Deck',
-              '2D/3D Hybrid Pipeline',
-              'Steam Cloud Save',
-            ];
-          } else {
-            d.techSpec = [
-              'Unreal Engine 5',
-              'PC Desktop',
-              '3D Greybox Meshes',
-              'Offline Local Save',
+              techParts[0],
+              techParts.length > 1 ? techParts[1] : (d.techSpec.length > 1 ? d.techSpec[1] : 'PC Desktop'),
+              techParts.length > 2 ? techParts[2] : (d.techSpec.length > 2 ? d.techSpec[2] : 'Greybox Assets'),
+              techParts.length > 3 ? techParts[3] : (d.techSpec.length > 3 ? d.techSpec[3] : 'Offline Local Save'),
             ];
           }
           break;
         case 7:
           d.doneWhen = bodyAfterColon;
-          break;
-        case 8:
-          final lowerOpt = optionText.toLowerCase();
-          final isSplitOption = lowerOpt.contains('v0.2') ||
-              lowerOpt.contains('two-step') ||
-              lowerOpt.contains('split') ||
-              (!lowerOpt.contains('single') && optIdx == 1);
-          if (!isSplitOption) {
-            d.releaseTrainTitles = [
-              'v0.1: ${d.title} Core Loop - Prototype',
-            ];
-          } else {
-            d.releaseTrainTitles = [
-              'v0.1: ${d.title} Controls & Mechanics - Prototype',
-              'v0.2: Full ${d.title} Core Loop - Prototype',
-            ];
-          }
           break;
       }
     });
@@ -1238,16 +1176,23 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                                     _sparkController.text,
                                     true,
                                   ),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
+                          borderRadius: BorderRadius.circular(5),
+                          child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentEmerald.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: accentEmerald.withValues(alpha: 0.45),
+                              ),
                             ),
                             child: Text(
                               'Fast-Track to Review ◫',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w800,
                                 color: accentEmerald,
                               ),
@@ -1924,8 +1869,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         return '${draft.exclusions.length} Cuts';
       case 7:
         return 'Playtest';
-      case 8:
-        return 'v0.1';
       default:
         return '';
     }
