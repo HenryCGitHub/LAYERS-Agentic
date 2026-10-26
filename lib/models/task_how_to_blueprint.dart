@@ -3308,14 +3308,24 @@ class TaskHowToBlueprint {
         ));
         return;
       }
-      final mechOverride = MechanicArchetypeProfile.mechanicStepOverride(
-        category: effectiveCategory,
-        taskIndex: taskIndex,
-        stepIdx: phaseIdx,
-        taskNum: taskNum,
-        targetAsset: targetAssetName,
-        primaryVarName: primaryVarName,
-      );
+      final contextForLoadoutCheck =
+          '${checkpointNode.cleanStageTitle} $cleanTitle'.toLowerCase();
+      final allowLoadoutOverride = effectiveCategory != 'loadout' ||
+          contextForLoadoutCheck.contains('loadout') ||
+          contextForLoadoutCheck.contains('weapon') ||
+          contextForLoadoutCheck.contains('equip') ||
+          contextForLoadoutCheck.contains('pedestal') ||
+          contextForLoadoutCheck.contains('armory');
+      final mechOverride = allowLoadoutOverride
+          ? MechanicArchetypeProfile.mechanicStepOverride(
+              category: effectiveCategory,
+              taskIndex: taskIndex,
+              stepIdx: phaseIdx,
+              taskNum: taskNum,
+              targetAsset: targetAssetName,
+              primaryVarName: primaryVarName,
+            )
+          : null;
       if (mechOverride != null) {
         dynamicSpecs.add((
           stepHeader:
