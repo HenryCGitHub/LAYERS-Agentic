@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/tier_document.dart';
-import 'task_how_to_blueprint.dart';
+import 'mechanic_archetype_profile.dart';
+export 'mechanic_archetype_profile.dart';
 export 'task_how_to_blueprint.dart';
 
 /// Represents a single dynamic state node in a Feature's state machine.

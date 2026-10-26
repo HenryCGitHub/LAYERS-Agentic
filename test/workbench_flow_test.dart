@@ -1666,6 +1666,64 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           courierProvider.featuresForBeat(firstBeatDoc.id).length,
           initialBeatFeatCount,
         );
+
+        // Expanded Genre Archetypes (deckbuilder, vehicle, stealth, puzzle) & custom AI step metadata preservation
+        expect(
+          MechanicArchetypeProfile.inferCategory('Card Hand & Mana Draw'),
+          'deckbuilder',
+        );
+        expect(
+          MechanicArchetypeProfile.inferCategory('Drift Boost & Lap Steering'),
+          'vehicle',
+        );
+        expect(
+          MechanicArchetypeProfile.inferCategory('Guard Vision Cone & Crouch'),
+          'stealth',
+        );
+        expect(
+          MechanicArchetypeProfile.inferCategory('Grid Tile Match & Undo'),
+          'puzzle',
+        );
+        expect(
+          MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+            'Card Hand & Mana Mechanics & Controls',
+            beatTitle: 'Card Hand & Mana',
+          ),
+          'Card Hand & Play',
+        );
+
+        // Verify custom_snippet sub-steps preserve custom verification (verifyResult) & codeLanguage (stepPath)
+        final sampleFeat = courierProvider
+            .featuresForBeat(courierProvider.activeReleaseBeats.first.id)
+            .first;
+        final sampleStates = FeatureStateNode.getStatesForDocument(sampleFeat);
+        final sampleCp = sampleStates.first;
+        final sampleTask = sampleCp.checklist.first;
+        TaskHowToBlueprint.resolve(
+          parentTask: sampleTask,
+          taskIndex: 0,
+          checkpointNode: sampleCp,
+          engineHint: 'Godot 4',
+        );
+        sampleTask.children.first
+          ..codeTargetFile = 'custom_snippet'
+          ..codeLanguage = 'Scene Dock → PlayerCharacter → Inspector'
+          ..verification = 'Confirm custom AI step verify check passes in Play mode.';
+        TaskHowToBlueprint.clearCache();
+        final resolvedCustom = TaskHowToBlueprint.resolve(
+          parentTask: sampleTask,
+          taskIndex: 0,
+          checkpointNode: sampleCp,
+          engineHint: 'Godot 4',
+        );
+        expect(
+          resolvedCustom.subSteps.first.stepPath,
+          'Scene Dock → PlayerCharacter → Inspector',
+        );
+        expect(
+          resolvedCustom.subSteps.first.verifyResult,
+          'Confirm custom AI step verify check passes in Play mode.',
+        );
       },
     );
   });

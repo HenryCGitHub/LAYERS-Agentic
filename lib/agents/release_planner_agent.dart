@@ -580,54 +580,57 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         } else if (isTargetedMvpEpic) {
           // Phase 2 Per-Epic MVP: Upgrade ONLY the target Epic (bIdx == targetMvpEpicIdx); keep all other Epics STABLE (0h)
           if (bIdx == targetMvpEpicIdx && fIdx == 0) {
-            final isEpic0 = bIdx == 0;
+            final isMovementEpic0 = bIdx == 0 &&
+                (archetype.category == 'movement' ||
+                    archetype.category == 'grapple' ||
+                    archetype.category == 'core');
             proposedFeats.add(
               ProposedFeatureBlueprint(
                 id: fDoc.id,
                 title: fDoc.title,
-                goal: isEpic0
+                goal: isMovementEpic0
                     ? 'Expand ${fDoc.title} with $versionTag air-dash chain and stamina recovery.'
                     : 'Upgrade ${fDoc.title} from greybox to full MVP depth with ${archetype.cp2Title}.',
-                doneWhen: isEpic0
+                doneWhen: isMovementEpic0
                     ? 'Player chains ground burst into air-dash with clean stamina recharge.'
                     : archetype.doneWhen,
                 estimatedHours: 4,
                 included: true,
                 lifecycle: FeatureLifecycleStatus.upgrade,
                 originVersion: originVer,
-                inScope: isEpic0
+                inScope: isMovementEpic0
                     ? const ['Air-dash chain impulse and cooldown indicator']
                     : archetype.inScope,
-                tuningParams: isEpic0
+                tuningParams: isMovementEpic0
                     ? const ['airDashMultiplier: 1.25 x']
                     : archetype.tuningParams,
-                edgeCases: isEpic0
+                edgeCases: isMovementEpic0
                     ? const [
                         '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
                       ]
                     : archetype.edgeCases,
                 checkpoints: [
                   ProposedCheckpointBlueprint(
-                    title: isEpic0
+                    title: isMovementEpic0
                         ? 'Air-Dash Chain & Cooldown HUD'
                         : archetype.cp2Title,
-                    playtestCriteria: isEpic0
+                    playtestCriteria: isMovementEpic0
                         ? 'Trigger burst in mid-air -> verify 1.25x air-dash impulse and cooldown pip recharge.'
                         : archetype.cp2Playtest,
                     releaseVersion: versionTag,
-                    tasks: isEpic0
+                    tasks: isMovementEpic0
                         ? const [
                             'Add mid-air burst chain state and airDashMultiplier (2h)',
                             'Bind stamina pip recharge bar on reticle HUD (2h)',
                           ]
                         : archetype.cp2Tasks,
-                    coveredScope: isEpic0
+                    coveredScope: isMovementEpic0
                         ? const ['Air-dash chain impulse and cooldown indicator']
                         : archetype.inScope,
-                    tuningParams: isEpic0
+                    tuningParams: isMovementEpic0
                         ? const ['airDashMultiplier: 1.25 x']
                         : archetype.tuningParams,
-                    edgeCases: isEpic0
+                    edgeCases: isMovementEpic0
                         ? const [
                             '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
                           ]
@@ -652,44 +655,61 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             );
           }
         } else if (bIdx == 0 && fIdx == 0) {
-          // Generic v0.2 evolution fallback
+          // Generic v0.2 evolution fallback (genre-adaptive)
+          final isMovementOrArena = archetype.category == 'movement' ||
+              archetype.category == 'grapple' ||
+              archetype.category == 'core';
           proposedFeats.add(
             ProposedFeatureBlueprint(
               id: fDoc.id,
               title: fDoc.title,
-              goal: 'Expand ${fDoc.title} with $versionTag air-dash chain and stamina recovery.',
-              doneWhen: 'Player chains ground burst into air-dash with clean stamina recharge.',
+              goal: isMovementOrArena
+                  ? 'Expand ${fDoc.title} with $versionTag air-dash chain and stamina recovery.'
+                  : 'Upgrade ${fDoc.title} in $versionTag with ${archetype.cp2Title}.',
+              doneWhen: isMovementOrArena
+                  ? 'Player chains ground burst into air-dash with clean stamina recharge.'
+                  : archetype.doneWhen,
               estimatedHours: 4,
               included: true,
               lifecycle: FeatureLifecycleStatus.upgrade,
               originVersion: originVer,
-              inScope: [
-                'Air-dash chain impulse and cooldown indicator',
-              ],
-              tuningParams: [
-                'airDashMultiplier: 1.25 x',
-              ],
-              edgeCases: [
-                '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
-              ],
+              inScope: isMovementOrArena
+                  ? const ['Air-dash chain impulse and cooldown indicator']
+                  : archetype.inScope,
+              tuningParams: isMovementOrArena
+                  ? const ['airDashMultiplier: 1.25 x']
+                  : archetype.tuningParams,
+              edgeCases: isMovementOrArena
+                  ? const [
+                      '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
+                    ]
+                  : archetype.edgeCases,
               checkpoints: [
                 ProposedCheckpointBlueprint(
-                  title: 'Air-Dash Chain & Cooldown HUD',
-                  playtestCriteria: 'Trigger burst in mid-air -> verify 1.25x air-dash impulse and cooldown pip recharge.',
+                  title: isMovementOrArena
+                      ? 'Air-Dash Chain & Cooldown HUD'
+                      : archetype.cp2Title,
+                  playtestCriteria: isMovementOrArena
+                      ? 'Trigger burst in mid-air -> verify 1.25x air-dash impulse and cooldown pip recharge.'
+                      : archetype.cp2Playtest,
                   releaseVersion: versionTag,
-                  tasks: const [
-                    'Add mid-air burst chain state and airDashMultiplier (2h)',
-                    'Bind stamina pip recharge bar on reticle HUD (2h)',
-                  ],
-                  coveredScope: const [
-                    'Air-dash chain impulse and cooldown indicator',
-                  ],
-                  tuningParams: const [
-                    'airDashMultiplier: 1.25 x',
-                  ],
-                  edgeCases: const [
-                    '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
-                  ],
+                  tasks: isMovementOrArena
+                      ? const [
+                          'Add mid-air burst chain state and airDashMultiplier (2h)',
+                          'Bind stamina pip recharge bar on reticle HUD (2h)',
+                        ]
+                      : archetype.cp2Tasks,
+                  coveredScope: isMovementOrArena
+                      ? const ['Air-dash chain impulse and cooldown indicator']
+                      : archetype.inScope,
+                  tuningParams: isMovementOrArena
+                      ? const ['airDashMultiplier: 1.25 x']
+                      : archetype.tuningParams,
+                  edgeCases: isMovementOrArena
+                      ? const [
+                          '[LEDGE CANCEL] Air-dash into ledge mantle preserves horizontal speed',
+                        ]
+                      : archetype.edgeCases,
                 ),
               ],
             ),
@@ -776,47 +796,96 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
               (!isTargetedMvpEpic && bIdx == existingBeats.length - 1))) {
         // Promote a new MVP feature in the target MVP Epic (or last beat in generic v0.2)
         if (!isTargetedMvpEpic || bIdx == existingBeats.length - 1) {
-          proposedFeats.add(
-            ProposedFeatureBlueprint(
-              id: 'feat_${versionTag}_medals',
-              title: 'Bonus Time-Trial Medals',
-              goal: 'Award Bronze/Silver/Gold speed medals at the end of an arena clear.',
-              doneWhen: 'Clearing under target thresholds displays medal icon on summary card.',
-              estimatedHours: 4,
-              included: true,
-              lifecycle: FeatureLifecycleStatus.newFeature,
-              originVersion: versionTag,
-              inScope: const [
-                'Gold/Silver/Bronze time threshold evaluation and badge popup',
-              ],
-              tuningParams: const [
-                'goldTimeThreshold: 25.0 s',
-              ],
-              edgeCases: const [
-                '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
-              ],
-              checkpoints: [
-                ProposedCheckpointBlueprint(
-                  title: 'Medal Threshold Evaluation',
-                  playtestCriteria: 'Clear arena in under 25s -> Gold medal badge animates on clear screen.',
-                  releaseVersion: versionTag,
-                  tasks: const [
-                    'Compare final elapsed time against goldTimeThreshold and render badge (2h)',
-                    'Add personal-best split delta indicator on clear banner (2h)',
-                  ],
-                  coveredScope: const [
-                    'Gold/Silver/Bronze time threshold evaluation and badge popup',
-                  ],
-                  tuningParams: const [
-                    'goldTimeThreshold: 25.0 s',
-                  ],
-                  edgeCases: const [
-                    '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
-                  ],
-                ),
-              ],
-            ),
+          final beatCat = MechanicArchetypeProfile.inferCategory(
+            '${beatDoc.title} ${existingBeats.map((e) => e.title).join(' ')}',
           );
+          final isNonArenaGenre = beatCat == 'farming' ||
+              beatCat == 'economy' ||
+              beatCat == 'deckbuilder' ||
+              beatCat == 'vehicle' ||
+              beatCat == 'stealth' ||
+              beatCat == 'puzzle';
+          if (isNonArenaGenre) {
+            final newFeatTitle = beatCat == 'farming' || beatCat == 'economy'
+                ? 'Market Order & Daily Bonus'
+                : (beatCat == 'deckbuilder'
+                    ? 'Relic Draft & Deck Upgrade'
+                    : (beatCat == 'vehicle'
+                        ? 'Lap Split & Drift Multiplier'
+                        : (beatCat == 'stealth'
+                            ? 'Distraction Lure & Takedown'
+                            : 'Hint & Undo Move System')));
+            final newArch =
+                MechanicArchetypeProfile.fromFeatureTitle(newFeatTitle);
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: 'feat_${versionTag}_bonus',
+                title: newFeatTitle,
+                goal: newArch.goal,
+                doneWhen: newArch.doneWhen,
+                estimatedHours: 4,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.newFeature,
+                originVersion: versionTag,
+                inScope: newArch.inScope,
+                tuningParams: newArch.tuningParams,
+                edgeCases: newArch.edgeCases,
+                checkpoints: [
+                  ProposedCheckpointBlueprint(
+                    title: newArch.cp1Title,
+                    playtestCriteria: newArch.cp1Playtest,
+                    releaseVersion: versionTag,
+                    tasks: newArch.cp1Tasks,
+                    coveredScope: newArch.inScope,
+                    tuningParams: newArch.tuningParams,
+                    edgeCases: newArch.edgeCases,
+                  ),
+                ],
+              ),
+            );
+          } else {
+            proposedFeats.add(
+              ProposedFeatureBlueprint(
+                id: 'feat_${versionTag}_medals',
+                title: 'Bonus Time-Trial Medals',
+                goal: 'Award Bronze/Silver/Gold speed medals at the end of an arena clear.',
+                doneWhen: 'Clearing under target thresholds displays medal icon on summary card.',
+                estimatedHours: 4,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.newFeature,
+                originVersion: versionTag,
+                inScope: const [
+                  'Gold/Silver/Bronze time threshold evaluation and badge popup',
+                ],
+                tuningParams: const [
+                  'goldTimeThreshold: 25.0 s',
+                ],
+                edgeCases: const [
+                  '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+                ],
+                checkpoints: [
+                  ProposedCheckpointBlueprint(
+                    title: 'Medal Threshold Evaluation',
+                    playtestCriteria: 'Clear arena in under 25s -> Gold medal badge animates on clear screen.',
+                    releaseVersion: versionTag,
+                    tasks: const [
+                      'Compare final elapsed time against goldTimeThreshold and render badge (2h)',
+                      'Add personal-best split delta indicator on clear banner (2h)',
+                    ],
+                    coveredScope: const [
+                      'Gold/Silver/Bronze time threshold evaluation and badge popup',
+                    ],
+                    tuningParams: const [
+                      'goldTimeThreshold: 25.0 s',
+                    ],
+                    edgeCases: const [
+                      '[TIMER OVERFLOW] Runs over 59:59 clamp display string safely',
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
         }
       }
 

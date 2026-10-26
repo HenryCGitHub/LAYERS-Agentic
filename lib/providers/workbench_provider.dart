@@ -1681,7 +1681,39 @@ class WorkbenchProvider extends ChangeNotifier {
     return bundle;
   }
 
+  /// Async AI-powered Starter Script synthesis (`gemini-4-argon` via `_planningModel`).
+  Future<FeatureScriptBundle> generateAiStarterScriptForFeature(
+    TierDocument featureDoc,
+    List<FeatureStateNode> states,
+  ) async {
+    final engineLabel = _activeEngineLabel;
+    final bundle =
+        await WorkspaceAgentOrchestrator.generateFeatureScriptBundleWithAi(
+      featureDoc: featureDoc,
+      states: states,
+      engineLabel: engineLabel,
+      apiKey: _apiKey,
+      preferredModel: _planningModel,
+    );
+    _recordAgentTrace(AgentRunTrace(
+      agentRole: 'Engine Architect Agent ($_planningModel)',
+      userGoal: 'Synthesize AI Starter Script for ${featureDoc.title}',
+      reasoning:
+          'Synthesized complete ${bundle.fileName} ($engineLabel) using $_planningModel with ${bundle.exportedVariables.length} exported tuning variables and ${bundle.embeddedGuards.length} embedded guard clauses.',
+      toolCalls: [
+        AgentToolCall(
+          toolName: 'generate_ai_starter_script_bundle',
+          targetTitle: bundle.fileName,
+          summary: 'Synthesized ${bundle.fileName} via $_planningModel',
+        ),
+      ],
+    ));
+    notifyListeners();
+    return bundle;
+  }
+
   /// Option 3: Runs the Stage 3 AI Playtest Simulator / Dry-Run Stress Test on a Checkpoint.
+  /// Returns the deterministic stress result immediately and enriches asynchronously via `_planningModel` (`gemini-4-argon`).
   PlaytestSimulationResult simulateCheckpointPlaytest({
     required TierDocument featureDoc,
     required List<FeatureStateNode> states,
@@ -1700,7 +1732,83 @@ class WorkbenchProvider extends ChangeNotifier {
     );
     _recordAgentTrace(result.trace);
     notifyListeners();
+
+    if (GeminiAgentClient.hasKey(_apiKey)) {
+      _enrichSimulationWithAi(
+        featureDoc: featureDoc,
+        states: states,
+        checkpointIndex: checkpointIndex,
+        engineLabel: engineLabel,
+      );
+    }
     return result;
+  }
+
+  Future<void> _enrichSimulationWithAi({
+    required TierDocument featureDoc,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required String engineLabel,
+  }) async {
+    final idx = (checkpointIndex >= 0 && checkpointIndex < states.length)
+        ? checkpointIndex
+        : 0;
+    if (idx >= states.length) return;
+    final cp = states[idx];
+    final prompt = '''
+You are the Systems Stress & Playtest Simulator for LAYERS-Agentic ($engineLabel).
+Analyze this feature checkpoint for physics, frame-spike, or rapid-input exploits:
+Feature: "${featureDoc.title}"
+Checkpoint: "${cp.cleanStageTitle}"
+Playtest Gate: "${cp.playtestCondition}"
+Tasks: ${cp.checklist.map((t) => t.text).join('; ')}
+Current Tuning: ${cp.tuningParams.join(', ')}
+Current Guards: ${cp.edgeCases.join(', ')}
+
+Return ONLY a JSON object:
+{
+  "exploitTitle": "<concise 4-7 word exploit title>",
+  "exploitDescription": "<1 sentence describing the exact state/timing exploit>",
+  "recommendedTuningClamp": "<varName: numericValue unit>",
+  "simulationGuard": "[SIMULATION GUARD] <1 concise guard rule preventing the exploit>"
+}''';
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: _apiKey,
+      preferredModel: _planningModel,
+      thinkingLevel: _thinkingLevel,
+      temperature: 0.35,
+    );
+    if (json == null) return;
+    final clamp = json['recommendedTuningClamp']?.toString().trim() ?? '';
+    final guard = json['simulationGuard']?.toString().trim() ?? '';
+    final desc = json['exploitDescription']?.toString().trim() ?? '';
+    if (clamp.contains(':') && !cp.tuningParams.contains(clamp)) {
+      cp.tuningParams = [...cp.tuningParams, clamp];
+    }
+    if (guard.isNotEmpty) {
+      final normalizedGuard = guard.startsWith('[SIMULATION GUARD]')
+          ? guard
+          : '[SIMULATION GUARD] $guard';
+      if (!cp.edgeCases.contains(normalizedGuard)) {
+        cp.edgeCases = [...cp.edgeCases, normalizedGuard];
+      }
+    }
+    updateFeatureStates(featureDoc.id, states);
+    if (desc.isNotEmpty) {
+      _recordAgentTrace(AgentRunTrace(
+        agentRole: 'AI Playtest Stress Simulator ($_planningModel)',
+        userGoal: 'Deep Stress Analysis on ${featureDoc.title}',
+        reasoning: desc,
+        toolCalls: [
+          AgentToolCall(
+            toolName: 'ai_simulate_playtest_stress',
+            targetTitle: '${featureDoc.title} · Checkpoint ${idx + 1}',
+            summary: 'Injected AI stress clamp ($clamp) & guard via $_planningModel',
+          ),
+        ],
+      ));
+    }
   }
 
   /// Option 4: Builds a Post-Release Retrospective & Auto-Carryover Summary for the active Release.
@@ -2630,7 +2738,85 @@ class WorkbenchProvider extends ChangeNotifier {
 
     selectFeature(featId);
     _syncActiveProjectMetadata();
+    if (GeminiAgentClient.hasKey(_apiKey)) {
+      _enrichLiveFeatureWithAi(featId, beatDoc.title);
+    }
     return featId;
+  }
+
+  Future<void> _enrichLiveFeatureWithAi(
+    String featureId,
+    String beatTitle,
+  ) async {
+    final featDoc = documents[featureId];
+    if (featDoc == null) return;
+    final states = FeatureStateNode.getStatesForDocument(featDoc);
+    if (states.isEmpty) return;
+    final projTitle = activeProject?.title ?? 'Game Prototype';
+    final engineLabel = _activeEngineLabel;
+    final prompt = '''
+You are the Systems Designer for "$projTitle" ($engineLabel).
+Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
+Return ONLY a JSON object:
+{
+  "goal": "<1 plain-English sentence starting with Build/Implement>",
+  "doneWhen": "<1 observable playtest completion condition>",
+  "checkpointTitle": "<2-4 word playable checkpoint title>",
+  "playtestGate": "<Action -> Observable result>",
+  "tasks": [
+    "<Task 1 title> (2h)",
+    "<Task 2 title> (1h)",
+    "<Task 3 title> (1h)"
+  ],
+  "tuningParams": [
+    "<param1: numericValue unit>",
+    "<param2: numericValue unit>"
+  ],
+  "edgeCases": [
+    "[STATE GUARD] <concise guard rule>"
+  ]
+}''';
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: _apiKey,
+      preferredModel: _conversationModel,
+      thinkingLevel: _thinkingLevel,
+      temperature: 0.4,
+    );
+    if (json != null && documents.containsKey(featureId)) {
+      final cp = states.first;
+      final aiTitle = json['checkpointTitle']?.toString().trim() ?? '';
+      final aiGate = json['playtestGate']?.toString().trim() ?? '';
+      final rawTasks = json['tasks'];
+      final rawTuning = json['tuningParams'];
+      final rawGuards = json['edgeCases'];
+      if (aiTitle.isNotEmpty) {
+        cp.name = 'Checkpoint 1: $aiTitle';
+      }
+      if (aiGate.isNotEmpty) {
+        cp.trigger = 'Playtest: $aiGate';
+      }
+      if (rawTasks is List && rawTasks.isNotEmpty) {
+        cp.checklist = [
+          for (int i = 0; i < rawTasks.length; i++)
+            Subtask(
+              id: '${featureId}_ai_t${i + 1}',
+              text: rawTasks[i].toString().trim(),
+              completed: false,
+            ),
+        ];
+      }
+      if (rawTuning is List && rawTuning.isNotEmpty) {
+        cp.tuningParams =
+            rawTuning.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+      }
+      if (rawGuards is List && rawGuards.isNotEmpty) {
+        cp.edgeCases =
+            rawGuards.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+      }
+      updateFeatureStates(featureId, states);
+    }
+    await synthesizeFeatureHowToStepsWithAi(featureId);
   }
 
   /// Renames an active Feature document directly inside `2. Workbench` and syncs `_releaseBlueprint`.
@@ -2873,7 +3059,107 @@ class WorkbenchProvider extends ChangeNotifier {
       ],
     ));
     updateFeatureStates(featureId, states);
+    if (GeminiAgentClient.hasKey(_apiKey)) {
+      _enrichPlaytestFixWithAi(
+        featureId: featureId,
+        states: states,
+        checkpointIndex: checkpointIndex,
+        fixTaskIndex: newTaskIndex,
+        issueDescription: cleanIssue,
+      );
+    }
     return newTaskIndex;
+  }
+
+  Future<void> _enrichPlaytestFixWithAi({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required int fixTaskIndex,
+    required String issueDescription,
+  }) async {
+    if (checkpointIndex < 0 || checkpointIndex >= states.length) return;
+    final cpNode = states[checkpointIndex];
+    if (fixTaskIndex < 0 || fixTaskIndex >= cpNode.checklist.length) return;
+    final fixTask = cpNode.checklist[fixTaskIndex];
+    final featTitle = documents[featureId]?.title ?? cpNode.cleanStageTitle;
+    final engineLabel = _activeEngineLabel;
+    final taskNum = fixTaskIndex + 1;
+
+    final prompt = '''
+You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
+Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize a concrete 3-step engine fix:
+Reported Bug: "$issueDescription"
+Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+Active Guards: ${cpNode.edgeCases.join(', ')}
+
+Return ONLY a JSON object with 3 concrete fix steps:
+{
+  "playtestGuard": "[PLAYTEST GUARD] <1 concise rule preventing this bug>",
+  "steps": [
+    {
+      "title": "STEP $taskNum.1 · <SHORT LITERAL STEP TITLE>",
+      "stepPath": "<Exact $engineLabel panel/inspector/script path>",
+      "instruction": "<1 sentence concrete fix/inspection instruction>",
+      "codeFormula": "<2-4 lines of $engineLabel code or node setup>",
+      "verifyResult": "<1 sentence visual/console check in Play mode>"
+    }
+  ]
+}''';
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: _apiKey,
+      preferredModel: _planningModel,
+      thinkingLevel: _thinkingLevel,
+      temperature: 0.3,
+    );
+    if (json == null) return;
+    final rawSteps = json['steps'];
+    if (rawSteps is List && rawSteps.isNotEmpty) {
+      final updatedSubs = <Subtask>[];
+      for (int i = 0; i < rawSteps.length; i++) {
+        final item = rawSteps[i];
+        if (item is Map) {
+          final title = item['title']?.toString().trim() ?? '';
+          final path = item['stepPath']?.toString().trim() ?? '';
+          final instr = item['instruction']?.toString().trim() ?? '';
+          final code = item['codeFormula']?.toString().trim() ?? '';
+          final verify = item['verifyResult']?.toString().trim() ?? '';
+          final prevDone = i < fixTask.children.length
+              ? fixTask.children[i].completed
+              : false;
+          updatedSubs.add(
+            Subtask(
+              id: i < fixTask.children.length
+                  ? fixTask.children[i].id
+                  : generateUniqueId('fix_ai_sub_${i + 1}'),
+              text: title.isNotEmpty
+                  ? title
+                  : 'STEP $taskNum.${i + 1} · APPLY ROOT-CAUSE FIX ${i + 1}',
+              specNotes: instr,
+              codeSnippet: code,
+              codeLanguage: path,
+              verification: verify,
+              codeTargetFile: 'custom_snippet',
+              completed: prevDone,
+            ),
+          );
+        }
+      }
+      if (updatedSubs.isNotEmpty) {
+        fixTask.children = updatedSubs;
+      }
+    }
+    final aiGuard = json['playtestGuard']?.toString().trim() ?? '';
+    if (aiGuard.isNotEmpty) {
+      final normGuard = aiGuard.startsWith('[PLAYTEST GUARD]')
+          ? aiGuard
+          : '[PLAYTEST GUARD] $aiGuard';
+      if (!cpNode.edgeCases.contains(normGuard)) {
+        cpNode.edgeCases = [...cpNode.edgeCases, normGuard];
+      }
+    }
+    updateFeatureStates(featureId, states);
   }
 
   /// Tailors the checkable How-To sub-steps (`Step X.1` through `Step X.N`) for a specific
@@ -3016,10 +3302,153 @@ Return ONLY a JSON object with this schema:
       // before syncing project metadata so selected_beat_id / selected_feature_id are persisted together.
       _selectFirstIncompleteFeatureInActiveRelease();
       _syncActiveProjectMetadata();
+      if (_selectedFeatureId != null && GeminiAgentClient.hasKey(_apiKey)) {
+        synthesizeFeatureHowToStepsWithAi(_selectedFeatureId!);
+      }
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
+    }
+  }
+
+  final Set<String> _aiSynthesizedFeatureSteps = <String>{};
+
+  /// Synthesizes bespoke, engine-specific 3-Area How-To Sub-Steps (`Where` -> `Code / Action` -> `Verify`)
+  /// for the active checkpoint of `featureId` using `_planningModel` (`gemini-4-argon`).
+  Future<void> synthesizeFeatureHowToStepsWithAi(String featureId) async {
+    if (!GeminiAgentClient.hasKey(_apiKey)) return;
+    final feat = documents[featureId];
+    if (feat == null) return;
+    final engineLabel = _activeEngineLabel;
+    final engineHint = _activeEngineHint;
+    final synthKey = '${featureId}_$engineLabel';
+    if (_aiSynthesizedFeatureSteps.contains(synthKey)) return;
+
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    if (states.isEmpty) return;
+    final activeVer = activeReleaseVersionTag;
+    final cpIndex = states.indexWhere((s) => s.releaseVersion == activeVer);
+    final cpNode = cpIndex >= 0 ? states[cpIndex] : states.first;
+    if (cpNode.checklist.isEmpty) return;
+
+    // Skip if already customized with custom_snippet across tasks
+    final alreadyCustom = cpNode.checklist.every(
+      (t) =>
+          t.children.isNotEmpty &&
+          t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
+    );
+    if (alreadyCustom) {
+      _aiSynthesizedFeatureSteps.add(synthKey);
+      return;
+    }
+
+    _aiSynthesizedFeatureSteps.add(synthKey);
+    for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+      TaskHowToBlueprint.resolve(
+        parentTask: cpNode.checklist[tIdx],
+        taskIndex: tIdx,
+        checkpointNode: cpNode,
+        engineHint: engineHint,
+      );
+    }
+
+    final projTitle = activeProject?.title ?? 'Game Prototype';
+    final taskSummaries = <String>[];
+    for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+      taskSummaries.add('Task ${tIdx + 1}: "${cpNode.checklist[tIdx].text}"');
+    }
+
+    final prompt = '''
+You are the Principal Game Engine Architect ($engineLabel) for "$projTitle".
+Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+Tasks:
+${taskSummaries.join('\n')}
+Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+Active Guards: ${cpNode.edgeCases.join(', ')}
+
+For each task (1..${cpNode.checklist.length}), return 3 to 5 sequential sub-steps where each step specifies:
+1. "title": "STEP X.Y · SHORT LITERAL STEP TITLE"
+2. "stepPath": Exact $engineLabel editor panel/menu/inspector path (e.g., "Scene Dock → + Add Child Node" or "Hierarchy → + Create Empty" or "Content Browser → Blueprint Class")
+3. "instruction": 1-2 sentences explaining exactly what to click or type in $engineLabel
+4. "codeFormula": 2-5 lines of concrete $engineLabel code or node/property configuration using the feature's tuning parameters and guards
+5. "verifyResult": 1 sentence observable verification check in the editor or Play mode
+
+Return ONLY valid JSON:
+{
+  "tasks": [
+    {
+      "taskIndex": 0,
+      "subSteps": [
+        {
+          "title": "STEP 1.1 · ...",
+          "stepPath": "...",
+          "instruction": "...",
+          "codeFormula": "...",
+          "verifyResult": "..."
+        }
+      ]
+    }
+  ]
+}''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: _apiKey,
+      preferredModel: _planningModel,
+      thinkingLevel: _thinkingLevel,
+      temperature: 0.3,
+    );
+    final rawTasks = json?['tasks'];
+    if (rawTasks is! List || rawTasks.isEmpty) return;
+
+    bool mutated = false;
+    for (final rawTask in rawTasks) {
+      if (rawTask is! Map) continue;
+      final tIdx = int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
+      if (tIdx < 0 || tIdx >= cpNode.checklist.length) continue;
+      final parentTask = cpNode.checklist[tIdx];
+      final taskNum = tIdx + 1;
+      final rawSubs = rawTask['subSteps'];
+      if (rawSubs is! List || rawSubs.isEmpty) continue;
+
+      final newChildren = <Subtask>[];
+      for (int sIdx = 0; sIdx < rawSubs.length; sIdx++) {
+        final item = rawSubs[sIdx];
+        if (item is! Map) continue;
+        final title = item['title']?.toString().trim() ?? '';
+        final path = item['stepPath']?.toString().trim() ?? '';
+        final instr = item['instruction']?.toString().trim() ?? '';
+        final code = item['codeFormula']?.toString().trim() ?? '';
+        final verify = item['verifyResult']?.toString().trim() ?? '';
+        if (instr.isEmpty && code.isEmpty) continue;
+        final prevDone = sIdx < parentTask.children.length
+            ? parentTask.children[sIdx].completed
+            : parentTask.completed;
+        newChildren.add(
+          Subtask(
+            id: '${parentTask.id}_sub_${sIdx + 1}',
+            text: title.isNotEmpty
+                ? title
+                : 'STEP $taskNum.${sIdx + 1} · IMPLEMENT STEP ${sIdx + 1}',
+            specNotes: instr,
+            codeSnippet: code,
+            codeLanguage: path,
+            verification: verify,
+            codeTargetFile: 'custom_snippet',
+            completed: prevDone,
+          ),
+        );
+      }
+      if (newChildren.isNotEmpty) {
+        parentTask.children = newChildren;
+        mutated = true;
+      }
+    }
+
+    if (mutated) {
+      TaskHowToBlueprint.clearCache();
+      updateFeatureStates(featureId, states);
     }
   }
 
@@ -3037,6 +3466,9 @@ Return ONLY a JSON object with this schema:
       LocalVaultService.saveDocument(proj);
     }
     notifyListeners();
+    if (_selectedFeatureId != null && GeminiAgentClient.hasKey(_apiKey)) {
+      synthesizeFeatureHowToStepsWithAi(_selectedFeatureId!);
+    }
   }
 
   void selectFeature(String featureId) {
@@ -3055,6 +3487,9 @@ Return ONLY a JSON object with this schema:
       LocalVaultService.saveDocument(proj);
     }
     notifyListeners();
+    if (GeminiAgentClient.hasKey(_apiKey)) {
+      synthesizeFeatureHowToStepsWithAi(featureId);
+    }
   }
 
   void updateFeatureStates(String featureId, List<FeatureStateNode> states) {

@@ -990,9 +990,29 @@ Return ONLY valid JSON:
         buf.writeln('    /// Checkpoint ${i + 1}: ${cp.cleanStageTitle}');
         buf.writeln('    private void ExecuteCheckpoint${i + 1}()');
         buf.writeln('    {');
-        for (final task in cp.checklist) {
+        for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
+          final task = cp.checklist[tIdx];
           buf.writeln('        // Task: ${task.text}');
+          final resolved = TaskHowToBlueprint.resolve(
+            parentTask: task,
+            taskIndex: tIdx,
+            checkpointNode: cp,
+            engineHint: engineLabel,
+          );
+          for (final sub in resolved.subSteps) {
+            final firstCodeLine = sub.codeFormula
+                .split('\n')
+                .map((l) => l.trim())
+                .firstWhere(
+                  (l) => l.isNotEmpty && !l.startsWith('//'),
+                  orElse: () => '',
+                );
+            if (firstCodeLine.isNotEmpty) {
+              buf.writeln('        // ${sub.shortTitle}: $firstCodeLine');
+            }
+          }
         }
+        buf.writeln('        if (isStateActive) { /* Active state update */ }');
         buf.writeln('    }');
       }
       buf.writeln('}');
@@ -1028,8 +1048,28 @@ Return ONLY valid JSON:
         buf.writeln('    // Checkpoint ${i + 1}: ${cp.cleanStageTitle}');
         buf.writeln('    void ExecuteCheckpoint${i + 1}(float DeltaTime)');
         buf.writeln('    {');
-        for (final task in cp.checklist) {
+        for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
+          final task = cp.checklist[tIdx];
           buf.writeln('        // Task: ${task.text}');
+          final resolved = TaskHowToBlueprint.resolve(
+            parentTask: task,
+            taskIndex: tIdx,
+            checkpointNode: cp,
+            engineHint: engineLabel,
+            unrealCppMode: true,
+          );
+          for (final sub in resolved.subSteps) {
+            final firstCodeLine = sub.codeFormula
+                .split('\n')
+                .map((l) => l.trim())
+                .firstWhere(
+                  (l) => l.isNotEmpty && !l.startsWith('//'),
+                  orElse: () => '',
+                );
+            if (firstCodeLine.isNotEmpty) {
+              buf.writeln('        // ${sub.shortTitle}: $firstCodeLine');
+            }
+          }
         }
         buf.writeln('    }');
       }
@@ -1066,10 +1106,29 @@ Return ONLY valid JSON:
         if (cp.checklist.isEmpty) {
           buf.writeln('\tpass');
         } else {
-          for (final task in cp.checklist) {
+          for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
+            final task = cp.checklist[tIdx];
             buf.writeln('\t# Task: ${task.text}');
+            final resolved = TaskHowToBlueprint.resolve(
+              parentTask: task,
+              taskIndex: tIdx,
+              checkpointNode: cp,
+              engineHint: engineLabel,
+            );
+            for (final sub in resolved.subSteps) {
+              final firstCodeLine = sub.codeFormula
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .firstWhere(
+                    (l) => l.isNotEmpty && !l.startsWith('#'),
+                    orElse: () => '',
+                  );
+              if (firstCodeLine.isNotEmpty) {
+                buf.writeln('\t# ${sub.shortTitle}: $firstCodeLine');
+              }
+            }
           }
-          buf.writeln('\tpass');
+          buf.writeln('\t_is_state_active = delta > 0.0');
         }
       }
     }
@@ -1081,6 +1140,65 @@ Return ONLY valid JSON:
       code: buf.toString().trimRight(),
       exportedVariables: allTuning,
       embeddedGuards: allGuards,
+    );
+  }
+
+  /// Async AI-powered Starter Script synthesis (`gemini-4-argon`).
+  /// Falls back to `generateFeatureScriptBundle` if offline or if JSON generation fails.
+  static Future<FeatureScriptBundle> generateFeatureScriptBundleWithAi({
+    required TierDocument featureDoc,
+    required List<FeatureStateNode> states,
+    required String engineLabel,
+    required String apiKey,
+    String preferredModel = 'gemini-4-argon',
+  }) async {
+    final fallback = generateFeatureScriptBundle(
+      featureDoc: featureDoc,
+      states: states,
+      engineLabel: engineLabel,
+    );
+    if (!GeminiAgentClient.hasKey(apiKey)) return fallback;
+
+    final cpSummary = <String>[];
+    for (int i = 0; i < states.length; i++) {
+      final cp = states[i];
+      final tasks = cp.checklist.map((t) => t.text).join('; ');
+      cpSummary.add(
+        'Checkpoint ${i + 1} (${cp.cleanStageTitle}): tasks=[$tasks], tuning=[${cp.tuningParams.join(", ")}], guards=[${cp.edgeCases.join(", ")}]',
+      );
+    }
+
+    final prompt = '''
+You are the Systems Architecture & Engine Code Synthesizer for LAYERS-Agentic.
+Generate a complete, clean, ready-to-paste Starter Script for "${featureDoc.title}" in $engineLabel (${fallback.fileName}).
+Checkpoints & Specs:
+${cpSummary.join('\n')}
+
+Requirements:
+1. Preserve all exported tuning variables (${fallback.exportedVariables.join(', ')}) and embedded guard comments (${fallback.embeddedGuards.join(', ')}).
+2. Implement real, functional methods for each checkpoint (`ExecuteCheckpoint1` / `_execute_checkpoint_1`, etc.) with concrete input/state/guard logic instead of empty stubs.
+3. Return strict JSON:
+{
+  "code": "<complete source code for ${fallback.fileName}>"
+}''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: preferredModel,
+      thinkingLevel: 'LOW',
+      temperature: 0.35,
+    );
+    final aiCode = json?['code']?.toString().trim() ?? '';
+    if (aiCode.length < 80) return fallback;
+
+    return FeatureScriptBundle(
+      fileName: fallback.fileName,
+      engineLabel: fallback.engineLabel,
+      language: fallback.language,
+      code: aiCode,
+      exportedVariables: fallback.exportedVariables,
+      embeddedGuards: fallback.embeddedGuards,
     );
   }
 

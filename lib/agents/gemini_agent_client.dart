@@ -83,6 +83,12 @@ RULES:
                   };
           }
 
+          final isHeavyPlanningModel =
+              model.contains('argon') || model.contains('pro');
+          final timeoutDuration = Duration(
+            seconds: isHeavyPlanningModel ? 15 : 8,
+          );
+
           final response = await http
               .post(
                 uri,
@@ -98,7 +104,7 @@ RULES:
                   'generationConfig': genConfig,
                 }),
               )
-              .timeout(const Duration(seconds: 8));
+              .timeout(timeoutDuration);
 
           if (response.statusCode == 200) {
             lastErrorStatus = null;
