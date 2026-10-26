@@ -1455,6 +1455,164 @@ Return ONLY valid JSON:
     );
   }
 
+  /// Refreshes ONLY the 3 Concept Expansion / Twist Cards on the Stage 1A New Project screen
+  /// while strictly preserving `existingIntake.rawIdea`, `workingTitle`, `baseSummary`, and `mechanics`.
+  static Future<List<SparkExpansionCard>> refreshSparkExpansionCards({
+    required SparkIdeaIntakeResult existingIntake,
+    required int suggestionVariantOffset,
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
+  }) async {
+    final previousTitles = existingIntake.expansionCards
+        .map((c) => c.title.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    if (GeminiAgentClient.hasKey(apiKey)) {
+      final prompt = '''
+You are an indie game producer proposing 3 NEW gameplay expansion / twist cards for this exact game concept:
+Working Title: "${existingIntake.workingTitle}"
+Original Idea: "${existingIntake.rawIdea}"
+Current Summary: "${existingIntake.baseSummary}"
+Core Mechanics: ${existingIntake.mechanics.join(', ')}
+${previousTitles.isNotEmpty ? 'Previously Shown Cards (DO NOT REPEAT): ${previousTitles.join(' | ')}' : ''}
+
+${GeminiAgentClient.compactStyleRules}
+- Stay 100% faithful to "${existingIntake.workingTitle}" and its exact subject, genre, and mechanics (never switch to an unrelated genre or theme).
+- Propose 3 distinct, concrete playable twists that complement "${existingIntake.workingTitle}".
+
+Return ONLY valid JSON:
+{
+  "expansionCards": [
+    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences describing the observable mechanic.", "additionSummary": "Concise clause"},
+    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences describing the risk/reward tension.", "additionSummary": "Concise clause"},
+    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences describing the progression payoff.", "additionSummary": "Concise clause"}
+  ]
+}
+''';
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: apiKey,
+        preferredModel: modelName,
+        thinkingLevel: thinkingLevel,
+        temperature: 0.65,
+      );
+      if (json != null) {
+        final rawCards = json['expansionCards'];
+        final cards = <SparkExpansionCard>[];
+        if (rawCards is List) {
+          const accents = ['amber', 'emerald', 'neutral'];
+          for (int i = 0; i < rawCards.length && i < 3; i++) {
+            final item = rawCards[i];
+            if (item is Map) {
+              cards.add(
+                SparkExpansionCard(
+                  badge: (item['badge'] ?? '0${i + 1} · IDEA ADDITION')
+                      .toString()
+                      .trim(),
+                  title: (item['title'] ?? 'Gameplay Twist ${i + 1}')
+                      .toString()
+                      .trim(),
+                  description: (item['description'] ?? '').toString().trim(),
+                  additionSummary:
+                      (item['additionSummary'] ?? item['title'] ?? '')
+                          .toString()
+                          .trim(),
+                  accentType: accents[i % accents.length],
+                ),
+              );
+            }
+          }
+        }
+        if (cards.length == 3) {
+          return _preserveSelectedExpansionCards(
+            existingCards: existingIntake.expansionCards,
+            freshCards: cards,
+          );
+        }
+      }
+    }
+
+    final fallback = buildDeterministicSparkIntake(
+      rawIdea: existingIntake.rawIdea,
+      existingIntake: existingIntake,
+      suggestionVariantOffset: suggestionVariantOffset,
+      isUpdateAction: false,
+    );
+    return fallback.expansionCards;
+  }
+
+  static List<SparkExpansionCard> _preserveSelectedExpansionCards({
+    required List<SparkExpansionCard> existingCards,
+    required List<SparkExpansionCard> freshCards,
+  }) {
+    final result = <SparkExpansionCard>[];
+    for (int i = 0; i < 3; i++) {
+      if (i < existingCards.length && existingCards[i].isSelected) {
+        result.add(existingCards[i]);
+      } else if (i < freshCards.length) {
+        result.add(freshCards[i]);
+      }
+    }
+    return result;
+  }
+
+  /// Regenerates 3 fresh Option Cards for a specific Stage 1B section (`optionKey`)
+  /// using `gemini-flash-latest` when an API key is configured, staying strictly on the user's concept.
+  static Future<List<String>?> regenerateSectionOptionsWithAi({
+    required ProjectConceptBlueprint draft,
+    required String optionKey,
+    required List<String> currentOptions,
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
+  }) async {
+    if (!GeminiAgentClient.hasKey(apiKey)) return null;
+
+    final prompt = '''
+You are an indie game producer generating 3 fresh Option Cards for the "$optionKey" section of this game concept:
+Title: "${draft.title}"
+Spark Premise: "${draft.sparkIdea}"
+Current Goal: "${draft.goal}"
+Current Core Loop: ${draft.coreLoopBeats.join(' -> ')}
+${currentOptions.isNotEmpty ? 'Previously Shown Options (DO NOT REPEAT): ${currentOptions.join(' | ')}' : ''}
+
+${GeminiAgentClient.compactStyleRules}
+- Stay 100% faithful to "${draft.title}" and its exact subject and mechanics.
+- Format each option as "Short Label: Concrete statement tailored to ${draft.title}".
+
+Return ONLY valid JSON:
+{
+  "options": [
+    "Option Label 1: Concrete option tailored to ${draft.title}",
+    "Option Label 2: Concrete option tailored to ${draft.title}",
+    "Option Label 3: Concrete option tailored to ${draft.title}"
+  ]
+}
+''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: modelName,
+      thinkingLevel: thinkingLevel,
+      temperature: 0.65,
+    );
+    final rawList = json?['options'];
+    if (rawList is List) {
+      final parsed = rawList
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .take(3)
+          .toList();
+      if (parsed.length >= 2) {
+        return parsed;
+      }
+    }
+    return null;
+  }
+
   static List<String> _deterministicMechanicsForIdea(String idea) {
     final lower = idea.toLowerCase();
     final hasGrapple = lower.contains('grappl') ||
@@ -1467,9 +1625,8 @@ Return ONLY valid JSON:
     final hasCourierOrCargo = lower.contains('cargo') ||
         lower.contains('courier') ||
         lower.contains('haul') ||
-        lower.contains('settlement') ||
-        lower.contains('supply') ||
-        lower.contains('deliver');
+        (lower.contains('settlement') &&
+            (lower.contains('supply') || lower.contains('deliver')));
 
     if (hasParkour && !hasGrapple) {
       if (hasCourierOrCargo) {
@@ -1526,8 +1683,8 @@ Return ONLY valid JSON:
     final hasCargo = lower.contains('cargo') ||
         lower.contains('haul') ||
         lower.contains('courier') ||
-        lower.contains('settlement') ||
-        lower.contains('supply');
+        (lower.contains('settlement') &&
+            (lower.contains('supply') || lower.contains('deliver')));
 
     if (hasParkour && hasCargo) {
       final setting = lower.contains('metropolis')
@@ -1694,33 +1851,50 @@ Return ONLY valid JSON:
       }
     }
 
-    final title = explicitTitleOverride ??
-        _derivePunchyTitle(
-          effectiveIdea,
-          variantOffset: isUpdateAction ? suggestionVariantOffset : 0,
-        );
-    final mechs =
-        List<String>.from(_deterministicMechanicsForIdea(effectiveIdea));
-    if (existingIntake != null && !isFullNewPitch) {
-      for (final oldTag in existingIntake.mechanics) {
-        if (!mechs.contains(oldTag) &&
-            !_deterministicMechanicsForIdea(existingIntake.rawIdea)
-                .contains(oldTag)) {
-          mechs.add(oldTag);
+    final String title;
+    if (explicitTitleOverride != null) {
+      title = explicitTitleOverride;
+    } else if (existingIntake != null &&
+        !isFullNewPitch &&
+        replacedOldSub == null &&
+        existingIntake.workingTitle.trim().isNotEmpty) {
+      title = existingIntake.workingTitle;
+    } else {
+      title = _derivePunchyTitle(
+        effectiveIdea,
+        variantOffset: isUpdateAction ? suggestionVariantOffset : 0,
+      );
+    }
+
+    final List<String> mechs;
+    if (existingIntake != null && !isUpdateAction) {
+      mechs = List<String>.from(existingIntake.mechanics);
+    } else {
+      mechs = List<String>.from(_deterministicMechanicsForIdea(effectiveIdea));
+      if (existingIntake != null && !isFullNewPitch) {
+        for (final oldTag in existingIntake.mechanics) {
+          if (!mechs.contains(oldTag) &&
+              !_deterministicMechanicsForIdea(existingIntake.rawIdea)
+                  .contains(oldTag)) {
+            mechs.add(oldTag);
+          }
+        }
+      }
+      for (final tag in addedTags) {
+        if (!mechs.any((m) => m.toLowerCase() == tag.toLowerCase())) {
+          mechs.add(tag);
         }
       }
     }
-    for (final tag in addedTags) {
-      if (!mechs.any((m) => m.toLowerCase() == tag.toLowerCase())) {
-        mechs.add(tag);
-      }
-    }
 
-    // Preserve and evolve `existingIntake.baseSummary` on Update Summary instead of replacing it
+    // Preserve `existingIntake.baseSummary` whenever refreshing cards (`!isUpdateAction`)
+    // and evolve it cleanly on Update Summary (`isUpdateAction`) instead of replacing it!
     final hasLegacyQuotedSummary = existingIntake != null &&
         existingIntake.baseSummary.contains('centers on "');
     String summary;
-    if (existingIntake != null &&
+    if (existingIntake != null && !isUpdateAction) {
+      summary = existingIntake.baseSummary;
+    } else if (existingIntake != null &&
         isUpdateAction &&
         !isFullNewPitch &&
         !hasLegacyQuotedSummary) {
@@ -1765,11 +1939,11 @@ Return ONLY valid JSON:
         lower.contains('tether');
     final hasParkourOrCourier = (lower.contains('parkour') ||
             lower.contains('wall-run') ||
-            lower.contains('wallrun') ||
-            lower.contains('cargo') ||
-            lower.contains('courier') ||
-            lower.contains('haul')) &&
+            lower.contains('wallrun')) &&
         !hasGrapple;
+
+    final primaryMechLabel = mechs.isNotEmpty ? mechs.first : title;
+    final secondaryMechLabel = mechs.length > 1 ? mechs[1] : 'Core Objective';
 
     final List<SparkExpansionCard> pool;
     if (hasParkourOrCourier) {
@@ -1878,50 +2052,50 @@ Return ONLY valid JSON:
       pool = [
         SparkExpansionCard(
           badge: '01 · CORE MECHANIC TWIST',
-          title: 'Precision Timing Cancel & Boost',
+          title: '$primaryMechLabel Timing Boost',
           description:
-              'Time your primary action on beat or impact to cancel recovery frames into an immediate speed or power burst.',
-          additionSummary: 'Precision timing cancel into speed/power burst',
+              'Time your $primaryMechLabel action on beat or impact in $title to cancel recovery into an immediate speed or power burst.',
+          additionSummary: '$primaryMechLabel timing cancel into speed/power burst',
           accentType: 'amber',
         ),
         SparkExpansionCard(
           badge: '02 · RISK / REWARD HOOK',
-          title: 'Push-Your-Luck Streak Multiplier',
+          title: '$title Push-Your-Luck Streak',
           description:
-              'Bank your round rewards early for a safe payout, or risk an extra escalation wave for double rewards.',
-          additionSummary: 'Push-your-luck wave escalation vs safe bank choice',
+              'Bank your $title rewards early for a safe payout, or risk an extra $secondaryMechLabel challenge for double rewards.',
+          additionSummary: 'Push-your-luck $title streak vs safe bank choice',
           accentType: 'emerald',
         ),
         SparkExpansionCard(
           badge: '03 · LOOP PAYOFF & UPGRADE',
-          title: '3-Choice Loadout Draft Bench',
+          title: '$title 3-Choice Upgrade Draft',
           description:
-              'Between rounds, pick 1 of 3 tactile mechanic modifiers that noticeably alter how your primary tool behaves.',
-          additionSummary: 'Between-round 3-choice mechanic modifier draft',
+              'Between $title rounds, pick 1 of 3 tactile modifiers that noticeably alter how $primaryMechLabel behaves.',
+          additionSummary: 'Between-round 3-choice $primaryMechLabel modifier draft',
           accentType: 'neutral',
         ),
         SparkExpansionCard(
           badge: '01 · CORE MECHANIC TWIST',
-          title: 'Interactive Arena Hazards',
+          title: 'Interactive $title Environment',
           description:
-              'Knock or redirect arena obstacles into targets to trigger chain-reaction clears.',
-          additionSummary: 'Redirectable arena hazards and chain reactions',
+              'Trigger or redirect interactive elements in the $title play space using $primaryMechLabel to create chain reactions.',
+          additionSummary: 'Interactive $title environment chain reactions',
           accentType: 'amber',
         ),
         SparkExpansionCard(
           badge: '02 · RISK / REWARD HOOK',
-          title: 'Overcharge Cooldown Gamble',
+          title: '$primaryMechLabel Overcharge Gamble',
           description:
-              'Overcharge your primary ability for 2x area effect, triggering a brief cooldown vent if it misses.',
-          additionSummary: 'Overcharge ability risk/reward cooldown vent',
+              'Overcharge your $primaryMechLabel for 2x effect in $title, triggering a brief cooldown recovery if it misses.',
+          additionSummary: 'Overcharge $primaryMechLabel risk/reward trade-off',
           accentType: 'emerald',
         ),
         SparkExpansionCard(
           badge: '03 · LOOP PAYOFF & UPGRADE',
-          title: 'Instant Trial Target Range',
+          title: '$title Prep-Zone Practice Target',
           description:
-              'Test newly unlocked upgrades on a live dummy target right inside the prep zone before starting the next round.',
-          additionSummary: 'Interactive prep-zone target dummy test range',
+              'Test newly unlocked $primaryMechLabel upgrades on an interactive target inside the $title prep area before starting the next round.',
+          additionSummary: 'Interactive $title prep-zone practice target',
           accentType: 'neutral',
         ),
       ];

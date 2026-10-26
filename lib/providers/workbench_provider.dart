@@ -311,17 +311,46 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Cycles the 3 Concept Expansion / Twist Cards on the New Project screen to fresh suggestions.
-  void shuffleSparkExpansionCards() {
+  /// Cycles ONLY the 3 Concept Expansion / Twist Cards on the New Project screen to fresh suggestions,
+  /// never overwriting `workingTitle`, `baseSummary`, or `mechanics`.
+  Future<void> shuffleSparkExpansionCards() async {
+    final currentIntake = _sparkIntake;
+    if (currentIntake == null) return;
     _sparkSuggestionVariantOffset++;
-    if (_sparkIntake != null) {
-      _sparkIntake = ProjectConceptAgent.buildDeterministicSparkIntake(
-        rawIdea: _sparkIntake!.rawIdea,
-        existingIntake: _sparkIntake,
+
+    if (!GeminiAgentClient.hasKey(_apiKey)) {
+      final fallback = ProjectConceptAgent.buildDeterministicSparkIntake(
+        rawIdea: currentIntake.rawIdea,
+        existingIntake: currentIntake,
         suggestionVariantOffset: _sparkSuggestionVariantOffset,
+        isUpdateAction: false,
       );
+      currentIntake.expansionCards = fallback.expansionCards;
+      notifyListeners();
+      return;
     }
+
+    _isAgentBusy = true;
+    _agentProgressStep =
+        'Refreshing suggestions for ${currentIntake.workingTitle} ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
+
+    try {
+      final freshCards = await ProjectConceptAgent.refreshSparkExpansionCards(
+        existingIntake: currentIntake,
+        suggestionVariantOffset: _sparkSuggestionVariantOffset,
+        apiKey: _apiKey,
+        modelName: _conversationModel,
+        thinkingLevel: _thinkingLevel,
+      );
+      if (_sparkIntake == currentIntake) {
+        currentIntake.expansionCards = freshCards;
+      }
+    } finally {
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
   }
 
   /// Clears the current pre-project Idea Summary so the user can start fresh.
@@ -1494,28 +1523,34 @@ class WorkbenchProvider extends ChangeNotifier {
   final Map<String, int> _sectionOptionRefreshOffsets = {};
 
   /// Option 2: Regenerates the 3 Option Playing Cards for a specific Stage 1 section (`01`..`09`).
-  void regenerateStage1SectionOptions(String optionKey) {
+  Future<void> regenerateStage1SectionOptions(String optionKey) async {
     final draft = _conceptDraft;
     if (draft == null) return;
     _pushAgentUndoSnapshot();
     final offset = (_sectionOptionRefreshOffsets[optionKey] ?? 0) + 1;
     _sectionOptionRefreshOffsets[optionKey] = offset;
     final title = draft.title;
+    final previousOptions = List<String>.from(
+      draft.sectionOptions[optionKey] ?? const <String>[],
+    );
+    final leadBeat = draft.coreLoopBeats.isNotEmpty
+        ? draft.coreLoopBeats.first.split(':').first.trim()
+        : '$title Core Control';
 
     List<String> fresh;
     switch (optionKey) {
       case 'goal':
         fresh = [
-          'Speed & Precision Core ($offset): Build a responsive $title greybox loop focused on sub-second movement recovery.',
-          'High-Tension Risk/Reward ($offset): Build a compact $title arena where aggressive positioning multiplies score.',
-          'Tactile Sandbox Toy ($offset): Build a physics-driven $title testbed where core controls feel fun before adding enemies.',
+          'Speed & Precision Core ($offset): Build a responsive $title greybox loop focused on $leadBeat and immediate feedback.',
+          'High-Tension Risk/Reward ($offset): Build a compact $title play space where bold $leadBeat decisions multiply rewards.',
+          'Tactile Sandbox Toy ($offset): Build a physics-driven $title testbed where $leadBeat feels fun before adding secondary systems.',
         ];
         break;
       case 'gameSpec':
         fresh = [
           '2D Side-Scroller · Gamepad + Keyboard · Singleplayer · Tight Room-to-Room Stages',
-          '3D Third-Person Action · Mouse + WASD · Singleplayer · Modular Arena Waves',
-          '2D Isometric Top-Down · Twin-Stick Aim · Singleplayer · Compact Extraction Map',
+          '3D Third-Person Action · Mouse + WASD · Singleplayer · Modular Playable Zones',
+          '2D Isometric Top-Down · Twin-Stick / Cursor · Singleplayer · Compact Loop Map',
         ];
         break;
       case 'techSpec':
@@ -1527,9 +1562,9 @@ class WorkbenchProvider extends ChangeNotifier {
         break;
       case 'designPillars':
         fresh = [
-          'Aggression Is Recovery: Attacking or dashing forward is the fastest way to recover from a mistake · Readable Chaos: Every hazard telegraph is clear at a glance · Zero Dead Time: Restarting a run takes under 1 second',
-          'Momentum Is Currency: Speed unlocks stronger moves and shortcuts · Tactile Impact: Every hit lands with crisp frame-freeze and audio punch · Learn by Doing: Mechanics teach themselves without text popups',
-          'High-Stakes Positioning: Where you stand matters more than button mashing · Expressive Mastery: Simple inputs combine into high-ceiling movement tricks · Instant Feedback: Every action visibly changes the arena state',
+          'Immediate Control Feel: $leadBeat responds in a single frame with clear visual and audio punch · Readable State: Every challenge telegraph in $title is clear at a glance · Zero Dead Time: Restarting a $title round takes under 1 second',
+          'Momentum & Flow: Mastering $leadBeat unlocks faster routes and higher payoffs · Tactile Impact: Every action visibly changes the $title play space · Learn by Doing: $title mechanics teach themselves without text popups',
+          'High-Stakes Decisions: Timing and positioning in $title matter more than button mashing · Expressive Mastery: Simple $leadBeat inputs combine into high-ceiling tricks · Instant Feedback: Every reward and penalty is immediately visible',
         ];
         break;
       case 'tradeOffs':
@@ -1541,9 +1576,9 @@ class WorkbenchProvider extends ChangeNotifier {
         break;
       case 'coreLoop':
         fresh = [
-          'Core Toy & Controls ($offset): Chain primary movement in arena · High-Speed Action: Engage reactive targets · Objective Clear: Bank score under pressure · Loadout Prep & Reset: Swap modifier and restart in 1 key press',
-          'Momentum & Action ($offset): Grapple and vault across hazard gaps · Combat Burst: Defeat elite blocker to unlock exit · Upgrade & Loadout: Pick 1 modifier for next wave · Loop Reset: Instant arena restart',
-          'Immediate Sandbox ($offset): Test primary controls and weapon feel · Wave Escalation: Survive 3 escalating 45-second waves · Climax Check: Break core shield under pressure · Run Summary & Reset: Review best time and loop immediately',
+          'Core Toy & Controls ($offset): Execute $leadBeat in the play space · Primary Challenge: Engage reactive $title targets · Objective Clear: Bank rewards under pressure · Loadout Prep & Reset: Swap modifier and restart in 1 key press',
+          'Escalating Mastery ($offset): Chain $leadBeat actions · Risk/Reward Push: Clear bonus $title objective before timer expires · Upgrade Choice: Pick 1 modifier for next round · Loop Reset: Instant $title restart',
+          'Immediate Sandbox ($offset): Test $leadBeat feel and timing · Round Escalation: Complete 3 escalating $title rounds · Climax Check: Finish final round objective · Run Summary & Reset: Review best score and loop immediately',
         ];
         break;
       case 'exclusions':
@@ -1555,7 +1590,7 @@ class WorkbenchProvider extends ChangeNotifier {
         break;
       case 'doneWhen':
         fresh = [
-          'Win/Fail & Clean Reset: Playtester triggers both win and fail states and resets the $title arena with 100% of dynamic objects restored.',
+          'Win/Fail & Clean Reset: Playtester triggers both win and fail states and resets the $title play space with 100% of dynamic objects restored.',
           'No-Instruction Playtest: A new player understands the primary $title control loop within 30 seconds from on-screen cues alone and finishes a round.',
           '3-Run Loop Endurance: Playtester completes 3 consecutive $title runs in under 5 minutes with responsive controls and zero state soft-locks.',
         ];
@@ -1590,6 +1625,32 @@ class WorkbenchProvider extends ChangeNotifier {
       ],
     ));
     notifyListeners();
+
+    if (GeminiAgentClient.hasKey(_apiKey)) {
+      _isAgentBusy = true;
+      _agentProgressStep =
+          'Refreshing $optionKey options for $title ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+      notifyListeners();
+      try {
+        final aiOptions =
+            await ProjectConceptAgent.regenerateSectionOptionsWithAi(
+          draft: draft,
+          optionKey: optionKey,
+          currentOptions: previousOptions,
+          apiKey: _apiKey,
+          modelName: _conversationModel,
+          thinkingLevel: _thinkingLevel,
+        );
+        if (aiOptions != null && aiOptions.isNotEmpty && _conceptDraft == draft) {
+          draft.sectionOptions[optionKey] = aiOptions;
+          _commitConceptToVault(draft);
+        }
+      } finally {
+        _isAgentBusy = false;
+        _agentProgressStep = null;
+        notifyListeners();
+      }
+    }
   }
 
   /// Option 1: Generates a complete Starter Script Bundle (`.gd`, `.cs`, or `.cpp`) for a Stage 3 Feature.

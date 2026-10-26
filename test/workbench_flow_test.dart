@@ -1488,6 +1488,41 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           afterCourierSearch.baseSummary.toLowerCase(),
           contains('courier'),
         );
+
+        // 8. Regression: Clicking Refresh Suggestions (shuffleSparkExpansionCards) NEVER overwrites
+        // the user's workingTitle, baseSummary, or mechanics, and keeps expansion cards on the same subject
+        provider.clearSparkIdeaIntake();
+        await provider.ingestOrRefineSparkIdea(
+          'A cozy pizza alchemy game where you brew magical toppings and deliver pies to night-shift monsters',
+        );
+        provider.sparkIntake!.workingTitle = 'Cozy Pizza Alchemy';
+        provider.sparkIntake!.baseSummary =
+            'Brew magical toppings and bake custom pizzas for hungry night-shift monsters.';
+        provider.sparkIntake!.mechanics = [
+          'Dough Toss & Oven Timing',
+          'Potion Topping Brew',
+          'Monster Order Rush',
+        ];
+        await provider.shuffleSparkExpansionCards();
+        expect(provider.sparkIntake!.workingTitle, equals('Cozy Pizza Alchemy'));
+        expect(
+          provider.sparkIntake!.baseSummary,
+          equals(
+            'Brew magical toppings and bake custom pizzas for hungry night-shift monsters.',
+          ),
+        );
+        expect(
+          provider.sparkIntake!.mechanics,
+          equals([
+            'Dough Toss & Oven Timing',
+            'Potion Topping Brew',
+            'Monster Order Rush',
+          ]),
+        );
+        expect(
+          provider.sparkIntake!.expansionCards.first.description,
+          contains('Cozy Pizza Alchemy'),
+        );
       },
     );
 
