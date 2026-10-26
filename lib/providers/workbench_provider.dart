@@ -651,11 +651,10 @@ class WorkbenchProvider extends ChangeNotifier {
     _syncCurrentPhaseFromRelease(activeRel);
 
     final savedStage = proj.sections['current_stage'];
-    if (savedStage == WorkbenchStage.releaseWorkbench.name && beats.isNotEmpty) {
+    if ((savedStage == WorkbenchStage.releaseWorkbench.name ||
+            savedStage == WorkbenchStage.releasePlanGate.name) &&
+        beats.isNotEmpty) {
       _currentStage = WorkbenchStage.releaseWorkbench;
-    } else if (savedStage == WorkbenchStage.releasePlanGate.name &&
-        _releaseBlueprint != null) {
-      _currentStage = WorkbenchStage.releasePlanGate;
     } else {
       _currentStage = WorkbenchStage.projectPitch;
     }
@@ -1945,8 +1944,8 @@ class WorkbenchProvider extends ChangeNotifier {
     _syncActiveProjectMetadata();
   }
 
-  /// Switches the Stage 3 Workbench in-place to an already-built Release (`rel.childrenIds.isNotEmpty`),
-  /// or opens Stage 2 (`Release Plan Gate`) if the target Release has not been planned/built yet.
+  /// Switches the Stage 2 Workbench in-place to an already-built Release (`rel.childrenIds.isNotEmpty`),
+  /// or synthesizes and builds the target Release directly into `2. Workbench` if not built yet.
   Future<void> selectActiveRelease(String releaseId) async {
     final targetRel = documents[releaseId];
     if (targetRel == null) return;
@@ -1960,13 +1959,16 @@ class WorkbenchProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await openReleasePlanGate(releaseId: releaseId);
+    await approveConceptAndBuildRelease(releaseId: releaseId);
   }
 
   /// 2-Stage Flow (`1. Concept` -> `2. Workbench`): Synthesizes the Release Blueprint and
-  /// immediately executes it into the active Workbench in one click.
+  /// immediately executes it into the active Workbench in one click without visiting any middle gate screen.
   Future<void> approveConceptAndBuildRelease({String? releaseId}) async {
-    await openReleasePlanGate(releaseId: releaseId);
+    await openReleasePlanGate(
+      releaseId: releaseId,
+      transitionToGateStage: false,
+    );
     if (_releaseBlueprint != null) {
       await approveAndExecuteReleasePlan();
     }
@@ -1984,7 +1986,7 @@ class WorkbenchProvider extends ChangeNotifier {
   Future<ReleaseBlueprint?> prepareProgressiveNextReleaseDraft({
     String? agentDirective,
   }) async {
-    await advanceToNextRelease();
+    await advanceToNextRelease(transitionToGateStage: false);
     _currentStage = WorkbenchStage.releaseWorkbench;
     if (agentDirective != null && agentDirective.trim().isNotEmpty) {
       await sendReleasePlanChatMessage(agentDirective.trim());
@@ -2026,8 +2028,11 @@ class WorkbenchProvider extends ChangeNotifier {
     await openReleasePlanGate(releaseId: activeRelId);
   }
 
-  /// Step 1C -> Stage 2: Lock in the Project Concept and open the Release Plan Gate for the active Release.
-  Future<void> openReleasePlanGate({String? releaseId}) async {
+  /// Step 1C -> Stage 2: Lock in the Project Concept and synthesize the Release Blueprint for the active Release.
+  Future<void> openReleasePlanGate({
+    String? releaseId,
+    bool transitionToGateStage = true,
+  }) async {
     if (_conceptDraft != null && _activeProjectId == null) {
       _commitConceptToVault(_conceptDraft!);
     }
@@ -2122,7 +2127,9 @@ class WorkbenchProvider extends ChangeNotifier {
           ],
         ));
       }
-      _currentStage = WorkbenchStage.releasePlanGate;
+      if (transitionToGateStage) {
+        _currentStage = WorkbenchStage.releasePlanGate;
+      }
       _syncActiveProjectMetadata();
     } finally {
       _isAgentBusy = false;
@@ -2997,7 +3004,7 @@ Return ONLY a JSON object with this schema:
   /// - Phase 1 (Prototype) complete -> Phase 2 (MVP Track: 1 MVP Release per Core Loop Beat)
   /// - Phase 2 (MVP Track) complete -> Phase 3 (Vertical Slice: 1 Polished Gold Standard Level)
   /// - Phase 3 (Vertical Slice) complete -> Phase 4 (Full Production: World & Content Expansion)
-  Future<void> advanceToNextRelease() async {
+  Future<void> advanceToNextRelease({bool transitionToGateStage = true}) async {
     final proj = activeProject;
     if (proj == null) return;
     final releases = projectReleases;
@@ -3007,7 +3014,10 @@ Return ONLY a JSON object with this schema:
     final retro = _lastReleaseRetrospective!;
 
     Future<void> openGateAndRecordRetro(String targetRelId) async {
-      await openReleasePlanGate(releaseId: targetRelId);
+      await openReleasePlanGate(
+        releaseId: targetRelId,
+        transitionToGateStage: transitionToGateStage,
+      );
       if (_releaseBlueprint != null) {
         final carryoverNote = retro.carryoverFeatureTitles.isEmpty
             ? '100% of ${retro.totalCheckpoints} checkpoints verified'

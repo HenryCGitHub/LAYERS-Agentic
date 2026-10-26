@@ -1474,6 +1474,28 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isNot(equals(farmDraft.sectionOptions['exclusions'])),
         );
 
+        // Item 1: Pure 2-Stage Workflow (1. Concept -> 2. Workbench) never transitions through WorkbenchStage.releasePlanGate
+        final observedStages = <WorkbenchStage>[];
+        farmProvider.addListener(() {
+          observedStages.add(farmProvider.currentStage);
+        });
+        await farmProvider.approveConceptAndBuildRelease();
+        expect(farmProvider.currentStage, WorkbenchStage.releaseWorkbench);
+        expect(
+          observedStages.contains(WorkbenchStage.releasePlanGate),
+          isFalse,
+          reason:
+              '2-stage workflow must transition directly from 1. Concept to 2. Workbench without flashing ReleasePlanGate',
+        );
+        await farmProvider.prepareProgressiveNextReleaseDraft();
+        expect(farmProvider.currentStage, WorkbenchStage.releaseWorkbench);
+        expect(
+          observedStages.contains(WorkbenchStage.releasePlanGate),
+          isFalse,
+          reason:
+              'Progressive next-release draft in 2. Workbench must never switch to ReleasePlanGate',
+        );
+
         // Item 2: v0.1 features always start at 0% progress with 1 cohesive greybox checkpoint (never 50% / 15/30 DONE)
         await courierProvider.openReleasePlanGate();
         await courierProvider.approveAndExecuteReleasePlan();

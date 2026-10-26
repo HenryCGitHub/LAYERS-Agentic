@@ -8,7 +8,6 @@ import 'models/feature_state.dart';
 import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
 import 'screens/project_pitch_screen.dart';
-import 'screens/release_plan_gate_screen.dart';
 import 'screens/release_workbench_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -397,7 +396,9 @@ class WorkbenchShell extends StatelessWidget {
                       isCompleted: workbench.isActiveReleaseComplete,
                       onTap: workbench.activeReleaseBeats.isNotEmpty
                           ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
-                          : null,
+                          : (workbench.conceptDraft != null && !workbench.isAgentBusy
+                              ? () => workbench.approveConceptAndBuildRelease()
+                              : null),
                     ),
                   ],
                 ),
@@ -1577,7 +1578,6 @@ class WorkbenchShell extends StatelessWidget {
       case WorkbenchStage.projectPitch:
         return ProjectPitchScreen(workbench: workbench);
       case WorkbenchStage.releasePlanGate:
-        return ReleasePlanGateScreen(workbench: workbench);
       case WorkbenchStage.releaseWorkbench:
         return ReleaseWorkbenchScreen(workbench: workbench);
     }
