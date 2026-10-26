@@ -331,43 +331,6 @@ class TaskHowToBlueprint {
   ) {
     final clean =
         extractCleanTitle(rawText).replaceAll(_anyDurationTagRe, ' ').trim();
-    final lowerClean = clean.toLowerCase();
-    if (lowerClean.contains('loop resolution') ||
-        lowerClean.contains('round clear & reset') ||
-        lowerClean.contains('next-wave loop reset') ||
-        lowerClean.contains('wave-clear / death state transition')) {
-      return (
-        pascalName: 'WaveResetManager',
-        snakeName: 'wave_reset_manager',
-      );
-    }
-    if (lowerClean.contains('active gameplay beat') ||
-        lowerClean.contains('arena movement & combat') ||
-        lowerClean.contains('primary combat & timing') ||
-        lowerClean.contains('core mechanic escalation') ||
-        lowerClean.contains('primary skill execution')) {
-      return (
-        pascalName: 'PlayerCombatActor',
-        snakeName: 'player_combat_actor',
-      );
-    }
-    if (lowerClean.contains('resource & upgrade choice') ||
-        lowerClean.contains('loot & upgrade choice') ||
-        lowerClean.contains('room clear & upgrade') ||
-        lowerClean.contains('wave-clear reward trigger')) {
-      return (
-        pascalName: 'UpgradeChestActor',
-        snakeName: 'upgrade_chest_actor',
-      );
-    }
-    if (lowerClean.contains('prep & loadout') ||
-        lowerClean.contains('staging & loadout') ||
-        lowerClean.contains('staging pedestal')) {
-      return (
-        pascalName: 'LoadoutPedestalActor',
-        snakeName: 'loadout_pedestal_actor',
-      );
-    }
     const stopWords = <String>{
       'create',
       'build',
@@ -433,13 +396,13 @@ class TaskHowToBlueprint {
     }
     final chosen = words.isNotEmpty
         ? words.take(3).toList()
-        : <String>['Grid', 'Tile', 'Actor'];
+        : <String>['Feature', 'Controller'];
     if (!chosen.any((w) =>
         w.toLowerCase() == 'actor' ||
         w.toLowerCase() == 'controller' ||
         w.toLowerCase() == 'node' ||
         w.toLowerCase() == 'manager')) {
-      chosen.add('Actor');
+      chosen.add('Controller');
     }
     final pascal = chosen
         .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
@@ -825,24 +788,9 @@ class TaskHowToBlueprint {
     final bpAsset = 'BP_$pascalAsset';
     final cppClass = 'A$pascalAsset';
 
-    final cpArchetype =
-        MechanicArchetypeProfile.fromFeatureTitle(checkpointNode.cleanStageTitle);
-    final effectiveCategory = cpArchetype.category != 'core'
-        ? cpArchetype.category
-        : (checkpointNode.cleanStageTitle.toLowerCase().contains('greybox core loop')
-            ? 'core'
-            : MechanicArchetypeProfile.inferCategory(
-                '${checkpointNode.cleanStageTitle} $cleanTitle ${checkpointNode.tuningParams.join(' ')} ${checkpointNode.edgeCases.join(' ')}',
-              ));
-    final hasLegacyEconomyMismatch = cpArchetype.category != 'economy' &&
-        checkpointNode.tuningParams.isNotEmpty &&
-        checkpointNode.tuningParams.first.contains('transactionCostBase: 25 gold');
-    final effectiveTuningParams = hasLegacyEconomyMismatch
-        ? cpArchetype.tuningParams
-        : checkpointNode.tuningParams;
-    final effectiveEdgeCases = hasLegacyEconomyMismatch
-        ? cpArchetype.edgeCases
-        : checkpointNode.edgeCases;
+    final effectiveCategory = 'core';
+    final effectiveTuningParams = checkpointNode.tuningParams;
+    final effectiveEdgeCases = checkpointNode.edgeCases;
 
     final primaryVar = effectiveTuningParams.isNotEmpty
         ? effectiveTuningParams[taskIndex % effectiveTuningParams.length]
@@ -1549,39 +1497,6 @@ class TaskHowToBlueprint {
         ));
         return;
       }
-      final contextForLoadoutCheck =
-          '${checkpointNode.cleanStageTitle} $cleanTitle'.toLowerCase();
-      final allowLoadoutOverride = effectiveCategory != 'loadout' ||
-          contextForLoadoutCheck.contains('loadout') ||
-          contextForLoadoutCheck.contains('weapon') ||
-          contextForLoadoutCheck.contains('equip') ||
-          contextForLoadoutCheck.contains('pedestal') ||
-          contextForLoadoutCheck.contains('armory');
-      final mechOverride = allowLoadoutOverride
-          ? MechanicArchetypeProfile.mechanicStepOverride(
-              category: effectiveCategory,
-              taskIndex: taskIndex,
-              stepIdx: phaseIdx,
-              taskNum: taskNum,
-              targetAsset: targetAssetName,
-              primaryVarName: primaryVarName,
-            )
-          : null;
-      if (mechOverride != null) {
-        dynamicSpecs.add((
-          stepHeader:
-              'STEP $taskNum.${dynamicSpecs.length + 1} · ${mechOverride.shortTitle.toUpperCase()}',
-          shortTitle: mechOverride.shortTitle,
-          instruction: mechOverride.instruction,
-          verify: mechOverride.verify,
-          path: rawSpec.path,
-          code: '${mechOverride.codeLead}\n${rawSpec.code}',
-          explain: rawCtx.explain,
-          primaryChip: rawCtx.primaryChip,
-          pitfall: rawCtx.pitfall,
-        ));
-        return;
-      }
       dynamicSpecs.add((
         stepHeader: rawSpec.stepHeader,
         shortTitle: rawSpec.shortTitle,
@@ -1756,21 +1671,7 @@ class TaskHowToBlueprint {
     final hasStaleEconomyOrGuardSteps = parentTask.children.any(
       (c) =>
           c.codeTargetFile != 'custom_snippet' &&
-          ((hasLegacyEconomyMismatch &&
-                  (c.text.toUpperCase().contains('TRANSACTIONCOSTBASE') ||
-                      c.text.toUpperCase().contains('PROCESSDURATIONSEC') ||
-                      c.text.toUpperCase().contains('STACKMAXCAPACITY') ||
-                      (c.codeSnippet ?? '').contains('transactionCostBase'))) ||
-              (effectiveCategory != 'core' &&
-                  (c.text.toUpperCase().contains('DEFINE STATE ENUM') ||
-                      c.text.toUpperCase().contains('BUILD STATE TRANSITION') ||
-                      c.text.toUpperCase().contains('BUILD SETSTATE') ||
-                      c.text.toUpperCase().contains('SWAP VISUAL MATERIAL') ||
-                      c.text.toUpperCase().contains('SWAP MATERIAL') ||
-                      c.text.toUpperCase().contains('STEP STATE WITH INTERPOLATION'))) ||
-              (effectiveCategory == 'ui' &&
-                  (c.codeSnippet ?? '').contains('Shape_Plane / Cube')) ||
-              (c.codeSnippet ?? '').contains('ValidateGuard_') ||
+          ((c.codeSnippet ?? '').contains('ValidateGuard_') ||
               (c.codeSnippet ?? '').contains('_validate_guard_') ||
               (c.codeSnippet ?? '').contains('!IsBoundaryBlocked')),
     );
@@ -1929,17 +1830,8 @@ class TaskHowToBlueprint {
     final taskNum = taskIndex + 1;
     final cleanTitle = extractCleanTitle(parentTask.text);
     final engineLabel = detectEngineLabel(engineHint);
-    final cpArchetype =
-        MechanicArchetypeProfile.fromFeatureTitle(checkpointNode.cleanStageTitle);
-    final hasLegacyEconomyMismatch = cpArchetype.category != 'economy' &&
-        checkpointNode.tuningParams.isNotEmpty &&
-        checkpointNode.tuningParams.first.contains('transactionCostBase: 25 gold');
-    final effectiveTuningParams = hasLegacyEconomyMismatch
-        ? cpArchetype.tuningParams
-        : checkpointNode.tuningParams;
-    final effectiveEdgeCases = hasLegacyEconomyMismatch
-        ? cpArchetype.edgeCases
-        : checkpointNode.edgeCases;
+    final effectiveTuningParams = checkpointNode.tuningParams;
+    final effectiveEdgeCases = checkpointNode.edgeCases;
 
     final primaryVar = effectiveTuningParams.isNotEmpty
         ? effectiveTuningParams[taskIndex % effectiveTuningParams.length]

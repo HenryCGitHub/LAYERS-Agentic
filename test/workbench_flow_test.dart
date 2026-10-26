@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/workspace_agent_tools.dart';
 import 'package:layers_agentic/constants/tiers.dart';
@@ -11,14 +12,867 @@ import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/project_pitch_screen.dart';
 
+Future<Map<String, dynamic>?> _mockGeminiResponder(
+  String prompt,
+  String preferredModel,
+) async {
+  // 1. Stage 1A: refreshSparkExpansionCards
+  if (prompt.contains('proposing 3 NEW gameplay expansion / twist cards')) {
+    final titleMatch =
+        RegExp(r'Working Title: "([^"]+)"').firstMatch(prompt);
+    final wTitle = titleMatch?.group(1) ?? 'Game Concept';
+    return {
+      'expansionCards': [
+        {
+          'badge': '01 · CORE MECHANIC TWIST',
+          'title': 'Chain Combo Surge',
+          'description': 'Chain rapid actions inside $wTitle for a speed boost.',
+          'additionSummary': 'chain combo surge for $wTitle',
+        },
+        {
+          'badge': '02 · RISK / REWARD HOOK',
+          'title': 'Overcharge Gamble',
+          'description': 'Risk overcharging in $wTitle for double payout.',
+          'additionSummary': 'overcharge gamble in $wTitle',
+        },
+        {
+          'badge': '03 · LOOP PAYOFF & UPGRADE',
+          'title': 'Mastery Relic Slot',
+          'description': 'Unlock a relic slot between $wTitle runs.',
+          'additionSummary': 'mastery relic slot for $wTitle',
+        },
+      ],
+    };
+  }
+
+  // 2. Stage 1A: ingestOrRefineSparkIdea
+  if (prompt.contains(
+    'summarizing a developer\'s game idea before building the blueprint',
+  )) {
+    if (prompt.contains('rename to Metro Runner')) {
+      return {
+        'workingTitle': 'Metro Runner',
+        'baseSummary':
+            'Retrieve and deliver vital cargo across a ruined metropolis using fluid parkour while evading patrol drones.',
+        'mechanics': [
+          'Fluid Parkour & Wall-Running',
+          'Cargo Haul Protection',
+          'Patrol Drones',
+        ],
+        'expansionCards': [
+          {
+            'badge': '01 · CORE MECHANIC TWIST',
+            'title': 'Momentum Slide & Rooftop Kick',
+            'description': 'Slide under obstacles and kick off ledges.',
+            'additionSummary': 'momentum slide and rooftop kick',
+          },
+          {
+            'badge': '02 · RISK / REWARD HOOK',
+            'title': 'Heavy Crate Overhaul',
+            'description': 'Carry extra crates for bonus payout.',
+            'additionSummary': 'heavy crate overhaul',
+          },
+          {
+            'badge': '03 · LOOP PAYOFF & UPGRADE',
+            'title': 'Grapple Rig Tuning',
+            'description': 'Upgrade rig speed between deliveries.',
+            'additionSummary': 'grapple rig tuning',
+          },
+        ],
+      };
+    }
+    if (prompt.contains('instead of scavengers use patrol drones')) {
+      return {
+        'workingTitle': 'Metropolis Cargo Parkour',
+        'baseSummary':
+            'Retrieve and deliver vital cargo across a ruined metropolis using fluid parkour while evading patrol drones.',
+        'mechanics': [
+          'Fluid Parkour & Wall-Running',
+          'Cargo Haul Protection',
+          'Patrol Drones',
+        ],
+        'expansionCards': [
+          {
+            'badge': '01 · CORE MECHANIC TWIST',
+            'title': 'Momentum Slide & Rooftop Kick',
+            'description': 'Slide under obstacles and kick off ledges.',
+            'additionSummary': 'momentum slide and rooftop kick',
+          },
+          {
+            'badge': '02 · RISK / REWARD HOOK',
+            'title': 'EMP Drone Jammer',
+            'description': 'Disable nearby patrol drones briefly.',
+            'additionSummary': 'EMP drone jammer',
+          },
+          {
+            'badge': '03 · LOOP PAYOFF & UPGRADE',
+            'title': 'Exo-Boot Thrusters',
+            'description': 'Boost wall-run distance.',
+            'additionSummary': 'exo-boot thrusters',
+          },
+        ],
+      };
+    }
+    if (prompt.contains('Selected Idea Additions to Fold In: Wall-Run Chain & Vault Boost')) {
+      return {
+        'workingTitle': 'Metropolis Cargo Parkour',
+        'baseSummary':
+            'Retrieve and deliver vital cargo across a ruined metropolis using fluid parkour, wall-run chain and rooftop vault speed boost.',
+        'mechanics': [
+          'Fluid Parkour & Wall-Running',
+          'Cargo Haul Protection',
+          'Wall-Run Chain & Vault Boost',
+        ],
+        'expansionCards': [
+          {
+            'badge': '01 · CORE MECHANIC TWIST',
+            'title': 'Momentum Slide & Rooftop Kick',
+            'description': 'Slide under obstacles and kick off ledges.',
+            'additionSummary': 'momentum slide and rooftop kick',
+          },
+          {
+            'badge': '02 · RISK / REWARD HOOK',
+            'title': 'Heavy Crate Overhaul',
+            'description': 'Carry extra crates for bonus payout.',
+            'additionSummary': 'heavy crate overhaul',
+          },
+          {
+            'badge': '03 · LOOP PAYOFF & UPGRADE',
+            'title': 'Safe-House Shortcut',
+            'description': 'Unlock rooftop shortcuts.',
+            'additionSummary': 'safe-house shortcut',
+          },
+        ],
+      };
+    }
+    if (prompt.contains('Brave areas too lethal')) {
+      return {
+        'workingTitle': 'Metropolis Cargo Parkour',
+        'baseSummary':
+            'Navigate a ruined metropolis using fluid parkour and high-speed combat to deliver vital cargo through scavenger ambushes.',
+        'mechanics': [
+          'Fluid Parkour & Wall-Running',
+          'Cargo Haul Protection',
+          'Scavenger Ambush Defense',
+        ],
+        'expansionCards': [
+          {
+            'badge': '01 · CORE MECHANIC TWIST',
+            'title': 'Wall-Run Chain & Vault Boost',
+            'description': 'Chain wall-runs into rooftop vault speed boosts.',
+            'additionSummary': 'wall-run chain and rooftop vault speed boost',
+          },
+          {
+            'badge': '02 · RISK / REWARD HOOK',
+            'title': 'Fragile High-Value Cargo',
+            'description': 'Deliver fragile cargo without taking hits.',
+            'additionSummary': 'fragile high-value cargo',
+          },
+          {
+            'badge': '03 · LOOP PAYOFF & UPGRADE',
+            'title': 'Runner Rig Upgrades',
+            'description': 'Spend delivery credits on parkour gear.',
+            'additionSummary': 'runner rig upgrades',
+          },
+        ],
+      };
+    }
+    if (prompt.contains('supply courier') ||
+        prompt.contains('staying longer in the zone')) {
+      return {
+        'workingTitle': 'Settlement Supply Courier',
+        'baseSummary':
+            'Travel from settlement to settlement as an armed supply courier, clearing enemy zones and searching hidden caches for extra credits.',
+        'mechanics': [
+          'Settlement Route Delivery',
+          'Zone Combat & Cache Search',
+          'Item Quest Extraction',
+        ],
+        'expansionCards': [
+          {
+            'badge': '01 · CORE MECHANIC TWIST',
+            'title': 'Cache Signal Scanner',
+            'description': 'Ping nearby hidden supply caches.',
+            'additionSummary': 'cache signal scanner',
+          },
+          {
+            'badge': '02 · RISK / REWARD HOOK',
+            'title': 'Overtime Zone Bounty',
+            'description': 'Stay longer in hostile zones for higher credit bounties.',
+            'additionSummary': 'overtime zone bounty',
+          },
+          {
+            'badge': '03 · LOOP PAYOFF & UPGRADE',
+            'title': 'Settlement Caravan Upgrades',
+            'description': 'Upgrade courier armor and weapon slots.',
+            'additionSummary': 'settlement caravan upgrades',
+          },
+        ],
+      };
+    }
+    if (prompt.contains('pizza alchemy')) {
+      return {
+        'workingTitle': 'Cozy Pizza Alchemy',
+        'baseSummary':
+            'Brew magical toppings and bake custom pizzas for hungry night-shift monsters.',
+        'mechanics': [
+          'Dough Toss & Oven Timing',
+          'Potion Topping Brew',
+          'Monster Order Rush',
+        ],
+        'expansionCards': [
+          {
+            'badge': '01 · CORE MECHANIC TWIST',
+            'title': 'Enchanted Oven Flame',
+            'description': 'Control magical oven heat in Cozy Pizza Alchemy.',
+            'additionSummary': 'enchanted oven flame',
+          },
+          {
+            'badge': '02 · RISK / REWARD HOOK',
+            'title': 'Spicy Cauldron Rush',
+            'description': 'Double-brew volatile toppings in Cozy Pizza Alchemy.',
+            'additionSummary': 'spicy cauldron rush',
+          },
+          {
+            'badge': '03 · LOOP PAYOFF & UPGRADE',
+            'title': 'Kitchen Familiar Helpers',
+            'description': 'Recruit imp helpers in Cozy Pizza Alchemy.',
+            'additionSummary': 'kitchen familiar helpers',
+          },
+        ],
+      };
+    }
+    final hasWallRun = prompt.contains('wall-run chains');
+    return {
+      'workingTitle': 'Grapple Parkour Roguelite',
+      'baseSummary':
+          'Swing across floating ruins using a grappling hook${hasWallRun ? " and wall-run chains" : ""} in a fast action roguelite loop.',
+      'mechanics': [
+        'Grappling Hook Swing',
+        if (hasWallRun) 'Wall-Run Chains' else 'Aerial Dash Boost',
+        'Arena Wave Clear',
+      ],
+      'expansionCards': [
+        {
+          'badge': '01 · CORE MECHANIC TWIST',
+          'title': 'Grapple Release Boost',
+          'description': 'Release hook at peak swing for a burst of speed.',
+          'additionSummary': 'grapple release boost',
+        },
+        {
+          'badge': '02 · RISK / REWARD HOOK',
+          'title': 'High-Altitude Combo Multiplier',
+          'description': 'Stay airborne to multiply combat rewards.',
+          'additionSummary': 'high-altitude combo multiplier',
+        },
+        {
+          'badge': '03 · LOOP PAYOFF & UPGRADE',
+          'title': 'Hook Mod Workbench',
+          'description': 'Slot elemental tether mods between runs.',
+          'additionSummary': 'hook mod workbench',
+        },
+      ],
+    };
+  }
+
+  // 3. Stage 1A: extractConceptFromGdd
+  if (prompt.contains('# Solar Skiff Salvage')) {
+    return {
+      'title': 'Solar Skiff Salvage',
+      'goal':
+          'Core Skiff Loop: Build a fast 3D hover-skiff salvage and grapple loop in Unity 6.',
+      'gameSpec': [
+        '3D Third-Person',
+        'Gamepad + Mouse/KB',
+        'Singleplayer',
+        'Open Salvage Zone',
+      ],
+      'techSpec': [
+        'Unity 6 (C#)',
+        'PC Desktop',
+        '3D Low-Poly Meshes',
+        'Offline Local Save',
+      ],
+      'designPillars': [
+        'High-Speed Skiff Momentum: Skiff drifting feels responsive on every turn',
+        'Readable Hazard Telegraphs: Sandstorms and debris are clear at a glance',
+        'Tactile Winch Tension: Towing heavy scrap visibly pulls the skiff hull',
+      ],
+      'tradeOffs': [
+        'Arcade Skiff Handling: Responsive arcade hover physics over realistic aero simulation',
+        'Instant Winch Latch: Fast grapple attachment over manual rope aiming',
+      ],
+      'coreLoopBeats': [
+        'Skiff Launch & Boost: Launch hover-skiff into the salvage zone',
+        'Grapple & Tow Salvage: Latch onto scrap and tow to the barge',
+        'Hazard Evasion: Dodge storm hazards while towing',
+        'Dock & Reset: Dock at the barge, bank scrap, and start next run',
+      ],
+      'exclusions': [
+        'No online multiplayer',
+        'No on-foot interior exploration',
+      ],
+      'doneWhen':
+          'Playtester completes 3 consecutive salvage runs and docks without clipping.',
+      'releaseTrainTitles': [
+        'v0.1: Solar Skiff Salvage Core Loop - Prototype',
+      ],
+    };
+  }
+
+  // 4. Stage 1B: regenerateSectionOptionsWithAi
+  if (prompt.contains('generating 3 fresh Option Cards for the')) {
+    return {
+      'options': [
+        'Speed & Precision Core (1): Build a responsive greybox loop focused on core controls and immediate feedback.',
+        'High-Tension Risk/Reward (1): Build a compact play space where bold decisions multiply rewards.',
+        'Tactile Sandbox Toy (1): Build a physics-driven testbed where core movement feels fun first.',
+      ],
+    };
+  }
+
+  // 5. Stage 1B: sendConceptChatTurn
+  if (prompt.contains('updating a Live Concept Blueprint')) {
+    if (prompt.contains('instead of a crab')) {
+      return {
+        'reply': 'Switched protagonist and core loop to armored vehicles.',
+        'updatedFields': ['Title', 'Goal', 'Core Loop'],
+        'title': 'Vehicle Arena Boomer Shooter',
+        'goal':
+            'Vehicle Arena Loop: Build a playable Vehicle Arena Boomer Shooter prototype where you drive armored vehicles, drift around hazards, and clear enemy waves.',
+        'coreLoopBeats': [
+          'Vehicle Drift & Boost: Drive armored vehicles and drift across the arena',
+          'Mounted Turret Combat: Fire vehicle weapons at incoming enemy waves',
+          'Scrap & Chassis Upgrade: Collect scrap drops and pick 1 vehicle mod',
+          'Wave Clear & Reset: Clear the arena wave and reset for the next round',
+        ],
+      };
+    }
+    return {
+      'reply': 'Updated Concept Blueprint to 2D Side-Scrolling Precision Platformer.',
+      'updatedFields': ['Goal'],
+      'goal':
+          '2D Side-Scrolling Precision Platformer: Build a responsive 2D Side-Scrolling Precision Platformer prototype with grappling hook swing and wall-run chains.',
+    };
+  }
+
+  // 6. Stage 1B: startConceptInterview
+  if (prompt.contains('creating a Stage 1 Concept Blueprint for this spark idea:')) {
+    final isFarm = prompt.toLowerCase().contains('cozy alchemy shop');
+    final isCourier = prompt.toLowerCase().contains('supply courier');
+    return {
+      'title': isFarm
+          ? 'Cozy Alchemy Shop'
+          : (isCourier ? 'Settlement Supply Courier' : 'Grapple Parkour Roguelite'),
+      'goal': isFarm
+          ? 'Core Shop & Garden Loop: Build a playable Cozy Alchemy Shop prototype where you harvest herbs, brew potions, and sell to customers.'
+          : 'Core Grapple Loop: Build a playable Grapple Parkour Roguelite prototype where you swing across arena gaps, clear enemy waves, and reset cleanly.',
+      'gameSpec': [
+        '2D Top-Down',
+        'Twin-Stick (WASD + Mouse Aim)',
+        'Singleplayer',
+        'Single-Screen Arena',
+      ],
+      'techSpec': [
+        'Godot 4 (2D)',
+        'PC Desktop',
+        '2D Sprites + Particles',
+        'Offline Local Save',
+      ],
+      'designPillars': [
+        'Unbroken Momentum: Prioritize continuous movement velocity and readable telegraphs',
+        'Tactical Positioning: Prioritize deliberate positioning and high-clarity feedback',
+        'Chain-Reaction Mastery: Prioritize fast chain-reactions and rewarding loop mastery',
+      ],
+      'tradeOffs': isFarm
+          ? [
+              'Instant Cauldron Craft: Instant recipe crafting over waiting on real-time timers',
+              'Clear Price Signals: Transparent customer haggling over hidden RNG math',
+            ]
+          : [
+              'Instant Input Response: Instant arcade input response over realistic physics inertia',
+              'Greybox Readability: Clean greybox readability over heavy visual shaders in v0.1',
+            ],
+      'coreLoopBeats': [
+        'Arena Entry & Traversal: Enter the arena, dash across hazards, and chain grapple swings',
+        'Primary Action & Targets: Engage reactive targets with primary weapon fire',
+        'Hazard & Counter Response: Dodge telegraphed attacks and counter-strike',
+        'Resource & Drop Pickup: Collect dropped energy shards from cleared targets',
+        'Mid-Run Upgrade Choice: Pick 1 of 3 active modifiers from the reward cache',
+        'Loop Resolution & Reset: Clear the final wave, tally score, and reset the arena',
+        'Staging & Loadout Prep: Select starting weapon and dash module in the staging zone',
+      ],
+      'exclusions': isFarm
+          ? [
+              'No combat dungeons in v0.1',
+              'No town romance relationship trees',
+            ]
+          : [
+              'Cut multi-branch skill trees and online co-op from v0.1',
+              'Defer multi-phase bosses and deep crafting until MVP',
+            ],
+      'doneWhen':
+          'Playtester spawns in, executes every core loop beat from start to finish, and resets the arena cleanly.',
+      'releaseTrainTitles': [
+        'v0.1: Core Movement & Game Loop - Prototype',
+      ],
+      'sectionOptions': {
+        'goal': [
+          'Single-Arena Loop: Focus v0.1 strictly on the core gameplay loop in a single test arena',
+          'Prep + Arena Loop: Include an interactive prep & staging zone before entering the active loop in v0.1',
+          'Controls & Feel First: Focus v0.1 on primary player controls and core mechanic feel first',
+        ],
+        'gameSpec': [
+          '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Singleplayer · Single-Screen Arena',
+          '2D Side-Scrolling · Precision Controls · Singleplayer · Multi-Room Stages',
+          '3D First-Person · Mouse + WASD · Singleplayer · Enclosed Sandbox',
+        ],
+        'techSpec': [
+          'Godot 4 (2D) · PC Desktop · 2D Sprites + Particles · Offline Local Save',
+          'Unity 6 · PC & Steam Deck · 2D/3D Hybrid Pipeline · Steam Cloud Save',
+          'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Offline Local Save',
+        ],
+        'designPillars': [
+          'Unbroken Momentum: Prioritize continuous movement velocity and readable telegraphs',
+          'Tactical Positioning: Prioritize deliberate positioning and high-clarity feedback',
+          'Chain-Reaction Mastery: Prioritize fast chain-reactions and rewarding loop mastery',
+        ],
+        'tradeOffs': isFarm
+            ? [
+                'Instant Cauldron Craft: Instant recipe crafting over waiting on real-time timers',
+                'Clear Price Signals: Transparent customer haggling over hidden RNG math',
+                'Compact Shop Layout: Single-screen shop layout over sprawling town map',
+              ]
+            : [
+                'Instant Input Response: Instant arcade input response over realistic physics inertia',
+                'Animation Commitment: Deliberate animation commitment over instant cancelable movement',
+                'Greybox Readability: Clean greybox readability over heavy visual shaders in v0.1',
+              ],
+        'coreLoop': [
+          'Complete 4-Beat Loop: Staging & Prep → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
+          'Direct Action Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
+          'Skill Mastery Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
+        ],
+        'exclusions': isFarm
+            ? [
+                'Cut Combat Dungeons: Cut combat dungeons and boss fights from Prototype',
+                'Defer Romance Trees: Defer NPC romance and seasonal festivals until MVP',
+                'Defer Online Trade: Defer player-to-player market trading until Full Production',
+              ]
+            : [
+                'Cut Trees, Co-Op & Story: Cut multi-branch skill trees, online co-op, and story cutscenes from Prototype',
+                'Defer Bosses & Crafting: Defer multi-phase bosses and deep inventory crafting until MVP releases',
+                'Defer Meta-Save & Audio: Defer persistent meta-progression saves and audio settings until MVP',
+              ],
+        'doneWhen': [
+          'All Beats & Clean Reset: Playtester spawns in, executes every core loop beat from start to finish, and resets the arena cleanly',
+          '3 Consecutive Runs: Playtester completes 3 back-to-back loop cycles with clear win/fail resolution and zero soft-locks',
+          'No-Explain Playtest: A playtester picks up the controls, reads the primary objective from on-screen cues alone, and completes a full round',
+        ],
+        'prototypeRelease': [
+          'Single v0.1 Greybox: Single Greybox Prototype (v0.1) proving all Core Loop Beats work together',
+          'Two-Step v0.1 → v0.2: v0.1 Controls & Primary Mechanics → v0.2 Full Core Loop & Reset',
+        ],
+      },
+    };
+  }
+
+  // 7. Stage 2: sendReleasePlanChatTurn
+  if (prompt.contains('Antigravity Release Planner Agent updating')) {
+    if (prompt.contains('Add Ore Smelting Furnace to Beat 2')) {
+      return {
+        'reply': 'Added Ore Smelting Furnace to Beat 2.',
+        'goal': 'Build v0.1 prototype loop.',
+        'doneWhen': 'Playtester completes loop 3 times.',
+        'explicitExclusions': ['No online co-op'],
+        'beats': [
+          {
+            'id': 'beat_2',
+            'title': 'Primary Action & Targets',
+            'goal': 'Engage reactive targets and smelt ore.',
+            'doneWhen': 'Targets cleared and ore smelted.',
+            'features': [
+              {
+                'id': 'feat_2_1',
+                'title': 'Target Combat',
+                'goal': 'Build target combat.',
+                'doneWhen': 'Targets defeated.',
+                'estimatedHours': 4,
+                'included': true,
+                'lifecycle': 'new',
+                'inScope': ['Target hit detection'],
+                'outOfScope': ['Boss phases'],
+                'tuningParams': ['fireRate: 4.0 shots/s'],
+                'edgeCases': ['[HIT GUARD] Ignore dead targets'],
+                'checkpoints': [
+                  {
+                    'title': 'Target Hit Detection',
+                    'playtestCriteria': 'Fire at target -> target takes damage',
+                    'tasks': ['Hitbox Setup (2h)', 'Damage State (2h)'],
+                  },
+                ],
+              },
+              {
+                'id': 'feat_2_2',
+                'title': 'Ore Smelting Furnace',
+                'goal': 'Build ore smelting furnace economy loop.',
+                'doneWhen': 'Player smelts ore into ingots.',
+                'estimatedHours': 4,
+                'included': true,
+                'lifecycle': 'new',
+                'inScope': ['Ore input', 'Ingot output'],
+                'outOfScope': ['Multi-tier alloys'],
+                'tuningParams': ['transactionCostBase: 25 gold'],
+                'edgeCases': ['[OVERFLOW GUARD] Cap furnace queue at 5'],
+                'checkpoints': [
+                  {
+                    'title': 'Furnace Deposit & Smelt',
+                    'playtestCriteria': 'Deposit ore -> smelt timer runs',
+                    'tasks': ['Furnace Actor (2h)', 'Smelt Timer (2h)'],
+                  },
+                  {
+                    'title': 'Ingot Payout & UI',
+                    'playtestCriteria': 'Timer finishes -> ingot spawns',
+                    'tasks': ['Ingot Spawn (2h)'],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+    }
+    return {
+      'reply': 'Updated release plan.',
+      'goal': 'Updated release goal.',
+      'doneWhen': 'Updated done when.',
+      'explicitExclusions': ['No online co-op'],
+      'beats': [],
+    };
+  }
+
+  // 8. Stage 2: ReleasePlannerAgent.planRelease
+  if (prompt.contains('planning Release:')) {
+    final isPart1 = prompt.contains('PHASE 1 SPLIT PROTOTYPE (PART 1 OF 2');
+    final isPart2 = prompt.contains('Prototype — Part 2');
+    final isMvp = prompt.contains('PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC ') &&
+        !prompt.contains('Grapple Momentum Release');
+    final isVerticalSlice = prompt.contains('PHASE 3 VERTICAL SLICE');
+    final isFullProd = prompt.contains('PHASE 4 FULL PRODUCTION');
+    final isFirstRelease = prompt.contains('First Release (v0.1): No prior features exist yet.');
+
+    if (isPart1 || isPart2 || isMvp || isVerticalSlice || isFullProd) {
+      final fourBeatTitles = [
+        'Staging & Loadout Prep',
+        'Arena Entry & Traversal',
+        'Combat & Wave Escalation',
+        'Loot & Round Reset',
+      ];
+      final count = isPart1 ? 2 : 4;
+      int targetMvpIdx = 0;
+      if (isMvp) {
+        final m = RegExp(r'TARGET: EPIC (\d+) ONLY').firstMatch(prompt);
+        if (m != null) {
+          targetMvpIdx = (int.tryParse(m.group(1)!) ?? 1) - 1;
+        }
+      }
+
+      final beats = <Map<String, dynamic>>[];
+      for (int i = 0; i < count; i++) {
+        String lifecycle = 'new';
+        String cpTitle = '${fourBeatTitles[i]} Core';
+        if (isPart2) {
+          lifecycle = i < 2 ? 'stable' : 'new';
+        } else if (isMvp) {
+          lifecycle = i == targetMvpIdx ? 'upgrade' : 'stable';
+          cpTitle = 'MVP ${fourBeatTitles[i]} Upgrade';
+        } else if (isVerticalSlice) {
+          lifecycle = 'upgrade';
+          cpTitle = 'Visual, Audio & Feel Polish';
+        } else if (isFullProd) {
+          lifecycle = 'upgrade';
+          cpTitle = 'Content Roster & Progression Scaling';
+        }
+
+        final feats = <Map<String, dynamic>>[
+          {
+            'id': 'feat_${i + 1}_1',
+            'title': '${fourBeatTitles[i]} Mechanics & Controls',
+            'goal': 'Build ${fourBeatTitles[i]} mechanics.',
+            'doneWhen': '${fourBeatTitles[i]} works in playtest.',
+            'estimatedHours': lifecycle == 'stable' ? 0 : 4,
+            'included': true,
+            'lifecycle': lifecycle,
+            'inScope': ['${fourBeatTitles[i]} core'],
+            'outOfScope': ['Deferred polish'],
+            'tuningParams': ['moveSpeed: 240.0 px/s', 'cooldown: 0.4 s'],
+            'edgeCases': ['[STATE GUARD] Prevent duplicate trigger'],
+            'checkpoints': lifecycle == 'stable'
+                ? []
+                : [
+                    {
+                      'title': cpTitle,
+                      'playtestCriteria': 'Trigger action -> verify response',
+                      'tasks': [
+                        'Actor Setup (2h)',
+                        'State Logic (1h)',
+                        'State Guard (1h)',
+                      ],
+                    },
+                  ],
+          },
+        ];
+        if (isFullProd && i == 0) {
+          feats.add({
+            'id': 'feat_fp_promoted_1',
+            'title': 'Endless Boss Rush Mode',
+            'goal': 'Build promoted Endless Boss Rush Mode.',
+            'doneWhen': 'Boss rush wave spawns and clears.',
+            'estimatedHours': 6,
+            'included': true,
+            'lifecycle': 'new',
+            'inScope': ['Boss wave queue'],
+            'outOfScope': [],
+            'tuningParams': ['bossWaveInterval: 30.0 s'],
+            'edgeCases': ['[SPAWN GUARD] Cap active bosses at 1'],
+            'checkpoints': [
+              {
+                'title': 'Boss Rush Spawner',
+                'playtestCriteria': 'Start rush -> boss spawns',
+                'tasks': ['Boss Queue (3h)', 'Reward Scaling (3h)'],
+              },
+            ],
+          });
+        }
+        beats.add({
+          'id': 'beat_${i + 1}',
+          'title': fourBeatTitles[i],
+          'goal': 'Build ${fourBeatTitles[i]}.',
+          'doneWhen': '${fourBeatTitles[i]} verified.',
+          'features': feats,
+        });
+      }
+
+      return {
+        'goal': 'Build release milestone.',
+        'doneWhen': 'Playtester verifies all beats.',
+        'explicitExclusions': ['Daily Seeded Leaderboard'],
+        'questions': [
+          {
+            'id': 'rel_q_feel',
+            'question': 'What should we prioritize?',
+            'options': [
+              '(Recommended) Tight Controls: Prioritize movement response',
+              'Visual Clarity: Prioritize clear telegraphs',
+            ],
+          },
+        ],
+        'beats': beats,
+      };
+    }
+
+    // Default 7-beat concept (v0.1 or v0.2)
+    final sevenBeatTitles = [
+      'Arena Entry & Traversal',
+      'Primary Action & Targets',
+      'Hazard & Counter Response',
+      'Resource & Drop Pickup',
+      'Mid-Run Upgrade Choice',
+      'Loop Resolution & Reset',
+      'Staging & Loadout Prep',
+    ];
+    final beats = <Map<String, dynamic>>[];
+    for (int i = 0; i < sevenBeatTitles.length; i++) {
+      final bTitle = sevenBeatTitles[i];
+      if (isFirstRelease) {
+        final feats = <Map<String, dynamic>>[
+          {
+            'id': 'feat_${i + 1}_1',
+            'title': '$bTitle Mechanics & Controls',
+            'goal': 'Build $bTitle mechanics and controls.',
+            'doneWhen': 'Playtester verifies $bTitle in arena.',
+            'estimatedHours': 4,
+            'included': true,
+            'lifecycle': 'new',
+            'inScope': ['$bTitle input', '$bTitle feedback'],
+            'outOfScope': ['Advanced skill tree'],
+            'tuningParams': ['moveSpeed: 240.0 px/s', 'dashCooldown: 0.4 s'],
+            'edgeCases': ['[STATE GUARD] Prevent invalid state transition'],
+            'checkpoints': [
+              {
+                'title': '$bTitle Core',
+                'playtestCriteria': 'Press input -> actor responds within 100ms',
+                'tasks': [
+                  'Actor Setup (2h)',
+                  'State Logic (1h)',
+                  'State Guard (1h)',
+                ],
+              },
+            ],
+          },
+        ];
+        if (i == 0) {
+          feats.add({
+            'id': 'feat_1_2',
+            'title': 'Grapple Momentum Release',
+            'goal': 'Build grapple release speed burst.',
+            'doneWhen': 'Releasing grapple boosts velocity.',
+            'estimatedHours': 4,
+            'included': true,
+            'lifecycle': 'new',
+            'inScope': ['Release boost'],
+            'outOfScope': ['Rope tangling'],
+            'tuningParams': ['releaseBoostSpeed: 320.0 px/s'],
+            'edgeCases': ['[VELOCITY CLAMP] Cap max release speed'],
+            'checkpoints': [
+              {
+                'title': 'Release Impulse',
+                'playtestCriteria': 'Detach mid-swing -> player launches forward',
+                'tasks': [
+                  'Release Input (2h)',
+                  'Impulse Math (1h)',
+                  'Speed Clamp (1h)',
+                ],
+              },
+            ],
+          });
+        }
+        beats.add({
+          'id': 'beat_${i + 1}',
+          'title': bTitle,
+          'goal': 'Build $bTitle.',
+          'doneWhen': '$bTitle complete.',
+          'features': feats,
+        });
+      } else {
+        // v0.2 subsequent release
+        final feats = <Map<String, dynamic>>[
+          {
+            'id': 'feat_${i + 1}_1',
+            'title': '$bTitle Mechanics & Controls',
+            'goal': 'Upgrade $bTitle mechanics.',
+            'doneWhen': '$bTitle v0.2 upgrade verified.',
+            'estimatedHours': i == 0 ? 4 : 0,
+            'included': true,
+            'lifecycle': i == 0 ? 'upgrade' : 'stable',
+            'inScope': ['$bTitle v0.2 polish'],
+            'outOfScope': [],
+            'tuningParams': ['moveSpeed: 260.0 px/s'],
+            'edgeCases': ['[STATE GUARD] Preserve momentum on land'],
+            'checkpoints': i == 0
+                ? [
+                    {
+                      'title': '$bTitle v0.2 Upgrade',
+                      'playtestCriteria': 'Chain movement -> speed bonus active',
+                      'tasks': [
+                        'Upgrade Logic (2h)',
+                        'VFX Hook (2h)',
+                      ],
+                    },
+                  ]
+                : [],
+          },
+        ];
+        if (i == 0) {
+          feats.add({
+            'id': 'feat_1_2',
+            'title': 'Grapple Momentum Release',
+            'goal': 'Keep Grapple Momentum Release stable.',
+            'doneWhen': 'Remains verified.',
+            'estimatedHours': 0,
+            'included': true,
+            'lifecycle': 'stable',
+            'inScope': ['Release boost'],
+            'outOfScope': [],
+            'tuningParams': ['releaseBoostSpeed: 320.0 px/s'],
+            'edgeCases': ['[VELOCITY CLAMP] Cap max release speed'],
+            'checkpoints': [],
+          });
+        }
+        beats.add({
+          'id': 'beat_${i + 1}',
+          'title': bTitle,
+          'goal': 'Evolve $bTitle for v0.2.',
+          'doneWhen': '$bTitle v0.2 complete.',
+          'features': feats,
+        });
+      }
+    }
+
+    return {
+      'goal': 'Build playable release loop.',
+      'doneWhen': 'Playtester completes loop 3 times in a row.',
+      'explicitExclusions': [
+        'Online Multiplayer Matchmaking',
+        'Cutscene Cinematics',
+      ],
+      'questions': [
+        {
+          'id': 'rel_q_feel',
+          'question': 'What should we prioritize in this release?',
+          'options': [
+            '(Recommended) Tight Controls: Prioritize movement feel',
+            'Combat Readability: Prioritize telegraph clarity',
+          ],
+        },
+      ],
+      'beats': beats,
+    };
+  }
+
+  // 9. Stage 3: Tailor How-To / Live Feature AI enrichment / Playtest Fix / Simulation
+  if (prompt.contains('Rewrite the implementation sub-steps') ||
+      prompt.contains('Tailor this newly added Feature') ||
+      prompt.contains('Playtest Root-Cause Debugger') ||
+      prompt.contains('Systems Stress & Playtest Simulator')) {
+    return null;
+  }
+
+  return {};
+}
+
 void main() {
   group('LAYERS-Agentic 3-Stage End-to-End Flow Tests', () {
+    setUp(() {
+      GeminiAgentClient.testMockResponder = _mockGeminiResponder;
+    });
+
+    tearDown(() {
+      GeminiAgentClient.testMockResponder = null;
+    });
+
+    test(
+      'Strict Offline Mode: returns null / false and surfaces "App is offline" banner with zero minimal scaffolds when Gemini AI is unreachable',
+      () async {
+        GeminiAgentClient.testMockResponder = null;
+        final offlineProvider = WorkbenchProvider();
+        offlineProvider.updateAiConfig(apiKey: '');
+
+        await offlineProvider.ingestOrRefineSparkIdea(
+          'High-speed grappling hook parkour roguelite',
+        );
+        expect(offlineProvider.sparkIntake, isNull);
+        expect(offlineProvider.isOffline, isTrue);
+        expect(offlineProvider.offlineErrorMessage, contains('App is offline'));
+
+        offlineProvider.clearOfflineError();
+        expect(offlineProvider.isOffline, isFalse);
+
+        await offlineProvider.startConceptInterview(
+          'High-speed grappling hook parkour roguelite',
+        );
+        expect(offlineProvider.conceptDraft, isNull);
+        expect(offlineProvider.isOffline, isTrue);
+        expect(offlineProvider.offlineErrorMessage, contains('App is offline'));
+      },
+    );
+
     test('ProjectConceptAgent seeds turn-by-turn chat and updates Live Concept Blueprint on each turn', () async {
       final draft = await ProjectConceptAgent.startConceptInterview(
         'High-speed grappling hook parkour roguelite',
       );
-      expect(draft.questions.length, 3);
-      expect(draft.isInterviewComplete, isTrue);
+      expect(draft, isNotNull);
+      expect(draft!.isInterviewComplete, isTrue);
       expect(draft.lastAgentReply, isNotEmpty);
       expect(draft.coreLoopBeats.length, greaterThanOrEqualTo(6));
       // Impact-First Ordering: Beat 1 starts with Core Toy / Traversal (never pre-match Staging & Loadout Prep)
@@ -35,17 +889,17 @@ void main() {
       expect(draft.releaseTrainTitles.length, 1);
 
       // Send a user turn in the chat and verify the Blueprint updates in real time
-      final updated = await ProjectConceptAgent.sendConceptChatTurn(
+      final updatedOk = await ProjectConceptAgent.sendConceptChatTurn(
         draft,
         '2D Side-Scrolling Precision Platformer',
       );
-
-      expect(updated.lastAgentReply, isNotEmpty);
-      expect(updated.goal, contains('2D Side-Scrolling Precision Platformer'));
-      expect(updated.toFormattedScopeSection(), contains('Goal:'));
-      expect(updated.toFormattedScopeSection(), contains('In Scope:'));
-      expect(updated.toFormattedScopeSection(), contains('Out of Scope:'));
-      expect(updated.toFormattedScopeSection(), contains('Done When:'));
+      expect(updatedOk, isTrue);
+      expect(draft.lastAgentReply, isNotEmpty);
+      expect(draft.goal, contains('2D Side-Scrolling Precision Platformer'));
+      expect(draft.toFormattedScopeSection(), contains('Goal:'));
+      expect(draft.toFormattedScopeSection(), contains('In Scope:'));
+      expect(draft.toFormattedScopeSection(), contains('Out of Scope:'));
+      expect(draft.toFormattedScopeSection(), contains('Done When:'));
 
       // Verify sanitizeGoalText strips leaked `[Section 01 Goal]...` wrappers with nested quotes
       const leakedGoal =
@@ -61,14 +915,16 @@ void main() {
       final crabDraft = await ProjectConceptAgent.startConceptInterview(
         'Crab champion boomer shooter game',
       );
-      final vehicleUpdated = await ProjectConceptAgent.sendConceptChatTurn(
-        crabDraft,
+      expect(crabDraft, isNotNull);
+      final vehicleUpdatedOk = await ProjectConceptAgent.sendConceptChatTurn(
+        crabDraft!,
         '[Section 01 Goal] instead of a crab we use vehicals.',
       );
-      expect(vehicleUpdated.title, contains('Vehicle'));
-      expect(vehicleUpdated.goal, contains('vehicles'));
-      expect(vehicleUpdated.goal.toLowerCase(), isNot(contains('instead of a crab')));
-      expect(vehicleUpdated.coreLoopBeats.first.toLowerCase(), isNot(contains('instead of a crab')));
+      expect(vehicleUpdatedOk, isTrue);
+      expect(crabDraft.title, contains('Vehicle'));
+      expect(crabDraft.goal, contains('vehicles'));
+      expect(crabDraft.goal.toLowerCase(), isNot(contains('instead of a crab')));
+      expect(crabDraft.coreLoopBeats.first.toLowerCase(), isNot(contains('instead of a crab')));
     });
 
     testWidgets(
@@ -283,7 +1139,7 @@ void main() {
             firstProposedFeat.title,
             beatTitle: provider.releaseBlueprint!.beats.first.title,
           ),
-          equals('Player Dash'),
+          equals('Arena Entry & Traversal Mechanics & Controls'),
         );
         expect(
           find.byKey(const ValueKey('outliner_new_progressive_release_btn')),
@@ -742,7 +1598,7 @@ void main() {
         );
         expect(unrealCpp.engineLabel, 'UNREAL 5');
         expect(unrealCpp.whereLocation, contains('ActorComponent'));
-        expect(unrealCpp.subSteps[0].explainConcept, contains('AWasdMovementDashActor'));
+        expect(unrealCpp.subSteps[0].explainConcept, contains('AWasdMovementDashController'));
         expect(unrealCpp.subSteps[3].codeFormula, contains('UPROPERTY(EditAnywhere'));
         expect(unrealCpp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
 
@@ -830,7 +1686,7 @@ void main() {
         final terminalAsset = TaskHowToBlueprint.deriveConcreteAssetName(
           'Create Terminal interaction (2h) Checkpoint 1: Terminal Interaction & Contract',
         );
-        expect(terminalAsset.pascalName, 'TerminalContractActor');
+        expect(terminalAsset.pascalName, 'TerminalContractController');
         expect(terminalAsset.pascalName, isNot(contains('Checkpoint')));
 
         // Verify deriveConcreteGuardStepSpec formats underscore bracket tags as clean Title Case
@@ -854,8 +1710,32 @@ void main() {
 
         final firstBeat = provider.releaseBlueprint!.beats.first;
         provider.addProposedFeatureToBeat(firstBeat.id, 'Grapple Hook Swing');
-
         final customFeatBp = firstBeat.features.last;
+        provider.updateProposedFeatureInBeat(
+          beatId: firstBeat.id,
+          featureId: customFeatBp.id,
+          tuningParams: const ['hookMaxRange: 18.0 m', 'hookPullSpeed: 28.0 m/s'],
+          edgeCases: const ['[LOS BREAK GUARD] Detach when line-of-sight breaks'],
+          checkpoints: [
+            ProposedCheckpointBlueprint(
+              title: 'Grapple Anchor & Swing',
+              playtestCriteria: 'Fire hook -> swing across gap',
+              tasks: const ['Hook Raycast (2h)', 'Swing Arc (2h)'],
+              tuningParams: const ['hookMaxRange: 18.0 m', 'hookPullSpeed: 28.0 m/s'],
+              edgeCases: const ['[LOS BREAK GUARD] Detach when line-of-sight breaks'],
+              releaseVersion: 'v0.1',
+            ),
+            ProposedCheckpointBlueprint(
+              title: 'Release Boost & Cooldown',
+              playtestCriteria: 'Release hook -> launch with momentum',
+              tasks: const ['Release Impulse (2h)'],
+              tuningParams: const ['hookMaxRange: 18.0 m', 'hookPullSpeed: 28.0 m/s'],
+              edgeCases: const ['[LOS BREAK GUARD] Detach when line-of-sight breaks'],
+              releaseVersion: 'v0.1',
+            ),
+          ],
+        );
+
         expect(customFeatBp.title, 'Grapple Hook Swing');
         expect(customFeatBp.checkpoints.length, 2);
         expect(customFeatBp.tuningParams, contains('hookMaxRange: 18.0 m'));
@@ -1058,7 +1938,7 @@ void main() {
         );
 
         // Option 2: Regenerate Stage 1 section options
-        provider.regenerateStage1SectionOptions('goal');
+        await provider.regenerateStage1SectionOptions('goal');
         expect(provider.conceptDraft!.sectionOptions['goal'], isNotEmpty);
         expect(
           provider.conceptDraft!.sectionOptions['goal']!.first,
@@ -1667,29 +2547,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           initialBeatFeatCount,
         );
 
-        // Expanded Genre Archetypes (deckbuilder, vehicle, stealth, puzzle) & custom AI step metadata preservation
-        expect(
-          MechanicArchetypeProfile.inferCategory('Card Hand & Mana Draw'),
-          'deckbuilder',
-        );
-        expect(
-          MechanicArchetypeProfile.inferCategory('Drift Boost & Lap Steering'),
-          'vehicle',
-        );
-        expect(
-          MechanicArchetypeProfile.inferCategory('Guard Vision Cone & Crouch'),
-          'stealth',
-        );
-        expect(
-          MechanicArchetypeProfile.inferCategory('Grid Tile Match & Undo'),
-          'puzzle',
-        );
+        // Pure title cleanup helper (no hardcoded archetype substitution)
         expect(
           MechanicArchetypeProfile.concreteFeatureTitleForBeat(
-            'Card Hand & Mana Mechanics & Controls',
+            'Card Hand & Mana: Deck Draw — Draw cards each turn',
             beatTitle: 'Card Hand & Mana',
           ),
-          'Card Hand & Play',
+          'Deck Draw',
         );
 
         // Verify custom_snippet sub-steps preserve custom verification (verifyResult) & codeLanguage (stepPath)

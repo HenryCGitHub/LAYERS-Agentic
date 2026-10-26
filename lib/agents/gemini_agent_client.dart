@@ -23,6 +23,13 @@ RULES:
   /// Records the last non-200 status hint (e.g., HTTP 402 prepayment credits depleted) for diagnostics.
   static String? lastErrorStatus;
 
+  /// Optional test-only responder used by `flutter test` to simulate Gemini JSON responses
+  /// without any hardcoded production scaffolds.
+  static Future<Map<String, dynamic>?> Function(
+    String prompt,
+    String preferredModel,
+  )? testMockResponder;
+
   static String resolveDefaultApiKey() {
     if (_rawEnvKey.trim().isNotEmpty) return _rawEnvKey.trim();
     if (_b64EnvKey.trim().isNotEmpty) {
@@ -34,6 +41,7 @@ RULES:
   }
 
   static bool hasKey(String apiKey) {
+    if (testMockResponder != null) return true;
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
     return key.isNotEmpty;
   }
@@ -45,8 +53,14 @@ RULES:
     String thinkingLevel = 'LOW',
     double temperature = 0.5,
   }) async {
+    if (testMockResponder != null) {
+      return testMockResponder!(prompt, preferredModel);
+    }
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
-    if (key.isEmpty) return null;
+    if (key.isEmpty) {
+      lastErrorStatus = 'Missing API Key';
+      return null;
+    }
 
     final modelsToTry = <String>{
       preferredModel,

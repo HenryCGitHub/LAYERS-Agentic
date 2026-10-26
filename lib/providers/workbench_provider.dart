@@ -253,6 +253,23 @@ class WorkbenchProvider extends ChangeNotifier {
   SparkIdeaIntakeResult? get sparkIntake => _sparkIntake;
   int _sparkSuggestionVariantOffset = 0;
 
+  String? _offlineErrorMessage;
+  String? get offlineErrorMessage => _offlineErrorMessage;
+  bool get isOffline => _offlineErrorMessage != null;
+
+  void clearOfflineError() {
+    if (_offlineErrorMessage != null) {
+      _offlineErrorMessage = null;
+      notifyListeners();
+    }
+  }
+
+  void _setOfflineState([String? customReason]) {
+    final err = GeminiAgentClient.lastErrorStatus;
+    _offlineErrorMessage = customReason ??
+        'App is offline — Unable to reach Gemini AI${err != null ? " ($err)" : ""}. Check your connection or API key in AI Settings.';
+  }
+
   /// Starts a brand-new Project at Stage 1A (`New Project`) while keeping existing projects in the vault.
   void createNewProject() {
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
@@ -263,6 +280,7 @@ class WorkbenchProvider extends ChangeNotifier {
     _releaseBlueprint = null;
     _sparkIntake = null;
     _sparkSuggestionVariantOffset = 0;
+    _offlineErrorMessage = null;
     _currentStage = WorkbenchStage.projectPitch;
     notifyListeners();
   }
@@ -282,7 +300,7 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _sparkIntake = await ProjectConceptAgent.ingestOrRefineSparkIdea(
+      final result = await ProjectConceptAgent.ingestOrRefineSparkIdea(
         userInput: clean,
         existingIntake: _sparkIntake,
         suggestionVariantOffset: _sparkSuggestionVariantOffset,
@@ -290,6 +308,12 @@ class WorkbenchProvider extends ChangeNotifier {
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
+      if (result != null) {
+        _sparkIntake = result;
+        _offlineErrorMessage = null;
+      } else {
+        _setOfflineState();
+      }
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -300,12 +324,9 @@ class WorkbenchProvider extends ChangeNotifier {
   /// Toggles one of the 3 Concept Expansion / Twist Cards on the New Project screen on or off,
   /// folding that mechanic into (or removing it from) the Agent's Idea Summary without auto-launching Stage 1B.
   void toggleSparkExpansionCard(int cardIndex) {
-    // If the user hasn't entered an idea yet, initialize a base intake so the expansion cards can be toggled
-    _sparkIntake ??= ProjectConceptAgent.buildDeterministicSparkIntake(
-      rawIdea: 'High-speed grappling hook parkour roguelite',
-      suggestionVariantOffset: _sparkSuggestionVariantOffset,
-    );
-    final cards = _sparkIntake!.expansionCards;
+    final intake = _sparkIntake;
+    if (intake == null) return;
+    final cards = intake.expansionCards;
     if (cardIndex < 0 || cardIndex >= cards.length) return;
     cards[cardIndex].isSelected = !cards[cardIndex].isSelected;
     notifyListeners();
@@ -317,18 +338,6 @@ class WorkbenchProvider extends ChangeNotifier {
     final currentIntake = _sparkIntake;
     if (currentIntake == null) return;
     _sparkSuggestionVariantOffset++;
-
-    if (!GeminiAgentClient.hasKey(_apiKey)) {
-      final fallback = ProjectConceptAgent.buildDeterministicSparkIntake(
-        rawIdea: currentIntake.rawIdea,
-        existingIntake: currentIntake,
-        suggestionVariantOffset: _sparkSuggestionVariantOffset,
-        isUpdateAction: false,
-      );
-      currentIntake.expansionCards = fallback.expansionCards;
-      notifyListeners();
-      return;
-    }
 
     _isAgentBusy = true;
     _agentProgressStep =
@@ -343,8 +352,13 @@ class WorkbenchProvider extends ChangeNotifier {
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
-      if (_sparkIntake == currentIntake) {
-        currentIntake.expansionCards = freshCards;
+      if (freshCards != null && freshCards.isNotEmpty) {
+        if (_sparkIntake == currentIntake) {
+          currentIntake.expansionCards = freshCards;
+        }
+        _offlineErrorMessage = null;
+      } else {
+        _setOfflineState();
       }
     } finally {
       _isAgentBusy = false;
@@ -547,9 +561,6 @@ class WorkbenchProvider extends ChangeNotifier {
         _conceptDraft = ProjectConceptBlueprint.fromJson(
           jsonDecode(rawConcept) as Map<String, dynamic>,
         );
-        if (_conceptDraft != null) {
-          ProjectConceptAgent.upgradeLegacyConceptDraftIfNeeded(_conceptDraft!);
-        }
       } catch (e) {
         debugPrint('Restore concept_blueprint_json error: $e');
       }
@@ -847,6 +858,7 @@ class WorkbenchProvider extends ChangeNotifier {
     if (apiKey != null) {
       _apiKey = apiKey.trim();
       GeminiAgentClient.lastErrorStatus = null;
+      _offlineErrorMessage = null;
     }
     if (conversationModel != null && conversationModel.trim().isNotEmpty) {
       _conversationModel = conversationModel.trim();
@@ -1001,13 +1013,15 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _conceptDraft = await ProjectConceptAgent.extractConceptFromGdd(
+      final extracted = await ProjectConceptAgent.extractConceptFromGdd(
         clean,
         apiKey: _apiKey,
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
-      if (_conceptDraft != null) {
+      if (extracted != null) {
+        _conceptDraft = extracted;
+        _offlineErrorMessage = null;
         _commitConceptToVault(_conceptDraft!);
         _jumpToFullReviewPending = true;
         _recordAgentTrace(
@@ -1026,6 +1040,8 @@ class WorkbenchProvider extends ChangeNotifier {
             ],
           ),
         );
+      } else {
+        _setOfflineState();
       }
     } finally {
       _isAgentBusy = false;
@@ -1533,123 +1549,45 @@ class WorkbenchProvider extends ChangeNotifier {
     final previousOptions = List<String>.from(
       draft.sectionOptions[optionKey] ?? const <String>[],
     );
-    final leadBeat = draft.coreLoopBeats.isNotEmpty
-        ? draft.coreLoopBeats.first.split(':').first.trim()
-        : '$title Core Control';
 
-    List<String> fresh;
-    switch (optionKey) {
-      case 'goal':
-        fresh = [
-          'Speed & Precision Core ($offset): Build a responsive $title greybox loop focused on $leadBeat and immediate feedback.',
-          'High-Tension Risk/Reward ($offset): Build a compact $title play space where bold $leadBeat decisions multiply rewards.',
-          'Tactile Sandbox Toy ($offset): Build a physics-driven $title testbed where $leadBeat feels fun before adding secondary systems.',
-        ];
-        break;
-      case 'gameSpec':
-        fresh = [
-          '2D Side-Scroller · Gamepad + Keyboard · Singleplayer · Tight Room-to-Room Stages',
-          '3D Third-Person Action · Mouse + WASD · Singleplayer · Modular Playable Zones',
-          '2D Isometric Top-Down · Twin-Stick / Cursor · Singleplayer · Compact Loop Map',
-        ];
-        break;
-      case 'techSpec':
-        fresh = [
-          'Godot 4 (2D/3D) · PC Desktop · Greybox Primitives + Particles · Local JSON Save',
-          'Unity 6 (C#) · PC & Steam Deck · Stylized Low-Poly + VFX Graph · Local Binary Save',
-          'Unreal Engine 5 · PC Desktop · Unlit Prototype Materials · Local SaveSlot',
-        ];
-        break;
-      case 'designPillars':
-        fresh = [
-          'Immediate Control Feel: $leadBeat responds in a single frame with clear visual and audio punch · Readable State: Every challenge telegraph in $title is clear at a glance · Zero Dead Time: Restarting a $title round takes under 1 second',
-          'Momentum & Flow: Mastering $leadBeat unlocks faster routes and higher payoffs · Tactile Impact: Every action visibly changes the $title play space · Learn by Doing: $title mechanics teach themselves without text popups',
-          'High-Stakes Decisions: Timing and positioning in $title matter more than button mashing · Expressive Mastery: Simple $leadBeat inputs combine into high-ceiling tricks · Instant Feedback: Every reward and penalty is immediately visible',
-        ];
-        break;
-      case 'tradeOffs':
-        fresh = ProjectConceptAgent.buildTradeOffOptionsForSpark(
-          draft.sparkIdea,
-          title,
-          offset: offset,
-        );
-        break;
-      case 'coreLoop':
-        fresh = [
-          'Core Toy & Controls ($offset): Execute $leadBeat in the play space · Primary Challenge: Engage reactive $title targets · Objective Clear: Bank rewards under pressure · Loadout Prep & Reset: Swap modifier and restart in 1 key press',
-          'Escalating Mastery ($offset): Chain $leadBeat actions · Risk/Reward Push: Clear bonus $title objective before timer expires · Upgrade Choice: Pick 1 modifier for next round · Loop Reset: Instant $title restart',
-          'Immediate Sandbox ($offset): Test $leadBeat feel and timing · Round Escalation: Complete 3 escalating $title rounds · Climax Check: Finish final round objective · Run Summary & Reset: Review best score and loop immediately',
-        ];
-        break;
-      case 'exclusions':
-        fresh = ProjectConceptAgent.buildExclusionOptionsForSpark(
-          draft.sparkIdea,
-          title,
-          offset: offset,
-        );
-        break;
-      case 'doneWhen':
-        fresh = [
-          'Win/Fail & Clean Reset: Playtester triggers both win and fail states and resets the $title play space with 100% of dynamic objects restored.',
-          'No-Instruction Playtest: A new player understands the primary $title control loop within 30 seconds from on-screen cues alone and finishes a round.',
-          '3-Run Loop Endurance: Playtester completes 3 consecutive $title runs in under 5 minutes with responsive controls and zero state soft-locks.',
-        ];
-        break;
-      case 'prototypeRelease':
-      case 'releaseTrain':
-      default:
-        fresh = [
-          'Single v0.1 Greybox ($offset): Single Greybox Prototype (v0.1) proving all $title Core Loop Beats work together',
-          'Two-Step v0.1 → v0.2 ($offset): v0.1 $title Controls & Primary Mechanics → v0.2 Full $title Core Loop & Reset',
-        ];
-        break;
-    }
-
-    // Rotate list by offset so each click surfaces a new top recommendation
-    final rotated = <String>[
-      for (int i = 0; i < fresh.length; i++) fresh[(i + offset) % fresh.length],
-    ];
-    draft.sectionOptions[optionKey] = rotated;
-    _commitConceptToVault(draft);
-    _recordAgentTrace(AgentRunTrace(
-      agentRole: 'Stage 1 Co-Design Agent',
-      userGoal: 'Refresh options for $optionKey',
-      reasoning:
-          'Synthesized 3 fresh option cards tailored to $title ($optionKey variant #$offset).',
-      toolCalls: [
-        AgentToolCall(
-          toolName: 'regenerate_section_options',
-          targetTitle: 'Stage 1 · $optionKey',
-          summary: 'Generated 3 fresh Option Playing Cards for $optionKey',
-        ),
-      ],
-    ));
+    _isAgentBusy = true;
+    _agentProgressStep =
+        'Refreshing $optionKey options for $title ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
-
-    if (GeminiAgentClient.hasKey(_apiKey)) {
-      _isAgentBusy = true;
-      _agentProgressStep =
-          'Refreshing $optionKey options for $title ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
-      notifyListeners();
-      try {
-        final aiOptions =
-            await ProjectConceptAgent.regenerateSectionOptionsWithAi(
-          draft: draft,
-          optionKey: optionKey,
-          currentOptions: previousOptions,
-          apiKey: _apiKey,
-          modelName: _conversationModel,
-          thinkingLevel: _thinkingLevel,
-        );
-        if (aiOptions != null && aiOptions.isNotEmpty && _conceptDraft == draft) {
-          draft.sectionOptions[optionKey] = aiOptions;
-          _commitConceptToVault(draft);
-        }
-      } finally {
-        _isAgentBusy = false;
-        _agentProgressStep = null;
-        notifyListeners();
+    try {
+      final aiOptions =
+          await ProjectConceptAgent.regenerateSectionOptionsWithAi(
+        draft: draft,
+        optionKey: optionKey,
+        currentOptions: previousOptions,
+        apiKey: _apiKey,
+        modelName: _conversationModel,
+        thinkingLevel: _thinkingLevel,
+      );
+      if (aiOptions != null && aiOptions.isNotEmpty && _conceptDraft == draft) {
+        draft.sectionOptions[optionKey] = aiOptions;
+        _offlineErrorMessage = null;
+        _commitConceptToVault(draft);
+        _recordAgentTrace(AgentRunTrace(
+          agentRole: 'Stage 1 Co-Design Agent',
+          userGoal: 'Refresh options for $optionKey',
+          reasoning:
+              'Synthesized 3 fresh option cards tailored to $title ($optionKey variant #$offset).',
+          toolCalls: [
+            AgentToolCall(
+              toolName: 'regenerate_section_options',
+              targetTitle: 'Stage 1 · $optionKey',
+              summary: 'Generated 3 fresh Option Playing Cards for $optionKey',
+            ),
+          ],
+        ));
+      } else {
+        _setOfflineState();
       }
+    } finally {
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
     }
   }
 
@@ -1965,8 +1903,8 @@ Return ONLY a JSON object:
     final cleanText = sparkText.trim();
     final effectiveSpark = cleanText.isNotEmpty
         ? cleanText
-        : (_sparkIntake?.canonicalPrompt ??
-            'High-speed grappling hook parkour roguelite');
+        : (_sparkIntake?.canonicalPrompt ?? '');
+    if (effectiveSpark.isEmpty) return;
 
     _isAgentBusy = true;
     _agentProgressStep =
@@ -1974,17 +1912,21 @@ Return ONLY a JSON object:
     notifyListeners();
 
     try {
-      _conceptDraft = await ProjectConceptAgent.startConceptInterview(
+      final draft = await ProjectConceptAgent.startConceptInterview(
         effectiveSpark,
         apiKey: _apiKey,
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
-      if (_conceptDraft != null) {
+      if (draft != null) {
+        _conceptDraft = draft;
+        _offlineErrorMessage = null;
         if (jumpToFullReview) {
           _jumpToFullReviewPending = true;
         }
         _commitConceptToVault(_conceptDraft!);
+      } else {
+        _setOfflineState();
       }
     } finally {
       _isAgentBusy = false;
@@ -2011,7 +1953,7 @@ Return ONLY a JSON object:
     notifyListeners();
 
     try {
-      await ProjectConceptAgent.sendConceptChatTurn(
+      final ok = await ProjectConceptAgent.sendConceptChatTurn(
         _conceptDraft!,
         clean,
         apiKey: _apiKey,
@@ -2019,7 +1961,12 @@ Return ONLY a JSON object:
         planningModel: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
-      _commitConceptToVault(_conceptDraft!);
+      if (ok) {
+        _offlineErrorMessage = null;
+        _commitConceptToVault(_conceptDraft!);
+      } else {
+        _setOfflineState();
+      }
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -2155,7 +2102,6 @@ Return ONLY a JSON object:
     if (_conceptDraft != null) {
       _commitConceptToVault(_conceptDraft!);
     }
-    _currentStage = WorkbenchStage.releaseWorkbench;
     _releaseViewFilter = 'active';
     notifyListeners();
 
@@ -2163,20 +2109,8 @@ Return ONLY a JSON object:
       releaseId: releaseId,
       transitionToGateStage: false,
     );
-    if (_releaseBlueprint == null) {
-      final proj = activeProject;
-      final relDoc = activeRelease;
-      if (proj != null && relDoc != null) {
-        _releaseBlueprint = await ReleasePlannerAgent.planRelease(
-          projectDoc: proj,
-          releaseDoc: relDoc,
-          apiKey: '',
-          modelName: _planningModel,
-          thinkingLevel: _thinkingLevel,
-        );
-      }
-    }
     if (_releaseBlueprint != null) {
+      _currentStage = WorkbenchStage.releaseWorkbench;
       await approveAndExecuteReleasePlan();
     }
   }
@@ -2297,7 +2231,7 @@ Return ONLY a JSON object:
     notifyListeners();
 
     try {
-      _releaseBlueprint = await ReleasePlannerAgent.planRelease(
+      final planned = await ReleasePlannerAgent.planRelease(
         projectDoc: proj,
         releaseDoc: relDoc,
         existingBeats: existingBeats,
@@ -2307,8 +2241,10 @@ Return ONLY a JSON object:
         modelName: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
-      final bp = _releaseBlueprint;
-      if (bp != null) {
+      if (planned != null) {
+        _releaseBlueprint = planned;
+        _offlineErrorMessage = null;
+        final bp = planned;
         final totalFeats = bp.totalIncludedFeatures;
         _recordAgentTrace(AgentRunTrace(
           agentRole: '3-Agent Release Pipeline',
@@ -2333,11 +2269,13 @@ Return ONLY a JSON object:
             ),
           ],
         ));
+        if (transitionToGateStage) {
+          _currentStage = WorkbenchStage.releasePlanGate;
+        }
+        _syncActiveProjectMetadata();
+      } else {
+        _setOfflineState();
       }
-      if (transitionToGateStage) {
-        _currentStage = WorkbenchStage.releasePlanGate;
-      }
-      _syncActiveProjectMetadata();
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -2356,14 +2294,19 @@ Return ONLY a JSON object:
     notifyListeners();
 
     try {
-      await ReleasePlannerAgent.sendReleasePlanChatTurn(
+      final ok = await ReleasePlannerAgent.sendReleasePlanChatTurn(
         blueprint: bp,
         userMessage: message,
         apiKey: _apiKey,
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
-      _syncActiveProjectMetadata();
+      if (ok) {
+        _offlineErrorMessage = null;
+        _syncActiveProjectMetadata();
+      } else {
+        _setOfflineState();
+      }
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -2473,8 +2416,7 @@ Return ONLY a JSON object:
     }
   }
 
-  /// Adds a custom Playable Feature directly into a Beat in Stage 2 with mechanic-specific
-  /// Checkpoints, Tuning Variables, and Edge-Case Guards synthesized via [MechanicArchetypeProfile].
+  /// Adds a custom Playable Feature directly into a Beat in Stage 2.
   void addProposedFeatureToBeat(String beatId, String rawTitle) {
     final bp = _releaseBlueprint;
     final cleanTitle = rawTitle.trim();
@@ -2485,46 +2427,28 @@ Return ONLY a JSON object:
       if (beat.id == beatId) {
         final featId =
             'feat_${beat.id}_${beat.features.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-        final archetype = MechanicArchetypeProfile.fromFeatureTitle(
-          cleanTitle,
-          beatTitle: beat.title,
-          beatDescription: beat.goal,
-        );
         beat.features.add(
           ProposedFeatureBlueprint(
             id: featId,
             title: cleanTitle,
-            goal: archetype.goal,
-            doneWhen: archetype.doneWhen,
+            goal: '',
+            doneWhen: '',
             estimatedHours: 4,
             included: true,
             lifecycle: FeatureLifecycleStatus.newFeature,
             originVersion: bp.releaseVersionTag,
-            inScope: archetype.inScope,
-            outOfScope: archetype.outOfScope,
-            tuningParams: archetype.tuningParams,
-            edgeCases: archetype.edgeCases,
+            inScope: const [],
+            outOfScope: const [],
+            tuningParams: const [],
+            edgeCases: const [],
             checkpoints: [
               ProposedCheckpointBlueprint(
-                title: archetype.cp1Title,
-                playtestCriteria: archetype.cp1Playtest,
-                tasks: archetype.cp1Tasks,
-                coveredScope: [archetype.inScope.first],
-                tuningParams: archetype.tuningParams,
-                edgeCases: [archetype.edgeCases.first],
-                releaseVersion: bp.releaseVersionTag,
-              ),
-              ProposedCheckpointBlueprint(
-                title: archetype.cp2Title,
-                playtestCriteria: archetype.cp2Playtest,
-                tasks: archetype.cp2Tasks,
-                coveredScope: archetype.inScope.length > 1
-                    ? [archetype.inScope[1]]
-                    : archetype.inScope,
-                tuningParams: archetype.tuningParams,
-                edgeCases: archetype.edgeCases.length > 1
-                    ? [archetype.edgeCases[1]]
-                    : archetype.edgeCases,
+                title: cleanTitle,
+                playtestCriteria: '',
+                tasks: const [],
+                coveredScope: const [],
+                tuningParams: const [],
+                edgeCases: const [],
                 releaseVersion: bp.releaseVersionTag,
               ),
             ],
@@ -2533,13 +2457,12 @@ Return ONLY a JSON object:
         _recordAgentTrace(AgentRunTrace(
           agentRole: 'Systems & Engine Architect',
           userGoal: 'Add Feature "$cleanTitle" to ${beat.title}',
-          reasoning:
-              'Synthesized Build Tasks, ${archetype.tuningParams.length} numeric tuning variables, and ${archetype.edgeCases.length} [GUARD] rules.',
+          reasoning: 'Added "$cleanTitle" to ${beat.title}.',
           toolCalls: [
             AgentToolCall(
               toolName: 'create_feature_blueprint',
               targetTitle: cleanTitle,
-              summary: 'Added "$cleanTitle" (4h) with ${archetype.cp1Title} & ${archetype.cp2Title}',
+              summary: 'Added "$cleanTitle" (4h)',
             ),
           ],
         ));
@@ -2613,28 +2536,23 @@ Return ONLY a JSON object:
     }
   }
 
-  /// Adds a new Playable Feature directly into an active Epic (`beatId`) inside `2. Workbench`,
-  /// synthesizing its cohesive Checkpoint (`FeatureStateNode`), 3 task groups, numeric tuning
-  /// variables, and `[GUARD]` rules via [MechanicArchetypeProfile], and selects it immediately.
+  /// Adds a new Playable Feature directly into an active Epic (`beatId`) inside `2. Workbench`
+  /// and enriches it via Gemini AI.
   String? addLiveFeatureToBeat(String beatId, String rawTitle) {
     final beatDoc = documents[beatId];
     final cleanTitle = rawTitle.trim();
     if (beatDoc == null || cleanTitle.isEmpty) return null;
+    if (!GeminiAgentClient.hasKey(_apiKey) &&
+        GeminiAgentClient.testMockResponder == null) {
+      _setOfflineState();
+      notifyListeners();
+      return null;
+    }
     _pushAgentUndoSnapshot();
 
     final versionTag = activeReleaseVersionTag;
     final featId =
         'feat_${beatDoc.id}_${beatDoc.childrenIds.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-    final archetype = MechanicArchetypeProfile.fromFeatureTitle(
-      cleanTitle,
-      beatTitle: beatDoc.title,
-      beatDescription: beatDoc.sections['scope'] ?? '',
-    );
-
-    final inScopeText = archetype.inScope.map((s) => '• $s').join('\n');
-    final outScopeText = archetype.outOfScope.map((s) => '• $s').join('\n');
-    final tuningText = archetype.tuningParams.map((t) => '• $t').join('\n');
-    final edgeText = archetype.edgeCases.map((e) => '• $e').join('\n');
 
     final featDoc = TierDocument(
       id: featId,
@@ -2646,34 +2564,22 @@ Return ONLY a JSON object:
         'originVersion': versionTag,
         'activeReleaseVersion': versionTag,
         'lifecycle': FeatureLifecycleStatus.newFeature.name,
-        'scope': 'Goal: ${archetype.goal}\n\n'
-            'In Scope:\n$inScopeText\n\n'
-            '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
-            'Done When: ${archetype.doneWhen}',
-        'variables': tuningText,
-        'tuning': tuningText,
-        'edge_cases': edgeText,
+        'scope': '',
+        'variables': '',
+        'tuning': '',
+        'edge_cases': '',
       },
     );
 
-    final checklist = <Subtask>[
-      for (int tIdx = 0; tIdx < archetype.cp1Tasks.length; tIdx++)
-        Subtask(
-          id: '${featId}_${versionTag}_cp1_t${tIdx + 1}',
-          text: archetype.cp1Tasks[tIdx],
-          completed: false,
-        ),
-    ];
-
     final stateNode = FeatureStateNode(
       id: '${featId}_${versionTag}_cp_1',
-      name: 'Checkpoint 1: ${archetype.cp1Title}',
-      trigger: 'Playtest: ${archetype.cp1Playtest}',
+      name: 'Checkpoint 1: $cleanTitle',
+      trigger: '',
       order: 0,
-      checklist: checklist,
-      coveredScope: List<String>.from(archetype.inScope),
-      tuningParams: List<String>.from(archetype.tuningParams),
-      edgeCases: List<String>.from(archetype.edgeCases),
+      checklist: const [],
+      coveredScope: const [],
+      tuningParams: const [],
+      edgeCases: const [],
       parameters: {'releaseVersion': versionTag},
     );
 
@@ -2694,24 +2600,24 @@ Return ONLY a JSON object:
             ProposedFeatureBlueprint(
               id: featId,
               title: cleanTitle,
-              goal: archetype.goal,
-              doneWhen: archetype.doneWhen,
+              goal: '',
+              doneWhen: '',
               estimatedHours: 4,
               included: true,
               lifecycle: FeatureLifecycleStatus.newFeature,
               originVersion: versionTag,
-              inScope: archetype.inScope,
-              outOfScope: archetype.outOfScope,
-              tuningParams: archetype.tuningParams,
-              edgeCases: archetype.edgeCases,
+              inScope: const [],
+              outOfScope: const [],
+              tuningParams: const [],
+              edgeCases: const [],
               checkpoints: [
                 ProposedCheckpointBlueprint(
-                  title: archetype.cp1Title,
-                  playtestCriteria: archetype.cp1Playtest,
-                  tasks: archetype.cp1Tasks,
-                  coveredScope: archetype.inScope,
-                  tuningParams: archetype.tuningParams,
-                  edgeCases: archetype.edgeCases,
+                  title: cleanTitle,
+                  playtestCriteria: '',
+                  tasks: const [],
+                  coveredScope: const [],
+                  tuningParams: const [],
+                  edgeCases: const [],
                   releaseVersion: versionTag,
                 ),
               ],
@@ -2725,22 +2631,19 @@ Return ONLY a JSON object:
     _recordAgentTrace(AgentRunTrace(
       agentRole: 'Systems & Engine Architect',
       userGoal: 'Add Feature "$cleanTitle" to ${beatDoc.title}',
-      reasoning:
-          'Synthesized Build Tasks, ${archetype.tuningParams.length} numeric tuning variables, and ${archetype.edgeCases.length} [GUARD] rules in 2. Workbench.',
+      reasoning: 'Created "$cleanTitle" in 2. Workbench and queued AI enrichment.',
       toolCalls: [
         AgentToolCall(
           toolName: 'create_live_feature_in_workbench',
           targetTitle: cleanTitle,
-          summary: 'Added "$cleanTitle" (4h) with ${archetype.cp1Title}',
+          summary: 'Added "$cleanTitle" (4h)',
         ),
       ],
     ));
 
     selectFeature(featId);
     _syncActiveProjectMetadata();
-    if (GeminiAgentClient.hasKey(_apiKey)) {
-      _enrichLiveFeatureWithAi(featId, beatDoc.title);
-    }
+    _enrichLiveFeatureWithAi(featId, beatDoc.title);
     return featId;
   }
 

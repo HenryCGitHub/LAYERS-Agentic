@@ -1172,13 +1172,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           .where((s) => s.subtask.completed)
                           .length;
                       final totalSubCount = bp.subSteps.length;
-                      final groupTitle = isFixTask
-                          ? bp.shortTaskTitle.toUpperCase()
-                          : MechanicArchetypeProfile.taskGroupTitle(
-                              grp.cpCategory,
-                              grp.globalTaskIdx,
-                              fallbackTitle: bp.shortTaskTitle,
-                            ).toUpperCase();
+                      final groupTitle = bp.shortTaskTitle.toUpperCase();
 
                       return Container(
                         padding: EdgeInsets.symmetric(
@@ -1910,44 +1904,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final isActiveFocus = index == activeFocusIndex;
     final bool isCollapsed = !isActiveFocus;
 
-    final featureArchetype =
-        MechanicArchetypeProfile.fromFeatureTitle(feat.title);
-    final cpArchetypeCategory =
-        MechanicArchetypeProfile.inferCategory(node.cleanStageTitle);
-    final effectiveCheckpointCategory =
-        (cpArchetypeCategory == 'polish' || cpArchetypeCategory == 'content')
-            ? cpArchetypeCategory
-            : featureArchetype.category;
-    final rawFeatureGoal = SectionTextUtils.resolveGoal(feat.sections).trim();
-    final isLegacyCircularGoal = rawFeatureGoal.isEmpty ||
-        rawFeatureGoal.toLowerCase().contains('(execute ') ||
-        rawFeatureGoal
-            .toLowerCase()
-            .startsWith('build the playable mechanics and feedback for ');
-    final featureGoalText =
-        isLegacyCircularGoal ? featureArchetype.goal : rawFeatureGoal;
-
-    final rawPlaytest = node.playtestCondition.trim();
-    final isLegacyCircularPlaytest = rawPlaytest.isEmpty ||
-        (rawPlaytest.toLowerCase().startsWith('execute ') &&
-            rawPlaytest.toLowerCase().contains('verify "execute ')) ||
-        (rawPlaytest.toLowerCase().startsWith('trigger ') &&
-            rawPlaytest
-                .toLowerCase()
-                .contains('state activates within actionresponsewindow') &&
-            featureArchetype.category != 'core');
-    final resolvedPlaytestCheck =
-        isLegacyCircularPlaytest ? featureArchetype.cp1Playtest : rawPlaytest;
-
-    final hasLegacyEconomyMismatch = featureArchetype.category != 'economy' &&
-        node.tuningParams.isNotEmpty &&
-        node.tuningParams.first.contains('transactionCostBase: 25 gold');
-    final tuningItems = hasLegacyEconomyMismatch
-        ? featureArchetype.tuningParams
-        : node.tuningParams;
-    final edgeItems = hasLegacyEconomyMismatch
-        ? featureArchetype.edgeCases
-        : node.edgeCases;
+    final featureGoalText = SectionTextUtils.resolveGoal(feat.sections).trim();
+    final resolvedPlaytestCheck = node.playtestCondition.trim();
+    final tuningItems = node.tuningParams;
+    final edgeItems = node.edgeCases;
 
     // Resolve Checkable How-To Blueprints for all parent tasks in this checkpoint
     final engineHint = _engineHint;
@@ -2077,7 +2037,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                   enabled: false,
                   height: 26,
                   child: Text(
-                    '${howToBlueprints[tIdx].numLabel} · ${MechanicArchetypeProfile.taskGroupTitle(effectiveCheckpointCategory, tIdx, fallbackTitle: howToBlueprints[tIdx].shortTaskTitle).toUpperCase()}',
+                    '${howToBlueprints[tIdx].numLabel} · ${howToBlueprints[tIdx].shortTaskTitle.toUpperCase()}',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
                       fontWeight: FontWeight.w800,
@@ -2537,7 +2497,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             howToBlueprints: howToBlueprints,
                             selectedTaskIdx: selectedTaskIdx,
                             activeSubStepIdx: activeSubStepIdx,
-                            featureCategory: effectiveCheckpointCategory,
+                            featureCategory: 'core',
                           ),
                         ),
                         const SizedBox(width: 22),

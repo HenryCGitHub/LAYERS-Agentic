@@ -574,7 +574,85 @@ class WorkbenchShell extends StatelessWidget {
           ),
         ),
       ),
-      body: _buildActiveStageBody(),
+      body: Column(
+        children: [
+          if (workbench.isOffline)
+            Container(
+              key: const ValueKey('global_offline_banner'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.accentRedFor(isDark).withValues(alpha: 0.14),
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppTheme.accentRedFor(isDark).withValues(alpha: 0.45),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.wifi_off_rounded,
+                    size: 15,
+                    color: AppTheme.accentRedFor(isDark),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      workbench.offlineErrorMessage ??
+                          'App is offline — Unable to reach Gemini AI.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    key: const ValueKey('offline_banner_settings_btn'),
+                    onTap: () => _showAiSettingsDialog(context),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: bgSurface,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Text(
+                        'AI Settings',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    key: const ValueKey('offline_banner_dismiss_btn'),
+                    onTap: workbench.clearOfflineError,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 14,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(child: _buildActiveStageBody()),
+        ],
+      ),
     );
   }
 

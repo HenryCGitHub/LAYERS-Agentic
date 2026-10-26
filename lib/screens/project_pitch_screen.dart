@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
@@ -165,11 +164,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       title: 'Goal',
       purpose: 'Plain-English statement of what we are building and why.',
       question: 'How should we frame the core prototype goal for v0.1?',
-      options: [
-        'Single-Arena Loop: Focus v0.1 strictly on the core gameplay loop in a single test arena',
-        'Prep + Arena Loop: Include an interactive prep & staging zone before entering the active loop in v0.1',
-        'Controls & Feel First: Focus v0.1 on primary player controls and core mechanic feel first',
-      ],
+      options: [],
     ),
     _SectionConfig(
       numLabel: '02',
@@ -178,11 +173,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       title: 'Game Spec',
       purpose: 'Camera view, player controls, mode, and arena layout.',
       question: 'Which camera perspective and control scheme fits best?',
-      options: [
-        '2D Top-Down · Twin-Stick (WASD + Mouse Aim) · Singleplayer · Single-Screen Arena',
-        '2D Side-Scrolling · Precision Controls · Singleplayer · Multi-Room Stages',
-        '3D First-Person · Mouse + WASD · Singleplayer · Enclosed Sandbox',
-      ],
+      options: [],
     ),
     _SectionConfig(
       numLabel: '03',
@@ -191,11 +182,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       title: 'Tech Spec',
       purpose: 'Engine, target platform, asset pipeline, and save/network architecture.',
       question: 'What engine and technical pipeline are we targeting for v0.1?',
-      options: [
-        'Godot 4 (2D) · PC Desktop · 2D Sprites + Particles · Offline Local Save',
-        'Unity 6 · PC & Steam Deck · 2D/3D Hybrid Pipeline · Steam Cloud Save',
-        'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Offline Local Save',
-      ],
+      options: [],
     ),
     _SectionConfig(
       numLabel: '04',
@@ -205,11 +192,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       purpose: 'Core player experience truths (how the game feels, never a feature list).',
       question: 'Which player experience truth should anchor our design decisions?',
       isMultiSelect: true,
-      options: [
-        'Unbroken Momentum: Prioritize continuous movement velocity and readable telegraphs',
-        'Tactical Positioning: Prioritize deliberate positioning and high-clarity feedback',
-        'Chain-Reaction Mastery: Prioritize fast chain-reactions and rewarding loop mastery',
-      ],
+      options: [],
     ),
     _SectionConfig(
       numLabel: '05',
@@ -219,11 +202,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       purpose: 'Explicit engineering & design priority rules when mechanics conflict.',
       question: 'When mechanics conflict during production, what wins?',
       isMultiSelect: true,
-      options: [
-        'Instant Input Response: Instant arcade input response over realistic physics inertia',
-        'Animation Commitment: Deliberate animation commitment over instant cancelable movement',
-        'Greybox Readability: Clean greybox readability over heavy visual shaders in v0.1',
-      ],
+      options: [],
     ),
     _SectionConfig(
       numLabel: '06',
@@ -233,11 +212,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       purpose: 'Repeatable player gameplay loop used to define the Epics and Features in Stage 2.',
       question: 'How should the playable core loop flow from start to reset?',
       isMultiSelect: true,
-      options: [
-        'Complete 4-Beat Loop: Staging & Prep → Active Gameplay Beats → Resource & Upgrade Choice → Loop Resolution & Reset',
-        'Direct Action Loop: Immediate Entry → Core Mechanic Escalation → Target Objective → Score / Loot Tally → Instant Reset',
-        'Skill Mastery Loop: Setup & Positioning → Primary Skill Execution → Hazard / Counter Response → Reward Payout → Next Round',
-      ],
+      options: [],
     ),
     _SectionConfig(
       numLabel: '07',
@@ -247,11 +222,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       purpose: 'Hard exclusions cut from the Prototype to prevent scope creep.',
       question: 'Which scope-creep features should we explicitly cut from the Prototype?',
       isMultiSelect: true,
-      options: [
-        'Cut Trees, Co-Op & Story: Cut multi-branch skill trees, online co-op, and story cutscenes from Prototype',
-        'Defer Bosses & Crafting: Defer multi-phase bosses and deep inventory crafting until MVP releases',
-        'Defer Meta-Save & Audio: Defer persistent meta-progression saves and audio settings until MVP',
-      ],
+      options: [],
     ),
     _SectionConfig(
       numLabel: '08',
@@ -260,11 +231,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       title: 'Done When',
       purpose: 'Observable playtest condition that proves the Prototype is complete.',
       question: 'How will we verify that the Prototype loop is done?',
-      options: [
-        'All Beats & Clean Reset: Playtester spawns in, executes every core loop beat from start to finish, and resets the arena cleanly',
-        '3 Consecutive Runs: Playtester completes 3 back-to-back loop cycles with clear win/fail resolution and zero soft-locks',
-        'No-Explain Playtest: A playtester picks up the controls, reads the primary objective from on-screen cues alone, and completes a full round',
-      ],
+      options: [],
     ),
   ];
 
@@ -273,18 +240,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     final dynamicOpts = draft.sectionOptions[sec.optionKey];
     if (dynamicOpts != null && dynamicOpts.isNotEmpty) {
       return dynamicOpts;
-    }
-    if (sec.optionKey == 'tradeOffs') {
-      return ProjectConceptAgent.buildTradeOffOptionsForSpark(
-        draft.sparkIdea,
-        draft.title,
-      );
-    }
-    if (sec.optionKey == 'exclusions') {
-      return ProjectConceptAgent.buildExclusionOptionsForSpark(
-        draft.sparkIdea,
-        draft.title,
-      );
     }
     return sec.options;
   }
@@ -619,34 +574,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   }
 
   String _describeCoreLoopBeatStep(String rawStep) {
-    final step = rawStep.trim();
-    final lower = step.toLowerCase();
-    if (lower.contains('prep') ||
-        lower.contains('loadout') ||
-        lower.contains('setup') ||
-        lower.contains('stage')) {
-      return '$step: Pick starting weapon and ability in the staging area and step into the arena trigger to start a run.';
-    }
-    if (lower.contains('action') ||
-        lower.contains('combat') ||
-        lower.contains('engage') ||
-        lower.contains('execute')) {
-      return '$step: Move, dodge, and fire at enemy waves in the arena until all targets are cleared.';
-    }
-    if (lower.contains('upgrade') ||
-        lower.contains('reward') ||
-        lower.contains('resource') ||
-        lower.contains('loot') ||
-        lower.contains('claim')) {
-      return '$step: Collect dropped resources or open the reward chest and pick 1 stat/weapon upgrade.';
-    }
-    if (lower.contains('reset') ||
-        lower.contains('next round') ||
-        lower.contains('resolve') ||
-        lower.contains('restart')) {
-      return '$step: Clear the arena state, advance the wave counter, and spawn the next round or restart cleanly on death.';
-    }
-    return '$step: Trigger $step player inputs, update active gameplay state, and show immediate visual/audio feedback.';
+    return rawStep.trim();
   }
 
   void _applySectionOptionDeterministic(

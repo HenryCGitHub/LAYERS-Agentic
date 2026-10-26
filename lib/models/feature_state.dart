@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/tier_document.dart';
-import 'mechanic_archetype_profile.dart';
 export 'mechanic_archetype_profile.dart';
 export 'task_how_to_blueprint.dart';
 
@@ -118,11 +117,6 @@ class FeatureStateNode {
       t = t.substring(9).trim();
     }
     if (t.isNotEmpty) {
-      final lower = t.toLowerCase();
-      if (lower.startsWith('execute ') && lower.contains('verify "execute ')) {
-        return MechanicArchetypeProfile.fromFeatureTitle(cleanStageTitle)
-            .cp1Playtest;
-      }
       return t;
     }
     if (feedback != null && feedback!.trim().isNotEmpty) return feedback!.trim();
