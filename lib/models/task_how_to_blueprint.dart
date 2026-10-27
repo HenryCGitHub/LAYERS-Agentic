@@ -311,6 +311,7 @@ class TaskHowToBlueprint {
   static String inferLayerTag(String rawText, int taskIdx) {
     final lower = rawText.toLowerCase();
     if (lower.contains('input') ||
+        lower.contains('mapping') ||
         lower.contains('control') ||
         lower.contains('key') ||
         lower.contains('mouse') ||
@@ -319,6 +320,7 @@ class TaskHowToBlueprint {
       return 'INPUT';
     }
     if (lower.contains('physic') ||
+        lower.contains('tuning') ||
         lower.contains('velocity') ||
         lower.contains('force') ||
         lower.contains('speed') ||
@@ -459,21 +461,39 @@ class TaskHowToBlueprint {
       'feature',
       'structure',
       'base',
+      'basic',
+      'initial',
+      'mapping',
+      'tuning',
+      'config',
+      'configuration',
+      'wiring',
+      'pawn',
       'properties',
       'actor',
       'node',
     };
     final seenLower = <String>{};
     final words = <String>[];
+    final versionTokenRe = RegExp(r'^v\d+$', caseSensitive: false);
     for (final m in _identifierWordRegex.allMatches(clean)) {
       final w = m.group(0)!;
       final lowerW = w.toLowerCase();
       if (w.length > 1 &&
           !stopWords.contains(lowerW) &&
           !_digitsOnlyRegex.hasMatch(w) &&
+          !versionTokenRe.hasMatch(lowerW) &&
           seenLower.add(lowerW)) {
         words.add(w);
       }
+    }
+    final lowerClean = clean.toLowerCase();
+    if (words.length == 1 &&
+        (lowerClean.contains('locomotion') ||
+            lowerClean.contains('pawn') ||
+            lowerClean.contains('character')) &&
+        !seenLower.contains('character')) {
+      words.add('Character');
     }
     final chosen = words.isNotEmpty
         ? words.take(3).toList()
@@ -743,7 +763,15 @@ class TaskHowToBlueprint {
                 lowerCategoryCorpus.contains('sword') ||
                 lowerCategoryCorpus.contains('melee'))
             ? 'combat'
-            : 'core';
+            : (lowerCategoryCorpus.contains('locomotion') ||
+                    lowerCategoryCorpus.contains('pawn') ||
+                    lowerCategoryCorpus.contains('character') ||
+                    lowerCategoryCorpus.contains('parkour') ||
+                    lowerCategoryCorpus.contains('sprint') ||
+                    lowerCategoryCorpus.contains('first person') ||
+                    lowerCategoryCorpus.contains('third person'))
+                ? 'character'
+                : 'core';
     final effectiveTuningParams = checkpointNode.tuningParams;
     final effectiveEdgeCases = checkpointNode.edgeCases;
 
@@ -754,8 +782,21 @@ class TaskHowToBlueprint {
     final primaryGuard = effectiveEdgeCases.isNotEmpty
         ? effectiveEdgeCases[taskIndex % effectiveEdgeCases.length]
         : '[STATE GUARD] Prevent duplicate trigger while active';
+    final lowerTaskTitle = cleanTitle.toLowerCase();
     final isFoundationTask = taskIndex == 0;
-    final isStateLogicTask = taskIndex == 1;
+    final isInputMappingTask = !isFoundationTask &&
+        (lowerTaskTitle.contains('input') ||
+            lowerTaskTitle.contains('mapping'));
+    final isPhysicsTuningTask = !isFoundationTask &&
+        !isInputMappingTask &&
+        (lowerTaskTitle.contains('tuning') ||
+            lowerTaskTitle.contains('gravity') ||
+            (lowerTaskTitle.contains('physics') &&
+                !lowerTaskTitle.contains('wasd')));
+    final isStateLogicTask = !isFoundationTask &&
+        !isInputMappingTask &&
+        !isPhysicsTuningTask &&
+        taskIndex == 1;
 
     ({
       String stepHeader,
@@ -914,49 +955,93 @@ class TaskHowToBlueprint {
             case 0:
               return (
                 stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.1 · CREATE $bpAsset BLUEPRINT ASSET'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.1 · DEFINE STATE ENUM & VARIABLES IN $bpAsset'
-                        : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $bpAsset'),
+                    ? (effectiveCategory == 'character'
+                        ? 'STEP $taskNum.1 · CREATE $bpAsset CHARACTER BLUEPRINT'
+                        : 'STEP $taskNum.1 · CREATE $bpAsset BLUEPRINT ASSET')
+                    : (isInputMappingTask
+                        ? 'STEP $taskNum.1 · CREATE INPUT ACTION & MAPPING CONTEXT FOR $bpAsset'
+                        : (isPhysicsTuningTask
+                            ? 'STEP $taskNum.1 · SELECT MOVEMENT & PHYSICS COMPONENT IN $bpAsset'
+                            : (isStateLogicTask
+                                ? 'STEP $taskNum.1 · DEFINE STATE ENUM & VARIABLES IN $bpAsset'
+                                : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $bpAsset'))),
                 shortTitle: isFoundationTask
                     ? 'Create $bpAsset'
-                    : (isStateLogicTask
-                        ? 'Define State Enum'
-                        : 'Bind Player Interaction Input'),
+                    : (isInputMappingTask
+                        ? 'Create IA_Move & IMC_Default'
+                        : (isPhysicsTuningTask
+                            ? 'Select Movement Component'
+                            : (isStateLogicTask
+                                ? 'Define State Enum'
+                                : 'Bind Player Interaction Input'))),
                 instruction: isFoundationTask
-                    ? 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Actor, and name it $bpAsset.'
-                    : (isStateLogicTask
-                        ? 'In /Game/Blueprints, double-click $bpAsset (created in Task 01) and add a State variable (Enum / Integer) under My Blueprint → Variables for "$cleanTitle".'
-                        : 'Open $bpAsset in /Game/Blueprints and add your player interaction input event (e.g., EnhancedInputAction IA_Interact) on the Event Graph.'),
+                    ? (effectiveCategory == 'character'
+                        ? 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Character, and name it $bpAsset.'
+                        : 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Actor, and name it $bpAsset.')
+                    : (isInputMappingTask
+                        ? 'In /Game/Input, create an Input Action IA_Move (Value Type: Axis2D) and an Input Mapping Context IMC_Default (bind WASD / Left Stick), then open $bpAsset (created in Task 01).'
+                        : (isPhysicsTuningTask
+                            ? 'In /Game/Blueprints, double-click $bpAsset (created in Task 01) and select its CharacterMovement / physics component in the Components panel.'
+                            : (isStateLogicTask
+                                ? 'In /Game/Blueprints, double-click $bpAsset (created in Task 01) and add a State variable (Enum / Integer) under My Blueprint → Variables for "$cleanTitle".'
+                                : 'Open $bpAsset in /Game/Blueprints and add your player interaction input event (e.g., EnhancedInputAction IA_Interact) on the Event Graph.'))),
                 verify: isFoundationTask
                     ? 'A new blue-underlined Blueprint icon named $bpAsset appears inside /Game/Blueprints.'
                     : 'The Blueprint Editor opens showing $bpAsset ready for "$cleanTitle".',
                 path: 'Content Browser → /Game/Blueprints/$bpAsset',
-                code: 'Asset Name:   $bpAsset\nParent Class: Actor (AActor / EMechanicState::Active)',
-                explain: 'An Actor Blueprint is a visual container you can place in a level that holds 3D meshes, collision sensors, and Event Graph nodes.',
+                code: isFoundationTask && effectiveCategory == 'character'
+                    ? 'Asset Name:   $bpAsset\nParent Class: Character (ACharacter / EMechanicState::Active)'
+                    : (isInputMappingTask
+                        ? 'Target Blueprint: $bpAsset (Reuse from Task 01)\nInput Assets:     IA_Move (Axis2D), IMC_Default (WASD)'
+                        : (isPhysicsTuningTask
+                            ? 'Target Blueprint: $bpAsset (Reuse from Task 01)\nTarget Component: CharacterMovement (UCharacterMovementComponent)'
+                            : 'Asset Name:   $bpAsset\nParent Class: Actor (AActor / EMechanicState::Active)')),
+                explain: 'All tasks in this feature modify the single $bpAsset Blueprint created in Task 01 so your setup, input, and physics work together seamlessly.',
               );
             case 1:
               return (
                 stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.2 · ATTACH VISUAL MESH & BOX COLLISION'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.2 · BUILD STATE TRANSITION FUNCTION'
-                        : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE BY CHANNEL'),
+                    ? (effectiveCategory == 'character'
+                        ? 'STEP $taskNum.2 · CONFIGURE CAPSULE, CAMERA & MOVEMENT COMPONENTS'
+                        : 'STEP $taskNum.2 · ATTACH VISUAL MESH & BOX COLLISION')
+                    : (isInputMappingTask
+                        ? 'STEP $taskNum.2 · REGISTER IMC_DEFAULT ON BEGINPLAY IN $bpAsset'
+                        : (isPhysicsTuningTask
+                            ? 'STEP $taskNum.2 · CONFIGURE VELOCITY, ACCELERATION & GRAVITY'
+                            : (isStateLogicTask
+                                ? 'STEP $taskNum.2 · BUILD STATE TRANSITION FUNCTION'
+                                : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE BY CHANNEL'))),
                 shortTitle: isFoundationTask
-                    ? 'Attach BoxCollision'
-                    : (isStateLogicTask
-                        ? 'Build State Transition Function'
-                        : 'Cast Interaction LineTrace'),
+                    ? (effectiveCategory == 'character'
+                        ? 'Configure Capsule & Camera'
+                        : 'Attach BoxCollision')
+                    : (isInputMappingTask
+                        ? 'Register Mapping Context'
+                        : (isPhysicsTuningTask
+                            ? 'Configure Walk Speed & Gravity'
+                            : (isStateLogicTask
+                                ? 'Build State Transition Function'
+                                : 'Cast Interaction LineTrace'))),
                 instruction: isFoundationTask
-                    ? 'Inside $bpAsset, look at the top-left Components panel and click + Add to attach a Static Mesh ("VisualMesh", set to Shape_Plane/Cube) and a Box Collision ("InteractBox").'
-                    : (isStateLogicTask
-                        ? 'In $bpAsset under My Blueprint → Functions, click + to create a function named "AdvanceState" with a Switch on State node to step through valid states.'
-                        : 'From your Input Action node, wire a LineTraceByChannel node projecting forward from the Player Camera to detect $bpAsset.'),
+                    ? (effectiveCategory == 'character'
+                        ? 'Inside $bpAsset, select the CapsuleComponent in the Components panel, click + Add to attach a CameraComponent ("FirstPersonCamera") at eye height, and verify CharacterMovement is present.'
+                        : 'Inside $bpAsset, look at the top-left Components panel and click + Add to attach a Static Mesh ("VisualMesh", set to Shape_Plane/Cube) and a Box Collision ("InteractBox").')
+                    : (isInputMappingTask
+                        ? 'In $bpAsset Event Graph, drag off Event BeginPlay → Get Controller → Cast To PlayerController → Enhanced Input Local Player Subsystem → Add Mapping Context (IMC_Default).'
+                        : (isPhysicsTuningTask
+                            ? 'With CharacterMovement selected in $bpAsset, open the Details panel and configure Max Walk Speed, Max Acceleration, Braking Deceleration, and Gravity Scale.'
+                            : (isStateLogicTask
+                                ? 'In $bpAsset under My Blueprint → Functions, click + to create a function named "AdvanceState" with a Switch on State node to step through valid states.'
+                                : 'From your Input Action node, wire a LineTraceByChannel node projecting forward from the Player Camera to detect $bpAsset.'))),
                 verify: isFoundationTask
-                    ? 'A visible 3D shape surrounded by an orange wireframe collision box appears in the central Viewport tab.'
-                    : (isStateLogicTask
-                        ? 'The AdvanceState function tab opens with Input → Switch on State → Set CurrentState nodes.'
-                        : 'Triggering the input fires a red debug trace line toward the targeted $bpAsset.'),
+                    ? 'A visible 3D shape surrounded by a wireframe collision bounds appears in the central Viewport tab.'
+                    : (isInputMappingTask
+                        ? 'Event BeginPlay registers IMC_Default on $bpAsset with zero compiler warnings.'
+                        : (isPhysicsTuningTask
+                            ? 'CharacterMovement Details panel reflects your updated speed, acceleration, and gravity values.'
+                            : (isStateLogicTask
+                                ? 'The AdvanceState function tab opens with Input → Switch on State → Set CurrentState nodes.'
+                                : 'Triggering the input fires a red debug trace line toward the targeted $bpAsset.'))),
                 path: isFoundationTask
                     ? '$bpAsset → Components Panel (Top-Left)'
                     : '$bpAsset → Functions / Event Graph',
@@ -965,58 +1050,92 @@ class TaskHowToBlueprint {
                         ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ CameraBoom   (SpringArmComponent: TargetArmLength = 400.0)\n     │   └─ FollowCamera (CameraComponent)\n     └─ HudCanvas    (WidgetComponent: Screen Space)'
                         : (effectiveCategory == 'combat'
                             ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ WeaponMesh  (StaticMeshComponent)\n     ├─ MuzzlePoint (SceneComponent)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)'
-                            : '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)'))
-                    : (isStateLogicTask
-                        ? '[Function: AdvanceState]\n   └──► [Switch on E_State]\n           ├──► Idle   ──► [Set CurrentState = Active]\n           └──► Active ──► [Set CurrentState = Complete]'
-                        : '[IA_Interact (Started)] ──► [LineTraceByChannel (Camera → +400cm)]\n   └──► [Break Hit Result (Hit Actor)]'),
+                            : (effectiveCategory == 'character'
+                                ? '$bpAsset (Self: ACharacter)\n ├─ CapsuleComponent  (Collision Cylinder: HalfHeight = 88, Radius = 34)\n ├─ FirstPersonCamera (CameraComponent: Use Pawn Control Rotation = true)\n └─ CharacterMovement (Movement Component)'
+                                : '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)')))
+                    : (isInputMappingTask
+                        ? '[Event BeginPlay] ──► [Get Controller] ──► [EnhancedInputLocalPlayerSubsystem]\n   └──► [Add Mapping Context (MappingContext = IMC_Default, Priority = 0)]'
+                        : (isPhysicsTuningTask
+                            ? 'CharacterMovement (Details Panel):\n ├─ Max Walk Speed:               $primaryVar\n ├─ Max Acceleration:             2048.0 cm/s²\n └─ Braking Deceleration Walking: 2048.0 cm/s²'
+                            : (isStateLogicTask
+                                ? '[Function: AdvanceState]\n   └──► [Switch on E_State]\n           ├──► Idle   ──► [Set CurrentState = Active]\n           └──► Active ──► [Set CurrentState = Complete]'
+                                : '[IA_Interact (Started)] ──► [LineTraceByChannel (Camera → +400cm)]\n   └──► [Break Hit Result (Hit Actor)]'))),
                 explain: isFoundationTask
-                    ? 'Static Mesh makes the object visible to the player. Box Collision creates an invisible trigger zone so the game knows when the player overlaps or clicks it.'
+                    ? 'Static Mesh / Capsule defines the physical bounds, and components give $bpAsset its core capabilities.'
                     : (isStateLogicTask
                         ? 'Putting state transitions inside a dedicated function keeps your Event Graph clean and callable from any trigger.'
-                        : 'LineTraceByChannel projects an invisible ray from the player camera to find exactly which actor you are looking at.'),
+                        : 'Connecting input and movement directly inside $bpAsset keeps your mechanic self-contained.'),
               );
             case 2:
               return (
                 stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.3 · DRAG $bpAsset INTO LEVEL VIEWPORT'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.3 · SWAP VISUAL MATERIAL ON STATE CHANGE'
-                        : 'STEP $taskNum.3 · CALL INTERACT TRIGGER ON HIT ACTOR'),
+                    ? (effectiveCategory == 'character'
+                        ? 'STEP $taskNum.3 · PLACE $bpAsset IN LEVEL & SET DEFAULT PAWN'
+                        : 'STEP $taskNum.3 · DRAG $bpAsset INTO LEVEL VIEWPORT')
+                    : (isInputMappingTask
+                        ? 'STEP $taskNum.3 · WIRE IA_MOVE AXIS TO MOVEMENT IN $bpAsset'
+                        : (isPhysicsTuningTask
+                            ? 'STEP $taskNum.3 · WIRE VELOCITY & MOMENTUM INTERPOLATION IN $bpAsset'
+                            : (isStateLogicTask
+                                ? 'STEP $taskNum.3 · SWAP VISUAL MATERIAL ON STATE CHANGE'
+                                : 'STEP $taskNum.3 · CALL INTERACT TRIGGER ON HIT ACTOR'))),
                 shortTitle: isFoundationTask
                     ? 'Drag into Level Viewport'
-                    : (isStateLogicTask
-                        ? 'Swap Visual Material on State Change'
-                        : 'Call Interact Trigger on Hit Actor'),
+                    : (isInputMappingTask
+                        ? 'Wire IA_Move to AddMovementInput'
+                        : (isPhysicsTuningTask
+                            ? 'Wire Physics Momentum Curve'
+                            : (isStateLogicTask
+                                ? 'Swap Visual Material on State Change'
+                                : 'Call Interact Trigger on Hit Actor'))),
                 instruction: isFoundationTask
-                    ? 'Click Compile & Save (top-left of $bpAsset), then switch to the main Level tab and drag $bpAsset from the Content Browser onto the floor at (0, 0, 0).'
-                    : (isStateLogicTask
-                        ? 'At the end of AdvanceState in $bpAsset, drag VisualMesh into the graph and call Set Material (or Set Vector Parameter Value) so each state changes color on screen.'
-                        : 'Drag off the Hit Actor pin from Break Hit Result, Cast To $bpAsset, and call its AdvanceState / Interact function.'),
+                    ? (effectiveCategory == 'character'
+                        ? 'Click Compile & Save in $bpAsset, drag $bpAsset into the Level Viewport (or set Auto Possess Player = Player 0 in Details), so Play mode spawns inside $bpAsset.'
+                        : 'Click Compile & Save (top-left of $bpAsset), then switch to the main Level tab and drag $bpAsset from the Content Browser onto the floor at (0, 0, 0).')
+                    : (isInputMappingTask
+                        ? 'In $bpAsset Event Graph, right-click and add EnhancedInputAction IA_Move, then wire Triggered (Action Value X/Y) into Add Movement Input.'
+                        : (isPhysicsTuningTask
+                            ? 'In $bpAsset Event Graph, connect Event Tick / Movement update to scale CharacterMovement Max Walk Speed & velocity interpolation using $primaryVarName.'
+                            : (isStateLogicTask
+                                ? 'At the end of AdvanceState in $bpAsset, drag VisualMesh into the graph and call Set Material (or Set Vector Parameter Value) so each state changes color on screen.'
+                                : 'Drag off the Hit Actor pin from Break Hit Result, Cast To $bpAsset, and call its AdvanceState / Interact function.'))),
                 verify: isFoundationTask
                     ? '$bpAsset sits on the level floor and is listed inside the World Outliner panel.'
-                    : (isStateLogicTask
-                        ? 'VisualMesh updates its material color immediately whenever CurrentState changes.'
-                        : 'Looking at $bpAsset and pressing Interact invokes AdvanceState on the hit instance.'),
+                    : (isInputMappingTask
+                        ? 'Pressing WASD in Play mode drives AddMovementInput on $bpAsset.'
+                        : (isPhysicsTuningTask
+                            ? '$bpAsset accelerates and decelerates smoothly according to $primaryVarName.'
+                            : (isStateLogicTask
+                                ? 'VisualMesh updates its material color immediately whenever CurrentState changes.'
+                                : 'Looking at $bpAsset and pressing Interact invokes AdvanceState on the hit instance.'))),
                 path: isFoundationTask
                     ? 'Main Level Viewport & World Outliner'
                     : '$bpAsset → Event Graph / AdvanceState',
                 code: isFoundationTask
                     ? 'Instance: ${bpAsset}_0\nLocation: X = 0.0, Y = 0.0, Z = 0.0'
-                    : (isStateLogicTask
-                        ? '[Set CurrentState] ──► [Set Material (Target: VisualMesh)]\n                         (Select Material by CurrentState)'
-                        : '[Break Hit Result] ──► [Cast To $bpAsset]\n                          └──► [Call AdvanceState ()]'),
+                    : (isInputMappingTask
+                        ? '[EnhancedInputAction IA_Move (Triggered)]\n   ├──► [Add Movement Input (WorldDirection: ForwardVector, ScaleValue: ActionValue.Y)]\n   └──► [Add Movement Input (WorldDirection: RightVector,   ScaleValue: ActionValue.X)]'
+                        : (isPhysicsTuningTask
+                            ? '[Event Tick] ──► [CharacterMovement → Set Max Walk Speed ($primaryVarName)]\n   └──► [FMath::FInterpConstantTo (Velocity, TargetVelocity, DeltaSeconds, $primaryVarName)]'
+                            : (isStateLogicTask
+                                ? '[Set CurrentState] ──► [Set Material (Target: VisualMesh)]\n                         (Select Material by CurrentState)'
+                                : '[Break Hit Result] ──► [Cast To $bpAsset]\n                          └──► [Call AdvanceState ()]'))),
                 explain: isFoundationTask
                     ? 'A Blueprint in the Content Browser is just a template. Dragging it into the Level Viewport spawns an actual physical copy inside your game world.'
-                    : 'Updating the mesh material gives instant visual confirmation that the state change succeeded.',
+                    : 'Updating the active component state on $bpAsset gives instant playable response in the viewport.',
               );
             case 3:
               return (
                 stepHeader: 'STEP $taskNum.4 · ADD & EXPOSE TUNING VARIABLES',
                 shortTitle: isFoundationTask
                     ? 'Add $primaryVarName Variable'
-                    : (isStateLogicTask
-                        ? 'Bind $primaryVarName to Transition Speed'
-                        : 'Add Target Hover Highlight Cue'),
+                    : (isInputMappingTask
+                        ? 'Expose $primaryVarName Input Tuning'
+                        : (isPhysicsTuningTask
+                            ? 'Expose $primaryVarName Physics Tuning'
+                            : (isStateLogicTask
+                                ? 'Bind $primaryVarName to Transition Speed'
+                                : 'Add Target Hover Highlight Cue'))),
                 instruction:
                     'In $bpAsset, find My Blueprint → Variables on the left and click + to add $primaryVarName (Float) and bIsActive (Boolean). Click the Eye Icon next to $primaryVarName to make it Instance Editable.',
                 verify:
@@ -1074,19 +1193,31 @@ class TaskHowToBlueprint {
             return (
               stepHeader: isFoundationTask
                   ? 'STEP $taskNum.1 · CREATE $pascalAsset.cs C# SCRIPT'
-                  : (isStateLogicTask
-                      ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $pascalAsset.cs'
-                      : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $pascalAsset.cs'),
+                  : (isInputMappingTask
+                      ? 'STEP $taskNum.1 · DEFINE INPUT AXES IN $pascalAsset.cs'
+                      : (isPhysicsTuningTask
+                          ? 'STEP $taskNum.1 · CONFIGURE PHYSICS FIELDS IN $pascalAsset.cs'
+                          : (isStateLogicTask
+                              ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $pascalAsset.cs'
+                              : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $pascalAsset.cs'))),
               shortTitle: isFoundationTask
                   ? 'Create $pascalAsset.cs'
-                  : (isStateLogicTask
-                      ? 'Define State Enum'
-                      : 'Bind Player Interaction Input'),
+                  : (isInputMappingTask
+                      ? 'Define Input Axes'
+                      : (isPhysicsTuningTask
+                          ? 'Configure Physics Fields'
+                          : (isStateLogicTask
+                              ? 'Define State Enum'
+                              : 'Bind Player Interaction Input'))),
               instruction: isFoundationTask
                   ? 'In the Project window (bottom panel), right-click inside Assets/Scripts → Create → C# Script, and name it $pascalAsset.'
-                  : (isStateLogicTask
-                      ? 'In Assets/Scripts, open $pascalAsset.cs and define the state enum and active state field for "$cleanTitle".'
-                      : 'Open $pascalAsset.cs and bind the player interaction input check for "$cleanTitle".'),
+                  : (isInputMappingTask
+                      ? 'Open Assets/Scripts/$pascalAsset.cs (created in Task 01) and declare the input vector fields for "$cleanTitle".'
+                      : (isPhysicsTuningTask
+                          ? 'Open Assets/Scripts/$pascalAsset.cs (created in Task 01) and cache the CharacterController / Rigidbody reference for "$cleanTitle".'
+                          : (isStateLogicTask
+                              ? 'In Assets/Scripts, open $pascalAsset.cs and define the state enum and active state field for "$cleanTitle".'
+                              : 'Open $pascalAsset.cs and bind the player interaction input check for "$cleanTitle".'))),
               verify: isFoundationTask
                   ? '$pascalAsset.cs appears in Assets/Scripts with class $pascalAsset : MonoBehaviour.'
                   : '$pascalAsset.cs compiles cleanly in your code editor.',
@@ -1098,19 +1229,31 @@ class TaskHowToBlueprint {
             return (
               stepHeader: isFoundationTask
                   ? 'STEP $taskNum.2 · CREATE GAMEOBJECT & ATTACH COLLIDER'
-                  : (isStateLogicTask
-                      ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION METHOD'
-                      : 'STEP $taskNum.2 · CAST PHYSICS RAYCAST TO TARGET'),
+                  : (isInputMappingTask
+                      ? 'STEP $taskNum.2 · READ INPUT AXES IN UPDATE()'
+                      : (isPhysicsTuningTask
+                          ? 'STEP $taskNum.2 · CONFIGURE VELOCITY, GRAVITY & DRAG'
+                          : (isStateLogicTask
+                              ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION METHOD'
+                              : 'STEP $taskNum.2 · CAST PHYSICS RAYCAST TO TARGET'))),
               shortTitle: isFoundationTask
                   ? 'Attach BoxCollider'
-                  : (isStateLogicTask
-                      ? 'Build State Transition Function'
-                      : 'Cast Interaction Raycast'),
+                  : (isInputMappingTask
+                      ? 'Read Input Axes in Update()'
+                      : (isPhysicsTuningTask
+                          ? 'Configure Velocity & Gravity'
+                          : (isStateLogicTask
+                              ? 'Build State Transition Function'
+                              : 'Cast Interaction Raycast'))),
               instruction: isFoundationTask
                   ? 'In the Hierarchy window (left), right-click → Create Empty → name it "$pascalAsset". In the Inspector, click Add Component to attach a MeshRenderer/SpriteRenderer, a BoxCollider (check Is Trigger), and your $pascalAsset script.'
-                  : (isStateLogicTask
-                      ? 'Inside $pascalAsset.cs, write a SetState() method that validates and advances the current state.'
-                      : 'Inside $pascalAsset.cs, cast a Physics.Raycast from Camera.main to detect the targeted $pascalAsset collider.'),
+                  : (isInputMappingTask
+                      ? 'Inside $pascalAsset.cs Update(), sample Horizontal and Vertical input axes into a normalized moveInput vector.'
+                      : (isPhysicsTuningTask
+                          ? 'Inside $pascalAsset.cs FixedUpdate(), apply acceleration, gravity, and velocity damping to the movement component.'
+                          : (isStateLogicTask
+                              ? 'Inside $pascalAsset.cs, write a SetState() method that validates and advances the current state.'
+                              : 'Inside $pascalAsset.cs, cast a Physics.Raycast from Camera.main to detect the targeted $pascalAsset collider.'))),
               verify:
                   'Selecting $pascalAsset in the Scene view shows a green wireframe BoxCollider outline.',
               path: 'Hierarchy → $pascalAsset → Inspector → Add Component',
@@ -1118,26 +1261,42 @@ class TaskHowToBlueprint {
                   ? (effectiveCategory == 'ui'
                       ? '$pascalAsset (GameObject)\n ├─ CameraArm  (Transform + Camera)\n ├─ HudCanvas  (Canvas + CanvasScaler + GraphicRaycaster)\n └─ $pascalAsset (MonoBehaviour Script)'
                       : '$pascalAsset (GameObject)\n ├─ VisualMesh      (MeshFilter + MeshRenderer / SpriteRenderer)\n ├─ InteractTrigger (BoxCollider: isTrigger = true)\n └─ $pascalAsset    (MonoBehaviour Script)')
-                  : 'public void ExecuteStep(float delta) {\n    // Step 2: Core State / Raycast\n}',
+                  : (isInputMappingTask
+                      ? 'Vector2 moveInput = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")).normalized;'
+                      : (isPhysicsTuningTask
+                          ? 'velocity = Vector3.MoveTowards(velocity, targetVelocity, $primaryVarName * Time.fixedDeltaTime);'
+                          : 'public void ExecuteStep(float delta) {\n    // Step 2: Core State / Raycast\n}')),
               explain: 'The Renderer draws the object on screen, the BoxCollider detects overlaps/clicks, and the Script runs your C# logic.',
             );
           case 2:
             return (
               stepHeader: isFoundationTask
                   ? 'STEP $taskNum.3 · POSITION IN SCENE & SAVE PREFAB'
-                  : (isStateLogicTask
-                      ? 'STEP $taskNum.3 · SWAP MATERIAL COLOR ON STATE CHANGE'
-                      : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $pascalAsset'),
+                  : (isInputMappingTask
+                      ? 'STEP $taskNum.3 · WIRE INPUT VECTOR TO MOVEMENT IN $pascalAsset.cs'
+                      : (isPhysicsTuningTask
+                          ? 'STEP $taskNum.3 · APPLY PHYSICS VELOCITY TO CONTROLLER'
+                          : (isStateLogicTask
+                              ? 'STEP $taskNum.3 · SWAP MATERIAL COLOR ON STATE CHANGE'
+                              : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $pascalAsset'))),
               shortTitle: isFoundationTask
                   ? 'Place in Scene at (0, 0, 0)'
-                  : (isStateLogicTask
-                      ? 'Swap Visual Material on State Change'
-                      : 'Call Interact Trigger on Hit Actor'),
+                  : (isInputMappingTask
+                      ? 'Wire Input Vector to Movement'
+                      : (isPhysicsTuningTask
+                          ? 'Apply Physics Velocity'
+                          : (isStateLogicTask
+                              ? 'Swap Visual Material on State Change'
+                              : 'Call Interact Trigger on Hit Actor'))),
               instruction: isFoundationTask
                   ? 'Select $pascalAsset in the Hierarchy, set its Transform Position to (0, 0, 0) in the Inspector, and drag it into Assets/Prefabs to save a reusable Prefab.'
-                  : (isStateLogicTask
-                      ? 'Update the MeshRenderer / SpriteRenderer color inside SetState() so each state is visually distinct.'
-                      : 'When Physics.Raycast hits a collider, call GetComponent<$pascalAsset>()?.TriggerInteract().'),
+                  : (isInputMappingTask
+                      ? 'Pass moveInput into $pascalAsset movement direction so WASD / Stick input drives the character in real time.'
+                      : (isPhysicsTuningTask
+                          ? 'Apply the tuned velocity vector inside FixedUpdate() on $pascalAsset.'
+                          : (isStateLogicTask
+                              ? 'Update the MeshRenderer / SpriteRenderer color inside SetState() so each state is visually distinct.'
+                              : 'When Physics.Raycast hits a collider, call GetComponent<$pascalAsset>()?.TriggerInteract().'))),
               verify:
                   '$pascalAsset sits at (0, 0, 0) in the Scene view with a blue Prefab icon in the Hierarchy.',
               path: 'Hierarchy & Scene View → Transform (0, 0, 0)',
@@ -1207,43 +1366,67 @@ class TaskHowToBlueprint {
           return (
             stepHeader: isFoundationTask
                 ? 'STEP $taskNum.1 · CREATE $snakeAsset.tscn & .gd SCRIPT'
-                : (isStateLogicTask
-                    ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $snakeAsset.gd'
-                    : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $snakeAsset.gd'),
+                : (isInputMappingTask
+                    ? 'STEP $taskNum.1 · CONFIGURE INPUT MAP ACTIONS IN $snakeAsset.gd'
+                    : (isPhysicsTuningTask
+                        ? 'STEP $taskNum.1 · CONFIGURE PHYSICS PROPERTIES IN $snakeAsset.gd'
+                        : (isStateLogicTask
+                            ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $snakeAsset.gd'
+                            : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $snakeAsset.gd'))),
             shortTitle: isFoundationTask
                 ? 'Create $snakeAsset.tscn'
-                : (isStateLogicTask
-                    ? 'Define State Enum'
-                    : 'Bind Player Interaction Input'),
+                : (isInputMappingTask
+                    ? 'Configure Input Map Actions'
+                    : (isPhysicsTuningTask
+                        ? 'Configure Physics Properties'
+                        : (isStateLogicTask
+                            ? 'Define State Enum'
+                            : 'Bind Player Interaction Input'))),
             instruction: isFoundationTask
                 ? 'In the Scene dock (top-left), click + Other Node → select Node2D / CharacterBody2D → name it "$pascalAsset". Save the scene as res://scenes/$snakeAsset.tscn, then click the Attach Script icon to create res://scripts/$snakeAsset.gd.'
-                : (isStateLogicTask
-                    ? 'In the FileSystem dock, open res://scripts/$snakeAsset.gd and declare the state enum and active state variable for "$cleanTitle".'
-                    : 'Open res://scripts/$snakeAsset.gd and bind the player interaction input action for "$cleanTitle".'),
+                : (isInputMappingTask
+                    ? 'Open Project → Project Settings → Input Map to bind move_left, move_right, move_up, move_down, then open res://scripts/$snakeAsset.gd (created in Task 01).'
+                    : (isPhysicsTuningTask
+                        ? 'Open res://scenes/$snakeAsset.tscn and res://scripts/$snakeAsset.gd (created in Task 01) to configure movement and physics parameters.'
+                        : (isStateLogicTask
+                            ? 'In the FileSystem dock, open res://scripts/$snakeAsset.gd and declare the state enum and active state variable for "$cleanTitle".'
+                            : 'Open res://scripts/$snakeAsset.gd and bind the player interaction input action for "$cleanTitle".'))),
             verify: isFoundationTask
                 ? '$pascalAsset appears in the Scene tree with a scroll icon next to it, and $snakeAsset.gd opens in the Script editor.'
                 : '$snakeAsset.gd is open in the central Script workspace.',
             path: 'FileSystem → res://scripts/$snakeAsset.gd',
-            code: 'extends Node2D\nclass_name $pascalAsset\n\nvar is_active: bool = false',
+            code: 'extends CharacterBody2D\nclass_name $pascalAsset\n\nvar is_active: bool = false',
             explain: 'In Godot 4, every reusable game object is a Scene (.tscn) with a GDScript (.gd) attached to its root node.',
           );
         case 1:
           return (
             stepHeader: isFoundationTask
                 ? 'STEP $taskNum.2 · ADD VISUAL & COLLISION CHILD NODES'
-                : (isStateLogicTask
-                    ? 'STEP $taskNum.2 · BUILD SET_STATE() TRANSITION FUNCTION'
-                    : 'STEP $taskNum.2 · CAST RAYCAST2D / AREA2D QUERY'),
+                : (isInputMappingTask
+                    ? 'STEP $taskNum.2 · READ INPUT.GET_VECTOR() IN $snakeAsset.gd'
+                    : (isPhysicsTuningTask
+                        ? 'STEP $taskNum.2 · CONFIGURE ACCELERATION, FRICTION & GRAVITY'
+                        : (isStateLogicTask
+                            ? 'STEP $taskNum.2 · BUILD SET_STATE() TRANSITION FUNCTION'
+                            : 'STEP $taskNum.2 · CAST RAYCAST2D / AREA2D QUERY'))),
             shortTitle: isFoundationTask
                 ? 'Attach CollisionShape2D'
-                : (isStateLogicTask
-                    ? 'Build State Transition Function'
-                    : 'Cast Interaction RayCast2D'),
+                : (isInputMappingTask
+                    ? 'Read Input.get_vector()'
+                    : (isPhysicsTuningTask
+                        ? 'Configure Velocity & Gravity'
+                        : (isStateLogicTask
+                            ? 'Build State Transition Function'
+                            : 'Cast Interaction RayCast2D'))),
             instruction: isFoundationTask
                 ? 'Right-click the root "$pascalAsset" node in the Scene dock → + Add Child Node → add a Sprite2D (or ColorRect) named "Visual" and an Area2D with a CollisionShape2D (RectangleShape2D) named "HitBox".'
-                : (isStateLogicTask
-                    ? 'In $snakeAsset.gd, add func set_mechanic_state(new_state: int) -> void: to validate and update the active state.'
-                    : 'Use a RayCast2D / Area2D overlap check in $snakeAsset.gd to detect targeted $pascalAsset instances.'),
+                : (isInputMappingTask
+                    ? 'In $snakeAsset.gd, read the 2D input direction vector using Input.get_vector("move_left", "move_right", "move_up", "move_down").'
+                    : (isPhysicsTuningTask
+                        ? 'In $snakeAsset.gd, interpolate velocity toward target speed using move_toward and $primaryVarName.'
+                        : (isStateLogicTask
+                            ? 'In $snakeAsset.gd, add func set_mechanic_state(new_state: int) -> void: to validate and update the active state.'
+                            : 'Use a RayCast2D / Area2D overlap check in $snakeAsset.gd to detect targeted $pascalAsset instances.'))),
             verify:
                 'The 2D Viewport shows your visible shape surrounded by a light-blue rectangle collision outline (no yellow warning triangle).',
             path: 'Scene Dock (Top-Left) → $pascalAsset Hierarchy',
@@ -1251,26 +1434,42 @@ class TaskHowToBlueprint {
                 ? (effectiveCategory == 'ui'
                     ? '$pascalAsset (Node2D / CharacterBody2D)\n ├─ FollowCamera (Camera2D: Position Smoothing = On)\n └─ HudCanvas    (CanvasLayer)\n     └─ StatusLabel (Label)'
                     : '$pascalAsset (Node2D / CharacterBody2D)\n ├─ Visual (Sprite2D / ColorRect: 64x64)\n └─ HitBox (Area2D)\n     └─ CollisionShape2D (RectangleShape2D)')
-                : 'func set_mechanic_state(new_state: int) -> void:\n    current_state = new_state',
+                : (isInputMappingTask
+                    ? 'var input_dir: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")'
+                    : (isPhysicsTuningTask
+                        ? 'velocity = velocity.move_toward(input_dir * $primaryVarName, $primaryVarName * delta)'
+                        : 'func set_mechanic_state(new_state: int) -> void:\n    current_state = new_state')),
             explain: 'Sprite2D/ColorRect makes the object visible on screen, while Area2D + CollisionShape2D lets Godot detect overlaps and clicks.',
           );
         case 2:
           return (
             stepHeader: isFoundationTask
                 ? 'STEP $taskNum.3 · INSTANCE SCENE IN MAIN LEVEL'
-                : (isStateLogicTask
-                    ? 'STEP $taskNum.3 · SWAP MODULATE / VISUAL ON STATE CHANGE'
-                    : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $pascalAsset'),
+                : (isInputMappingTask
+                    ? 'STEP $taskNum.3 · WIRE INPUT DIRECTION TO VELOCITY IN $snakeAsset.gd'
+                    : (isPhysicsTuningTask
+                        ? 'STEP $taskNum.3 · CALL MOVE_AND_SLIDE() WITH PHYSICS TUNING'
+                        : (isStateLogicTask
+                            ? 'STEP $taskNum.3 · SWAP MODULATE / VISUAL ON STATE CHANGE'
+                            : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $pascalAsset'))),
             shortTitle: isFoundationTask
                 ? 'Instance in Main Scene'
-                : (isStateLogicTask
-                    ? 'Swap Visual Color on State Change'
-                    : 'Call Interact Trigger on Hit Node'),
+                : (isInputMappingTask
+                    ? 'Wire Input to Velocity'
+                    : (isPhysicsTuningTask
+                        ? 'Call move_and_slide()'
+                        : (isStateLogicTask
+                            ? 'Swap Visual Color on State Change'
+                            : 'Call Interact Trigger on Hit Node'))),
             instruction: isFoundationTask
                 ? 'Press Ctrl+S to save $snakeAsset.tscn, switch to your Main level scene tab, and click the Chain-Link icon ("Instantiate Child Scene") to drop $snakeAsset.tscn into the level at (0, 0).'
-                : (isStateLogicTask
-                    ? 'Inside set_mechanic_state(), update \$Visual.modulate so each state of $pascalAsset has a distinct color on screen.'
-                    : 'When the RayCast2D / Area2D hits $pascalAsset, call target.set_mechanic_state() to trigger the transition.'),
+                : (isInputMappingTask
+                    ? 'Assign velocity = input_dir * $primaryVarName inside $snakeAsset.gd so directional input drives $pascalAsset.'
+                    : (isPhysicsTuningTask
+                        ? 'Call move_and_slide() at the end of _physics_process(delta) in $snakeAsset.gd so collisions and floor slopes resolve cleanly.'
+                        : (isStateLogicTask
+                            ? 'Inside set_mechanic_state(), update \$Visual.modulate so each state of $pascalAsset has a distinct color on screen.'
+                            : 'When the RayCast2D / Area2D hits $pascalAsset, call target.set_mechanic_state() to trigger the transition.'))),
             verify:
                 '$pascalAsset appears in the Main scene tree with a small movie-clapper / chain icon next to it.',
             path: 'Main Scene Tab → Instantiate Child Scene (Ctrl+Shift+A)',

@@ -3581,5 +3581,165 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    test(
+      '19. Feature Task Ordering & Shared Asset Continuity: 1-Based taskIndex Alignment and Role-Aware SETUP -> INPUT -> PHYSICS Steps',
+      () async {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await provider.startConceptInterview(
+          'First-person parkour roof runner in Unreal Engine 5.',
+        );
+        provider.updateConceptDraft((d) {
+          d.techSpec = ['Unreal Engine 5', '3D First-Person'];
+        });
+        await provider.approveConceptAndBuildRelease();
+
+        final beat1 = provider.activeReleaseBeats.first;
+        final feat = provider.featuresForBeat(beat1.id).first;
+        provider.renameLiveFeature(feat.id, 'First Person Locomotion');
+        final states = FeatureStateNode.getStatesForDocument(feat);
+        states.first
+          ..name = 'Basic Locomotion (v0.1)'
+          ..tuningParams = ['walkSpeed: 600 cm/s', 'jumpForce: 450 cm/s']
+          ..edgeCases = [
+            '[COLLISION GUARD] Prevent player clipping into roof geometry',
+          ]
+          ..checklist = [
+            Subtask(id: 't_pawn', text: 'Pawn Setup (2h)'),
+            Subtask(id: 't_input', text: 'Input Mapping (2h)'),
+            Subtask(id: 't_phys', text: 'Physics Tuning (2h)'),
+          ];
+        provider.updateFeatureStates(feat.id, states);
+
+        // ── 1. Deterministic Fallback: Shared Asset (BP_LocomotionCharacter) + Role-Aware SETUP -> INPUT -> PHYSICS ──
+        TaskHowToBlueprint.clearCache();
+        final freshStates = FeatureStateNode.getStatesForDocument(feat);
+        final cp = freshStates.first;
+        final bp0 = TaskHowToBlueprint.resolve(
+          parentTask: cp.checklist[0],
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5',
+        );
+        final bp1 = TaskHowToBlueprint.resolve(
+          parentTask: cp.checklist[1],
+          taskIndex: 1,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5',
+        );
+        final bp2 = TaskHowToBlueprint.resolve(
+          parentTask: cp.checklist[2],
+          taskIndex: 2,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5',
+        );
+
+        // Task 1 (Pawn Setup) creates BP_LocomotionCharacter as ACharacter with Capsule + Camera + CharacterMovement
+        expect(bp0.subSteps[0].shortTitle, equals('Create BP_LocomotionCharacter'));
+        expect(bp0.subSteps[0].codeFormula, contains('Character (ACharacter'));
+        expect(bp0.subSteps[1].codeFormula, contains('CapsuleComponent'));
+        expect(bp0.subSteps[1].codeFormula, contains('FirstPersonCamera'));
+        expect(bp0.subSteps[1].codeFormula, contains('CharacterMovement'));
+
+        // Task 2 (Input Mapping) sets up IA_Move & IMC_Default and wires to AddMovementInput on the SAME BP_LocomotionCharacter
+        expect(bp1.subSteps[0].shortTitle, equals('Create IA_Move & IMC_Default'));
+        expect(bp1.subSteps[0].codeFormula, contains('BP_LocomotionCharacter (Reuse from Task 01)'));
+        expect(bp1.subSteps[1].shortTitle, equals('Register Mapping Context'));
+        expect(bp1.subSteps[2].shortTitle, equals('Wire IA_Move to AddMovementInput'));
+
+        // Task 3 (Physics Tuning) tunes CharacterMovement speed, acceleration & velocity on the SAME BP_LocomotionCharacter
+        expect(bp2.subSteps[0].shortTitle, equals('Select Movement Component'));
+        expect(bp2.subSteps[0].codeFormula, contains('BP_LocomotionCharacter (Reuse from Task 01)'));
+        expect(bp2.subSteps[1].shortTitle, equals('Configure Walk Speed & Gravity'));
+        expect(bp2.subSteps[2].shortTitle, equals('Wire Physics Momentum Curve'));
+
+        // ── 2. AI Step Synthesis: 1-Based taskIndex (1, 2, 3) Maps Cleanly to checklist[0], [1], [2] with Zero Shift ──
+        final prevResponder = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, preferredModel) async {
+          if (prompt.contains(
+            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps',
+          )) {
+            expect(prompt, contains('ONE CANONICAL ASSET ACROSS ALL TASKS'));
+            expect(prompt, contains('STRICT TASK-ROLE ALIGNMENT'));
+            return <String, dynamic>{
+              'tasks': [
+                {
+                  'taskIndex': 1,
+                  'subSteps': [
+                    {
+                      'title': 'STEP 1.1 · CREATE CHARACTER BLUEPRINT BP_ROOFRUNNER',
+                      'stepPath': 'Content Browser → /Game/Blueprints/BP_RoofRunner',
+                      'instruction': 'Create BP_RoofRunner inheriting from Character.',
+                      'area1Hierarchy': 'BP_RoofRunner (ACharacter)\n └─ CapsuleComponent',
+                      'area2Inspector': 'walkSpeed: 600 cm/s',
+                      'codeFormula': 'Parent Class: Character (ACharacter)',
+                      'verifyResult': 'BP_RoofRunner compiles cleanly.',
+                    },
+                  ],
+                },
+                {
+                  'taskIndex': 2,
+                  'subSteps': [
+                    {
+                      'title': 'STEP 2.1 · SETUP ENHANCED INPUT MAPPING',
+                      'stepPath': 'BP_RoofRunner → Event Graph',
+                      'instruction': 'Bind IA_Move and IMC_Default inside BP_RoofRunner.',
+                      'area1Hierarchy': '',
+                      'area2Inspector': 'walkSpeed: 600 cm/s',
+                      'codeFormula': '[IA_Move] ──► [AddMovementInput]',
+                      'verifyResult': 'WASD moves BP_RoofRunner in Play mode.',
+                    },
+                  ],
+                },
+                {
+                  'taskIndex': 3,
+                  'subSteps': [
+                    {
+                      'title': 'STEP 3.1 · TUNE VELOCITY, GRAVITY & COLLISION GUARD',
+                      'stepPath': 'BP_RoofRunner → CharacterMovement Details',
+                      'instruction': 'Set Max Walk Speed = 600 and Jump Z Velocity = 450.',
+                      'area1Hierarchy': '',
+                      'area2Inspector': 'walkSpeed: 600 cm/s | jumpForce: 450 cm/s',
+                      'codeFormula': 'CharacterMovement->MaxWalkSpeed = walkSpeed;',
+                      'verifyResult': 'BP_RoofRunner sprints and jumps without roof clipping.',
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          return prevResponder != null
+              ? await prevResponder(prompt, preferredModel)
+              : null;
+        };
+
+        try {
+          await provider.synthesizeFeatureHowToStepsWithAi(
+            feat.id,
+            forceRefresh: true,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevResponder;
+        }
+
+        final afterAiStates = FeatureStateNode.getStatesForDocument(feat);
+        final afterCp = afterAiStates.first;
+        // Task 01 (Pawn Setup) got taskIndex 1's steps
+        expect(
+          afterCp.checklist[0].children.first.text,
+          equals('STEP 1.1 · CREATE CHARACTER BLUEPRINT BP_ROOFRUNNER'),
+        );
+        // Task 02 (Input Mapping) got taskIndex 2's steps (NOT Pawn Setup!)
+        expect(
+          afterCp.checklist[1].children.first.text,
+          equals('STEP 2.1 · SETUP ENHANCED INPUT MAPPING'),
+        );
+        // Task 03 (Physics Tuning) got taskIndex 3's steps (NOT Input Mapping and NOT dropped!)
+        expect(
+          afterCp.checklist[2].children.first.text,
+          equals('STEP 3.1 · TUNE VELOCITY, GRAVITY & COLLISION GUARD'),
+        );
+      },
+    );
   });
 }

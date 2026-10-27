@@ -1084,7 +1084,9 @@ Return ONLY a JSON object with this schema:
       final projTitle = activeProject?.title ?? 'Game Prototype';
       final taskSummaries = <String>[];
       for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-        taskSummaries.add('Task ${tIdx + 1}: "${cpNode.checklist[tIdx].text}"');
+        taskSummaries.add(
+          'Task ${tIdx + 1} (taskIndex: $tIdx): "${cpNode.checklist[tIdx].text}"',
+        );
       }
 
       // Gather previous checkpoints & sibling features' exact variable names and guards
@@ -1124,7 +1126,14 @@ Active Tuning Parameters (MUST use exact variable names): ${cpNode.tuningParams.
 Active Guards (MUST enforce in code): ${cpNode.edgeCases.join(', ')}
 ${priorCheckpointsSummary.isNotEmpty ? 'Previous Checkpoints & Project Variable Context (reuse exact identifiers):\n${priorCheckpointsSummary.join('\n')}' : ''}
 
-For each task (1..${cpNode.checklist.length}), return 3 to 5 sequential sub-steps covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
+CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
+- ONE CANONICAL ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" (e.g., a single Character/Pawn/Actor Blueprint, C# MonoBehaviour, or Godot Scene). ONLY Task 1 (taskIndex: 0) Step 1.1 creates the asset and attaches its core components; Tasks 2..${cpNode.checklist.length} MUST open and extend that exact same asset — NEVER create a second replacement Pawn, Character Blueprint, or duplicate script in Task 2+.
+- STRICT TASK-ROLE ALIGNMENT (NO BLEEDING OR SHIFTING): Each task's subSteps MUST strictly implement that specific task's title:
+  * If a task is Asset/Pawn/Character/Actor Setup: create the canonical asset, configure its components/hierarchy, and place/possess it in the level.
+  * If a task is Input Mapping / Controls: create/bind the input actions and wire input events inside the canonical asset from Task 1 (do NOT recreate the Pawn/Character here).
+  * If a task is Physics Tuning / Movement / Guard: tune the movement/physics parameters (${cpNode.tuningParams.join(', ')}) and enforce the guards (${cpNode.edgeCases.join(', ')}) on the canonical asset (do NOT put initial Input Mapping setup here).
+
+For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return 3 to 5 sequential sub-steps covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
 1. "title": "STEP X.Y · SHORT LITERAL STEP TITLE"
 2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path
 3. "instruction": 1-2 sentences explaining what to click or type in $targetEngineMode
@@ -1163,10 +1172,25 @@ Return ONLY valid JSON:
       final rawTasks = json?['tasks'];
       if (rawTasks is! List || rawTasks.isEmpty) return;
 
+      final parsedTaskIndices = rawTasks
+          .whereType<Map>()
+          .map((t) => int.tryParse(t['taskIndex']?.toString() ?? '') ?? -1)
+          .where((idx) => idx >= 0)
+          .toList();
+      final isOneBasedTaskIndexing = parsedTaskIndices.isNotEmpty &&
+          !parsedTaskIndices.contains(0) &&
+          parsedTaskIndices.every(
+            (idx) => idx >= 1 && idx <= cpNode.checklist.length,
+          );
+
       bool mutated = false;
-      for (final rawTask in rawTasks) {
+      for (int listIdx = 0; listIdx < rawTasks.length; listIdx++) {
+        final rawTask = rawTasks[listIdx];
         if (rawTask is! Map) continue;
-        final tIdx = int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
+        final rawIdx = int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
+        final tIdx = rawIdx < 0
+            ? listIdx
+            : (isOneBasedTaskIndexing ? rawIdx - 1 : rawIdx);
         if (tIdx < 0 || tIdx >= cpNode.checklist.length) continue;
         final parentTask = cpNode.checklist[tIdx];
         final taskNum = tIdx + 1;
@@ -1177,7 +1201,16 @@ Return ONLY valid JSON:
         for (int sIdx = 0; sIdx < rawSubs.length; sIdx++) {
           final item = rawSubs[sIdx];
           if (item is! Map) continue;
-          final title = item['title']?.toString().trim() ?? '';
+          final rawTitle = item['title']?.toString().trim() ?? '';
+          final strippedTitle = rawTitle
+              .replaceFirst(
+                RegExp(r'^STEP\s+\d+(?:\.\d+)?\s*[·:\-]\s*', caseSensitive: false),
+                '',
+              )
+              .trim();
+          final title = strippedTitle.isNotEmpty
+              ? 'STEP $taskNum.${sIdx + 1} · $strippedTitle'
+              : '';
           final path = item['stepPath']?.toString().trim() ?? '';
           final instr = item['instruction']?.toString().trim() ?? '';
           final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
