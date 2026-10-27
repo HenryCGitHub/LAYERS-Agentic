@@ -591,13 +591,18 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
   void _showReleaseShippedSummaryModal(BuildContext context, TierDocument rel) {
     final retro = widget.workbench.buildActiveReleaseRetrospective();
     final beats = widget.workbench.activeReleaseBeats;
+    final activeRelVer = widget.workbench.activeReleaseVersionTag;
     final allFeats = <TierDocument>[
       for (final b in beats) ...widget.workbench.featuresForBeat(b.id),
     ];
     int totalTasks = 0;
     int totalStepsDone = 0;
     for (final f in allFeats) {
-      final states = FeatureStateNode.getStatesForDocument(f);
+      final allStates = FeatureStateNode.getStatesForDocument(f);
+      final activeStates = allStates
+          .where((s) => s.releaseVersion == activeRelVer)
+          .toList();
+      final states = activeStates.isNotEmpty ? activeStates : allStates;
       for (final s in states) {
         totalTasks += s.totalChecklistCount;
         for (final t in s.checklist) {
@@ -1259,7 +1264,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
         _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
       } else if (markDone) {
-        final nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+        final activeRelVer = widget.workbench.activeReleaseVersionTag;
+        int nextCpIdx = states.indexWhere(
+          (s) => s.releaseVersion == activeRelVer && !s.isCompleted,
+        );
+        if (nextCpIdx == -1) {
+          nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+        }
         if (nextCpIdx != -1) {
           _manualCheckpointFocusIndex = nextCpIdx;
           final nextCp = states[nextCpIdx];

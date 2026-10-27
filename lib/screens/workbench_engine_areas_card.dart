@@ -336,7 +336,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.015),
+          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.015),
           border: Border(
             bottom: BorderSide(
               color: borderSubtle.withValues(alpha: 0.7),
@@ -374,7 +374,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.03),
+                  color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: borderSubtle),
                 ),

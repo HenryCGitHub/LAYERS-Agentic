@@ -856,7 +856,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           ],
         );
       },
-    ).whenComplete(controller.dispose);
+    );
   }
 
   void _applyDirectKvValue({
@@ -1738,7 +1738,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           ],
         );
       },
-    ).whenComplete(gddController.dispose);
+    );
   }
 
   // ── Unified 2-Surface Recessed Left Concept Stepper (`01 Goal` ... `09 Releases` + `10 Full Review`) ─
@@ -2135,7 +2135,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           ],
         );
       },
-    ).whenComplete(controller.dispose);
+    );
   }
 
   // ── Steps `01`–`08`: De-Boxed Full-Width Single-Section Workspace ──────────

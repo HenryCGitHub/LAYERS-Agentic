@@ -77,6 +77,16 @@ class TaskHowToBlueprint {
   static final RegExp _bracketTagCaptureRegex = RegExp(r'^\[([^\]]+)\]');
   static final RegExp _stepHeaderPrefixRegex =
       RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false);
+  static final RegExp _trailingForBeatSuffixRegex =
+      RegExp(r'\s+for\s+[A-Z][\w\s&\-\/]*$');
+  static final RegExp _leadingVerbPrefixRegex = RegExp(
+    r'^(?:Create|Implement|Hook up|Hook|Wire|Subscribe|Enforce|Spawn|Apply|Bind)\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _digitsOnlyRegex = RegExp(r'^\d+$');
+  static final RegExp _trailingGuardSuffixRegex =
+      RegExp(r'[\s_]+GUARD$', caseSensitive: false);
+  static final RegExp _whitespaceOrUnderscoreRegex = RegExp(r'[\s_]+');
 
   /// Concise 3–4 word task title for the Left Outliner (condensing legacy verbose task sentences).
   String get shortTaskTitle => formatConciseTaskTitle(cleanTitle);
@@ -106,16 +116,13 @@ class TaskHowToBlueprint {
     }
     // Strip redundant trailing " for <Beat/Feature Name>"
     text = text.replaceFirst(
-      RegExp(r'\s+for\s+[A-Z][\w\s&\-\/]*$'),
+      _trailingForBeatSuffixRegex,
       '',
     );
     if (text.length > 32) {
       text = text
           .replaceFirst(
-            RegExp(
-              r'^(?:Create|Implement|Hook up|Hook|Wire|Subscribe|Enforce|Spawn|Apply|Bind)\s+',
-              caseSensitive: false,
-            ),
+            _leadingVerbPrefixRegex,
             '',
           )
           .replaceAll(' and ', ' & ')
@@ -398,7 +405,7 @@ class TaskHowToBlueprint {
       final lowerW = w.toLowerCase();
       if (w.length > 1 &&
           !stopWords.contains(lowerW) &&
-          !RegExp(r'^\d+$').hasMatch(w) &&
+          !_digitsOnlyRegex.hasMatch(w) &&
           seenLower.add(lowerW)) {
         words.add(w);
       }
@@ -484,11 +491,11 @@ class TaskHowToBlueprint {
       };
       if (!genericTags.contains(upperTag)) {
         final cleanedTag = rawTag
-            .replaceFirst(RegExp(r'[\s_]+GUARD$', caseSensitive: false), '')
+            .replaceFirst(_trailingGuardSuffixRegex, '')
             .trim();
         if (cleanedTag.isNotEmpty) {
           final titleCased = cleanedTag
-              .split(RegExp(r'[\s_]+'))
+              .split(_whitespaceOrUnderscoreRegex)
               .where((w) => w.isNotEmpty)
               .map((w) {
                 if (w.toUpperCase() == 'LOS' ||

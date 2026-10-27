@@ -2714,6 +2714,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           courierProvider.selectedFeatureId,
           isNot(equals(tempArchDoc.id)),
         );
+
+        // Round 9: TaskHowToBlueprint.formatConciseTaskTitle strips trailing " for <Beat>" and leading action verbs
+        expect(
+          TaskHowToBlueprint.formatConciseTaskTitle(
+            'Implement player dash velocity and cooldown timer for Arena Entry & Traversal (2h)',
+          ),
+          equals('Player dash velocity & cooldown timer'),
+        );
       },
     );
   });

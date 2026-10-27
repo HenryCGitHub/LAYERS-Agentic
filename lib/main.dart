@@ -1149,7 +1149,7 @@ class WorkbenchShell extends StatelessWidget {
           },
         );
       },
-    ).whenComplete(collabEmailCtrl.dispose);
+    );
   }
 
   void _showAiSettingsDialog(BuildContext context) {
@@ -1424,7 +1424,7 @@ class WorkbenchShell extends StatelessWidget {
           },
         );
       },
-    ).whenComplete(keyController.dispose);
+    );
   }
 
   Widget _buildModelOptionTile({
@@ -1571,7 +1571,6 @@ class WorkbenchShell extends StatelessWidget {
         ],
       ),
     );
-    ctrl.dispose();
     if (newTitle != null && newTitle.trim().isNotEmpty) {
       workbench.renameProject(proj.id, newTitle.trim());
       return true;
