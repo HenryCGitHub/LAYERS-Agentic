@@ -65,7 +65,25 @@ class WorkbenchShell extends StatelessWidget {
     sb.writeln('# $title — Project & Release Specification');
     if (draft != null) {
       sb.writeln('\n## Stage 1: Project Concept Blueprint');
-      sb.writeln(draft.toFormattedScopeSection());
+      sb.writeln(draft.toFullMarkdownSpec());
+    } else if (workbench.activeProject != null) {
+      final projSec = workbench.activeProject!.sections;
+      sb.writeln('\n## Stage 1: Project Concept Blueprint');
+      if ((projSec['game_spec'] ?? '').isNotEmpty) {
+        sb.writeln('Game Spec: ${projSec['game_spec']}');
+      }
+      if ((projSec['tech_spec'] ?? '').isNotEmpty) {
+        sb.writeln('Tech Spec: ${projSec['tech_spec']}');
+      }
+      if ((projSec['design_pillars'] ?? '').isNotEmpty) {
+        sb.writeln('\nDesign Pillars:\n${projSec['design_pillars']}');
+      }
+      if ((projSec['trade_offs'] ?? '').isNotEmpty) {
+        sb.writeln('\nTrade-Offs:\n${projSec['trade_offs']}');
+      }
+      if ((projSec['scope'] ?? '').isNotEmpty) {
+        sb.writeln('\n${projSec['scope']}');
+      }
     }
     final beats = workbench.activeReleaseBeats;
     if (rel != null && beats.isNotEmpty) {
@@ -91,6 +109,10 @@ class WorkbenchShell extends StatelessWidget {
             for (final task in cp.checklist) {
               final tDone = task.completed ? 'x' : ' ';
               sb.writeln('    - [$tDone] ${task.text}');
+              for (final sub in task.children) {
+                final sDone = sub.completed ? 'x' : ' ';
+                sb.writeln('      - [$sDone] ${sub.text}');
+              }
             }
           }
         }
@@ -407,50 +429,6 @@ class WorkbenchShell extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Tooltip(
-                    message: 'Agent Command Palette & Tool History (1-Click Undo)',
-                    child: InkWell(
-                      key: const ValueKey('top_bar_agent_log_btn'),
-                      onTap: () => _showAgentCommandHistoryDialog(context),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: bgSurface,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: workbench.agentTraceHistory.isNotEmpty
-                                ? AppTheme.borderBrightFor(isDark)
-                                : borderColor,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.terminal_rounded,
-                              size: 11,
-                              color: workbench.agentTraceHistory.isNotEmpty
-                                  ? accentEmerald
-                                  : textSecondary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Agent (${workbench.agentTraceHistory.length})',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: workbench.agentTraceHistory.isNotEmpty
-                                    ? textPrimary
-                                    : textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
                   // Compact unified Studio Utility Pill Cluster (Export · Cloud Vault · AI Models · Theme)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
@@ -855,108 +833,118 @@ class WorkbenchShell extends StatelessWidget {
                           style: GoogleFonts.inter(fontSize: 11.5, color: textSecondary),
                         )
                       else
-                        for (final p in projs.take(6))
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 5),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: p.id == workbench.activeProjectId
-                                  ? bgRecessed
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(
-                                color: p.id == workbench.activeProjectId
-                                    ? borderBright
-                                    : borderSubtle,
-                              ),
-                            ),
-                            child: Row(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 280),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Icon(
-                                  p.id == workbench.activeProjectId
-                                      ? Icons.check_circle_rounded
-                                      : Icons.folder_outlined,
-                                  size: 13,
-                                  color: p.id == workbench.activeProjectId
-                                      ? accentEmerald
-                                      : textMuted,
-                                ),
-                                const SizedBox(width: 7),
-                                Expanded(
-                                  child: InkWell(
-                                    key: ValueKey('vault_switch_${p.id}'),
-                                    onTap: () {
-                                      workbench.switchProject(p.id);
-                                      setModalState(() {});
-                                    },
-                                    child: Text(
-                                      p.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: p.id == workbench.activeProjectId
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: textPrimary,
+                                for (final p in projs)
+                                  Container(
+                                    margin: const EdgeInsets.only(bottom: 5),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: p.id == workbench.activeProjectId
+                                          ? bgRecessed
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(5),
+                                      border: Border.all(
+                                        color: p.id == workbench.activeProjectId
+                                            ? borderBright
+                                            : borderSubtle,
                                       ),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Tooltip(
-                                  message: 'Rename Project',
-                                  child: InkWell(
-                                    key: ValueKey('vault_rename_${p.id}'),
-                                    onTap: () async {
-                                      if (await _promptRenameProjectDialog(ctx, p)) {
-                                        setModalState(() {});
-                                      }
-                                    },
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(4),
-                                      child: Icon(Icons.edit_outlined, size: 13, color: textSecondary),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          p.id == workbench.activeProjectId
+                                              ? Icons.check_circle_rounded
+                                              : Icons.folder_outlined,
+                                          size: 13,
+                                          color: p.id == workbench.activeProjectId
+                                              ? accentEmerald
+                                              : textMuted,
+                                        ),
+                                        const SizedBox(width: 7),
+                                        Expanded(
+                                          child: InkWell(
+                                            key: ValueKey('vault_switch_${p.id}'),
+                                            onTap: () {
+                                              workbench.switchProject(p.id);
+                                              setModalState(() {});
+                                            },
+                                            child: Text(
+                                              p.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12,
+                                                fontWeight: p.id == workbench.activeProjectId
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                                color: textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Tooltip(
+                                          message: 'Rename Project',
+                                          child: InkWell(
+                                            key: ValueKey('vault_rename_${p.id}'),
+                                            onTap: () async {
+                                              if (await _promptRenameProjectDialog(ctx, p)) {
+                                                setModalState(() {});
+                                              }
+                                            },
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(4),
+                                              child: Icon(Icons.edit_outlined, size: 13, color: textSecondary),
+                                            ),
+                                          ),
+                                        ),
+                                        Tooltip(
+                                          message: 'Duplicate Project',
+                                          child: InkWell(
+                                            key: ValueKey('vault_duplicate_${p.id}'),
+                                            onTap: () {
+                                              workbench.duplicateProject(p.id);
+                                              setModalState(() {});
+                                            },
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(4),
+                                              child: Icon(Icons.copy_all_rounded, size: 13, color: textSecondary),
+                                            ),
+                                          ),
+                                        ),
+                                        Tooltip(
+                                          message: 'Delete Project',
+                                          child: InkWell(
+                                            key: ValueKey('vault_delete_${p.id}'),
+                                            onTap: () {
+                                              workbench.deleteProject(p.id);
+                                              setModalState(() {});
+                                            },
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(4),
+                                              child: Icon(
+                                                Icons.delete_outline_rounded,
+                                                size: 13,
+                                                color: AppTheme.accentRedFor(isDark),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ),
-                                Tooltip(
-                                  message: 'Duplicate Project',
-                                  child: InkWell(
-                                    key: ValueKey('vault_duplicate_${p.id}'),
-                                    onTap: () {
-                                      workbench.duplicateProject(p.id);
-                                      setModalState(() {});
-                                    },
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(4),
-                                      child: Icon(Icons.copy_all_rounded, size: 13, color: textSecondary),
-                                    ),
-                                  ),
-                                ),
-                                Tooltip(
-                                  message: 'Delete Project',
-                                  child: InkWell(
-                                    key: ValueKey('vault_delete_${p.id}'),
-                                    onTap: () {
-                                      workbench.deleteProject(p.id);
-                                      setModalState(() {});
-                                    },
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(4),
-                                      child: Icon(
-                                        Icons.delete_outline_rounded,
-                                        size: 13,
-                                        color: AppTheme.accentRedFor(isDark),
-                                      ),
-                                    ),
-                                  ),
-                                ),
                               ],
                             ),
                           ),
+                        ),
                       if (activeProj != null) ...[
                         const SizedBox(height: 14),
                         Text(
@@ -1657,294 +1645,5 @@ class WorkbenchShell extends StatelessWidget {
       case WorkbenchStage.releaseWorkbench:
         return ReleaseWorkbenchScreen(workbench: workbench);
     }
-  }
-
-  /// Option 4: Global Top-Bar Agent Command Palette & Chronological Tool History Drawer with 1-Click Undo.
-  void _showAgentCommandHistoryDialog(BuildContext context) {
-    final isDark = workbench.isDark;
-    final bgSurface = AppTheme.bgSurfaceFor(isDark);
-    final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
-    final borderSubtle = AppTheme.borderSubtleFor(isDark);
-    final borderBright = AppTheme.borderBrightFor(isDark);
-    final textPrimary = AppTheme.textPrimaryFor(isDark);
-    final textSecondary = AppTheme.textSecondaryFor(isDark);
-    final textMuted = AppTheme.textMutedFor(isDark);
-    final accentEmerald = AppTheme.accentGreenFor(isDark);
-    final accentAmber = AppTheme.accentAmberFor(isDark);
-    final cmdController = TextEditingController();
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            final history = workbench.agentTraceHistory;
-            final canUndo = workbench.canUndoLastAgentAction;
-
-            Future<void> submitCommand() async {
-              final text = cmdController.text.trim();
-              if (text.isEmpty) return;
-              cmdController.clear();
-              await workbench.runGlobalAgentCommand(text);
-              if (ctx.mounted) {
-                setModalState(() {});
-              }
-            }
-
-            return AlertDialog(
-              key: const ValueKey('agent_command_history_dialog'),
-              backgroundColor: bgSurface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: BorderSide(color: borderBright),
-              ),
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.terminal_rounded, size: 17, color: accentEmerald),
-                      const SizedBox(width: 8),
-                      Text(
-                        'AGENT COMMAND PALETTE & TOOL LOG (${history.length})',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      OutlinedButton.icon(
-                        key: const ValueKey('undo_last_agent_action_btn'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: canUndo ? accentAmber : textMuted,
-                          side: BorderSide(
-                            color: canUndo
-                                ? accentAmber.withValues(alpha: 0.5)
-                                : borderSubtle,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        onPressed: canUndo
-                            ? () {
-                                workbench.undoLastAgentAction();
-                                setModalState(() {});
-                              }
-                            : null,
-                        icon: const Icon(Icons.undo_rounded, size: 13),
-                        label: Text(
-                          'Undo Last Agent Action',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      InkWell(
-                        onTap: () => Navigator.of(ctx).pop(),
-                        child: Icon(Icons.close_rounded, size: 18, color: textMuted),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 680,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            key: const ValueKey('global_agent_command_input'),
-                            controller: cmdController,
-                            style: GoogleFonts.inter(fontSize: 12.5, color: textPrimary),
-                            decoration: InputDecoration(
-                              hintText:
-                                  'Run a global Agent command in active stage (e.g., "Add coyote time tuning", "Defer multiplayer")...',
-                              hintStyle: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: textMuted,
-                              ),
-                              filled: true,
-                              fillColor: bgRecessed,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 11,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                borderSide: BorderSide(color: borderSubtle),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                borderSide: BorderSide(color: borderSubtle),
-                              ),
-                            ),
-                            onSubmitted: (_) => submitCommand(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          key: const ValueKey('global_agent_command_send_btn'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: accentEmerald,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          onPressed: submitCommand,
-                          child: Text(
-                            'Run Command →',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'CHRONOLOGICAL AGENT TOOL TRACE HISTORY',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.4,
-                        color: textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 340),
-                      child: history.isEmpty
-                          ? Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: bgRecessed,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: borderSubtle),
-                              ),
-                              child: Text(
-                                'No Agent tool actions recorded yet in this session.',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: textMuted,
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              shrinkWrap: true,
-                              itemCount: history.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 8),
-                              itemBuilder: (_, idx) {
-                                final item = history[idx];
-                                return Container(
-                                  key: ValueKey('agent_history_item_$idx'),
-                                  padding: const EdgeInsets.all(11),
-                                  decoration: BoxDecoration(
-                                    color: bgRecessed,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: borderSubtle),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            item.agentRole.toUpperCase(),
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: accentEmerald,
-                                            ),
-                                          ),
-                                          Text(
-                                            '#${history.length - idx}',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 9,
-                                              color: textMuted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        item.reasoning,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11.5,
-                                          color: textPrimary,
-                                        ),
-                                      ),
-                                      if (item.toolCalls.isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: [
-                                            for (final tc in item.toolCalls)
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: bgSurface,
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                    color: borderSubtle,
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  '⚙ ${tc.toolName} → ${tc.summary}',
-                                                  style:
-                                                      GoogleFonts.jetBrainsMono(
-                                                    fontSize: 9,
-                                                    color: textSecondary,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 }

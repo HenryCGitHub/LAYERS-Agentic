@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
-import 'package:layers_agentic/agents/workspace_agent_tools.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -1496,7 +1495,26 @@ void main() {
         }
         final v1RelId = provider.activeRelease!.id;
         final v1Beat2 = provider.releaseBlueprint!.beats[1];
-        provider.addProposedFeatureToBeat(v1Beat2.id, 'Slide Boost & Cancel');
+        v1Beat2.features.add(
+          ProposedFeatureBlueprint(
+            id: 'feat_slide_boost_test',
+            title: 'Slide Boost & Cancel',
+            goal: 'Build Slide Boost & Cancel inside ${v1Beat2.title}.',
+            doneWhen: 'Playtester slides and cancels cleanly.',
+            estimatedHours: 4,
+            included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: 'v0.1',
+            checkpoints: [
+              ProposedCheckpointBlueprint(
+                title: 'Slide Boost & Cancel',
+                playtestCriteria: 'Slide -> cancel cleanly',
+                tasks: const ['Slide Boost (2h)'],
+                releaseVersion: 'v0.1',
+              ),
+            ],
+          ),
+        );
         final deferredSlideFeat = v1Beat2.features.last;
         provider.toggleProposedFeatureScope(
           v1Beat2.id,
@@ -1793,18 +1811,22 @@ void main() {
     );
 
     test(
-      'Stage 2 -> Stage 3 Custom Mechanic Breakdown synthesizes domain-specific tuning variables, edge guards, and 2 playable checkpoints',
+      '2-Stage Release Plan Chat & Custom Mechanic Breakdown synthesizes domain-specific tuning variables, edge guards, and playable checkpoints',
       () async {
         final provider = WorkbenchProvider();
         await provider.startConceptInterview('High-speed grappling hook parkour roguelite');
         await provider.openReleasePlanGate();
 
         final firstBeat = provider.releaseBlueprint!.beats.first;
-        provider.addProposedFeatureToBeat(firstBeat.id, 'Grapple Hook Swing');
-        final customFeatBp = firstBeat.features.last;
-        provider.updateProposedFeatureInBeat(
-          beatId: firstBeat.id,
-          featureId: customFeatBp.id,
+        final customFeatBp = ProposedFeatureBlueprint(
+          id: 'feat_grapple_hook_swing',
+          title: 'Grapple Hook Swing',
+          goal: 'Latch onto overhead anchors and swing across gaps.',
+          doneWhen: 'Player swings across 3 gaps and releases with momentum.',
+          estimatedHours: 6,
+          included: true,
+          lifecycle: FeatureLifecycleStatus.newFeature,
+          originVersion: 'v0.1',
           tuningParams: const ['hookMaxRange: 18.0 m', 'hookPullSpeed: 28.0 m/s'],
           edgeCases: const ['[LOS BREAK GUARD] Detach when line-of-sight breaks'],
           checkpoints: [
@@ -1826,6 +1848,7 @@ void main() {
             ),
           ],
         );
+        firstBeat.features.add(customFeatBp);
 
         expect(customFeatBp.title, 'Grapple Hook Swing');
         expect(customFeatBp.checkpoints.length, 2);
@@ -1836,7 +1859,7 @@ void main() {
           contains('[LOS BREAK GUARD]'),
         );
 
-        // Also verify Stage 2 chat command "Add Ore Smelting Furnace to Beat 2" adds a tailored economy feature
+        // Also verify Release Plan chat command "Add Ore Smelting Furnace to Beat 2" adds a tailored economy feature
         await provider.sendReleasePlanChatMessage('Add Ore Smelting Furnace to Beat 2');
         final secondBeat = provider.releaseBlueprint!.beats[1];
         final furnaceBp = secondBeat.features.last;
@@ -1844,85 +1867,68 @@ void main() {
         expect(furnaceBp.checkpoints.length, 2);
         expect(furnaceBp.tuningParams, contains('transactionCostBase: 25 gold'));
 
-        // Execute Stage 3 and verify the custom Grapple Hook Swing feature carries its 2 checkpoints & tuning into the Workbench
+        // Execute into 2. Workbench and verify the custom Grapple Hook Swing feature carries its 2 checkpoints & tuning into the Workbench
         await provider.approveAndExecuteReleasePlan();
-        final stage3Beat1Feats = provider.featuresForBeat(
+        final stage2Beat1Feats = provider.featuresForBeat(
           provider.activeReleaseBeats.first.id,
         );
-        final stage3GrappleDoc = stage3Beat1Feats.firstWhere(
+        final stage2GrappleDoc = stage2Beat1Feats.firstWhere(
           (f) => f.title == 'Grapple Hook Swing',
         );
-        final stage3GrappleStates =
-            FeatureStateNode.getStatesForDocument(stage3GrappleDoc);
-        expect(stage3GrappleStates.length, 2);
+        final stage2GrappleStates =
+            FeatureStateNode.getStatesForDocument(stage2GrappleDoc);
+        expect(stage2GrappleStates.length, 2);
         expect(
-          stage3GrappleStates.first.tuningParams,
+          stage2GrappleStates.first.tuningParams,
           contains('hookPullSpeed: 28.0 m/s'),
         );
       },
     );
 
     test(
-      'Stage 2 Inline Feature Editing and Stage 3 Playtest Issue Triage ([FIX] task + [PLAYTEST GUARD] edge case)',
+      '2. Workbench Live Feature Add/Rename/Remove, Section/Cache Sync on updateFeatureStates, and Playtest Issue Triage ([FIX] task + [PLAYTEST GUARD])',
       () async {
         final provider = WorkbenchProvider();
         await provider.startConceptInterview('Cyberpunk Grapple Arena');
-        await provider.openReleasePlanGate();
+        await provider.approveConceptAndBuildRelease();
 
-        final firstBeat = provider.releaseBlueprint!.beats.first;
-        provider.addProposedFeatureToBeat(firstBeat.id, 'Temp Debug Feature');
-        final tempFeatId = firstBeat.features.last.id;
-        provider.removeProposedFeatureFromBeat(firstBeat.id, tempFeatId);
-        expect(firstBeat.features.any((f) => f.id == tempFeatId), isFalse);
+        final firstBeat = provider.activeReleaseBeats.first;
+        final addedFeatId = provider.addLiveFeatureToBeat(
+          firstBeat.id,
+          'Temp Debug Feature',
+        );
+        expect(addedFeatId, isNotNull);
+        final removed = provider.removeLiveFeature(addedFeatId!);
+        expect(removed, isTrue);
+        expect(provider.documents.containsKey(addedFeatId), isFalse);
 
-        final targetFeat = firstBeat.features.first;
-        provider.updateProposedFeatureInBeat(
-          beatId: firstBeat.id,
-          featureId: targetFeat.id,
-          title: 'Wall Grapple & Vault',
-          goal: 'Let the player latch onto walls and vault over ledges.',
-          doneWhen: 'Player vaults 5 ledges in a row without clipping.',
-          estimatedHours: 6,
-          tuningParams: const ['grapplePullSpeed: 32.0 m/s', 'vaultBoost: 12.0 m/s'],
-        );
-        expect(targetFeat.title, 'Wall Grapple & Vault');
-        expect(targetFeat.estimatedHours, 6);
-        expect(targetFeat.tuningParams, contains('grapplePullSpeed: 32.0 m/s'));
+        final builtFeat = provider.featuresForBeat(firstBeat.id).first;
+        provider.renameLiveFeature(builtFeat.id, 'Wall Grapple & Vault');
+        expect(builtFeat.title, 'Wall Grapple & Vault');
 
-        // Verify Stage 2 inline Release Goal/Done When and Epic edit + Add Epic
-        provider.updateReleaseBlueprintGoalAndDoneWhen(
-          goal: 'Build a tight 3-minute grapple arena loop.',
-        );
-        expect(
-          provider.releaseBlueprint!.goal,
-          'Build a tight 3-minute grapple arena loop.',
-        );
-        provider.updateProposedBeatInBlueprint(
-          beatId: firstBeat.id,
-          title: 'Loadout & Rig Selection',
-        );
-        expect(firstBeat.title, 'Loadout & Rig Selection');
-        final initialEpicCount = provider.releaseBlueprint!.beats.length;
-        final addedBeatId = provider.addProposedBeatToBlueprint(
-          title: 'Boss Shield Break',
-        );
-        expect(addedBeatId, isNotNull);
-        expect(provider.releaseBlueprint!.beats.length, initialEpicCount + 1);
-        expect(
-          provider.releaseBlueprint!.beats.last.features.first.title,
-          'Boss Shield Break Mechanics & Controls',
-        );
-
-        await provider.approveAndExecuteReleasePlan();
-        final stage3Feats = provider.featuresForBeat(
-          provider.activeReleaseBeats.first.id,
-        );
-        final builtFeat = stage3Feats.firstWhere(
-          (f) => f.title == 'Wall Grapple & Vault',
-        );
         final states = FeatureStateNode.getStatesForDocument(builtFeat);
-        final initialTaskCount = states.first.checklist.length;
+        states.first.tuningParams = [
+          'grapplePullSpeed: 32.0 m/s',
+          'vaultBoost: 12.0 m/s',
+        ];
+        states.first.edgeCases = ['[WALL_CLIP GUARD] Clamp vault clearance'];
+        provider.updateFeatureStates(builtFeat.id, states);
 
+        // Verify updateFeatureStates syncs feat.sections['tuning'], ['variables'], and ['edge_cases']
+        expect(
+          builtFeat.sections['tuning'],
+          contains('grapplePullSpeed: 32.0 m/s'),
+        );
+        expect(
+          builtFeat.sections['variables'],
+          contains('vaultBoost: 12.0 m/s'),
+        );
+        expect(
+          builtFeat.sections['edge_cases'],
+          contains('[WALL_CLIP GUARD] Clamp vault clearance'),
+        );
+
+        final initialTaskCount = states.first.checklist.length;
         final newFixIdx = provider.logPlaytestIssueOnCheckpoint(
           featureId: builtFeat.id,
           states: states,
@@ -1947,88 +1953,22 @@ void main() {
     );
 
     test(
-      'Autonomous Producer Scope-Guard Interventions & Stage 3 Cross-Feature Tool-Calling Co-Pilot',
-      () async {
-        final provider = WorkbenchProvider();
-        await provider.startConceptInterview('Cyberpunk Grapple Arena');
-        // Add an explicit exclusion to test the 0-token Producer Scope Guard
-        provider.updateConceptDraft((draft) {
-          draft.exclusions = ['Online Multiplayer Matchmaking', 'Cutscene Cinematics'];
-        });
-        await provider.openReleasePlanGate();
-        expect(provider.lastAgentTrace, isNotNull);
-        expect(provider.lastAgentTrace!.toolCalls.length, 3);
-
-        // Add a feature that conflicts with the "Online Multiplayer Matchmaking" exclusion
-        final firstBeat = provider.releaseBlueprint!.beats.first;
-        provider.addProposedFeatureToBeat(
-          firstBeat.id,
-          'Online Multiplayer Lobby',
-        );
-        final stage2Interventions = provider.stage2Interventions;
-        expect(stage2Interventions, isNotEmpty);
-        expect(
-          stage2Interventions.first.toolName,
-          'defer_conflicting_feature',
-        );
-
-        // Apply the 1-click Producer Intervention and verify it defers the conflicting feature
-        await provider.applyAgentIntervention(stage2Interventions.first);
-        final conflictingFeat = firstBeat.features.firstWhere(
-          (f) => f.title == 'Online Multiplayer Lobby',
-        );
-        expect(conflictingFeat.included, isFalse);
-
-        // Execute Stage 3 and test Cross-Feature Tool-Calling Co-Pilot
-        await provider.approveAndExecuteReleasePlan();
-        final allStage3Feats = <TierDocument>[
-          for (final b in provider.activeReleaseBeats)
-            ...provider.featuresForBeat(b.id),
-        ];
-        expect(allStage3Feats.length, greaterThanOrEqualTo(2));
-        final activeFeat = allStage3Feats.first;
-        final siblingFeat = allStage3Feats[1];
-        final activeStates = FeatureStateNode.getStatesForDocument(activeFeat);
-
-        final trace = await provider.runStage3AgentCoPilot(
-          featureDoc: activeFeat,
-          states: activeStates,
-          activeCheckpointIndex: 0,
-          directive: 'Rebalance and make movement snappier across coupled features',
-        );
-        expect(trace.toolCalls.length, greaterThanOrEqualTo(2));
-        final updatedSiblingStates =
-            FeatureStateNode.getStatesForDocument(siblingFeat);
-        expect(
-          updatedSiblingStates.first.tuningParams,
-          contains('coupled_sync_window_ms: 90 ms'),
-        );
-      },
-    );
-
-    test(
-      'Options 1-4: Stage 1 Concept Critic & Refresh, Stage 3 Starter Script Bundle, AI Playtest Simulator, and Post-Release Retrospective',
+      'Stage 1 Option Refresh, Full Markdown Concept Spec, and Post-Release Retrospective Summary',
       () async {
         final provider = WorkbenchProvider();
         await provider.startConceptInterview('Cyberpunk Grapple Arena');
 
-        // Option 2: Stage 1 Concept Critic detects Online vs Offline-Only conflict & resolves in 1 click
-        provider.updateConceptDraft((draft) {
-          draft.gameSpec = ['2D Top-Down', 'Online Multiplayer Co-Op'];
-          draft.techSpec = ['Godot 4 (2D)', 'Offline-Only Local Save'];
-        });
-        expect(provider.stage1Interventions, isNotEmpty);
-        expect(
-          provider.stage1Interventions.first.toolName,
-          'resolve_stage1_netcode_conflict',
-        );
-        await provider.applyAgentIntervention(provider.stage1Interventions.first);
-        expect(
-          provider.conceptDraft!.gameSpec.join(' '),
-          contains('Singleplayer'),
-        );
+        // Verify ProjectConceptBlueprint.toFullMarkdownSpec includes Game Spec, Tech Spec, Design Pillars, and Trade-Offs
+        final fullMd = provider.conceptDraft!.toFullMarkdownSpec();
+        expect(fullMd, contains('Game Spec:'));
+        expect(fullMd, contains('Tech Spec:'));
+        expect(fullMd, contains('Design Pillars:'));
+        expect(fullMd, contains('Trade-Offs:'));
+        expect(fullMd, contains('Goal:'));
+        expect(fullMd, contains('In Scope:'));
+        expect(fullMd, contains('Done When:'));
 
-        // Option 2: Regenerate Stage 1 section options
+        // Regenerate Stage 1 section options
         await provider.regenerateStage1SectionOptions('goal');
         expect(provider.conceptDraft!.sectionOptions['goal'], isNotEmpty);
         expect(
@@ -2036,9 +1976,8 @@ void main() {
           contains('(1):'),
         );
 
-        // Advance to Stage 2 & Stage 3
-        await provider.openReleasePlanGate();
-        await provider.approveAndExecuteReleasePlan();
+        // Build v0.1 in 2. Workbench
+        await provider.approveConceptAndBuildRelease();
         final firstBeat = provider.activeReleaseBeats.first;
         final firstFeat = provider.featuresForBeat(firstBeat.id).first;
         final states = FeatureStateNode.getStatesForDocument(firstFeat);
@@ -2056,25 +1995,22 @@ void main() {
           isTrue,
         );
 
-        // Option 4: Post-Release Retrospective & Auto-Carryover Summary into v0.2
+        // Post-Release Retrospective & Auto-Carryover Summary into v0.2
         final retro = provider.buildActiveReleaseRetrospective();
         expect(retro.playtestGuardsAdded, greaterThanOrEqualTo(1));
         expect(retro.carryoverFeatureTitles, isNotEmpty);
+        expect(retro.verifiedCheckpoints, lessThanOrEqualTo(retro.totalCheckpoints));
         await provider.advanceToNextRelease();
         expect(provider.lastReleaseRetrospective, isNotNull);
-        expect(
-          provider.lastAgentTrace?.agentRole,
-          'Post-Release Retrospective & Carryover Agent',
-        );
       },
     );
 
     test(
-      'Options 3, 4, 5 & 7: GDD Ingestion & Jump to Review, Dependency Tier Classification, Global Agent Command Palette & 1-Click Undo',
+      'GDD Ingestion & Jump to Full Concept Review, and Dual-Model Config Persistence',
       () async {
         final provider = WorkbenchProvider();
 
-        // Option 5: Import Existing GDD / Pitch Notes and jump straight to Step 10 Full Review
+        // Import Existing GDD / Pitch Notes and jump straight to Step 09 Full Concept Review
         await provider.importExistingGddAndJumpToReview('''
 # Solar Skiff Salvage
 Goal: Build a fast 3D hover-skiff salvage and grapple loop in Unity 6.
@@ -2091,55 +2027,15 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         provider.consumeJumpToFullReviewPending();
         expect(provider.jumpToFullReviewPending, isFalse);
 
-        // Option 7: Critical Path & Dependency Tier classification
-        final tier1 = WorkspaceAgentOrchestrator.classifyDependencyTier(
-          featureTitle: 'Player Movement & Camera Controls',
-          beatIndex: 0,
+        // Dual-Model AI Config updates both conversationModel and planningModel
+        provider.updateAiConfig(
+          conversationModel: 'gemini-3.8-flash',
+          planningModel: 'gemini-3.8-flash',
+          thinkingLevel: 'MEDIUM',
         );
-        final tier2 = WorkspaceAgentOrchestrator.classifyDependencyTier(
-          featureTitle: 'Enemy Wave Spawner & Arena',
-          beatIndex: 1,
-        );
-        final tier3 = WorkspaceAgentOrchestrator.classifyDependencyTier(
-          featureTitle: 'Shop UI & Particle VFX Polish',
-          beatIndex: 2,
-        );
-        expect(tier1.tierRank, 1);
-        expect(tier1.shortBadge, '⚡ BUILD 1ST');
-        expect(tier2.tierRank, 2);
-        expect(tier2.shortBadge, '◈ BUILD 2ND');
-        expect(tier3.tierRank, 3);
-        expect(tier3.shortBadge, '◌ STUBBABLE');
-
-        // Option 4: Global Agent Command Palette & 1-Click Undo
-        await provider.openReleasePlanGate();
-        await provider.approveAndExecuteReleasePlan();
-        final firstBeat = provider.activeReleaseBeats.first;
-        final firstFeat = provider.featuresForBeat(firstBeat.id).first;
-        final beforeStates = FeatureStateNode.getStatesForDocument(firstFeat);
-        final initialTuningCount = beforeStates.first.tuningParams.length;
-        final historyBefore = provider.agentTraceHistory.length;
-
-        await provider.runGlobalAgentCommand(
-          'Add coyote time tuning',
-        );
-        expect(provider.agentTraceHistory.length, greaterThan(historyBefore));
-        expect(provider.canUndoLastAgentAction, isTrue);
-
-        final afterCommandStates =
-            FeatureStateNode.getStatesForDocument(firstFeat);
-        expect(
-          afterCommandStates.first.tuningParams.length,
-          greaterThan(initialTuningCount),
-        );
-
-        // 1-Click Undo restores exact pre-mutation checkpoint state
-        final undone = provider.undoLastAgentAction();
-        expect(undone, isTrue);
-        final restoredDoc = provider.documents[firstFeat.id]!;
-        final restoredStates =
-            FeatureStateNode.getStatesForDocument(restoredDoc);
-        expect(restoredStates.first.tuningParams.length, initialTuningCount);
+        expect(provider.conversationModel, 'gemini-3.8-flash');
+        expect(provider.planningModel, 'gemini-3.8-flash');
+        expect(provider.thinkingLevel, 'MEDIUM');
       },
     );
 

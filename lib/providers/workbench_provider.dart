@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
 import '../agents/release_planner_agent.dart';
-import '../agents/workspace_agent_tools.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
@@ -214,6 +213,17 @@ class WorkbenchProvider extends ChangeNotifier {
       }
       if (loaded.apiKey != null && loaded.apiKey!.trim().isNotEmpty) {
         _apiKey = loaded.apiKey!.trim();
+      }
+      if (loaded.modelName != null && loaded.modelName!.trim().isNotEmpty) {
+        _conversationModel = loaded.modelName!.trim();
+      }
+      if (loaded.planningModel != null &&
+          loaded.planningModel!.trim().isNotEmpty) {
+        _planningModel = loaded.planningModel!.trim();
+      }
+      if (loaded.thinkingLevel != null &&
+          loaded.thinkingLevel!.trim().isNotEmpty) {
+        _thinkingLevel = loaded.thinkingLevel!.trim().toUpperCase();
       }
       final projs = savedProjects;
       if (projs.isNotEmpty) {
@@ -759,6 +769,7 @@ class WorkbenchProvider extends ChangeNotifier {
       activeDocumentId: activeId,
       apiKey: _apiKey,
       modelName: _conversationModel,
+      planningModel: _planningModel,
       thinkingLevel: _thinkingLevel,
       themeMode: _isDark ? 'dark' : 'light',
     );
@@ -917,16 +928,6 @@ class WorkbenchProvider extends ChangeNotifier {
   final List<String> _executionLog = [];
   List<String> get executionLog => List.unmodifiable(_executionLog);
 
-  AgentRunTrace? _lastAgentTrace;
-  AgentRunTrace? get lastAgentTrace => _lastAgentTrace;
-
-  final List<AgentRunTrace> _agentTraceHistory = [];
-  List<AgentRunTrace> get agentTraceHistory =>
-      List.unmodifiable(_agentTraceHistory);
-
-  final List<Map<String, dynamic>> _agentUndoStack = [];
-  bool get canUndoLastAgentAction => _agentUndoStack.isNotEmpty;
-
   bool _jumpToFullReviewPending = false;
   bool get jumpToFullReviewPending => _jumpToFullReviewPending;
 
@@ -934,79 +935,15 @@ class WorkbenchProvider extends ChangeNotifier {
     _jumpToFullReviewPending = false;
   }
 
-  void _recordAgentTrace(AgentRunTrace trace) {
-    _lastAgentTrace = trace;
-    _agentTraceHistory.insert(0, trace);
-    if (_agentTraceHistory.length > 25) {
-      _agentTraceHistory.removeLast();
-    }
-  }
-
-  void _pushAgentUndoSnapshot() {
-    final docSnapshots = <String, String>{};
-    for (final entry in documents.entries) {
-      docSnapshots[entry.key] = jsonEncode(entry.value.toJson());
-    }
-    _agentUndoStack.add({
-      'conceptJson':
-          _conceptDraft != null ? jsonEncode(_conceptDraft!.toJson()) : null,
-      'releaseBpJson': _releaseBlueprint != null
-          ? jsonEncode(_releaseBlueprint!.toJson())
-          : null,
-      'docs': docSnapshots,
-    });
-    if (_agentUndoStack.length > 15) {
-      _agentUndoStack.removeAt(0);
-    }
-  }
-
-  /// Option 4: 1-Click Undo / Revert of the most recent Agent tool mutation.
-  bool undoLastAgentAction() {
-    if (_agentUndoStack.isEmpty) return false;
-    final snap = _agentUndoStack.removeLast();
-    final rawConcept = snap['conceptJson'] as String?;
-    if (rawConcept != null) {
-      _conceptDraft = ProjectConceptBlueprint.fromJson(
-        jsonDecode(rawConcept) as Map<String, dynamic>,
-      );
-    }
-    final rawRelBp = snap['releaseBpJson'] as String?;
-    if (rawRelBp != null) {
-      _releaseBlueprint = ReleaseBlueprint.fromJson(
-        jsonDecode(rawRelBp) as Map<String, dynamic>,
-      );
-    }
-    final rawDocs = snap['docs'] as Map<String, String>?;
-    if (rawDocs != null) {
-      documents.clear();
-      for (final entry in rawDocs.entries) {
-        final d = TierDocument.fromJson(
-          jsonDecode(entry.value) as Map<String, dynamic>,
-        );
-        documents[entry.key] = d;
-        _persistDocument(d);
-      }
-    }
-    if (_agentTraceHistory.isNotEmpty) {
-      _agentTraceHistory.removeAt(0);
-    }
-    _lastAgentTrace =
-        _agentTraceHistory.isNotEmpty ? _agentTraceHistory.first : null;
-    _syncActiveProjectMetadata();
-    notifyListeners();
-    return true;
-  }
-
-  /// Option 5: Imports an unstructured GDD, Notion note, or README document on Stage 1A,
-  /// extracts all 9 Concept sections, and jumps straight to `Step 10 · Full Review`.
+  /// Imports an unstructured GDD, Notion note, or README document on Stage 1A,
+  /// extracts all 8 Concept sections, and jumps straight to `Step 09 · Full Concept Review`.
   Future<void> importExistingGddAndJumpToReview(String rawGdd) async {
     final clean = rawGdd.trim();
     if (clean.isEmpty) return;
 
-    _pushAgentUndoSnapshot();
     _isAgentBusy = true;
     _agentProgressStep =
-        'Extracting 9-section Concept Blueprint from GDD ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Extracting 8-section Concept Blueprint from GDD ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
@@ -1021,22 +958,6 @@ class WorkbenchProvider extends ChangeNotifier {
         _offlineErrorMessage = null;
         _commitConceptToVault(_conceptDraft!);
         _jumpToFullReviewPending = true;
-        _recordAgentTrace(
-          AgentRunTrace(
-            agentRole: 'GDD Ingestion & Extraction Agent',
-            userGoal: 'Import Existing GDD / Notes (${clean.length} chars)',
-            reasoning:
-                'Parsed "${_conceptDraft!.title}" into all 9 Concept sections (${_conceptDraft!.coreLoopBeats.length} Beats, ${_conceptDraft!.designPillars.length} Pillars, ${_conceptDraft!.exclusions.length} Exclusions) and jumped to Step 10 Full Review.',
-            toolCalls: [
-              AgentToolCall(
-                toolName: 'extract_concept_from_gdd',
-                targetTitle: _conceptDraft!.title,
-                summary:
-                    'Populated Sections 01–09 and opened Step 10 · Full Review',
-              ),
-            ],
-          ),
-        );
       } else {
         _setOfflineState();
       }
@@ -1044,391 +965,6 @@ class WorkbenchProvider extends ChangeNotifier {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
-    }
-  }
-
-  /// Option 4: Executes a natural-language command from the Global Top-Bar Agent Command Palette
-  /// in whichever stage (`Stage 1`, `Stage 2`, or `Stage 3`) is currently active.
-  Future<String> runGlobalAgentCommand(String command) async {
-    final clean = command.trim();
-    if (clean.isEmpty) return 'No command entered.';
-
-    if (_currentStage == WorkbenchStage.releaseWorkbench &&
-        selectedFeature != null) {
-      final feat = selectedFeature!;
-      final states = FeatureStateNode.getStatesForDocument(feat);
-      final trace = await runStage3AgentCoPilot(
-        featureDoc: feat,
-        states: states,
-        activeCheckpointIndex: 0,
-        directive: clean,
-      );
-      return trace.toolCalls.isNotEmpty
-          ? trace.toolCalls.first.summary
-          : trace.reasoning;
-    } else if (_currentStage == WorkbenchStage.releaseWorkbench &&
-        _releaseBlueprint != null) {
-      _pushAgentUndoSnapshot();
-      await sendReleasePlanChatMessage(clean);
-      _recordAgentTrace(
-        AgentRunTrace(
-          agentRole: 'Stage 2 Release Planner Agent',
-          userGoal: clean,
-          reasoning:
-              'Applied global command "$clean" to ${_releaseBlueprint!.releaseTitle}.',
-          toolCalls: [
-            AgentToolCall(
-              toolName: 'refine_release_blueprint',
-              targetTitle: _releaseBlueprint!.releaseVersionTag,
-              summary: 'Refined Release Blueprint via Global Command Palette',
-            ),
-          ],
-        ),
-      );
-      return 'Updated ${_releaseBlueprint!.releaseTitle} ✓';
-    } else {
-      _pushAgentUndoSnapshot();
-      await sendConceptChatMessage(clean);
-      final title = _conceptDraft?.title ?? 'Project Concept';
-      _recordAgentTrace(
-        AgentRunTrace(
-          agentRole: 'Stage 1 Concept Co-Design Agent',
-          userGoal: clean,
-          reasoning: 'Applied global command "$clean" to $title.',
-          toolCalls: [
-            AgentToolCall(
-              toolName: 'update_concept_blueprint',
-              targetTitle: title,
-              summary: 'Updated Concept Blueprint via Global Command Palette',
-            ),
-          ],
-        ),
-      );
-      return 'Updated $title ✓';
-    }
-  }
-
-  void clearLastAgentTrace() {
-    _lastAgentTrace = null;
-    notifyListeners();
-  }
-
-  /// Set of intervention IDs explicitly marked "Keep in Scope ✓" / dismissed by the user.
-  final Set<String> _keptInterventionIds = {};
-
-  /// Marks a Producer Scope-Guard or Concept Critic intervention as intentionally kept in scope.
-  void keepAgentIntervention(AgentIntervention intervention) {
-    _keptInterventionIds.add(intervention.id);
-    final featTitle =
-        intervention.payload['featureTitle']?.toString() ?? intervention.title;
-    _recordAgentTrace(AgentRunTrace(
-      agentRole: 'Producer Scope Guard',
-      userGoal: 'Keep in Scope: $featTitle',
-      reasoning:
-          'Explicitly approved keeping "$featTitle" in active release scope.',
-      toolCalls: [
-        AgentToolCall(
-          toolName: 'keep_feature_in_scope',
-          targetTitle: featTitle,
-          summary: 'Kept "$featTitle" in active scope ✓',
-        ),
-      ],
-    ));
-    notifyListeners();
-  }
-
-  /// Marks all current Stage 2 Producer Scope-Guard alerts as kept in scope.
-  void keepAllStage2Interventions() {
-    final current = stage2Interventions;
-    if (current.isEmpty) return;
-    for (final item in current) {
-      _keptInterventionIds.add(item.id);
-    }
-    _recordAgentTrace(AgentRunTrace(
-      agentRole: 'Producer Scope Guard',
-      userGoal: 'Keep All ${current.length} Flagged Items in Scope',
-      reasoning:
-          'Approved keeping all ${current.length} flagged scope items in active release scope.',
-      toolCalls: [
-        for (final item in current)
-          AgentToolCall(
-            toolName: 'keep_feature_in_scope',
-            targetTitle:
-                item.payload['featureTitle']?.toString() ?? item.title,
-            summary: 'Kept in active scope ✓',
-          ),
-      ],
-    ));
-    notifyListeners();
-  }
-
-  /// 0-Token Autonomous Concept Critic Interventions for Stage 1 (`ProjectConceptBlueprint`).
-  List<AgentIntervention> get stage1Interventions {
-    final draft = _conceptDraft;
-    if (draft == null) return const [];
-    return WorkspaceAgentOrchestrator.auditConceptBlueprint(draft)
-        .where((i) => !_keptInterventionIds.contains(i.id))
-        .toList();
-  }
-
-  /// 0-Token Autonomous Producer Scope-Guard Interventions for Stage 2 (`Release Plan Gate`).
-  List<AgentIntervention> get stage2Interventions {
-    final bp = _releaseBlueprint;
-    if (bp == null) return const [];
-    return WorkspaceAgentOrchestrator.auditReleaseBlueprint(
-      blueprint: bp,
-      concept: _conceptDraft,
-    ).where((i) => !_keptInterventionIds.contains(i.id)).toList();
-  }
-
-  /// Executes a 1-click `[Let Agent Fix ✦]` intervention from the Autonomous Producer / Engine Architect.
-  Future<void> applyAgentIntervention(
-    AgentIntervention intervention, {
-    List<FeatureStateNode>? stage3States,
-  }) async {
-    _pushAgentUndoSnapshot();
-    final bp = _releaseBlueprint;
-    final payload = intervention.payload;
-
-    switch (intervention.toolName) {
-      case 'resolve_stage1_netcode_conflict':
-        if (_conceptDraft != null) {
-          _conceptDraft!.gameSpec = _conceptDraft!.gameSpec
-              .map(
-                (s) => (s.toLowerCase().contains('online') ||
-                        s.toLowerCase().contains('multiplayer'))
-                    ? 'Singleplayer (Local Shared-Screen Optional)'
-                    : s,
-              )
-              .toList();
-          _commitConceptToVault(_conceptDraft!);
-          _recordAgentTrace(AgentRunTrace(
-            agentRole: 'Stage 1 Concept Critic',
-            userGoal: intervention.title,
-            reasoning: intervention.reason,
-            toolCalls: const [
-              AgentToolCall(
-                toolName: 'resolve_stage1_netcode_conflict',
-                targetTitle: '02 · Game Spec',
-                summary: 'Aligned Game Spec to Singleplayer to match Offline-Only Tech Spec',
-              ),
-            ],
-          ));
-          notifyListeners();
-        }
-        return;
-
-      case 'resolve_stage1_dimension_conflict':
-        if (_conceptDraft != null) {
-          _conceptDraft!.techSpec = _conceptDraft!.techSpec
-              .map((s) => s.replaceAll('2D', '3D'))
-              .toList();
-          _commitConceptToVault(_conceptDraft!);
-          _recordAgentTrace(AgentRunTrace(
-            agentRole: 'Stage 1 Concept Critic',
-            userGoal: intervention.title,
-            reasoning: intervention.reason,
-            toolCalls: const [
-              AgentToolCall(
-                toolName: 'resolve_stage1_dimension_conflict',
-                targetTitle: '03 · Tech Spec',
-                summary: 'Aligned Tech Spec renderer & engine pipeline to 3D',
-              ),
-            ],
-          ));
-          notifyListeners();
-        }
-        return;
-
-      case 'append_stage1_loop_reset_beat':
-        if (_conceptDraft != null) {
-          _conceptDraft!.coreLoopBeats = [
-            ..._conceptDraft!.coreLoopBeats,
-            'Run Summary & Loop Reset: tally run rewards and reset cleanly to the starting stage in 1 key press',
-          ];
-          _commitConceptToVault(_conceptDraft!);
-          _recordAgentTrace(AgentRunTrace(
-            agentRole: 'Stage 1 Concept Critic',
-            userGoal: intervention.title,
-            reasoning: intervention.reason,
-            toolCalls: const [
-              AgentToolCall(
-                toolName: 'append_stage1_loop_reset_beat',
-                targetTitle: '06 · Core Loop',
-                summary: 'Appended "Run Summary & Loop Reset" beat to close the core loop',
-              ),
-            ],
-          ));
-          notifyListeners();
-        }
-        return;
-
-      case 'populate_stage1_exclusions':
-        if (_conceptDraft != null) {
-          final updated = List<String>.from(_conceptDraft!.exclusions);
-          for (final ex in const [
-            'No online multiplayer or matchmaking in v0.1',
-            'No procedural world generation or cutscene cinematics in v0.1',
-          ]) {
-            if (!updated.contains(ex)) updated.add(ex);
-          }
-          _conceptDraft!.exclusions = updated;
-          _commitConceptToVault(_conceptDraft!);
-          _recordAgentTrace(AgentRunTrace(
-            agentRole: 'Stage 1 Concept Critic',
-            userGoal: intervention.title,
-            reasoning: intervention.reason,
-            toolCalls: const [
-              AgentToolCall(
-                toolName: 'populate_stage1_exclusions',
-                targetTitle: '07 · Out of Scope',
-                summary: 'Added 2 explicit v0.1 Out-of-Scope guardrails',
-              ),
-            ],
-          ));
-          notifyListeners();
-        }
-        return;
-
-      case 'defer_conflicting_feature':
-        final beatId = payload['beatId']?.toString() ?? '';
-        final featId = payload['featureId']?.toString() ?? '';
-        final featTitle = payload['featureTitle']?.toString() ?? 'Feature';
-        toggleProposedFeatureScope(beatId, featId, false);
-        _recordAgentTrace(AgentRunTrace(
-          agentRole: 'Producer Scope Guard',
-          userGoal: intervention.title,
-          reasoning: intervention.reason,
-          toolCalls: [
-            AgentToolCall(
-              toolName: 'defer_conflicting_feature',
-              targetTitle: featTitle,
-              summary: 'Deferred "$featTitle" to Out of Scope to protect ${bp?.releaseVersionTag ?? "v0.1"} boundaries',
-            ),
-          ],
-        ));
-        notifyListeners();
-        return;
-
-      case 'trim_oversized_feature':
-        final beatId = payload['beatId']?.toString() ?? '';
-        final featId = payload['featureId']?.toString() ?? '';
-        final featTitle = payload['featureTitle']?.toString() ?? 'Feature';
-        if (bp != null) {
-          for (final beat in bp.beats) {
-            if (beat.id == beatId) {
-              for (final feat in beat.features) {
-                if (feat.id == featId) {
-                  feat.estimatedHours = 5;
-                  if (feat.checkpoints.length > 2) {
-                    feat.checkpoints = feat.checkpoints.take(2).toList();
-                  }
-                  break;
-                }
-              }
-            }
-          }
-          _recordAgentTrace(AgentRunTrace(
-            agentRole: 'Producer Scope Guard',
-            userGoal: intervention.title,
-            reasoning:
-                'Trimmed "$featTitle" to a 5h greybox core so playtesting is never blocked by a >8h ticket.',
-            toolCalls: [
-              AgentToolCall(
-                toolName: 'trim_oversized_feature',
-                targetTitle: featTitle,
-                summary: 'Capped "$featTitle" at 5h and focused on 2 core playable checkpoints',
-              ),
-            ],
-          ));
-          _syncActiveProjectMetadata();
-          notifyListeners();
-        }
-        return;
-
-      case 'auto_prune_milestone_scope':
-        if (bp != null) {
-          final deferredTitles = <String>[];
-          for (final beat in bp.beats) {
-            if (beat.includedFeatures.length > 1) {
-              final candidate = beat.includedFeatures.last;
-              candidate.included = false;
-              deferredTitles.add(candidate.title);
-            }
-          }
-          _recordAgentTrace(AgentRunTrace(
-            agentRole: 'Producer Scope Guard',
-            userGoal: intervention.title,
-            reasoning:
-                'Auto-deferred secondary features (${deferredTitles.join(", ")}) to bring ${bp.releaseVersionTag} within budget.',
-            toolCalls: [
-              for (final t in deferredTitles)
-                AgentToolCall(
-                  toolName: 'defer_secondary_feature',
-                  targetTitle: t,
-                  summary: 'Deferred "$t" to Out of Scope',
-                ),
-            ],
-          ));
-          _syncActiveProjectMetadata();
-          notifyListeners();
-        }
-        return;
-
-      case 'split_overloaded_checkpoint':
-        final featId = payload['featureId']?.toString() ?? _selectedFeatureId ?? '';
-        final cpIdx = (payload['checkpointIndex'] as int?) ?? 0;
-        final featDoc = documents[featId];
-        if (featDoc != null && stage3States != null && cpIdx < stage3States.length) {
-          final heavyCp = stage3States[cpIdx];
-          if (heavyCp.checklist.length > 3) {
-            final overflowTasks = heavyCp.checklist.sublist(3);
-            heavyCp.checklist = heavyCp.checklist.sublist(0, 3);
-            final splitCp = FeatureStateNode(
-              id: generateUniqueId('cp_split'),
-              name: 'Stage ${stage3States.length + 1}: ${heavyCp.cleanStageTitle} (Part 2)',
-              trigger: heavyCp.trigger,
-              parameters: Map<String, String>.from(heavyCp.parameters),
-              tuningParams: List<String>.from(heavyCp.tuningParams),
-              edgeCases: List<String>.from(heavyCp.edgeCases),
-              checklist: overflowTasks,
-            );
-            stage3States.insert(cpIdx + 1, splitCp);
-            updateFeatureStates(featId, stage3States);
-            _recordAgentTrace(AgentRunTrace(
-              agentRole: 'Producer Scope Guard',
-              userGoal: intervention.title,
-              reasoning:
-                  'Split overloaded Checkpoint ${cpIdx + 1} into two focused 60/40 Playable Checkpoints.',
-              toolCalls: [
-                AgentToolCall(
-                  toolName: 'split_overloaded_checkpoint',
-                  targetTitle: featDoc.title,
-                  summary: 'Moved ${overflowTasks.length} tasks into ${splitCp.name}',
-                ),
-              ],
-            ));
-          }
-        }
-        return;
-
-      case 'rebalance_tuning_params':
-      case 'add_edge_case_guards':
-      default:
-        final featId = payload['featureId']?.toString() ?? _selectedFeatureId ?? '';
-        final cpIdx = (payload['checkpointIndex'] as int?) ?? 0;
-        final featDoc = documents[featId];
-        if (featDoc != null && stage3States != null) {
-          await runStage3AgentCoPilot(
-            featureDoc: featDoc,
-            states: stage3States,
-            activeCheckpointIndex: cpIdx,
-            directive: intervention.toolName == 'rebalance_tuning_params'
-                ? 'suggest_tuning'
-                : 'add_edge_guards',
-          );
-        }
-        return;
     }
   }
 
@@ -1479,67 +1015,10 @@ class WorkbenchProvider extends ChangeNotifier {
         (firstActiveFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
   }
 
-  static bool _isStretchCandidateFeature(ProposedFeatureBlueprint f) =>
-      f.id == 'feat_1_3' ||
-      (f.id.endsWith('_2') && f.id != 'feat_1_2') ||
-      f.title.toLowerCase().contains('bonus');
-
-  /// Runs the Stage 3 Agentic Co-Pilot (`[ASK AGENT]` bar & Co-Pilot Cards) using
-  /// low-token surgical Workspace Tool Calls (`WorkspaceAgentOrchestrator.runStage3CoPilotTools`).
-  Future<AgentRunTrace> runStage3AgentCoPilot({
-    required TierDocument featureDoc,
-    required List<FeatureStateNode> states,
-    required int activeCheckpointIndex,
-    required String directive,
-  }) async {
-    _pushAgentUndoSnapshot();
-    final engineLabel = _activeEngineLabel;
-    final releaseVer = activeRelease?.sections['versionTag'] ?? 'v0.1';
-    final allReleaseFeats = <TierDocument>[
-      for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
-    ];
-
-    final trace = await WorkspaceAgentOrchestrator.runStage3CoPilotTools(
-      userDirective: directive,
-      activeFeature: featureDoc,
-      activeStates: states,
-      activeCheckpointIndex: activeCheckpointIndex,
-      siblingFeatures: allReleaseFeats,
-      engineLabel: engineLabel,
-      releaseVersionTag: releaseVer,
-      onSaveStates: (featId, updatedStates) {
-        updateFeatureStates(featId, updatedStates);
-      },
-      apiKey: _apiKey,
-      modelName: _conversationModel,
-      thinkingLevel: _thinkingLevel,
-    );
-
-    if (trace == null) {
-      _setOfflineState();
-      return AgentRunTrace(
-        agentRole: 'Stage 3 Systems & Feel Agent',
-        userGoal: directive.trim(),
-        reasoning: _offlineErrorMessage ?? 'App is offline.',
-        toolCalls: const [],
-      );
-    }
-
-    _offlineErrorMessage = null;
-    _recordAgentTrace(trace);
-    notifyListeners();
-    return trace;
-  }
-
-  final Map<String, int> _sectionOptionRefreshOffsets = {};
-
-  /// Option 2: Regenerates the 3 Option Playing Cards for a specific Stage 1 section (`01`..`09`).
+  /// Regenerates the 3 Option Playing Cards for a specific Stage 1 section (`01`..`08`).
   Future<void> regenerateStage1SectionOptions(String optionKey) async {
     final draft = _conceptDraft;
     if (draft == null) return;
-    _pushAgentUndoSnapshot();
-    final offset = (_sectionOptionRefreshOffsets[optionKey] ?? 0) + 1;
-    _sectionOptionRefreshOffsets[optionKey] = offset;
     final title = draft.title;
     final previousOptions = List<String>.from(
       draft.sectionOptions[optionKey] ?? const <String>[],
@@ -1563,19 +1042,6 @@ class WorkbenchProvider extends ChangeNotifier {
         draft.sectionOptions[optionKey] = aiOptions;
         _offlineErrorMessage = null;
         _commitConceptToVault(draft);
-        _recordAgentTrace(AgentRunTrace(
-          agentRole: 'Stage 1 Co-Design Agent',
-          userGoal: 'Refresh options for $optionKey',
-          reasoning:
-              'Synthesized 3 fresh option cards tailored to $title ($optionKey variant #$offset).',
-          toolCalls: [
-            AgentToolCall(
-              toolName: 'regenerate_section_options',
-              targetTitle: 'Stage 1 · $optionKey',
-              summary: 'Generated 3 fresh Option Playing Cards for $optionKey',
-            ),
-          ],
-        ));
       } else {
         _setOfflineState();
       }
@@ -2082,31 +1548,6 @@ class WorkbenchProvider extends ChangeNotifier {
       if (planned != null) {
         _releaseBlueprint = planned;
         _offlineErrorMessage = null;
-        final bp = planned;
-        final totalFeats = bp.totalIncludedFeatures;
-        _recordAgentTrace(AgentRunTrace(
-          agentRole: '3-Agent Release Pipeline',
-          userGoal: 'Plan ${bp.releaseTitle}',
-          reasoning:
-              'Systems Designer drafted ${bp.beats.length} Epics ($totalFeats Features) → Producer Scope Critic checked ${bp.explicitExclusions.length} exclusions → Engine Architect bound tuning & guards.',
-          toolCalls: [
-            AgentToolCall(
-              toolName: 'draft_release_beats',
-              targetTitle: bp.releaseVersionTag,
-              summary: 'Generated ${bp.beats.length} Core Loop Epics & $totalFeats Playable Features (${bp.totalIncludedHours}h)',
-            ),
-            AgentToolCall(
-              toolName: 'audit_scope_exclusions',
-              targetTitle: 'Producer Scope Guard',
-              summary: 'Verified against ${bp.explicitExclusions.length} Out-of-Scope boundaries',
-            ),
-            AgentToolCall(
-              toolName: 'bind_engine_tuning_and_guards',
-              targetTitle: 'Engine Architect',
-              summary: 'Injected Build Tasks, numeric tuning variables, and [GUARD] rules',
-            ),
-          ],
-        ));
         if (transitionToGateStage) {
           _currentStage = WorkbenchStage.releaseWorkbench;
         }
@@ -2170,210 +1611,6 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Toggles all non-superseded Features inside a Beat on or off at once in Stage 2.
-  void toggleProposedBeatScope(String beatId, bool included) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        for (final feat in beat.features) {
-          if (!feat.isSuperseded) {
-            feat.included = included;
-          }
-        }
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        return;
-      }
-    }
-  }
-
-  /// Selects or unselects a Stage 2 Release Question Playing Card option and live-syncs
-  /// the Release Blueprint's `doneWhen` and optional deferred feature scope immediately.
-  /// Clicking an already-selected option card unselects it and restores the initial default.
-  void selectReleaseQuestionOption(String questionId, String optionText) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    for (final q in bp.questions) {
-      if (q.id == questionId) {
-        final isUnselect = q.selectedOption == optionText;
-        if (isUnselect) {
-          q.selectedOption = '';
-          if (questionId.contains('feel') || q == bp.questions.first) {
-            final projTitle = activeProject?.title ?? bp.releaseTitle;
-            bp.doneWhen =
-                'A playtester can complete the full $projTitle core loop cycle and reset cleanly 3 times in a row.';
-          } else if (questionId.contains('scope')) {
-            for (final b in bp.beats) {
-              for (final f in b.features) {
-                if (!f.isSuperseded) {
-                  f.included = !_isStretchCandidateFeature(f);
-                }
-              }
-            }
-          }
-          _syncActiveProjectMetadata();
-          notifyListeners();
-          return;
-        }
-
-        q.selectedOption = optionText;
-        final clean = optionText
-            .replaceFirst(RegExp(r'^\(Recommended\)\s*', caseSensitive: false), '')
-            .trim();
-        final colonIdx = clean.indexOf(':');
-        final summary = (colonIdx > 0 && colonIdx < clean.length - 1)
-            ? clean.substring(colonIdx + 1).trim()
-            : clean;
-
-        if (questionId.contains('feel') || q == bp.questions.first) {
-          bp.doneWhen =
-              'A playtester can complete the full ${bp.releaseVersionTag} core loop cycle 3 times in a row — prioritizing: $summary.';
-        } else if (questionId.contains('scope')) {
-          final lower = clean.toLowerCase();
-          if (lower.contains('expanded')) {
-            for (final b in bp.beats) {
-              for (final f in b.features) {
-                if (!f.isSuperseded) f.included = true;
-              }
-            }
-          } else if (lower.contains('lean')) {
-            for (final b in bp.beats) {
-              for (final f in b.features) {
-                if (_isStretchCandidateFeature(f)) {
-                  f.included = false;
-                }
-              }
-            }
-          }
-        }
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        return;
-      }
-    }
-  }
-
-  /// Adds a custom Playable Feature directly into a Beat in Stage 2.
-  void addProposedFeatureToBeat(String beatId, String rawTitle) {
-    final bp = _releaseBlueprint;
-    final cleanTitle = rawTitle.trim();
-    if (bp == null || cleanTitle.isEmpty) return;
-    _pushAgentUndoSnapshot();
-
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        final featId =
-            'feat_${beat.id}_${beat.features.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-        beat.features.add(
-          ProposedFeatureBlueprint(
-            id: featId,
-            title: cleanTitle,
-            goal: '',
-            doneWhen: '',
-            estimatedHours: 4,
-            included: true,
-            lifecycle: FeatureLifecycleStatus.newFeature,
-            originVersion: bp.releaseVersionTag,
-            inScope: const [],
-            outOfScope: const [],
-            tuningParams: const [],
-            edgeCases: const [],
-            checkpoints: [
-              ProposedCheckpointBlueprint(
-                title: cleanTitle,
-                playtestCriteria: '',
-                tasks: const [],
-                coveredScope: const [],
-                tuningParams: const [],
-                edgeCases: const [],
-                releaseVersion: bp.releaseVersionTag,
-              ),
-            ],
-          ),
-        );
-        _recordAgentTrace(AgentRunTrace(
-          agentRole: 'Systems & Engine Architect',
-          userGoal: 'Add Feature "$cleanTitle" to ${beat.title}',
-          reasoning: 'Added "$cleanTitle" to ${beat.title}.',
-          toolCalls: [
-            AgentToolCall(
-              toolName: 'create_feature_blueprint',
-              targetTitle: cleanTitle,
-              summary: 'Added "$cleanTitle" (4h)',
-            ),
-          ],
-        ));
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        return;
-      }
-    }
-  }
-
-  /// Updates a proposed Feature's Title, Hours, Goal, Done When, Checkpoints, or Tuning
-  /// parameters inline inside Stage 2 (`Release Plan Gate`).
-  void updateProposedFeatureInBeat({
-    required String beatId,
-    required String featureId,
-    String? title,
-    String? goal,
-    String? doneWhen,
-    int? estimatedHours,
-    List<ProposedCheckpointBlueprint>? checkpoints,
-    List<String>? tuningParams,
-    List<String>? edgeCases,
-  }) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        for (final feat in beat.features) {
-          if (feat.id == featureId) {
-            if (title != null && title.trim().isNotEmpty) {
-              feat.title = title.trim();
-            }
-            if (goal != null && goal.trim().isNotEmpty) {
-              feat.goal = goal.trim();
-            }
-            if (doneWhen != null && doneWhen.trim().isNotEmpty) {
-              feat.doneWhen = doneWhen.trim();
-            }
-            if (estimatedHours != null && estimatedHours >= 0) {
-              feat.estimatedHours = estimatedHours;
-            }
-            if (checkpoints != null && checkpoints.isNotEmpty) {
-              feat.checkpoints = checkpoints;
-            }
-            if (tuningParams != null) {
-              feat.tuningParams = tuningParams;
-            }
-            if (edgeCases != null) {
-              feat.edgeCases = edgeCases;
-            }
-            _syncActiveProjectMetadata();
-            notifyListeners();
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  /// Removes a proposed Feature card from a Beat in Stage 2 (`Release Plan Gate`).
-  void removeProposedFeatureFromBeat(String beatId, String featureId) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        beat.features.removeWhere((f) => f.id == featureId);
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        return;
-      }
-    }
-  }
-
   /// Adds a new Playable Feature directly into an active Epic (`beatId`) inside `2. Workbench`
   /// and enriches it via Gemini AI.
   String? addLiveFeatureToBeat(String beatId, String rawTitle) {
@@ -2386,7 +1623,6 @@ class WorkbenchProvider extends ChangeNotifier {
       notifyListeners();
       return null;
     }
-    _pushAgentUndoSnapshot();
 
     final versionTag = activeReleaseVersionTag;
     final featId =
@@ -2465,19 +1701,6 @@ class WorkbenchProvider extends ChangeNotifier {
         }
       }
     }
-
-    _recordAgentTrace(AgentRunTrace(
-      agentRole: 'Systems & Engine Architect',
-      userGoal: 'Add Feature "$cleanTitle" to ${beatDoc.title}',
-      reasoning: 'Created "$cleanTitle" in 2. Workbench and queued AI enrichment.',
-      toolCalls: [
-        AgentToolCall(
-          toolName: 'create_live_feature_in_workbench',
-          targetTitle: cleanTitle,
-          summary: 'Added "$cleanTitle" (4h)',
-        ),
-      ],
-    ));
 
     selectFeature(featId);
     _syncActiveProjectMetadata();
@@ -2591,7 +1814,6 @@ Return ONLY a JSON object:
     final featDoc = documents[featureId];
     final cleanTitle = newTitle.trim();
     if (featDoc == null || cleanTitle.isEmpty) return;
-    _pushAgentUndoSnapshot();
 
     final oldTitle = featDoc.title;
     featDoc.title = cleanTitle;
@@ -2626,7 +1848,6 @@ Return ONLY a JSON object:
     ];
     if (allFeats.length <= 1) return false;
 
-    _pushAgentUndoSnapshot();
     if (beatDoc != null) {
       beatDoc.childrenIds.remove(featureId);
       _persistDocument(beatDoc);
@@ -2654,87 +1875,7 @@ Return ONLY a JSON object:
     return true;
   }
 
-  /// Updates the active Release Blueprint's top-level `goal` or `doneWhen` in Stage 2 (`Release Plan Gate`).
-  void updateReleaseBlueprintGoalAndDoneWhen({
-    String? goal,
-    String? doneWhen,
-  }) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    if (goal != null && goal.trim().isNotEmpty) {
-      bp.goal = goal.trim();
-    }
-    if (doneWhen != null && doneWhen.trim().isNotEmpty) {
-      bp.doneWhen = doneWhen.trim();
-    }
-    _syncActiveProjectMetadata();
-    notifyListeners();
-  }
-
-  /// Updates a proposed Epic's (`ProposedBeatBlueprint`) title, goal, or doneWhen inline in Stage 2.
-  void updateProposedBeatInBlueprint({
-    required String beatId,
-    String? title,
-    String? goal,
-    String? doneWhen,
-  }) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        if (title != null && title.trim().isNotEmpty) {
-          beat.title = title.trim();
-        }
-        if (goal != null && goal.trim().isNotEmpty) {
-          beat.goal = goal.trim();
-        }
-        if (doneWhen != null && doneWhen.trim().isNotEmpty) {
-          beat.doneWhen = doneWhen.trim();
-        }
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        return;
-      }
-    }
-  }
-
-  /// Appends a new proposed Epic (`ProposedBeatBlueprint`) with a starter Playable Feature in Stage 2
-  /// and returns the new Epic's `id`.
-  String? addProposedBeatToBlueprint({
-    required String title,
-    String? goal,
-    String? doneWhen,
-  }) {
-    final bp = _releaseBlueprint;
-    final cleanTitle = title.trim();
-    if (bp == null || cleanTitle.isEmpty) return null;
-    _pushAgentUndoSnapshot();
-
-    final epicNum = bp.beats.length + 1;
-    final beatId =
-        'beat_${epicNum}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-    final effectiveGoal = (goal != null && goal.trim().isNotEmpty)
-        ? goal.trim()
-        : 'Build the playable $cleanTitle mechanics and connect them to the ${bp.releaseVersionTag} core loop.';
-    final effectiveDoneWhen = (doneWhen != null && doneWhen.trim().isNotEmpty)
-        ? doneWhen.trim()
-        : 'Playtester executes $cleanTitle in the test arena with clear visual/audio feedback and zero state soft-locks.';
-
-    final newBeat = ProposedBeatBlueprint(
-      id: beatId,
-      title: cleanTitle,
-      goal: effectiveGoal,
-      doneWhen: effectiveDoneWhen,
-      features: <ProposedFeatureBlueprint>[],
-    );
-    bp.beats.add(newBeat);
-    addProposedFeatureToBeat(beatId, '$cleanTitle Mechanics & Controls');
-    _syncActiveProjectMetadata();
-    notifyListeners();
-    return beatId;
-  }
-
-  /// Logs a Playtest Issue on a Checkpoint in Stage 3 (`Release Workbench`):
+  /// Logs a Playtest Issue on a Checkpoint in `2. Workbench`:
   /// 1. Appends a `[FIX] <issueDescription> (1h)` Parent Task to `cpNode.checklist` with
   ///    3 checkable, engine-aware debug/fix How-To Sub-Steps.
   /// 2. Appends `[PLAYTEST GUARD] <issueDescription>` to `cpNode.edgeCases`.
@@ -2751,7 +1892,6 @@ Return ONLY a JSON object:
         checkpointIndex >= states.length) {
       return -1;
     }
-    _pushAgentUndoSnapshot();
     final cpNode = states[checkpointIndex];
     final newTaskIndex = cpNode.checklist.length;
     final taskNum = newTaskIndex + 1;
@@ -2811,20 +1951,6 @@ Return ONLY a JSON object:
     if (!cpNode.edgeCases.contains(guardText)) {
       cpNode.edgeCases = [...cpNode.edgeCases, guardText];
     }
-    final featTitle = documents[featureId]?.title ?? cpNode.cleanStageTitle;
-    _recordAgentTrace(AgentRunTrace(
-      agentRole: 'Playtest Root-Cause Debugger',
-      userGoal: 'Log Issue: $cleanIssue',
-      reasoning:
-          'Diagnosed "$cleanIssue" in $engineLabel ($primaryTune) and injected a 3-step root-cause fix + [PLAYTEST GUARD].',
-      toolCalls: [
-        AgentToolCall(
-          toolName: 'diagnose_and_fix_playtest_bug',
-          targetTitle: '$featTitle · Checkpoint ${checkpointIndex + 1}',
-          summary: 'Added [FIX] $cleanIssue (1h) + [PLAYTEST GUARD] boundary rule',
-        ),
-      ],
-    ));
     updateFeatureStates(featureId, states);
     if (GeminiAgentClient.hasKey(_apiKey) ||
         GeminiAgentClient.testMockResponder != null) {
@@ -3296,6 +2422,23 @@ Return ONLY valid JSON:
     final feat = documents[featureId];
     if (feat == null) return;
     FeatureStateNode.saveStatesToDocument(feat, states);
+    if (states.isNotEmpty) {
+      final activeCp = states.firstWhere(
+        (s) => !s.isCompleted,
+        orElse: () => states.first,
+      );
+      if (activeCp.tuningParams.isNotEmpty) {
+        final formattedTuning =
+            activeCp.tuningParams.map((p) => '• $p').join('\n');
+        feat.sections['tuning'] = formattedTuning;
+        feat.sections['variables'] = formattedTuning;
+      }
+      if (activeCp.edgeCases.isNotEmpty) {
+        feat.sections['edge_cases'] =
+            activeCp.edgeCases.map((e) => '• $e').join('\n');
+      }
+    }
+    TaskHowToBlueprint.clearCache();
     _persistDocument(feat, debounce: true);
     notifyListeners();
   }
@@ -3542,7 +2685,6 @@ Return ONLY valid JSON:
     if (releases.isEmpty) return;
 
     _lastReleaseRetrospective = buildActiveReleaseRetrospective();
-    final retro = _lastReleaseRetrospective!;
 
     Future<void> openGateAndRecordRetro(String targetRelId) async {
       await openReleasePlanGate(
@@ -3550,30 +2692,6 @@ Return ONLY valid JSON:
         transitionToGateStage: transitionToGateStage,
       );
       if (_releaseBlueprint != null) {
-        final carryoverNote = retro.carryoverFeatureTitles.isEmpty
-            ? '100% of ${retro.totalCheckpoints} checkpoints verified'
-            : 'Carried over ${retro.carryoverFeatureTitles.length} unfinished feature(s) (${retro.carryoverFeatureTitles.join(", ")}) as UPGRADING';
-        _recordAgentTrace(AgentRunTrace(
-          agentRole: 'Post-Release Retrospective & Carryover Agent',
-          userGoal: 'Evolve from ${retro.releaseTitle} to ${_releaseBlueprint!.releaseTitle}',
-          reasoning:
-              '$carryoverNote · Preserved ${retro.fixTasksTriaged} playtest [FIX] tasks and ${retro.playtestGuardsAdded} [PLAYTEST GUARD] rules in the live tree.',
-          toolCalls: [
-            AgentToolCall(
-              toolName: 'compile_release_retrospective',
-              targetTitle: retro.releaseTitle,
-              summary:
-                  'Verified ${retro.verifiedCheckpoints}/${retro.totalCheckpoints} checkpoints (${retro.fixTasksTriaged} fixes, ${retro.playtestGuardsAdded} guards)',
-            ),
-            if (retro.carryoverFeatureTitles.isNotEmpty)
-              AgentToolCall(
-                toolName: 'auto_carryover_incomplete_features',
-                targetTitle: _releaseBlueprint!.releaseVersionTag,
-                summary:
-                    'Carried over ${retro.carryoverFeatureTitles.join(", ")} into ${_releaseBlueprint!.releaseVersionTag}',
-              ),
-          ],
-        ));
         notifyListeners();
       }
     }

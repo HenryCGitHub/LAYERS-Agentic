@@ -2111,100 +2111,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     );
   }
 
-  // ── Steps `01`–`09`: De-Boxed Full-Width Single-Section Workspace ──────────
+  // ── Steps `01`–`08`: De-Boxed Full-Width Single-Section Workspace ──────────
   Widget _buildFocusedSectionWorkspace(ProjectConceptBlueprint draft, int sectionIdx) {
     final sec = _sections[sectionIdx];
     final agentNote = _agentNotesBySection[sectionIdx];
-    final stage1Interventions = widget.workbench.stage1Interventions;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final intervention in stage1Interventions.take(1)) ...[
-          Container(
-            key: const ValueKey('stage1_intervention_banner'),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: bgSurface,
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(
-                color: (intervention.severity == 'crimson'
-                        ? accentCrimson
-                        : accentAmber)
-                    .withValues(alpha: 0.5),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: (intervention.severity == 'crimson'
-                            ? accentCrimson
-                            : accentAmber)
-                        .withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    intervention.badge,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: intervention.severity == 'crimson'
-                          ? accentCrimson
-                          : accentAmber,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${intervention.title} — ${intervention.reason}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      color: textSecondary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                InkWell(
-                  key: const ValueKey('stage1_apply_intervention_btn'),
-                  onTap: () => widget.workbench.applyAgentIntervention(intervention),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: (intervention.severity == 'crimson'
-                              ? accentCrimson
-                              : accentAmber)
-                          .withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: (intervention.severity == 'crimson'
-                                ? accentCrimson
-                                : accentAmber)
-                            .withValues(alpha: 0.55),
-                      ),
-                    ),
-                    child: Text(
-                      intervention.actionLabel,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        color: intervention.severity == 'crimson'
-                            ? accentCrimson
-                            : accentAmber,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
         // SECTION 1: DE-BOXED EDITORIAL ARTIFACT SECTION WORKSPACE
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4379,7 +4293,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 child: _buildSectionContentWidget(
                   draft,
                   0,
-                  isReadOnlySummary: true,
+                  isReadOnlySummary: false,
                 ),
               ),
 
@@ -4401,7 +4315,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                           child: _buildSectionContentWidget(
                             draft,
                             1,
-                            isReadOnlySummary: true,
+                            isReadOnlySummary: false,
                           ),
                         ),
                         Padding(
@@ -4418,7 +4332,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                           child: _buildSectionContentWidget(
                             draft,
                             2,
-                            isReadOnlySummary: true,
+                            isReadOnlySummary: false,
                           ),
                         ),
                       ],
@@ -4435,7 +4349,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                             child: _buildSectionContentWidget(
                               draft,
                               1,
-                              isReadOnlySummary: true,
+                              isReadOnlySummary: false,
                             ),
                           ),
                         ),
@@ -4454,7 +4368,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                             child: _buildSectionContentWidget(
                               draft,
                               2,
-                              isReadOnlySummary: true,
+                              isReadOnlySummary: false,
                             ),
                           ),
                         ),
@@ -4480,7 +4394,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   child: _buildSectionContentWidget(
                     draft,
                     idx,
-                    isReadOnlySummary: true,
+                    isReadOnlySummary: false,
                   ),
                 ),
               ],

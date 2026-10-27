@@ -17,6 +17,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
       String? activeDocumentId;
       String? apiKey;
       String? modelName;
+      String? planningModel;
       String? thinkingLevel;
       String? themeMode;
 
@@ -26,6 +27,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
         activeDocumentId = settings['activeDocumentId'] as String?;
         apiKey = settings['apiKey'] as String?;
         modelName = settings['modelName'] as String?;
+        planningModel = settings['planningModel'] as String?;
         thinkingLevel = settings['thinkingLevel'] as String?;
         themeMode = settings['themeMode'] as String?;
       }
@@ -49,6 +51,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
         activeDocumentId: activeDocumentId,
         apiKey: apiKey,
         modelName: modelName,
+        planningModel: planningModel,
         thinkingLevel: thinkingLevel,
         themeMode: themeMode,
       );
@@ -62,6 +65,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
     required String activeDocumentId,
     String? apiKey,
     String? modelName,
+    String? planningModel,
     String? thinkingLevel,
     String? themeMode,
   }) async {
@@ -83,6 +87,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
             'activeDocumentId': activeDocumentId,
             'apiKey': apiKey ?? '',
             'modelName': modelName ?? 'gemini-flash-latest',
+            'planningModel': planningModel ?? 'gemini-4-argon',
             'thinkingLevel': thinkingLevel ?? 'LOW',
             'themeMode': themeMode ?? currentThemeMode ?? 'dark',
           }));

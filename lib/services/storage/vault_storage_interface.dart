@@ -7,6 +7,7 @@ abstract class VaultStorageBackend {
     required String activeDocumentId,
     String? apiKey,
     String? modelName,
+    String? planningModel,
     String? thinkingLevel,
     String? themeMode,
   });

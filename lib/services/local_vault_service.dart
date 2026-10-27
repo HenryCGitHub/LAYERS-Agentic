@@ -7,6 +7,7 @@ class VaultLoadResult {
   final String? activeDocumentId;
   final String? apiKey;
   final String? modelName;
+  final String? planningModel;
   final String? thinkingLevel;
   final String? themeMode;
 
@@ -15,6 +16,7 @@ class VaultLoadResult {
     this.activeDocumentId,
     this.apiKey,
     this.modelName,
+    this.planningModel,
     this.thinkingLevel,
     this.themeMode,
   });
@@ -30,6 +32,7 @@ class LocalVaultService {
     required String activeDocumentId,
     String? apiKey,
     String? modelName,
+    String? planningModel,
     String? thinkingLevel,
     String? themeMode,
   }) async {
@@ -37,6 +40,7 @@ class LocalVaultService {
       activeDocumentId: activeDocumentId,
       apiKey: apiKey,
       modelName: modelName,
+      planningModel: planningModel,
       thinkingLevel: thinkingLevel,
       themeMode: themeMode,
     );

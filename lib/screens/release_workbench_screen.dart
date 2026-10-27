@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../agents/workspace_agent_tools.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
@@ -908,11 +907,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         TaskHowToBlueprint.formatRemainingHoursShort(featRemMins);
     final isDone = progress >= 100 || featRemMins <= 0;
     final isFocus = widget.workbench.focusMode;
-    final depTier = WorkspaceAgentOrchestrator.classifyDependencyTier(
-      featureTitle: feat.title,
-      beatIndex: beatIndex,
-      featureIndexInBeat: featureIndexInBeat,
-    );
 
     final shouldDim = isFocus && !isSelected;
     final displayTitle = _formatOutlineFeatureDisplayTitle(
@@ -1087,13 +1081,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                               ? accentEmerald
                               : (isSelected ? accentCyan : textMuted),
                         ),
-                      ),
-                    ),
-                    Offstage(
-                      offstage: true,
-                      child: Container(
-                        key: ValueKey('stage3_dep_tier_${feat.id}'),
-                        child: Text(depTier.shortBadge),
                       ),
                     ),
                   ],

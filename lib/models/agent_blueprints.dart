@@ -374,6 +374,41 @@ class ProjectConceptBlueprint {
         'Done When: $doneWhen';
   }
 
+  /// Formats the complete 8-section Project Concept Blueprint into Markdown for export.
+  String toFullMarkdownSpec() {
+    final buf = StringBuffer()
+      ..writeln('Goal: $goal')
+      ..writeln();
+    if (gameSpec.isNotEmpty) {
+      buf.writeln('Game Spec: ${gameSpec.join(' · ')}');
+    }
+    if (techSpec.isNotEmpty) {
+      buf.writeln('Tech Spec: ${techSpec.join(' · ')}');
+    }
+    if (designPillars.isNotEmpty) {
+      buf
+        ..writeln()
+        ..writeln('Design Pillars:')
+        ..writeln(designPillars.map((p) => '• $p').join('\n'));
+    }
+    if (tradeOffs.isNotEmpty) {
+      buf
+        ..writeln()
+        ..writeln('Trade-Offs:')
+        ..writeln(tradeOffs.map((t) => '• $t').join('\n'));
+    }
+    buf
+      ..writeln()
+      ..writeln('In Scope:')
+      ..writeln(coreLoopBeats.map((b) => '• $b').join('\n'))
+      ..writeln()
+      ..writeln('Out of Scope:')
+      ..writeln(exclusions.map((e) => '• $e').join('\n'))
+      ..writeln()
+      ..write('Done When: $doneWhen');
+    return buf.toString();
+  }
+
   Map<String, dynamic> toJson() => {
         'title': title,
         'sparkIdea': sparkIdea,
@@ -791,4 +826,27 @@ class ReleaseBlueprint {
       lastAgentReply: json['lastAgentReply']?.toString(),
     );
   }
+}
+
+/// Holds the Post-Release Retrospective & Auto-Carryover Summary (`v0.1` -> `v0.2`+).
+class ReleaseRetrospectiveSummary {
+  final String releaseTitle;
+  final int totalFeatures;
+  final int verifiedCheckpoints;
+  final int totalCheckpoints;
+  final int fixTasksTriaged;
+  final int playtestGuardsAdded;
+  final List<String> carryoverFeatureTitles;
+  final List<String> hardenedFeatureTitles;
+
+  const ReleaseRetrospectiveSummary({
+    required this.releaseTitle,
+    required this.totalFeatures,
+    required this.verifiedCheckpoints,
+    required this.totalCheckpoints,
+    required this.fixTasksTriaged,
+    required this.playtestGuardsAdded,
+    required this.carryoverFeatureTitles,
+    required this.hardenedFeatureTitles,
+  });
 }
