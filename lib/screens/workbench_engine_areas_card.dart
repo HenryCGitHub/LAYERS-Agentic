@@ -279,6 +279,43 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       codeBody = rawCode;
     }
 
+    // Apply on-demand gemini-flash-latest 3-Area Hierarchy & Inspector overrides when present
+    final aiArea1 = activeSubStep.area1Hierarchy?.trim() ?? '';
+    if (aiArea1.isNotEmpty) {
+      compWhere ??= stepPath;
+      compBody = aiArea1;
+    }
+    final aiArea2 = activeSubStep.area2Inspector?.trim() ?? '';
+    if (aiArea2.isNotEmpty) {
+      if (inspWhere.isEmpty) {
+        inspWhere = isUnreal
+            ? 'Details Panel'
+            : (isUnity ? 'Inspector Window' : 'Inspector Dock');
+      }
+      final parsedAiRows = <({String key, String value})>[];
+      final rawEntries = aiArea2.contains('\n')
+          ? aiArea2.split('\n')
+          : aiArea2.split('|');
+      for (final rawEntry in rawEntries) {
+        final cleanEntry = rawEntry.trim();
+        if (cleanEntry.isEmpty) continue;
+        final colonIdx = cleanEntry.indexOf(':');
+        if (colonIdx > 0 && colonIdx < cleanEntry.length - 1) {
+          parsedAiRows.add((
+            key: cleanEntry.substring(0, colonIdx).trim(),
+            value: cleanEntry.substring(colonIdx + 1).trim(),
+          ));
+        } else {
+          parsedAiRows.add((key: 'Inspector Binding', value: cleanEntry));
+        }
+      }
+      if (parsedAiRows.isNotEmpty) {
+        inspRows
+          ..clear()
+          ..addAll(parsedAiRows);
+      }
+    }
+
     final hasComp = compBody != null && compBody.trim().isNotEmpty;
     final hasInsp = inspRows.isNotEmpty;
     final hasCode = codeBody != null && codeBody.trim().isNotEmpty;
@@ -448,6 +485,46 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Tooltip(
+                      message:
+                          'On-demand gemini-flash-latest pass: adapt 3-Area Hierarchy, Inspector & Code to exact project variables and prior checkpoints',
+                      child: InkWell(
+                        key: const ValueKey('ai_adapt_three_area_btn'),
+                        onTap: widget.workbench.isSynthesizingFeatureSteps(feat.id)
+                            ? null
+                            : () {
+                                widget.workbench.synthesizeFeatureHowToStepsWithAi(
+                                  feat.id,
+                                  forceRefresh: true,
+                                  unrealCppMode: _unrealCppMode,
+                                );
+                              },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          child: Text(
+                            widget.workbench.isSynthesizingFeatureSteps(feat.id)
+                                ? '✦ Adapting...'
+                                : '✦ AI Adapt',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: accentAmber,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '·',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        color: textMuted,
+                      ),
+                    ),
                     InkWell(
                       key: ValueKey(
                         'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',

@@ -10,6 +10,7 @@ import 'providers/workbench_provider.dart';
 import 'screens/project_pitch_screen.dart';
 import 'screens/release_workbench_screen.dart';
 import 'theme/app_theme.dart';
+import 'utils/markdown_exporter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -143,7 +144,12 @@ class WorkbenchShell extends StatelessWidget {
         }
       }
     }
-    await Clipboard.setData(ClipboardData(text: sb.toString()));
+    final fullMd = sb.toString();
+    await Clipboard.setData(ClipboardData(text: fullMd));
+    triggerMarkdownFileDownload(
+      filename: 'PROJECT_SPEC.md',
+      content: fullMd,
+    );
     if (!context.mounted) return;
     final isDark = workbench.isDark;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -152,6 +158,35 @@ class WorkbenchShell extends StatelessWidget {
         behavior: SnackBarBehavior.floating,
         content: Text(
           'Copied full Project & Release Spec to clipboard ✓',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.accentGreenFor(isDark),
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _exportActiveReleaseAgentsMd(BuildContext context) async {
+    final agentsMd = workbench.buildActiveReleaseCodingAgentMarkdown();
+    await Clipboard.setData(ClipboardData(text: agentsMd));
+    final downloaded = triggerMarkdownFileDownload(
+      filename: 'AGENTS.md',
+      content: agentsMd,
+    );
+    if (!context.mounted) return;
+    final isDark = workbench.isDark;
+    final ver = workbench.activeReleaseVersionTag;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.bgSurfaceFor(isDark),
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          downloaded
+              ? 'Downloaded AGENTS.md & copied $ver AI Coding Context to clipboard ✓'
+              : 'Copied Active Release ($ver) AGENTS.md / .cursorrules for AI Coding Agent ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -488,6 +523,34 @@ class WorkbenchShell extends StatelessWidget {
                                     const SizedBox(width: 3),
                                     Text(
                                       'Export',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(width: 1, height: 12, color: borderColor),
+                          Tooltip(
+                            message:
+                                'Export Active Release for AI Coding Agent (AGENTS.md / .cursorrules — Copies & Downloads)',
+                            child: InkWell(
+                              key: const ValueKey('global_export_agents_md_btn'),
+                              onTap: () => _exportActiveReleaseAgentsMd(context),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.terminal_rounded, size: 11, color: accentAmber),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'AGENTS.md',
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 8.5,
                                         fontWeight: FontWeight.w700,

@@ -2911,6 +2911,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                                     setState(() {
                                                       _unrealCppMode = false;
                                                     });
+                                                    if (widget.workbench.hasLiveAiKey) {
+                                                      widget.workbench
+                                                          .synthesizeFeatureHowToStepsWithAi(
+                                                        feat.id,
+                                                        unrealCppMode: false,
+                                                      );
+                                                    }
                                                   },
                                                   borderRadius:
                                                       BorderRadius.circular(4),
@@ -2958,6 +2965,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                                     setState(() {
                                                       _unrealCppMode = true;
                                                     });
+                                                    if (widget.workbench.hasLiveAiKey) {
+                                                      widget.workbench
+                                                          .synthesizeFeatureHowToStepsWithAi(
+                                                        feat.id,
+                                                        unrealCppMode: true,
+                                                      );
+                                                    }
                                                   },
                                                   borderRadius:
                                                       BorderRadius.circular(4),

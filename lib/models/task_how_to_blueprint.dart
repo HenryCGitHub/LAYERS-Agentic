@@ -16,6 +16,8 @@ class TaskHowToSubStep {
   final int estimatedMinutes;   // Weighted minutes for this specific step (e.g., 15, 25, 65, 35)
   final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m", "1.1h")
   final bool isGuardStep;
+  final String? area1Hierarchy; // Optional AI-synthesized Area 1 (Scene / Component Hierarchy)
+  final String? area2Inspector; // Optional AI-synthesized Area 2 (Inspector / Details Bindings)
 
   const TaskHowToSubStep({
     required this.subtask,
@@ -31,6 +33,8 @@ class TaskHowToSubStep {
     this.estimatedMinutes = 15,
     this.etaLabel = '15m',
     this.isGuardStep = false,
+    this.area1Hierarchy,
+    this.area2Inspector,
   });
 }
 
@@ -141,6 +145,67 @@ class TaskHowToBlueprint {
       _blueprintCache = {};
 
   static void clearCache() => _blueprintCache.clear();
+
+  static const String _area1Marker = '\n[[AREA1]]\n';
+  static const String _area2Marker = '\n[[AREA2]]\n';
+
+  /// Encodes optional AI-synthesized `area1Hierarchy` (Scene/Component tree) and
+  /// `area2Inspector` (Inspector/Details bindings) inside `Subtask.specNotes` without
+  /// altering existing Hive/JSON serialization schemas.
+  static String encodeThreeAreaNotes({
+    required String instruction,
+    String? area1Hierarchy,
+    String? area2Inspector,
+  }) {
+    final base = instruction.trim();
+    final a1 = (area1Hierarchy ?? '').trim();
+    final a2 = (area2Inspector ?? '').trim();
+    if (a1.isEmpty && a2.isEmpty) return base;
+    final sb = StringBuffer(base);
+    if (a1.isNotEmpty) {
+      sb.write(_area1Marker);
+      sb.write(a1);
+    }
+    if (a2.isNotEmpty) {
+      sb.write(_area2Marker);
+      sb.write(a2);
+    }
+    return sb.toString();
+  }
+
+  /// Decodes `Subtask.specNotes` into clean natural instruction prose plus optional
+  /// AI-synthesized `area1Hierarchy` and `area2Inspector` blocks.
+  static ({
+    String cleanInstruction,
+    String? area1Hierarchy,
+    String? area2Inspector,
+  }) decodeThreeAreaNotes(String? rawSpecNotes) {
+    if (rawSpecNotes == null || rawSpecNotes.trim().isEmpty) {
+      return (
+        cleanInstruction: '',
+        area1Hierarchy: null,
+        area2Inspector: null,
+      );
+    }
+    String working = rawSpecNotes;
+    String? a2;
+    final idx2 = working.indexOf(_area2Marker);
+    if (idx2 >= 0) {
+      a2 = working.substring(idx2 + _area2Marker.length).trim();
+      working = working.substring(0, idx2);
+    }
+    String? a1;
+    final idx1 = working.indexOf(_area1Marker);
+    if (idx1 >= 0) {
+      a1 = working.substring(idx1 + _area1Marker.length).trim();
+      working = working.substring(0, idx1);
+    }
+    return (
+      cleanInstruction: working.trim(),
+      area1Hierarchy: (a1 != null && a1.isNotEmpty) ? a1 : null,
+      area2Inspector: (a2 != null && a2.isNotEmpty) ? a2 : null,
+    );
+  }
 
   static String detectEngineLabel(String? engineHint) {
     final lower = (engineHint ?? '').toLowerCase();
@@ -622,7 +687,8 @@ class TaskHowToBlueprint {
     String? engineHint,
     bool unrealCppMode = false,
   }) {
-    final cacheKey = '${checkpointNode.id}_${parentTask.id}_$taskIndex';
+    final cacheKey =
+        '${checkpointNode.id}_${parentTask.id}_${taskIndex}_${engineHint ?? ''}_${unrealCppMode ? 'cpp' : 'bp'}';
     if (parentTask.children.isNotEmpty) {
       final sig = _computeTaskSignature(
         parentTask: parentTask,
@@ -1603,15 +1669,16 @@ class TaskHowToBlueprint {
           : (hasDynamicSpec
               ? spec.stepHeader
               : 'STEP $taskNum.${i + 1} · ${rawLabel.toUpperCase()}');
-      final instruction = isCustomSnippet &&
-              child.specNotes != null &&
-              child.specNotes!.trim().isNotEmpty
-          ? child.specNotes!.trim()
+      final decodedNotes = decodeThreeAreaNotes(child.specNotes);
+      final rawInstruction = isCustomSnippet &&
+              decodedNotes.cleanInstruction.isNotEmpty
+          ? decodedNotes.cleanInstruction
           : (hasDynamicSpec
               ? spec.instruction
-              : (child.specNotes != null && child.specNotes!.trim().isNotEmpty
-                  ? child.specNotes!.trim()
+              : (decodedNotes.cleanInstruction.isNotEmpty
+                  ? decodedNotes.cleanInstruction
                   : 'Implement and verify "$rawLabel" inside $whereLocation.'));
+      final instruction = rawInstruction;
       final code = isCustomSnippet &&
               child.codeSnippet != null &&
               child.codeSnippet!.trim().isNotEmpty
@@ -1674,6 +1741,8 @@ class TaskHowToBlueprint {
           estimatedMinutes: stepMins,
           etaLabel: stepEta,
           isGuardStep: isLastStep || stepLabel.toUpperCase().contains('GUARD'),
+          area1Hierarchy: decodedNotes.area1Hierarchy,
+          area2Inspector: decodedNotes.area2Inspector,
         ),
       );
     }

@@ -2724,5 +2724,159 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    test(
+      '14. Dynamic 3-Area gemini-flash-latest Synthesis, AGENTS.md Export, and Stage 1 -> Stage 2 Live Sync',
+      () async {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await provider.startConceptInterview(
+          'Unreal 5 arena shooter with grapple hook, wave spawner, and ore extraction.',
+        );
+        provider.updateConceptDraft((d) {
+          d.techSpec = ['Unreal Engine 5', '3D Arena'];
+          d.exclusions = ['No multiplayer matchmaking'];
+        });
+        await provider.approveConceptAndBuildRelease();
+
+        final initialBeats = provider.activeReleaseBeats;
+        expect(initialBeats.length, greaterThanOrEqualTo(3));
+        final beat1Id = initialBeats[0].id;
+        final beat2Id = initialBeats[1].id;
+        final beat3Id = initialBeats[2].id;
+        final beat3OriginalTitle = initialBeats[2].title;
+        final beat1Feat = provider.featuresForBeat(beat1Id).first;
+
+        // Mark Task 1 of Beat 1's feature as 100% completed
+        final b1States = FeatureStateNode.getStatesForDocument(beat1Feat);
+        expect(b1States, isNotEmpty);
+        b1States.first.checklist.first.completed = true;
+        for (final sub in b1States.first.checklist.first.children) {
+          sub.completed = true;
+        }
+        provider.updateFeatureStates(beat1Feat.id, b1States);
+        expect(provider.getDocumentProgress(beat1Feat.id), greaterThan(0));
+
+        // ── Upgrade 2: Dynamic 3-Area gemini-flash-latest synthesis & LRU cache invalidation ──
+        String? capturedModel;
+        String? capturedPrompt;
+        final prevResponder = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, preferredModel) async {
+          if (prompt.contains('Synthesize concrete, beginner-friendly 3-Area Engine How-To steps')) {
+            capturedModel = preferredModel;
+            capturedPrompt = prompt;
+            return <String, dynamic>{
+              'tasks': [
+                {
+                  'taskIndex': 0,
+                  'subSteps': [
+                    {
+                      'title': 'STEP 1.1 · ATTACH GRAPPLE CABLE COMPONENT',
+                      'stepPath': 'Source/Project/GrappleCharacter.cpp',
+                      'instruction': 'Instantiate UCableComponent in C++ constructor.',
+                      'area1Hierarchy':
+                          'AGrappleCharacter (Self)\n └─ GrappleCable (UCableComponent)',
+                      'area2Inspector':
+                          'grappleRange: 1800.0 cm | cableWidth: 6.0',
+                      'codeFormula':
+                          'GrappleCable = CreateDefaultSubobject<UCableComponent>(TEXT("GrappleCable"));',
+                      'verifyResult':
+                          'GrappleCable appears under RootComponent in Details panel.',
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          return prevResponder != null
+              ? await prevResponder(prompt, preferredModel)
+              : null;
+        };
+
+        try {
+          await provider.synthesizeFeatureHowToStepsWithAi(
+            beat1Feat.id,
+            forceRefresh: true,
+            unrealCppMode: true,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevResponder;
+        }
+
+        expect(capturedModel, equals('gemini-flash-latest'));
+        expect(capturedPrompt, contains('UNREAL 5 C++'));
+        expect(capturedPrompt, contains('Sibling Feature'));
+
+        final updatedStates = FeatureStateNode.getStatesForDocument(beat1Feat);
+        final resolvedBp = TaskHowToBlueprint.resolve(
+          parentTask: updatedStates.first.checklist.first,
+          taskIndex: 0,
+          checkpointNode: updatedStates.first,
+          engineHint: 'Unreal Engine 5',
+          unrealCppMode: true,
+        );
+        expect(resolvedBp.subSteps.first.area1Hierarchy, contains('GrappleCable'));
+        expect(resolvedBp.subSteps.first.area2Inspector, contains('grappleRange: 1800.0 cm'));
+        expect(resolvedBp.subSteps.first.instruction, equals('Instantiate UCableComponent in C++ constructor.'));
+
+        // ── Upgrade 3: Engine-Ready Context Export (AGENTS.md / .cursorrules) ──
+        final agentsMd = provider.buildActiveReleaseCodingAgentMarkdown(
+          unrealCppMode: true,
+        );
+        expect(agentsMd, contains('# AGENTS.md —'));
+        expect(agentsMd, contains('UNREAL 5 C++ (.h / .cpp)'));
+        expect(agentsMd, contains('## 3. Canonical Tuning Variables & Inspector Bindings'));
+        expect(agentsMd, contains('## 4. Mandatory Playtest & Edge-Case Guards'));
+        expect(agentsMd, contains('Area 1 (Hierarchy)'));
+        expect(agentsMd, contains('Area 2 (Inspector)'));
+
+        // ── Upgrade 4: Stage 1 -> Stage 2 Live Sync (with Edge Case 3 Guard) ──
+        final progressBeforeSync = provider.getDocumentProgress(beat1Feat.id);
+        expect(progressBeforeSync, greaterThan(0));
+        // Edit Stage 1:
+        // 1. Rename Beat 1 in-place ("Arena Entry & Traversal" -> "Arena Entry & Grapple Launch")
+        // 2. Delete Beat 2
+        // 3. Keep Beat 3 (shifts to index 1)
+        // 4. Add a brand-new Beat at index 2 ("Boss Escape Portal: Open the warp gate")
+        provider.updateConceptDraft((d) {
+          d.coreLoopBeats = [
+            'Arena Entry & Grapple Launch: Enter the arena, dash across hazards, and chain grapple swings',
+            '$beat3OriginalTitle: Dodge telegraphed attacks and counter-strike',
+            'Boss Escape Portal: Open the warp gate after depositing ore',
+          ];
+          d.exclusions = [
+            'No multiplayer matchmaking',
+            'No weapon crafting tree',
+          ];
+        });
+
+        final syncedBeats = provider.activeReleaseBeats;
+        expect(syncedBeats.length, equals(3));
+        // Beat 1 was updated in-place and preserved its ID and completed progress!
+        expect(syncedBeats[0].id, equals(beat1Id));
+        expect(syncedBeats[0].title, equals('Arena Entry & Grapple Launch'));
+        expect(
+          provider.getDocumentProgress(beat1Feat.id),
+          equals(progressBeforeSync),
+          reason: 'Stage 1 -> Stage 2 sync must preserve completed task progress',
+        );
+        // Beat 3 shifted to index 1 and kept its original Beat ID!
+        expect(syncedBeats[1].id, equals(beat3Id));
+        expect(syncedBeats[1].title, equals(beat3OriginalTitle));
+        // Brand-new Beat 3 ("Boss Escape Portal") was created fresh and NOT falsely matched to deleted Beat 2!
+        expect(syncedBeats[2].id, isNot(equals(beat2Id)));
+        expect(syncedBeats[2].title, equals('Boss Escape Portal'));
+        expect(provider.featuresForBeat(syncedBeats[2].id), isNotEmpty);
+        // Deleted Beat 2's features were safely archived as superseded
+        expect(
+          provider.supersededFeatures.any((f) => f.parentId == beat2Id),
+          isTrue,
+        );
+        // Exclusions synced into ReleaseBlueprint
+        expect(
+          provider.releaseBlueprint?.explicitExclusions,
+          contains('No weapon crafting tree'),
+        );
+      },
+    );
   });
 }
