@@ -1,84 +1,6 @@
 part of 'project_pitch_screen.dart';
 
 extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
-  // ── Direct Text Edit Dialog for Any Section Callout or Row ──────────────────
-  void _showDirectSectionTextEditDialog({
-    required String title,
-    required String initialText,
-    required ValueChanged<String> onSave,
-  }) {
-    final controller = TextEditingController(text: initialText);
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: bgSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: borderBright),
-          ),
-          title: Text(
-            'Edit $title',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: textPrimary,
-            ),
-          ),
-          content: SizedBox(
-            width: 480,
-            child: TextField(
-              controller: controller,
-              autofocus: true,
-              maxLines: 3,
-              minLines: 1,
-              style: GoogleFonts.inter(fontSize: 13.5, color: textPrimary),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: bgRecessed,
-                hintText: 'Enter $title...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(color: borderSubtle),
-                ),
-              ),
-              onSubmitted: (val) {
-                final trimmed = val.trim();
-                if (trimmed.isNotEmpty) onSave(trimmed);
-                Navigator.of(ctx).pop();
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: focalAccent,
-                foregroundColor: focalAccentFg,
-                elevation: 0,
-              ),
-              onPressed: () {
-                final trimmed = controller.text.trim();
-                if (trimmed.isNotEmpty) onSave(trimmed);
-                Navigator.of(ctx).pop();
-              },
-              child: Text(
-                'Save',
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   // ── Inline Click-to-Edit Box (Replaces Popup AlertDialogs Across Stage 1) ──
   Widget _buildInlineEditorBox({
     required String editKey,
@@ -257,7 +179,15 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                             key: const ValueKey('section_header_approve_build_btn'),
                             onTap: widget.workbench.isAgentBusy
                                 ? null
-                                : () => widget.workbench.approveConceptAndBuildRelease(),
+                                : () {
+                                    if (widget.workbench.activeReleaseBeats.isNotEmpty) {
+                                      widget.workbench.setStage(
+                                        WorkbenchStage.releaseWorkbench,
+                                      );
+                                    } else {
+                                      widget.workbench.approveConceptAndBuildRelease();
+                                    }
+                                  },
                             borderRadius: BorderRadius.circular(5),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -272,7 +202,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                                 ),
                               ),
                               child: Text(
-                                'Approve & Build v0.1 →',
+                                widget.workbench.activeReleaseBeats.isNotEmpty
+                                    ? '✓ Synced · Return to Workbench →'
+                                    : 'Approve & Build v0.1 →',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
@@ -613,6 +545,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 const SizedBox(width: 8),
                 _buildPrimaryApproveButton(
                   key: const ValueKey('approve_concept_plan_release_btn'),
+                  showRebuildSecondary: false,
                 ),
               ],
             ),
@@ -1044,15 +977,11 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     d.tradeOffs = next;
                   })
               : null,
-          onAddItem: isReadOnlySummary
+          onAddSave: isReadOnlySummary
               ? null
-              : () => _showDirectSectionTextEditDialog(
-                    title: 'Add Trade-Off (X over Y)',
-                    initialText: 'Immediate arcade responsiveness over complex simulation depth',
-                    onSave: (val) => widget.workbench.updateConceptDraft((d) {
-                      d.tradeOffs = [...d.tradeOffs, val];
-                    }),
-                  ),
+              : (val) => widget.workbench.updateConceptDraft((d) {
+                    d.tradeOffs = [...d.tradeOffs, val];
+                  }),
         );
       case 5: // 06 Core Loop — Connected Beat Cycle Rows + Inline Add/Remove/Reorder
         return _buildIndexedRows(
@@ -1079,15 +1008,11 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     d.coreLoopBeats = next;
                   })
               : null,
-          onAddItem: isReadOnlySummary
+          onAddSave: isReadOnlySummary
               ? null
-              : () => _showDirectSectionTextEditDialog(
-                    title: 'Add Core Loop Beat',
-                    initialText: 'Extract & Upgrade: Spend gathered resources on one immediate loadout upgrade.',
-                    onSave: (val) => widget.workbench.updateConceptDraft((d) {
-                      d.coreLoopBeats = [...d.coreLoopBeats, val];
-                    }),
-                  ),
+              : (val) => widget.workbench.updateConceptDraft((d) {
+                    d.coreLoopBeats = [...d.coreLoopBeats, val];
+                  }),
         );
       case 6: // 07 Out of Scope — 2-Column Recessed Guardrail Grid + Inline Add/Remove
         return _buildCutGuardrailChips(
@@ -1103,15 +1028,11 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     d.exclusions = next;
                   })
               : null,
-          onAddItem: isReadOnlySummary
+          onAddSave: isReadOnlySummary
               ? null
-              : () => _showDirectSectionTextEditDialog(
-                    title: 'Add Out of Scope Exclusion (Cut)',
-                    initialText: 'No procedural world generation or multiplayer networking in v0.1',
-                    onSave: (val) => widget.workbench.updateConceptDraft((d) {
-                      d.exclusions = [...d.exclusions, val];
-                    }),
-                  ),
+              : (val) => widget.workbench.updateConceptDraft((d) {
+                    d.exclusions = [...d.exclusions, val];
+                  }),
         );
       case 7: // 08 Done When — Acceptance Callout Statement with Highlighted Playtest Metrics
       default:
@@ -1808,11 +1729,10 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
         for (int i = 0; i < pillars.length; i++) buildPillarRow(i),
         if (!isReadOnlySummary) ...[
           const SizedBox(height: 10),
-          _buildInlineAddBar(
-            label: '+ Add a custom Design Pillar...',
-            onTap: () => _showDirectSectionTextEditDialog(
-              title: 'Add Design Pillar',
-              initialText: 'Every Choice Echoes: Player actions leave visible feedback in the arena.',
+          if (_activeInlineEditKey == 'add_pillar')
+            _buildInlineEditorBox(
+              editKey: 'add_pillar',
+              hintText: 'Type a new Design Pillar (e.g. Every Choice Echoes: Visible arena feedback)...',
               onSave: (val) => widget.workbench.updateConceptDraft((d) {
                 d.designPillars = [
                   ...d.designPillars,
@@ -1822,14 +1742,20 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   ),
                 ];
               }),
+            )
+          else
+            _buildInlineAddBar(
+              barKey: const ValueKey('section_3_add_pillar_btn'),
+              label: '+ Add a custom Design Pillar...',
+              onTap: () => _startInlineEdit('add_pillar', ''),
             ),
-          ),
         ],
       ],
     );
   }
 
   Widget _buildInlineAddBar({
+    Key? barKey,
     required String label,
     required VoidCallback onTap,
   }) {
@@ -1837,6 +1763,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       color: bgRecessed.withValues(alpha: 0.45),
       borderRadius: BorderRadius.circular(5),
       child: InkWell(
+        key: barKey,
         onTap: onTap,
         borderRadius: BorderRadius.circular(5),
         child: Container(
@@ -1885,7 +1812,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     void Function(int index, String newValue)? onEditItem,
     void Function(int oldIndex, int newIndex)? onReorderItem,
     void Function(int index)? onDeleteItem,
-    VoidCallback? onAddItem,
+    ValueChanged<String>? onAddSave,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2021,14 +1948,22 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
             ),
           ),
         ],
-        if (onAddItem != null) ...[
+        if (onAddSave != null) ...[
           const SizedBox(height: 10),
-          _buildInlineAddBar(
-            label: isCoreLoop
-                ? '+ Add a custom Core Loop Beat...'
-                : '+ Add item...',
-            onTap: onAddItem,
-          ),
+          if (_activeInlineEditKey == 'add_beat')
+            _buildInlineEditorBox(
+              editKey: 'add_beat',
+              hintText: 'Type a Core Loop Beat (e.g. Extract & Upgrade: Spend gathered ore)...',
+              onSave: onAddSave,
+            )
+          else
+            _buildInlineAddBar(
+              barKey: const ValueKey('section_5_add_beat_btn'),
+              label: isCoreLoop
+                  ? '+ Add a custom Core Loop Beat...'
+                  : '+ Add item...',
+              onTap: () => _startInlineEdit('add_beat', ''),
+            ),
         ],
       ],
     );
@@ -2038,7 +1973,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     List<String> tradeOffs, {
     void Function(int index, String newValue)? onEditItem,
     void Function(int index)? onDeleteItem,
-    VoidCallback? onAddItem,
+    ValueChanged<String>? onAddSave,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2061,12 +1996,20 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
               onDelete: onDeleteItem == null ? null : () => onDeleteItem(i),
             ),
         ],
-        if (onAddItem != null) ...[
+        if (onAddSave != null) ...[
           const SizedBox(height: 10),
-          _buildInlineAddBar(
-            label: '+ Add a custom Trade-Off (X over Y)...',
-            onTap: onAddItem,
-          ),
+          if (_activeInlineEditKey == 'add_tradeoff')
+            _buildInlineEditorBox(
+              editKey: 'add_tradeoff',
+              hintText: 'Type X over Y trade-off (e.g. Immediate arcade feel over simulation depth)...',
+              onSave: onAddSave,
+            )
+          else
+            _buildInlineAddBar(
+              barKey: const ValueKey('section_4_add_guardrail_btn'),
+              label: '+ Add a custom Trade-Off (X over Y)...',
+              onTap: () => _startInlineEdit('add_tradeoff', ''),
+            ),
         ],
       ],
     );
@@ -2171,7 +2114,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     List<String> exclusions, {
     void Function(int index, String newValue)? onEditItem,
     void Function(int index)? onDeleteItem,
-    VoidCallback? onAddItem,
+    ValueChanged<String>? onAddSave,
   }) {
     Widget buildExclusionRow(int idx) {
       final editKey = 'exclusion_$idx';
@@ -2250,12 +2193,20 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < exclusions.length; i++) buildExclusionRow(i),
-        if (onAddItem != null) ...[
+        if (onAddSave != null) ...[
           const SizedBox(height: 10),
-          _buildInlineAddBar(
-            label: '+ Add an Out of Scope exclusion (Cut)...',
-            onTap: onAddItem,
-          ),
+          if (_activeInlineEditKey == 'add_exclusion')
+            _buildInlineEditorBox(
+              editKey: 'add_exclusion',
+              hintText: 'Type an Out of Scope exclusion (e.g. No multiplayer networking in v0.1)...',
+              onSave: onAddSave,
+            )
+          else
+            _buildInlineAddBar(
+              barKey: const ValueKey('section_6_add_cut_btn'),
+              label: '+ Add an Out of Scope exclusion (Cut)...',
+              onTap: () => _startInlineEdit('add_exclusion', ''),
+            ),
         ],
       ],
     );

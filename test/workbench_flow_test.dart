@@ -3316,5 +3316,270 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    testWidgets(
+      '18. Workflow Audit: Zero-Modal Inline Creation & Editing, Smart Return to Workbench, and Interactive Area 2 Inspector Tuning',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1600, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        await provider.startConceptInterview(
+          'A fast top-down mech arena shooter in Godot 4.',
+        );
+        await tester.pumpAndSettle();
+
+        // ── 1. Audit Item 6: Stage 1 Inline Project Title & 09 Progressive Releases Editing ──
+        final titleTrigger = find.byKey(
+          const ValueKey('stage1_blueprint_title_inline_trigger'),
+        );
+        expect(titleTrigger, findsOneWidget);
+        await tester.ensureVisible(titleTrigger);
+        await tester.pumpAndSettle();
+        await tester.tap(titleTrigger);
+        await tester.pumpAndSettle();
+
+        final titleInput = find.byKey(
+          const ValueKey('stage1_inline_edit_field_blueprint_project_title'),
+        );
+        expect(titleInput, findsOneWidget);
+        await tester.enterText(titleInput, 'IRON VANGUARD ARENA');
+        await tester.tap(
+          find.byKey(
+            const ValueKey('stage1_inline_save_btn_blueprint_project_title'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(provider.conceptDraft!.title, equals('IRON VANGUARD ARENA'));
+
+        // Inline edit 09 Progressive Releases row 0
+        final releaseTrainCard0 = find.byKey(
+          const ValueKey('stage1_release_train_card_0'),
+        );
+        expect(releaseTrainCard0, findsOneWidget);
+        await tester.ensureVisible(releaseTrainCard0);
+        await tester.pumpAndSettle();
+        await tester.tap(releaseTrainCard0);
+        await tester.pumpAndSettle();
+
+        final releaseTrainInput0 = find.byKey(
+          const ValueKey('stage1_inline_edit_field_release_train_0'),
+        );
+        expect(releaseTrainInput0, findsOneWidget);
+        await tester.enterText(
+          releaseTrainInput0,
+          'v0.1 Prototype — Dash, Lock-On Missiles & Scrap Pickup',
+        );
+        await tester.tap(
+          find.byKey(
+            const ValueKey('stage1_inline_save_btn_release_train_0'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          provider.conceptDraft!.releaseTrainTitles.first,
+          contains('Lock-On Missiles & Scrap Pickup'),
+        );
+
+        // ── 2. Audit Item 1: Stage 1 Inline "+ Add ..." Rows (without AlertDialog) ──
+        final addPillarBtn = find.byKey(
+          const ValueKey('section_3_add_pillar_btn'),
+        );
+        expect(addPillarBtn, findsOneWidget);
+        await tester.ensureVisible(addPillarBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(addPillarBtn);
+        await tester.pumpAndSettle();
+
+        final addPillarInput = find.byKey(
+          const ValueKey('stage1_inline_edit_field_add_pillar'),
+        );
+        expect(addPillarInput, findsOneWidget);
+        await tester.enterText(
+          addPillarInput,
+          'Every boost dash feels weighty, decisive, and high-risk.',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('stage1_inline_save_btn_add_pillar')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          provider.conceptDraft!.designPillars.any(
+            (p) => p.contains('weighty, decisive, and high-risk'),
+          ),
+          isTrue,
+        );
+
+        // ── 3. Audit Item 2: Smart Stage 1 -> Stage 2 Return CTA ("✓ Synced · Return to Workbench →") ──
+        final approveFuture = provider.approveConceptAndBuildRelease();
+        await tester.pumpAndSettle();
+        await approveFuture;
+        await tester.pumpAndSettle();
+        expect(provider.currentStage, equals(WorkbenchStage.releaseWorkbench));
+        expect(provider.activeReleaseBeats, isNotEmpty);
+
+        // Switch back to Stage 1 (Concept) and verify Return CTA + Rebuild CTA
+        provider.setStage(WorkbenchStage.projectPitch);
+        await tester.pumpAndSettle();
+
+        final returnToWorkbenchBtn = find.byKey(
+          const ValueKey('return_to_workbench_btn'),
+        );
+        final rebuildV01Btn = find.byKey(
+          const ValueKey('rebuild_v01_from_concept_btn'),
+        );
+        expect(returnToWorkbenchBtn, findsWidgets);
+        expect(rebuildV01Btn, findsWidgets);
+
+        await tester.ensureVisible(returnToWorkbenchBtn.first);
+        await tester.pumpAndSettle();
+        await tester.tap(returnToWorkbenchBtn.first);
+        await tester.pumpAndSettle();
+        expect(provider.currentStage, equals(WorkbenchStage.releaseWorkbench));
+
+        // ── 4. Audit Item 3: Stage 2 Inline Feature Creation, Rename & Task Editing ──
+        final firstBeat = provider.activeReleaseBeats.first;
+        final initialBeatFeatCount =
+            provider.featuresForBeat(firstBeat.id).length;
+
+        final addFeatBtn = find.byKey(
+          ValueKey('rail_add_feat_to_beat_${firstBeat.id}'),
+        );
+        expect(addFeatBtn, findsOneWidget);
+        await tester.ensureVisible(addFeatBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(addFeatBtn);
+        await tester.pumpAndSettle();
+
+        final addFeatInput = find.byKey(
+          const ValueKey('workbench_add_live_feature_input'),
+        );
+        expect(addFeatInput, findsOneWidget);
+        await tester.enterText(addFeatInput, 'Shield Parry');
+        await tester.tap(
+          find.byKey(const ValueKey('confirm_workbench_add_live_feature_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          provider.featuresForBeat(firstBeat.id).length,
+          equals(initialBeatFeatCount + 1),
+        );
+
+        // Inline Rename active feature in Feature Header Bar
+        final activeFeat = provider.selectedFeature!;
+        final renameFeatBtn = find.byKey(
+          ValueKey('workbench_rename_feature_btn_${activeFeat.id}'),
+        );
+        expect(renameFeatBtn, findsOneWidget);
+        await tester.tap(renameFeatBtn);
+        await tester.pumpAndSettle();
+
+        final renameFeatInput = find.byKey(
+          const ValueKey('workbench_rename_live_feature_input'),
+        );
+        expect(renameFeatInput, findsOneWidget);
+        await tester.enterText(renameFeatInput, 'Plasma Shield Parry');
+        await tester.tap(
+          find.byKey(
+            const ValueKey('confirm_workbench_rename_live_feature_btn'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(provider.selectedFeature!.title, equals('Plasma Shield Parry'));
+
+        // Inline Edit Task Title in Left Step List
+        final states = FeatureStateNode.getStatesForDocument(
+          provider.selectedFeature!,
+        );
+        final node = states.first;
+        final editTaskBtn = find.byKey(
+          ValueKey('edit_active_task_title_btn_${node.id}_0'),
+        );
+        expect(editTaskBtn, findsOneWidget);
+        await tester.ensureVisible(editTaskBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(editTaskBtn);
+        await tester.pumpAndSettle();
+
+        final editTaskInput = find.byKey(
+          const ValueKey('edit_stage3_task_title_input'),
+        );
+        expect(editTaskInput, findsOneWidget);
+        await tester.enterText(editTaskInput, 'Bind Parry Input & Shield Arc');
+        await tester.tap(
+          find.byKey(const ValueKey('save_stage3_task_title_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          FeatureStateNode.getStatesForDocument(provider.selectedFeature!)
+              .first
+              .checklist
+              .first
+              .text,
+          equals('Bind Parry Input & Shield Arc'),
+        );
+
+        // Inline "+ Add Build Task..." in Left Step List
+        final initialTaskCount = FeatureStateNode.getStatesForDocument(
+          provider.selectedFeature!,
+        ).first.checklist.length;
+        final addTaskBtn = find.byKey(
+          ValueKey('outline_add_task_btn_${node.id}'),
+        );
+        expect(addTaskBtn, findsOneWidget);
+        await tester.ensureVisible(addTaskBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(addTaskBtn);
+        await tester.pumpAndSettle();
+
+        final addTaskInput = find.byKey(
+          const ValueKey('add_stage3_task_title_input'),
+        );
+        expect(addTaskInput, findsOneWidget);
+        await tester.enterText(addTaskInput, 'Trigger Parry Reflect Spark');
+        await tester.tap(
+          find.byKey(const ValueKey('confirm_add_stage3_task_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          FeatureStateNode.getStatesForDocument(provider.selectedFeature!)
+              .first
+              .checklist
+              .length,
+          equals(initialTaskCount + 1),
+        );
+
+        // ── 5. Audit Item 4: Interactive Click-to-Tune Row Inside Area 2 Inspector ──
+        final area2Row0 = find.byKey(
+          ValueKey('area2_inspector_tuning_row_${node.id}_0'),
+        );
+        expect(area2Row0, findsOneWidget);
+        await tester.ensureVisible(area2Row0);
+        await tester.pumpAndSettle();
+        await tester.tap(area2Row0);
+        await tester.pumpAndSettle();
+
+        final area2Input0 = find.byKey(
+          ValueKey('area2_inspector_tuning_input_${node.id}_0'),
+        );
+        expect(area2Input0, findsOneWidget);
+        await tester.enterText(area2Input0, 'parryWindowSec: 0.35');
+        await tester.tap(
+          find.byKey(ValueKey('area2_inspector_tuning_save_${node.id}_0')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          FeatureStateNode.getStatesForDocument(provider.selectedFeature!)
+              .first
+              .tuningParams,
+          contains('parryWindowSec: 0.35'),
+        );
+      },
+    );
   });
 }

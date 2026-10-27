@@ -55,10 +55,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   String? _inlineEditingTuningNodeId;
   final TextEditingController _inlineTuningEditController =
       TextEditingController();
+  String? _activeStage2InlineEditKey;
+  final TextEditingController _stage2InlineEditController =
+      TextEditingController();
 
   @override
   void dispose() {
     _inlineTuningEditController.dispose();
+    _stage2InlineEditController.dispose();
     super.dispose();
   }
 
@@ -77,8 +81,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       beatIndex: beatIndex,
     );
   }
-
-  static final RegExp _nonDigitRegex = RegExp(r'[^0-9]');
 
   @override
   bool get isDark => widget.workbench.isDark;

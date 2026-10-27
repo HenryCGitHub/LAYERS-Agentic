@@ -44,21 +44,27 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
         ),
         const SizedBox(height: 10),
         for (int i = 0; i < releases.length; i++)
-          _buildReleaseStepCard(
-            releases[i],
-            draft: draft,
-            isFirst: i == 0,
-            index: i,
-            onTap: () => _showDirectSectionTextEditDialog(
-              title: 'Release v0.${i + 1}',
-              initialText: releases[i],
-              onSave: (val) => widget.workbench.updateConceptDraft((d) {
-                final next = List<String>.from(d.releaseTrainTitles);
-                next[i] = val;
-                d.releaseTrainTitles = next;
-              }),
+          if (_activeInlineEditKey == 'release_train_$i')
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: _buildInlineEditorBox(
+                editKey: 'release_train_$i',
+                hintText: 'Edit Release v0.${i + 1} scope...',
+                onSave: (val) => widget.workbench.updateConceptDraft((d) {
+                  final next = List<String>.from(d.releaseTrainTitles);
+                  next[i] = val;
+                  d.releaseTrainTitles = next;
+                }),
+              ),
+            )
+          else
+            _buildReleaseStepCard(
+              releases[i],
+              draft: draft,
+              isFirst: i == 0,
+              index: i,
+              onTap: () => _startInlineEdit('release_train_$i', releases[i]),
             ),
-          ),
       ],
     );
   }
@@ -74,6 +80,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        key: ValueKey('stage1_release_train_card_$index'),
         onTap: onTap,
         child: Container(
           padding: EdgeInsets.fromLTRB(isFirst ? 14 : 8, 12, 8, 12),
@@ -180,18 +187,32 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    InkWell(
-                      onTap: () => _promptEditProjectTitle(draft),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Text(
-                        '${draft.title} — Complete Project Concept Blueprint',
-                        style: AppTheme.displayFont(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
+                    if (_activeInlineEditKey == 'blueprint_project_title')
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 460),
+                        child: _buildInlineEditorBox(
+                          editKey: 'blueprint_project_title',
+                          hintText: 'Project title...',
+                          onSave: _saveInlineProjectTitle,
+                        ),
+                      )
+                    else
+                      InkWell(
+                        key: const ValueKey('stage1_blueprint_title_inline_trigger'),
+                        onTap: () => _promptEditProjectTitle(
+                          draft,
+                          key: 'blueprint_project_title',
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Text(
+                          '${draft.title} — Complete Project Concept Blueprint',
+                          style: AppTheme.displayFont(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: 3),
                     Text(
                       'Hover any section to adjust it inline with the Agent, or click any item to edit directly.',
@@ -370,7 +391,78 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     );
   }
 
-  Widget _buildPrimaryApproveButton({Key? key}) {
+  Widget _buildPrimaryApproveButton({
+    Key? key,
+    bool showRebuildSecondary = true,
+  }) {
+    final hasBuiltRelease = widget.workbench.activeReleaseBeats.isNotEmpty;
+    if (hasBuiltRelease) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showRebuildSecondary) ...[
+            Tooltip(
+              message: 'Regenerate v0.1 Workbench from scratch',
+              child: OutlinedButton(
+                key: key == null
+                    ? const ValueKey('rebuild_v01_from_concept_btn')
+                    : null,
+                onPressed: widget.workbench.isAgentBusy
+                    ? null
+                    : () => widget.workbench.approveConceptAndBuildRelease(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: accentAmber,
+                  backgroundColor: bgRecessed,
+                  side: BorderSide(color: accentAmber.withValues(alpha: 0.45)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                child: Text(
+                  '↻ Rebuild v0.1',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          ElevatedButton(
+            key: key ?? const ValueKey('return_to_workbench_btn'),
+            onPressed: widget.workbench.isAgentBusy
+                ? null
+                : () => widget.workbench.setStage(WorkbenchStage.releaseWorkbench),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: Colors.black,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+                side: BorderSide(color: accentEmerald.withValues(alpha: 0.7)),
+              ),
+            ),
+            child: Text(
+              '✓ Return to Workbench →',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return ElevatedButton(
       key: key,
       onPressed: widget.workbench.isAgentBusy

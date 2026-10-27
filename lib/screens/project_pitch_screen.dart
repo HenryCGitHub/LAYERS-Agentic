@@ -783,19 +783,19 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     });
   }
 
-  void _promptEditProjectTitle(ProjectConceptBlueprint draft) {
-    _showDirectSectionTextEditDialog(
-      title: 'Rename Project Title',
-      initialText: draft.title,
-      onSave: (val) {
-        final activeId = widget.workbench.activeProjectId;
-        if (activeId != null) {
-          widget.workbench.renameProject(activeId, val);
-        } else {
-          widget.workbench.updateConceptDraft((d) => d.title = val);
-        }
-      },
-    );
+  void _promptEditProjectTitle(ProjectConceptBlueprint draft, {String key = 'project_title'}) {
+    _startInlineEdit(key, draft.title);
+  }
+
+  void _saveInlineProjectTitle(String val) {
+    final trimmed = val.trim();
+    if (trimmed.isEmpty) return;
+    final activeId = widget.workbench.activeProjectId;
+    if (activeId != null) {
+      widget.workbench.renameProject(activeId, trimmed);
+    } else {
+      widget.workbench.updateConceptDraft((d) => d.title = trimmed);
+    }
   }
 
   @override

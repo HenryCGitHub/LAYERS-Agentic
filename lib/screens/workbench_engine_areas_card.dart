@@ -681,38 +681,95 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             padding: EdgeInsets.only(
                               bottom: rIdx == inspRows.length - 1 ? 0 : 6,
                             ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(
-                                  width: 196,
-                                  child: Text(
-                                    inspRows[rIdx].key,
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: textSecondary,
+                            child: _activeStage2InlineEditKey ==
+                                    'area2_tuning_${node.id}_$rIdx'
+                                ? _buildStage2InlineEditor(
+                                    editKey: 'area2_tuning_${node.id}_$rIdx',
+                                    hintText: 'e.g. moveSpeed: 750',
+                                    inputKey: ValueKey(
+                                      'area2_inspector_tuning_input_${node.id}_$rIdx',
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text.rich(
-                                    _buildSemanticStepSpan(
-                                      text: inspRows[rIdx].value,
-                                      baseStyle: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: textPrimary,
+                                    saveBtnKey: ValueKey(
+                                      'area2_inspector_tuning_save_${node.id}_$rIdx',
+                                    ),
+                                    onSave: (val) => _saveInlineTuningParam(
+                                      feat: feat,
+                                      states: states,
+                                      node: node,
+                                      selectedTaskIdx: selectedTaskIdx,
+                                      rawValue: val,
+                                    ),
+                                  )
+                                : InkWell(
+                                    key: ValueKey(
+                                      'area2_inspector_tuning_row_${node.id}_$rIdx',
+                                    ),
+                                    onTap: () {
+                                      final row = inspRows[rIdx];
+                                      final initialText = (row.value
+                                                  .contains(':') ||
+                                              row.value.contains('='))
+                                          ? row.value.split('·').first.trim()
+                                          : (primaryTuningLabel.isNotEmpty
+                                              ? primaryTuningLabel
+                                              : '${row.key}: ${row.value}');
+                                      _startStage2InlineEdit(
+                                        'area2_tuning_${node.id}_$rIdx',
+                                        initialText,
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 2,
+                                        horizontal: 2,
                                       ),
-                                      tuningItems: tuningItems,
-                                      edgeItems: edgeItems,
-                                      isCodeBlock: true,
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(
+                                            width: 196,
+                                            child: Text(
+                                              inspRows[rIdx].key,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text.rich(
+                                              _buildSemanticStepSpan(
+                                                text: inspRows[rIdx].value,
+                                                baseStyle:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: textPrimary,
+                                                ),
+                                                tuningItems: tuningItems,
+                                                edgeItems: edgeItems,
+                                                isCodeBlock: true,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '✎',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              color: accentViolet.withValues(
+                                                alpha: 0.75,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
                           ),
                       ],
                     ),

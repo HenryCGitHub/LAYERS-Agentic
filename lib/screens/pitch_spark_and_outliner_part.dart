@@ -800,51 +800,61 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        key: const ValueKey('stage1_rename_project_title_btn'),
-                        onTap: () => _promptEditProjectTitle(draft),
-                        borderRadius: BorderRadius.circular(3),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                draft.title.trim().isEmpty
-                                    ? 'Concept Blueprint'
-                                    : draft.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: textPrimary,
+                if (_activeInlineEditKey == 'outliner_project_title')
+                  _buildInlineEditorBox(
+                    editKey: 'outliner_project_title',
+                    hintText: 'Project title...',
+                    onSave: _saveInlineProjectTitle,
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          key: const ValueKey('stage1_rename_project_title_btn'),
+                          onTap: () => _promptEditProjectTitle(
+                            draft,
+                            key: 'outliner_project_title',
+                          ),
+                          borderRadius: BorderRadius.circular(3),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  draft.title.trim().isEmpty
+                                      ? 'Concept Blueprint'
+                                      : draft.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: textPrimary,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.edit_outlined,
-                              size: 11,
-                              color: textMuted,
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 11,
+                                color: textMuted,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$verifiedCount/${_sections.length} ✓',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: accentEmerald,
+                      const SizedBox(width: 8),
+                      Text(
+                        '$verifiedCount/${_sections.length} ✓',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: accentEmerald,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
                 const SizedBox(height: 4),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -894,19 +904,27 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
             ),
           ),
 
-          // Quick-Action Footer: Jump straight to 2. Workbench (Build v0.1) from any section
+          // Quick-Action Footer: Jump straight to 2. Workbench (Build v0.1 or Return to Synced Workbench) from any section
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
             child: InkWell(
               key: const ValueKey('outliner_quick_build_v01_btn'),
               onTap: widget.workbench.isAgentBusy
                   ? null
-                  : () => widget.workbench.approveConceptAndBuildRelease(),
+                  : () {
+                      if (widget.workbench.activeReleaseBeats.isNotEmpty) {
+                        widget.workbench.setStage(WorkbenchStage.releaseWorkbench);
+                      } else {
+                        widget.workbench.approveConceptAndBuildRelease();
+                      }
+                    },
               borderRadius: BorderRadius.circular(5),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                 child: Text(
-                  'Build v0.1 →',
+                  widget.workbench.activeReleaseBeats.isNotEmpty
+                      ? '✓ Return to Workbench →'
+                      : 'Build v0.1 →',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.jetBrainsMono(

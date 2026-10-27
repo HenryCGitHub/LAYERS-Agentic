@@ -497,89 +497,110 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: RichText(
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      text: TextSpan(
-                                        style: GoogleFonts.inter(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.2,
-                                          color: textPrimary,
-                                        ),
-                                        children: [
-                                          TextSpan(
-                                            text:
-                                                '$epicShortCode · $epicDisplayTitle',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: textMuted,
-                                            ),
+                              if (_activeStage2InlineEditKey ==
+                                  'rename_header_feat_${feat.id}')
+                                ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 420),
+                                  child: _buildStage2InlineEditor(
+                                    editKey: 'rename_header_feat_${feat.id}',
+                                    inputKey: const ValueKey(
+                                      'workbench_rename_live_feature_input',
+                                    ),
+                                    saveBtnKey: const ValueKey(
+                                      'confirm_workbench_rename_live_feature_btn',
+                                    ),
+                                    hintText: 'Feature title...',
+                                    onSave: (val) => widget.workbench
+                                        .renameLiveFeature(feat.id, val),
+                                  ),
+                                )
+                              else
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: RichText(
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        text: TextSpan(
+                                          style: GoogleFonts.inter(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.2,
+                                            color: textPrimary,
                                           ),
-                                          TextSpan(
-                                            text: '  ›  ',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11,
-                                              color: textMuted,
+                                          children: [
+                                            TextSpan(
+                                              text:
+                                                  '$epicShortCode · $epicDisplayTitle',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: textMuted,
+                                              ),
                                             ),
+                                            TextSpan(
+                                              text: '  ›  ',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 11,
+                                                color: textMuted,
+                                              ),
+                                            ),
+                                            TextSpan(text: featShortTitle),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'workbench_rename_feature_btn_${feat.id}',
+                                      ),
+                                      onTap: () => _startStage2InlineEdit(
+                                        'rename_header_feat_${feat.id}',
+                                        feat.title,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 2,
+                                        ),
+                                        child: Text(
+                                          '✎',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMuted,
                                           ),
-                                          TextSpan(text: featShortTitle),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  InkWell(
-                                    key: ValueKey(
-                                      'workbench_rename_feature_btn_${feat.id}',
-                                    ),
-                                    onTap: () =>
-                                        _showRenameLiveFeatureDialog(feat),
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 2,
-                                      ),
-                                      child: Text(
-                                        '✎',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: textMuted,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  InkWell(
-                                    key: ValueKey(
-                                      'workbench_remove_feature_btn_${feat.id}',
-                                    ),
-                                    onTap: () => widget.workbench
-                                        .removeLiveFeature(feat.id),
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 2,
+                                    const SizedBox(width: 2),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'workbench_remove_feature_btn_${feat.id}',
                                       ),
-                                      child: Text(
-                                        '×',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: textMuted,
+                                      onTap: () => widget.workbench
+                                          .removeLiveFeature(feat.id),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 2,
+                                        ),
+                                        child: Text(
+                                          '×',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMuted,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
                               const SizedBox(height: 3),
                               Container(
                                 key: ValueKey(
@@ -811,8 +832,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     key: ValueKey(
                                       'halfscreen_rename_feature_btn_${feat.id}',
                                     ),
-                                    onTap: () =>
-                                        _showRenameLiveFeatureDialog(feat),
+                                    onTap: () => _startStage2InlineEdit(
+                                      'rename_header_feat_${feat.id}',
+                                      feat.title,
+                                    ),
                                     borderRadius: BorderRadius.circular(4),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -960,6 +983,49 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                             ),
                           ],
                         ),
+                        if (_activeStage2InlineEditKey ==
+                            'rename_header_feat_${feat.id}')
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: _buildStage2InlineEditor(
+                              editKey: 'rename_header_feat_${feat.id}',
+                              inputKey: const ValueKey(
+                                'workbench_rename_live_feature_input',
+                              ),
+                              saveBtnKey: const ValueKey(
+                                'confirm_workbench_rename_live_feature_btn',
+                              ),
+                              hintText: 'Feature title...',
+                              onSave: (val) => widget.workbench
+                                  .renameLiveFeature(feat.id, val),
+                            ),
+                          ),
+                        if (_activeStage2InlineEditKey ==
+                            'edit_task_${node.id}_$selectedTaskIdx')
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: _buildStage2InlineEditor(
+                              editKey: 'edit_task_${node.id}_$selectedTaskIdx',
+                              inputKey: const ValueKey(
+                                'edit_stage3_task_title_input',
+                              ),
+                              saveBtnKey: const ValueKey(
+                                'save_stage3_task_title_btn',
+                              ),
+                              deleteBtnKey: const ValueKey(
+                                'delete_stage3_task_btn',
+                              ),
+                              hintText: 'Edit task title...',
+                              onSave: (val) {
+                                selectedParentTask.text = val;
+                                TaskHowToBlueprint.clearCache();
+                                widget.workbench.updateFeatureStates(
+                                  feat.id,
+                                  states,
+                                );
+                              },
+                            ),
+                          ),
                         if (states.length > 1)
                           Padding(
                             padding: const EdgeInsets.only(top: 6, bottom: 2),
@@ -2079,12 +2145,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               key: ValueKey(
                                 'edit_active_task_title_btn_${node.id}_$selectedTaskIdx',
                               ),
-                              onTap: () => _showEditBuildTaskTitleDialog(
-                                feat,
-                                states,
-                                selectedParentTask,
-                                cpNode: node,
-                                taskIndex: selectedTaskIdx,
+                              onTap: () => _startStage2InlineEdit(
+                                'edit_task_${node.id}_$selectedTaskIdx',
+                                selectedParentTask.text,
                               ),
                               child: const SizedBox(width: 4, height: 1),
                             ),
