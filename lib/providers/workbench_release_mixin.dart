@@ -1840,6 +1840,138 @@ Return ONLY valid JSON:
     notifyListeners();
   }
 
+  /// Propagates a variable identifier rename (`oldIdentifier` -> `newIdentifier`)
+  /// across all Features, Checkpoints, Tuning Lists, Playtest Guards, and 3-Area
+  /// Steps (`sub.text`, `sub.specNotes`, `sub.codeSnippet`, `sub.verification`)
+  /// in the active project using exact word-boundary matching.
+  /// Returns the number of Feature documents updated.
+  int propagateVariableRenameAcrossProject(
+    String oldIdentifier,
+    String newIdentifier,
+  ) {
+    final oldId = oldIdentifier.trim();
+    final newId = newIdentifier.trim();
+    if (oldId.isEmpty || newId.isEmpty || oldId == newId) return 0;
+
+    final idRegex = RegExp(r'\b' + RegExp.escape(oldId) + r'\b');
+    int updatedFeatureCount = 0;
+
+    bool replaceSubtaskTree(Subtask node) {
+      var changed = false;
+      if (idRegex.hasMatch(node.text)) {
+        node.text = node.text.replaceAll(idRegex, newId);
+        changed = true;
+      }
+      if (node.specNotes != null && idRegex.hasMatch(node.specNotes!)) {
+        node.specNotes = node.specNotes!.replaceAll(idRegex, newId);
+        changed = true;
+      }
+      if (node.codeSnippet != null && idRegex.hasMatch(node.codeSnippet!)) {
+        node.codeSnippet = node.codeSnippet!.replaceAll(idRegex, newId);
+        changed = true;
+      }
+      if (node.verification != null && idRegex.hasMatch(node.verification!)) {
+        node.verification = node.verification!.replaceAll(idRegex, newId);
+        changed = true;
+      }
+      for (final child in node.children) {
+        if (replaceSubtaskTree(child)) {
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
+    // Collect all feature documents in the active project
+    final projectFeatureIds = <String>{};
+    for (final rel in projectReleases) {
+      for (final bId in rel.childrenIds) {
+        final beat = documents[bId];
+        if (beat == null) continue;
+        for (final fId in beat.childrenIds) {
+          if (documents[fId]?.tier == TierType.feature) {
+            projectFeatureIds.add(fId);
+          }
+        }
+      }
+    }
+
+    for (final fId in projectFeatureIds) {
+      final feat = documents[fId];
+      if (feat == null) continue;
+      var featChanged = false;
+
+      final states = FeatureStateNode.getStatesForDocument(feat);
+      for (final cp in states) {
+        for (int i = 0; i < cp.tuningParams.length; i++) {
+          if (idRegex.hasMatch(cp.tuningParams[i])) {
+            cp.tuningParams[i] = cp.tuningParams[i].replaceAll(idRegex, newId);
+            featChanged = true;
+          }
+        }
+        for (int i = 0; i < cp.edgeCases.length; i++) {
+          if (idRegex.hasMatch(cp.edgeCases[i])) {
+            cp.edgeCases[i] = cp.edgeCases[i].replaceAll(idRegex, newId);
+            featChanged = true;
+          }
+        }
+        if (idRegex.hasMatch(cp.trigger)) {
+          cp.trigger = cp.trigger.replaceAll(idRegex, newId);
+          featChanged = true;
+        }
+        for (final task in cp.checklist) {
+          if (replaceSubtaskTree(task)) {
+            featChanged = true;
+          }
+        }
+      }
+
+      for (final key in feat.sections.keys.toList()) {
+        if (key == 'feature_states_json') continue;
+        final val = feat.sections[key];
+        if (val != null && idRegex.hasMatch(val)) {
+          feat.sections[key] = val.replaceAll(idRegex, newId);
+          featChanged = true;
+        }
+      }
+
+      if (featChanged) {
+        FeatureStateNode.saveStatesToDocument(feat, states);
+        _persistDocument(feat, debounce: true);
+        updatedFeatureCount++;
+      }
+    }
+
+    if (_releaseBlueprint != null) {
+      var bpChanged = false;
+      for (final b in _releaseBlueprint!.beats) {
+        for (final f in b.features) {
+          for (int i = 0; i < f.tuningParams.length; i++) {
+            if (idRegex.hasMatch(f.tuningParams[i])) {
+              f.tuningParams[i] = f.tuningParams[i].replaceAll(idRegex, newId);
+              bpChanged = true;
+            }
+          }
+          for (int i = 0; i < f.edgeCases.length; i++) {
+            if (idRegex.hasMatch(f.edgeCases[i])) {
+              f.edgeCases[i] = f.edgeCases[i].replaceAll(idRegex, newId);
+              bpChanged = true;
+            }
+          }
+        }
+      }
+      if (bpChanged) {
+        _syncActiveProjectMetadata();
+      }
+    }
+
+    TaskHowToBlueprint.clearCache();
+    if (updatedFeatureCount > 0) {
+      notifyListeners();
+    }
+    return updatedFeatureCount;
+  }
+
   /// Advances to the next queued Release in the current Production Phase, or unlocks the
   /// next Production Phase once the current phase's releases are completed:
   /// - Phase 1 (Prototype) complete -> Phase 2 (MVP Track: 1 MVP Release per Core Loop Beat)

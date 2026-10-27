@@ -2989,5 +2989,118 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(find.text('✓ Gate Passed'), findsWidgets);
       },
     );
+
+    test(
+      '16. Project JSON Backup/Restore (.layers.json) and Cross-Feature Variable Rename Propagation',
+      () async {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await provider.startConceptInterview(
+          'Build a fast 2D grapple action platformer in Godot 4.',
+        );
+        provider.updateConceptDraft((d) {
+          d.title = 'Hook Runner';
+          d.goal = 'Build a fast 2D grapple action platformer in Godot 4.';
+          d.techSpec = ['Engine: Godot 4', 'Language: GDScript'];
+        });
+        await provider.approveConceptAndBuildRelease();
+
+        final beats = provider.activeReleaseBeats;
+        expect(beats, isNotEmpty);
+        final allFeats = <TierDocument>[
+          for (final b in beats) ...provider.featuresForBeat(b.id),
+        ];
+        expect(allFeats.length, greaterThanOrEqualTo(2));
+
+        final featA = allFeats[0];
+        final featB = allFeats[1];
+
+        // Seed shared variable `grappleSpeed` across both Feature A and Feature B
+        final statesA = FeatureStateNode.getStatesForDocument(featA);
+        statesA.last.tuningParams = ['grappleSpeed: 650.0', 'hookRange: 320.0'];
+        statesA.last.edgeCases = [
+          '[GUARD] Clamp grappleSpeed when player collides with ceiling',
+        ];
+        provider.updateFeatureStates(featA.id, statesA);
+
+        final statesB = FeatureStateNode.getStatesForDocument(featB);
+        statesB.last.tuningParams = ['grappleSpeed: 650.0', 'releaseBoost: 1.25'];
+        statesB.last.edgeCases = [
+          '[GUARD] Scale momentum impulse by grappleSpeed on detach',
+        ];
+        statesB.last.checklist.first.children = [
+          Subtask(
+            id: 'sub_b_1',
+            text: 'Apply grappleSpeed multiplier on release',
+            specNotes: 'NODE: GrappleController | PROP: grappleSpeed = 650.0',
+            codeSnippet: 'velocity = hook_dir * grappleSpeed * releaseBoost',
+            verification: 'Confirm grappleSpeed scales launch arc cleanly.',
+          ),
+        ];
+        provider.updateFeatureStates(featB.id, statesB);
+
+        // ── 1. Cross-Feature Variable Rename Propagation (Upgrade 3) ──
+        final updatedCount = provider.propagateVariableRenameAcrossProject(
+          'grappleSpeed',
+          'zipVelocity',
+        );
+        expect(updatedCount, greaterThanOrEqualTo(2));
+
+        final updatedStatesA = FeatureStateNode.getStatesForDocument(featA);
+        expect(updatedStatesA.last.tuningParams, contains('zipVelocity: 650.0'));
+        expect(
+          updatedStatesA.last.edgeCases.first,
+          contains('Clamp zipVelocity when player collides with ceiling'),
+        );
+
+        final updatedStatesB = FeatureStateNode.getStatesForDocument(featB);
+        expect(updatedStatesB.last.tuningParams, contains('zipVelocity: 650.0'));
+        expect(
+          updatedStatesB.last.edgeCases.first,
+          contains('Scale momentum impulse by zipVelocity on detach'),
+        );
+        final updatedSubB = updatedStatesB.last.checklist.first.children.first;
+        expect(updatedSubB.text, contains('zipVelocity'));
+        expect(updatedSubB.specNotes, contains('zipVelocity = 650.0'));
+        expect(updatedSubB.codeSnippet, contains('zipVelocity * releaseBoost'));
+        expect(updatedSubB.verification, contains('zipVelocity'));
+
+        // ── 2. Full Project JSON Export & Restore (.layers.json) (Upgrade 2) ──
+        final exportedJson = provider.exportProjectToJson();
+        expect(exportedJson, contains('"format": "layers-agentic-project-v2"'));
+        expect(exportedJson, contains('"Hook Runner"'));
+        expect(exportedJson, contains('zipVelocity: 650.0'));
+
+        // Restore into a fresh provider instance (exact ID restoration)
+        final freshProvider = WorkbenchProvider(enableAutoLoad: false);
+        final restoredId = freshProvider.importProjectFromJson(exportedJson);
+        expect(restoredId, isNotNull);
+        expect(freshProvider.activeProject?.title, equals('Hook Runner'));
+        expect(freshProvider.currentStage, equals(WorkbenchStage.releaseWorkbench));
+        expect(freshProvider.activeReleaseBeats.length, equals(beats.length));
+
+        final restoredFeats = <TierDocument>[
+          for (final b in freshProvider.activeReleaseBeats)
+            ...freshProvider.featuresForBeat(b.id),
+        ];
+        final restoredStatesB = FeatureStateNode.getStatesForDocument(
+          restoredFeats[1],
+        );
+        expect(restoredStatesB.last.tuningParams, contains('zipVelocity: 650.0'));
+        expect(
+          restoredStatesB.last.checklist.first.children.first.codeSnippet,
+          contains('zipVelocity * releaseBoost'),
+        );
+
+        // Import again into the same provider to verify collision-safe ID remapping
+        final duplicateImportId = freshProvider.importProjectFromJson(exportedJson);
+        expect(duplicateImportId, isNotNull);
+        expect(duplicateImportId, isNot(equals(restoredId)));
+        expect(
+          freshProvider.activeProject?.title,
+          equals('Hook Runner (Imported)'),
+        );
+        expect(freshProvider.savedProjects.length, equals(2));
+      },
+    );
   });
 }

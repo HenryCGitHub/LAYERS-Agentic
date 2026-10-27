@@ -378,6 +378,196 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     return newId;
   }
 
+  /// Exports the full interactive state of [projectId] (defaults to [activeProjectId])
+  /// across all 4 tiers (`Project`, `Release`, `Epic`, `Feature`, including superseded features,
+  /// Concept Blueprint, Release Blueprint, and completed checkpoints) as a portable `.layers.json` bundle.
+  String exportProjectToJson([String? projectId]) {
+    final targetId = projectId ?? _activeProjectId;
+    if (targetId == null) return '';
+    if (targetId == _activeProjectId) {
+      _syncActiveProjectMetadata();
+    }
+    final proj = documents[targetId];
+    if (proj == null) return '';
+
+    final collectedIds = <String>{proj.id};
+    for (final relId in proj.childrenIds) {
+      collectedIds.add(relId);
+      final relDoc = documents[relId];
+      if (relDoc != null) {
+        for (final beatId in relDoc.childrenIds) {
+          collectedIds.add(beatId);
+          final beatDoc = documents[beatId];
+          if (beatDoc != null) {
+            collectedIds.addAll(beatDoc.childrenIds);
+          }
+        }
+      }
+    }
+    // Include any detached/superseded Epics or Features belonging to this project
+    bool addedMore = true;
+    while (addedMore) {
+      addedMore = false;
+      for (final doc in documents.values) {
+        if (!collectedIds.contains(doc.id) &&
+            doc.parentId != null &&
+            collectedIds.contains(doc.parentId)) {
+          collectedIds.add(doc.id);
+          addedMore = true;
+        }
+      }
+    }
+
+    final bundleDocs = <Map<String, dynamic>>[
+      for (final id in collectedIds)
+        if (documents[id] != null) documents[id]!.toJson(),
+    ];
+
+    final payload = <String, dynamic>{
+      'format': 'layers-agentic-project-v2',
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'projectId': proj.id,
+      'projectTitle': proj.title,
+      'documents': bundleDocs,
+    };
+
+    return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  /// Imports a `.layers.json` project bundle into the vault, automatically remapping IDs
+  /// if any document ID collides with an existing project in the vault, and switches to the imported project.
+  String? importProjectFromJson(String rawJson) {
+    final trimmed = rawJson.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map<String, dynamic>) return null;
+      final rawDocs = decoded['documents'];
+      if (rawDocs is! List || rawDocs.isEmpty) return null;
+
+      final parsedDocs = <TierDocument>[];
+      for (final item in rawDocs) {
+        if (item is Map<String, dynamic>) {
+          parsedDocs.add(TierDocument.fromJson(item));
+        } else if (item is Map) {
+          parsedDocs.add(
+            TierDocument.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+      if (parsedDocs.isEmpty) return null;
+
+      final rootProj = parsedDocs.firstWhere(
+        (d) => d.tier == TierType.project,
+        orElse: () => parsedDocs.first,
+      );
+
+      final hasCollision = parsedDocs.any((d) => documents.containsKey(d.id));
+      final idMap = <String, String>{};
+      final baseTs = DateTime.now().microsecondsSinceEpoch;
+      if (hasCollision) {
+        for (int i = 0; i < parsedDocs.length; i++) {
+          final d = parsedDocs[i];
+          if (d.tier == TierType.project) {
+            idMap[d.id] = 'proj_${baseTs}_$i';
+          } else {
+            idMap[d.id] = '${d.tier.name}_${baseTs}_$i';
+          }
+        }
+      } else {
+        for (final d in parsedDocs) {
+          idMap[d.id] = d.id;
+        }
+      }
+
+      String remapId(String id) => idMap[id] ?? id;
+
+      for (final d in parsedDocs) {
+        final newId = remapId(d.id);
+        final newParentId = d.parentId != null ? remapId(d.parentId!) : null;
+        final newChildrenIds = d.childrenIds.map(remapId).toList();
+        final newSections = Map<String, String>.from(d.sections);
+
+        String importedTitle = d.title;
+        if (d.tier == TierType.project) {
+          if (hasCollision && !importedTitle.endsWith(' (Imported)')) {
+            importedTitle = '$importedTitle (Imported)';
+            final rawConcept = newSections['concept_draft_json'];
+            if (rawConcept != null && rawConcept.isNotEmpty) {
+              try {
+                final cMap = Map<String, dynamic>.from(
+                  jsonDecode(rawConcept) as Map,
+                );
+                cMap['title'] = importedTitle;
+                newSections['concept_draft_json'] = jsonEncode(cMap);
+              } catch (_) {}
+            }
+          }
+          final oldActiveRel = newSections['active_release_id'];
+          if (oldActiveRel != null && idMap.containsKey(oldActiveRel)) {
+            newSections['active_release_id'] = idMap[oldActiveRel]!;
+          }
+          final oldSelBeat = newSections['selected_beat_id'];
+          if (oldSelBeat != null && idMap.containsKey(oldSelBeat)) {
+            newSections['selected_beat_id'] = idMap[oldSelBeat]!;
+          }
+          final oldSelFeat = newSections['selected_feature_id'];
+          if (oldSelFeat != null && idMap.containsKey(oldSelFeat)) {
+            newSections['selected_feature_id'] = idMap[oldSelFeat]!;
+          }
+          final rawRelBp = newSections['release_blueprint_json'];
+          if (rawRelBp != null && rawRelBp.isNotEmpty) {
+            try {
+              final bpMap = Map<String, dynamic>.from(
+                jsonDecode(rawRelBp) as Map,
+              );
+              final oldRelDocId = bpMap['releaseDocId']?.toString();
+              if (oldRelDocId != null) {
+                bpMap['releaseDocId'] = remapId(oldRelDocId);
+              }
+              final rawBeats = bpMap['beats'];
+              if (rawBeats is List) {
+                for (final bItem in rawBeats) {
+                  if (bItem is Map) {
+                    final bId = bItem['id']?.toString();
+                    if (bId != null) bItem['id'] = remapId(bId);
+                    final rawFeats = bItem['features'];
+                    if (rawFeats is List) {
+                      for (final fItem in rawFeats) {
+                        if (fItem is Map) {
+                          final fId = fItem['id']?.toString();
+                          if (fId != null) fItem['id'] = remapId(fId);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              newSections['release_blueprint_json'] = jsonEncode(bpMap);
+            } catch (_) {}
+          }
+        }
+
+        final importedDoc = d.copyWith(
+          id: newId,
+          title: importedTitle,
+          parentId: newParentId,
+          childrenIds: newChildrenIds,
+          sections: newSections,
+        );
+        documents[newId] = importedDoc;
+        _persistDocument(importedDoc);
+      }
+
+      final importedProjId = remapId(rootProj.id);
+      switchProject(importedProjId);
+      return importedProjId;
+    } catch (e) {
+      debugPrint('importProjectFromJson error: $e');
+      return null;
+    }
+  }
+
   /// Deletes a project and its child documents from LocalVaultService and Cloud Firestore.
   void deleteProject(String projectId) {
     final proj = documents[projectId];

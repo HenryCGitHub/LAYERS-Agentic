@@ -10,6 +10,7 @@ import '../utils/section_text_utils.dart';
 
 part 'workbench_engine_areas_card.dart';
 part 'workbench_modals_part.dart';
+part 'workbench_task_and_playtest_modals_part.dart';
 part 'workbench_outliner_and_shell_part.dart';
 part 'workbench_checkpoint_workspace_part.dart';
 
