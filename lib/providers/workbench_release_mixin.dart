@@ -1423,6 +1423,370 @@ Return ONLY valid JSON:
     return sb.toString();
   }
 
+  /// Generates a focused, single-feature AI Coding Agent prompt (for Cursor, Claude Code, or Antigravity)
+  /// containing only the selected Feature's 3-Area blueprint, exact tuning variable names, sibling variable
+  /// references, mandatory `[GUARD]` rules, and Playtest Gate condition.
+  String buildActiveFeatureCodingAgentPrompt(
+    String featureId, {
+    bool unrealCppMode = false,
+  }) {
+    final feat = documents[featureId];
+    if (feat == null) return '';
+    final draft = _conceptDraft;
+    final proj = activeProject;
+    final activeVer = activeReleaseVersionTag;
+    final engineHint = _activeEngineHint;
+    final engineLabel = _activeEngineLabel;
+    final effectiveEngineTarget = engineLabel == 'UNREAL 5'
+        ? (unrealCppMode ? 'UNREAL 5 C++ (.h / .cpp)' : 'UNREAL 5 BLUEPRINTS')
+        : (engineLabel == 'UNITY C#'
+            ? 'UNITY C# (MonoBehaviour)'
+            : 'GODOT 4 (GDScript 2.0)');
+    final projectTitle = (draft != null && draft.title.trim().isNotEmpty)
+        ? draft.title.trim()
+        : (proj != null && proj.title.trim().isNotEmpty
+            ? proj.title.trim()
+            : 'LAYERS-Agentic Game Project');
+
+    final parentBeat =
+        feat.parentId != null ? documents[feat.parentId!] : null;
+    final beats = activeReleaseBeats;
+    final beatIdx =
+        parentBeat != null ? beats.indexWhere((b) => b.id == parentBeat.id) : 0;
+    final eNum = ((beatIdx >= 0 ? beatIdx : 0) + 1).toString().padLeft(2, '0');
+    final epicLabel = parentBeat != null
+        ? 'E$eNum · ${parentBeat.title}'
+        : 'E01 · Core Loop Epic';
+
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    final activeStates =
+        states.where((s) => s.releaseVersion == activeVer).toList();
+    final cpNode = activeStates.isNotEmpty
+        ? activeStates.last
+        : (states.isNotEmpty ? states.last : null);
+
+    final sb = StringBuffer();
+    sb.writeln(
+      '# AI CODING AGENT TASK PROMPT — ${feat.title} ($activeVer · $effectiveEngineTarget)',
+    );
+    sb.writeln(
+      '> Implement this single feature in **$effectiveEngineTarget** using the exact variable names, scene hierarchy, and playtest guards below.',
+    );
+
+    sb.writeln('\n## 1. Feature Scope & Context');
+    sb.writeln('- **Project**: $projectTitle (`$activeVer`)');
+    sb.writeln('- **Target Engine**: $effectiveEngineTarget');
+    sb.writeln('- **Epic**: $epicLabel');
+    sb.writeln('- **Feature**: ${feat.title}');
+    final rawGoal = (feat.sections['scope'] ?? feat.sections['goal'] ?? '').trim();
+    if (rawGoal.isNotEmpty) {
+      sb.writeln('- **Goal**: ${rawGoal.split('\n').first.replaceFirst(RegExp(r'^Goal:\s*', caseSensitive: false), '').trim()}');
+    }
+    if (cpNode != null && cpNode.playtestCondition.trim().isNotEmpty) {
+      sb.writeln('- **Playtest Gate (Done When)**: ${cpNode.playtestCondition.trim()}');
+    }
+
+    sb.writeln('\n## 2. Canonical Tuning Variables & Sibling Context');
+    if (cpNode == null || cpNode.tuningParams.isEmpty) {
+      sb.writeln('- *(No numeric tuning variables registered)*');
+    } else {
+      sb.writeln('### Active Feature Variables (`${feat.title}`)');
+      for (final param in cpNode.tuningParams) {
+        sb.writeln('- `$param`');
+      }
+    }
+    if (parentBeat != null) {
+      final siblingLines = <String>[];
+      for (final sib in featuresForBeat(parentBeat.id)) {
+        if (sib.id == feat.id) continue;
+        final sibStates = FeatureStateNode.getStatesForDocument(sib);
+        if (sibStates.isNotEmpty && sibStates.last.tuningParams.isNotEmpty) {
+          siblingLines.add(
+            '- **${sib.title}**: `${sibStates.last.tuningParams.join('`, `')}`',
+          );
+        }
+      }
+      if (siblingLines.isNotEmpty) {
+        sb.writeln('\n### Sibling Feature Variables in $epicLabel (Reuse Exact Identifiers)');
+        for (final line in siblingLines) {
+          sb.writeln(line);
+        }
+      }
+    }
+
+    sb.writeln('\n## 3. Mandatory Edge-Case & Playtest Guards');
+    if (cpNode == null || cpNode.edgeCases.isEmpty) {
+      sb.writeln('- *(No edge-case guards registered)*');
+    } else {
+      for (final g in cpNode.edgeCases) {
+        sb.writeln('- `${g.trim()}`');
+      }
+    }
+
+    if (cpNode != null) {
+      sb.writeln('\n## 4. 3-Area Implementation Steps ($effectiveEngineTarget)');
+      for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+        final task = cpNode.checklist[tIdx];
+        final bp = TaskHowToBlueprint.resolve(
+          parentTask: task,
+          taskIndex: tIdx,
+          checkpointNode: cpNode,
+          engineHint: engineHint,
+          unrealCppMode: unrealCppMode,
+        );
+        final doneMark = task.completed ? 'x' : ' ';
+        sb.writeln(
+          '- [$doneMark] **Task ${bp.numLabel}: ${bp.cleanTitle}** (`${bp.whereLocation}`)',
+        );
+        for (final sub in bp.subSteps) {
+          final sMark = sub.subtask.completed ? 'x' : ' ';
+          sb.writeln(
+            '  - [$sMark] **${sub.stepNumberLabel}** — ${sub.instruction}',
+          );
+          if (sub.area1Hierarchy != null &&
+              sub.area1Hierarchy!.trim().isNotEmpty) {
+            sb.writeln(
+              '    - **Area 1 (Hierarchy)**: `${sub.area1Hierarchy!.replaceAll('\n', ' / ')}`',
+            );
+          }
+          if (sub.area2Inspector != null &&
+              sub.area2Inspector!.trim().isNotEmpty) {
+            sb.writeln(
+              '    - **Area 2 (Inspector)**: `${sub.area2Inspector!.replaceAll('\n', ' | ')}`',
+            );
+          }
+          if (sub.codeFormula.trim().isNotEmpty) {
+            sb.writeln('    ```');
+            for (final line in sub.codeFormula.trim().split('\n')) {
+              sb.writeln('    $line');
+            }
+            sb.writeln('    ```');
+          }
+          if (sub.verifyResult.trim().isNotEmpty) {
+            sb.writeln('    - *Verify*: ${sub.verifyResult.trim()}');
+          }
+        }
+      }
+    }
+
+    return sb.toString();
+  }
+
+  /// Two-Way Engine Sync: Parses a developer's pasted GDScript, C#, or Unreal C++ script
+  /// (using `gemini-flash-latest` when online + a deterministic multi-line regex parser fallback)
+  /// to update changed numeric tuning variable values and append newly added `[GUARD]` checks
+  /// directly onto the Feature's active checkpoint.
+  Future<({int updatedVars, int addedGuards})>
+      syncFeatureTuningAndGuardsFromCode(
+    String featureId,
+    String pastedCode,
+  ) async {
+    final feat = documents[featureId];
+    final trimmedCode = pastedCode.trim();
+    if (feat == null || trimmedCode.isEmpty) {
+      return (updatedVars: 0, addedGuards: 0);
+    }
+
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    if (states.isEmpty) return (updatedVars: 0, addedGuards: 0);
+    final activeVer = activeReleaseVersionTag;
+    int cpIdx = states.lastIndexWhere((s) => s.releaseVersion == activeVer);
+    if (cpIdx < 0) cpIdx = states.length - 1;
+    final cpNode = states[cpIdx];
+
+    final extractedTuning = <String, String>{};
+    final extractedGuards = <String>[];
+
+    // 1. Fast AI extraction pass via gemini-flash-latest when key is available
+    if (GeminiAgentClient.hasKey(_apiKey)) {
+      final prompt = '''
+You are a Game Engine Code-to-Spec Synchronizer.
+Compare the developer's pasted engine script against the Feature's current Tuning Parameters and Guards.
+Feature: "${feat.title}"
+Current Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+Current Guards: ${cpNode.edgeCases.join(' | ')}
+
+Pasted Engine Script:
+```
+$trimmedCode
+```
+
+Extract:
+1. "tuningUpdates": Any updated or newly exported numeric/boolean/string tuning variables from the script formatted as "variableName: value". Preserve existing variable names when they match.
+2. "newGuards": Any new safety/null/cooldown/bounds guard checks in the script formatted as "[GUARD] condition — safe fallback".
+
+Return ONLY valid JSON:
+{
+  "tuningUpdates": ["moveSpeed: 650.0"],
+  "newGuards": ["[GUARD] Prevent dash while stunned — early-return when isStunned is true"]
+}''';
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: _apiKey,
+        preferredModel: _conversationModel,
+        thinkingLevel: 'LOW',
+        temperature: 0.1,
+      );
+      final rawTuning = json?['tuningUpdates'];
+      if (rawTuning is List) {
+        for (final item in rawTuning) {
+          final text = item?.toString().trim() ?? '';
+          final colonIdx = text.indexOf(':');
+          if (colonIdx > 0) {
+            final k = text.substring(0, colonIdx).trim();
+            final v = text.substring(colonIdx + 1).trim();
+            if (k.isNotEmpty && v.isNotEmpty) {
+              extractedTuning[k] = v;
+            }
+          }
+        }
+      }
+      final rawGuards = json?['newGuards'];
+      if (rawGuards is List) {
+        for (final item in rawGuards) {
+          final text = item?.toString().trim() ?? '';
+          if (text.isNotEmpty) {
+            extractedGuards.add(
+              text.startsWith('[') ? text : '[GUARD] $text',
+            );
+          }
+        }
+      }
+    }
+
+    // 2. Deterministic multi-line regex extraction (handles Godot 4 @export, Unity [SerializeField], Unreal UPROPERTY across line breaks)
+    String cleanNumericValue(String raw) {
+      var val = raw
+          .split('//')
+          .first
+          .split('#')
+          .first
+          .trim()
+          .replaceAll(RegExp(r';$'), '')
+          .trim();
+      // Strip trailing C#/C++ float 'f' suffix on numeric literals (e.g. 600.0f -> 600.0, 6f -> 6.0)
+      final floatMatch = RegExp(r'^(-?\d+(?:\.\d+)?)[fF]$').firstMatch(val);
+      if (floatMatch != null) {
+        final numPart = floatMatch.group(1)!;
+        val = numPart.contains('.') ? numPart : '$numPart.0';
+      }
+      return val;
+    }
+
+    // 2a. Multi-line Unity [SerializeField] / Unreal UPROPERTY(...) attribute on same or preceding line
+    final attrFieldRegex = RegExp(
+      r'(?:\[SerializeField[^\]]*\]|UPROPERTY\([^)]*\))\s*(?:(?:private|public|protected|internal|mutable|const)\s+)?[\w<>:*&]+\s+(\w+)\s*=\s*([^;\n]+);',
+      multiLine: true,
+    );
+    for (final m in attrFieldRegex.allMatches(trimmedCode)) {
+      final k = m.group(1)?.trim() ?? '';
+      final v = cleanNumericValue(m.group(2) ?? '');
+      if (k.isNotEmpty && v.isNotEmpty) {
+        extractedTuning.putIfAbsent(k, () => v);
+      }
+    }
+
+    // 2b. Godot 4 @export var / typed var declarations
+    final gdVarRegex = RegExp(
+      r'@export(?:_[a-z_]+)?(?:\([^)]*\))?\s+var\s+(\w+)(?:\s*:\s*[\w.]+)?\s*=\s*([^\n#;]+)',
+      multiLine: true,
+    );
+    for (final m in gdVarRegex.allMatches(trimmedCode)) {
+      final k = m.group(1)?.trim() ?? '';
+      final v = cleanNumericValue(m.group(2) ?? '');
+      if (k.isNotEmpty && v.isNotEmpty) {
+        extractedTuning.putIfAbsent(k, () => v);
+      }
+    }
+
+    // 2c. Direct assignment match for any existing tuningParams keys
+    for (final existing in cpNode.tuningParams) {
+      final existingKey = existing.split(':').first.trim();
+      if (existingKey.isEmpty) continue;
+      final keyRegex = RegExp(
+        r'\b' +
+            RegExp.escape(existingKey) +
+            r'\b(?:\s*:\s*[\w.]+)?\s*=\s*([^\n;#/]+)',
+        multiLine: true,
+        caseSensitive: false,
+      );
+      final match = keyRegex.firstMatch(trimmedCode);
+      if (match != null) {
+        final v = cleanNumericValue(match.group(1) ?? '');
+        if (v.isNotEmpty) {
+          extractedTuning[existingKey] = v;
+        }
+      }
+    }
+
+    // 2d. Guard comment extraction (// [GUARD] ..., # [GUARD] ..., // GUARD: ...)
+    final guardCommentRegex = RegExp(
+      r'(?://|#)\s*\[?(?:PLAYTEST\s+)?GUARD\]?\s*:?\s*(.+)$',
+      multiLine: true,
+      caseSensitive: false,
+    );
+    for (final m in guardCommentRegex.allMatches(trimmedCode)) {
+      final gText = m.group(1)?.trim() ?? '';
+      if (gText.isNotEmpty) {
+        final formatted = gText.startsWith('[') ? gText : '[GUARD] $gText';
+        if (!extractedGuards.contains(formatted)) {
+          extractedGuards.add(formatted);
+        }
+      }
+    }
+
+    // 3. Apply extracted tuning updates and new guards to cpNode in-place
+    int updatedVars = 0;
+    int addedGuards = 0;
+
+    final updatedTuningList = List<String>.from(cpNode.tuningParams);
+    String normalizeVarKey(String k) =>
+        k.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    for (final entry in extractedTuning.entries) {
+      final normTarget = normalizeVarKey(entry.key);
+      if (normTarget.isEmpty) continue;
+      final existingIdx = updatedTuningList.indexWhere(
+        (item) => normalizeVarKey(item.split(':').first) == normTarget,
+      );
+      if (existingIdx >= 0) {
+        final canonicalKey =
+            updatedTuningList[existingIdx].split(':').first.trim();
+        final newEntry = '$canonicalKey: ${entry.value}';
+        if (updatedTuningList[existingIdx] != newEntry) {
+          updatedTuningList[existingIdx] = newEntry;
+          updatedVars++;
+        }
+      } else {
+        updatedTuningList.add('${entry.key}: ${entry.value}');
+        updatedVars++;
+      }
+    }
+
+    final updatedGuardsList = List<String>.from(cpNode.edgeCases);
+    for (final g in extractedGuards) {
+      final normG = g.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final alreadyExists = updatedGuardsList.any(
+        (existing) =>
+            existing.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim() ==
+            normG,
+      );
+      if (!alreadyExists) {
+        updatedGuardsList.add(g);
+        addedGuards++;
+      }
+    }
+
+    if (updatedVars > 0 || addedGuards > 0) {
+      cpNode.tuningParams = updatedTuningList;
+      cpNode.edgeCases = updatedGuardsList;
+      TaskHowToBlueprint.clearCache();
+      updateFeatureStates(featureId, states);
+    }
+
+    return (updatedVars: updatedVars, addedGuards: addedGuards);
+  }
+
   void selectFeature(String featureId) {
     final feat = documents[featureId];
     if (feat == null) return;

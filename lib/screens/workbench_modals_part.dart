@@ -1896,13 +1896,574 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
       );
       if (newIdx >= 0 && checkpointIndex < states.length) {
         final cpNode = states[checkpointIndex];
-        // ignore: invalid_use_of_protected_member
-        setState(() {
+        _rebuild(() {
           _manualCheckpointFocusIndex = checkpointIndex;
           _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
           _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
         });
       }
+    }
+  }
+
+  /// Copies the focused single-feature AI Coding Agent prompt to the clipboard.
+  void _copyActiveFeaturePrompt(TierDocument feat) {
+    final promptText = widget.workbench.buildActiveFeatureCodingAgentPrompt(
+      feat.id,
+      unrealCppMode: _unrealCppMode,
+    );
+    Clipboard.setData(ClipboardData(text: promptText));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Copied "${feat.title}" AI Coding Prompt to clipboard',
+          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Opens the unified Playtest Run Sheet modal listing every active Feature's Playtest Gate,
+  /// Tuning Variables, and `[GUARD]` rules in the current release with 1-click Pass & Flag actions.
+  Future<void> _showPlaytestRunSheetModal(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return ListenableBuilder(
+          listenable: widget.workbench,
+          builder: (context, _) {
+            final activeVer = widget.workbench.activeReleaseVersionTag;
+            final rel = widget.workbench.activeRelease;
+            final beats = widget.workbench.activeReleaseBeats;
+            int totalFeats = 0;
+            int passedFeats = 0;
+            for (final b in beats) {
+              for (final f in widget.workbench.featuresForBeat(b.id)) {
+                totalFeats++;
+                if (widget.workbench.getDocumentProgress(f.id) >= 100) {
+                  passedFeats++;
+                }
+              }
+            }
+
+            return Dialog(
+              key: const ValueKey('playtest_run_sheet_modal'),
+              backgroundColor: bgSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: borderSubtle),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 760,
+                  maxHeight: 680,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Modal Header
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: bgRecessed,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(12),
+                        ),
+                        border: Border(bottom: BorderSide(color: borderSubtle)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PLAYTEST RUN SHEET · ${activeVer.toUpperCase()} GATE VERIFICATION',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.7,
+                                    color: accentCyan,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  rel?.title ?? '$activeVer Playtest Checklist',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            key: const ValueKey('playtest_sheet_summary_badge'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: passedFeats == totalFeats && totalFeats > 0
+                                  ? accentEmerald.withValues(alpha: 0.14)
+                                  : accentAmber.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color:
+                                    passedFeats == totalFeats && totalFeats > 0
+                                        ? accentEmerald.withValues(alpha: 0.4)
+                                        : accentAmber.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Text(
+                              '$passedFeats/$totalFeats GATES PASSED',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color:
+                                    passedFeats == totalFeats && totalFeats > 0
+                                        ? accentEmerald
+                                        : accentAmber,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          IconButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Scrollable Epic & Feature Gate Rows
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (int bIdx = 0; bIdx < beats.length; bIdx++) ...[
+                              Padding(
+                                padding: EdgeInsets.only(
+                                  top: bIdx == 0 ? 0 : 14,
+                                  bottom: 8,
+                                ),
+                                child: Text(
+                                  'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beats[bIdx].title).toUpperCase()}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.7,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ),
+                              for (final feat in widget.workbench
+                                  .featuresForBeat(beats[bIdx].id))
+                                Builder(
+                                  builder: (context) {
+                                    final states =
+                                        FeatureStateNode.getStatesForDocument(
+                                      feat,
+                                    );
+                                    int cpIdx = states.lastIndexWhere(
+                                      (s) => s.releaseVersion == activeVer,
+                                    );
+                                    if (cpIdx < 0 && states.isNotEmpty) {
+                                      cpIdx = states.length - 1;
+                                    }
+                                    final cpNode =
+                                        cpIdx >= 0 ? states[cpIdx] : null;
+                                    final prog = widget.workbench
+                                        .getDocumentProgress(feat.id);
+                                    final isPassed = prog >= 100;
+
+                                    return Container(
+                                      key: ValueKey(
+                                        'playtest_sheet_row_${feat.id}',
+                                      ),
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: bgRecessed,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isPassed
+                                              ? accentEmerald.withValues(
+                                                  alpha: 0.45,
+                                                )
+                                              : borderSubtle,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      isPassed
+                                                          ? Icons
+                                                              .check_circle_rounded
+                                                          : Icons
+                                                              .radio_button_unchecked_rounded,
+                                                      size: 16,
+                                                      color: isPassed
+                                                          ? accentEmerald
+                                                          : textMuted,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Flexible(
+                                                      child: Text(
+                                                        _formatOutlineFeatureDisplayTitle(
+                                                          feat.title,
+                                                          beats[bIdx].title,
+                                                          beatIndex: bIdx,
+                                                        ),
+                                                        style:
+                                                            GoogleFonts.inter(
+                                                          fontSize: 13.5,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: textPrimary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      '$prog%',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        color: isPassed
+                                                            ? accentEmerald
+                                                            : textMuted,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  if (cpNode != null) ...[
+                                                    InkWell(
+                                                      key: ValueKey(
+                                                        'playtest_sheet_pass_btn_${feat.id}',
+                                                      ),
+                                                      onTap: () {
+                                                        final targetDone =
+                                                            !isPassed;
+                                                        for (final t in cpNode
+                                                            .checklist) {
+                                                          t.completed =
+                                                              targetDone;
+                                                          for (final sub
+                                                              in t.children) {
+                                                            sub.completed =
+                                                                targetDone;
+                                                          }
+                                                        }
+                                                        widget.workbench
+                                                            .updateFeatureStates(
+                                                          feat.id,
+                                                          states,
+                                                        );
+                                                      },
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        5,
+                                                      ),
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 5,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: isPassed
+                                                              ? accentEmerald
+                                                                  .withValues(
+                                                                  alpha: 0.16,
+                                                                )
+                                                              : bgSurface,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(5),
+                                                          border: Border.all(
+                                                            color: isPassed
+                                                                ? accentEmerald
+                                                                : borderSubtle,
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          isPassed
+                                                              ? '✓ Gate Passed'
+                                                              : '✓ Pass Gate',
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 10,
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            color: isPassed
+                                                                ? accentEmerald
+                                                                : textPrimary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    InkWell(
+                                                      key: ValueKey(
+                                                        'playtest_sheet_flag_btn_${feat.id}',
+                                                      ),
+                                                      onTap: () =>
+                                                          _showLogPlaytestIssueDialog(
+                                                        feat,
+                                                        states,
+                                                        cpIdx,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        5,
+                                                      ),
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 9,
+                                                          vertical: 5,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: accentAmber
+                                                              .withValues(
+                                                            alpha: 0.12,
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(5),
+                                                          border: Border.all(
+                                                            color: accentAmber
+                                                                .withValues(
+                                                              alpha: 0.4,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          '🐞 Flag Issue',
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 10,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: accentAmber,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                          if (cpNode != null) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Playtest Gate: ${cpNode.playtestCondition}',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12,
+                                                color: textSecondary,
+                                              ),
+                                            ),
+                                            if (cpNode.edgeCases.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Wrap(
+                                                spacing: 6,
+                                                runSpacing: 4,
+                                                children: [
+                                                  for (final g
+                                                      in cpNode.edgeCases)
+                                                    Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 7,
+                                                        vertical: 3,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: bgSurface,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        border: Border.all(
+                                                          color: borderSubtle,
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        g,
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 9.5,
+                                                          color: textMuted,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ],
+                                          ],
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Opens the Two-Way Engine Code Sync dialog where the developer can paste a GDScript, C#,
+  /// or Unreal C++ script to update Feature tuning parameters and `[GUARD]` rules.
+  Future<void> _showSyncFeatureFromCodeDialog(
+    TierDocument feat,
+    FeatureStateNode node,
+  ) async {
+    final codeCtrl = TextEditingController();
+    final pasted = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const ValueKey('sync_feature_from_code_dialog'),
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: borderSubtle),
+        ),
+        title: Text(
+          '⇄ Sync Tuning & Guards from Engine Code · ${feat.title}',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        content: SizedBox(
+          width: 560,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Paste your modified GDScript (.gd), Unity C# (.cs), or Unreal C++ (.h / .cpp) script below. Updated variable values and new [GUARD] checks will sync into "${node.cleanStageTitle}".',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('sync_feature_code_input_field'),
+                controller: codeCtrl,
+                autofocus: true,
+                maxLines: 10,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11.5,
+                  color: textPrimary,
+                ),
+                decoration: InputDecoration(
+                  hintText:
+                      'e.g.\nUPROPERTY(EditAnywhere)\nfloat MoveSpeed = 640.0f;\n// [GUARD] Prevent dash while stunned',
+                  hintStyle: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: textMuted,
+                  ),
+                  filled: true,
+                  fillColor: bgRecessed,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: borderSubtle),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_sync_from_code_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentEmerald,
+              foregroundColor: const Color(0xFF04131D),
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(codeCtrl.text),
+            child: Text(
+              'Sync Tuning & Guards',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (pasted != null && pasted.trim().isNotEmpty && mounted) {
+      final result = await widget.workbench.syncFeatureTuningAndGuardsFromCode(
+        feat.id,
+        pasted,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Synced ${result.updatedVars} tuning variable(s) and ${result.addedGuards} new guard(s) from code.',
+            style: GoogleFonts.inter(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 }

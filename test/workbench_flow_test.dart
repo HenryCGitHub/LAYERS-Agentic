@@ -2878,5 +2878,116 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    testWidgets(
+      '15. Single-Feature AI Prompt Export, Playtest Run Sheet Gate Triage, and Two-Way Code Sync',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1600, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        await provider.startConceptInterview(
+          'Build a fast 3D action slasher in Unreal Engine 5.',
+        );
+        provider.updateConceptDraft((d) {
+          d.title = 'Neon Katana';
+          d.goal = 'Build a fast 3D action slasher in Unreal Engine 5.';
+          d.techSpec = ['Engine: Unreal Engine 5', 'Language: C++ & Blueprints'];
+        });
+        final buildFuture = provider.approveConceptAndBuildRelease();
+        await tester.pumpAndSettle();
+        await buildFuture;
+        await tester.pumpAndSettle();
+
+        final beats = provider.activeReleaseBeats;
+        expect(beats, isNotEmpty);
+        final firstFeat = provider.featuresForBeat(beats.first.id).first;
+
+        // ── 1. Single-Feature AI Prompt Export (Upgrade 2) ──
+        final singlePrompt = provider.buildActiveFeatureCodingAgentPrompt(
+          firstFeat.id,
+          unrealCppMode: true,
+        );
+        expect(singlePrompt, contains('# AI CODING AGENT TASK PROMPT — ${firstFeat.title}'));
+        expect(singlePrompt, contains('UNREAL 5 C++ (.h / .cpp)'));
+        expect(singlePrompt, contains('## 2. Canonical Tuning Variables & Sibling Context'));
+        expect(singlePrompt, contains('## 3. Mandatory Edge-Case & Playtest Guards'));
+        expect(singlePrompt, contains('## 4. 3-Area Implementation Steps'));
+        expect(
+          find.byKey(ValueKey('copy_feature_ai_prompt_btn_${firstFeat.id}')),
+          findsOneWidget,
+        );
+
+        // ── 2. Two-Way Engine Code Sync (Upgrade 4 + Gotcha 3 Multi-Line C++/C#/GDScript Regex) ──
+        final syncResult = await provider.syncFeatureTuningAndGuardsFromCode(
+          firstFeat.id,
+          '''
+          UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Movement")
+          float moveSpeed = 780.0f;
+
+          [SerializeField]
+          private float dashCooldown = 0.25f;
+
+          @export var comboWindowSec: float = 0.45
+
+          // [GUARD] Cancel dash impulse immediately when player hits a solid wall normal
+          ''',
+        );
+        expect(syncResult.updatedVars, greaterThanOrEqualTo(3));
+        expect(syncResult.addedGuards, equals(1));
+
+        final syncedStates = FeatureStateNode.getStatesForDocument(firstFeat);
+        expect(
+          syncedStates.last.tuningParams.any((p) => p.contains('780.0')),
+          isTrue,
+        );
+        expect(
+          syncedStates.last.tuningParams.any((p) => p.contains('dashCooldown: 0.25')),
+          isTrue,
+        );
+        expect(
+          syncedStates.last.tuningParams.any((p) => p.contains('comboWindowSec: 0.45')),
+          isTrue,
+        );
+        expect(
+          syncedStates.last.edgeCases.any(
+            (g) => g.contains('Cancel dash impulse immediately when player hits a solid wall normal'),
+          ),
+          isTrue,
+        );
+
+        // ── 3. Unified Playtest Run Sheet Modal + Live Reactive Rebuilds (Upgrade 3 + Gotcha 2) ──
+        final playtestSheetBtn = find.byKey(
+          const ValueKey('open_playtest_run_sheet_btn'),
+        );
+        expect(playtestSheetBtn, findsOneWidget);
+        await tester.ensureVisible(playtestSheetBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(playtestSheetBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('playtest_run_sheet_modal')),
+          findsOneWidget,
+        );
+        expect(provider.getDocumentProgress(firstFeat.id), lessThan(100));
+
+        // Click "✓ Pass Gate" inside the open modal and verify live reactive rebuild to 100%
+        final passBtn = find.byKey(
+          ValueKey('playtest_sheet_pass_btn_${firstFeat.id}'),
+        );
+        expect(passBtn, findsOneWidget);
+        await tester.tap(passBtn);
+        await tester.pumpAndSettle();
+
+        expect(provider.getDocumentProgress(firstFeat.id), equals(100));
+        expect(find.text('✓ Gate Passed'), findsWidgets);
+      },
+    );
   });
 }
