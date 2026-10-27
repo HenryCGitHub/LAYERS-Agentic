@@ -2695,6 +2695,25 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         sampleFeat.sections['lifecycle'] =
             FeatureLifecycleStatus.newFeature.name;
+
+        // Round 8: Removing the last archived testbed while viewing 'archived' resets releaseViewFilter to 'active'
+        final tempArchDoc = TierDocument(
+          id: 'feat_temp_archived',
+          title: 'Temp Archived Testbed',
+          tier: TierType.feature,
+          parentId: courierProvider.activeReleaseBeats.first.id,
+          sections: {'lifecycle': FeatureLifecycleStatus.superseded.name},
+        );
+        courierProvider.documents[tempArchDoc.id] = tempArchDoc;
+        courierProvider.setReleaseViewFilter('archived');
+        expect(courierProvider.selectedFeatureId, equals(tempArchDoc.id));
+        final removedArch = courierProvider.removeLiveFeature(tempArchDoc.id);
+        expect(removedArch, isTrue);
+        expect(courierProvider.releaseViewFilter, equals('active'));
+        expect(
+          courierProvider.selectedFeatureId,
+          isNot(equals(tempArchDoc.id)),
+        );
       },
     );
   });

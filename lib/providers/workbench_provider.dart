@@ -1960,12 +1960,14 @@ Return ONLY a JSON object:
     if (featDoc == null) return false;
     final parentBeatId = featDoc.parentId;
     final beatDoc = parentBeatId != null ? documents[parentBeatId] : null;
+    final isArchivedFeat =
+        featDoc.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
 
     // Prevent deleting the very last feature in the entire release so the Workbench never empties
     final allFeats = <TierDocument>[
       for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
     ];
-    if (allFeats.length <= 1) return false;
+    if (!isArchivedFeat && allFeats.length <= 1) return false;
 
     if (beatDoc != null) {
       beatDoc.childrenIds.remove(featureId);
@@ -1991,7 +1993,17 @@ Return ONLY a JSON object:
       }
     }
 
-    if (_selectedFeatureId == featureId) {
+    if (_releaseViewFilter == 'archived') {
+      final remainingArchived = supersededFeatures;
+      if (remainingArchived.isNotEmpty) {
+        if (_selectedFeatureId == featureId) {
+          _selectedFeatureId = remainingArchived.first.id;
+        }
+      } else {
+        _releaseViewFilter = 'active';
+        _selectFirstIncompleteFeatureInActiveRelease();
+      }
+    } else if (_selectedFeatureId == featureId) {
       _selectFirstIncompleteFeatureInActiveRelease();
     }
     _syncActiveProjectMetadata();

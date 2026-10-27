@@ -88,6 +88,8 @@ class WorkbenchShell extends StatelessWidget {
     final beats = workbench.activeReleaseBeats;
     if (rel != null && beats.isNotEmpty) {
       final relProgress = workbench.getDocumentProgress(rel.id);
+      final engineHint =
+          draft?.techSpec.join(' ') ?? workbench.activeProject?.sections['tech_spec'];
       sb.writeln('\n## Stage 2: Active Release Workbench (${rel.title} · $relProgress% Verified)');
       for (int bIdx = 0; bIdx < beats.length; bIdx++) {
         final beat = beats[bIdx];
@@ -99,14 +101,25 @@ class WorkbenchShell extends StatelessWidget {
           final states = FeatureStateNode.getStatesForDocument(feat);
           for (final cp in states) {
             final cpDone = cp.isCompleted ? '✓' : '○';
-            sb.writeln('  - [$cpDone] **${cp.cleanStageTitle}** — *${cp.playtestCondition}*');
+            sb.writeln(
+              '  - [$cpDone] **${cp.cleanStageTitle} (${cp.releaseVersion})** — *${cp.playtestCondition}*',
+            );
             if (cp.tuningParams.isNotEmpty) {
               sb.writeln('    - Tuning: `${cp.tuningParams.join(', ')}`');
             }
             if (cp.edgeCases.isNotEmpty) {
               sb.writeln('    - Guards: ${cp.edgeCases.join(' · ')}');
             }
-            for (final task in cp.checklist) {
+            for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
+              final task = cp.checklist[tIdx];
+              if (task.children.isEmpty) {
+                TaskHowToBlueprint.resolve(
+                  parentTask: task,
+                  taskIndex: tIdx,
+                  checkpointNode: cp,
+                  engineHint: engineHint,
+                );
+              }
               final tDone = task.completed ? 'x' : ' ';
               sb.writeln('    - [$tDone] ${task.text}');
               for (final sub in task.children) {
@@ -248,6 +261,9 @@ class WorkbenchShell extends StatelessWidget {
                         final proj = savedProjects.where((p) => p.id == projId).firstOrNull;
                         if (proj == null) return;
                         await _promptRenameProjectDialog(context, proj);
+                      } else if (val.startsWith('__duplicate__:')) {
+                        final projId = val.substring('__duplicate__:'.length);
+                        workbench.duplicateProject(projId);
                       } else if (val.startsWith('__delete__:')) {
                         final projId = val.substring('__delete__:'.length);
                         workbench.deleteProject(projId);
@@ -298,6 +314,22 @@ class WorkbenchShell extends StatelessWidget {
                                     padding: const EdgeInsets.all(4),
                                     child: Icon(
                                       Icons.edit_outlined,
+                                      size: 12.5,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Tooltip(
+                                message: 'Duplicate Project',
+                                child: InkWell(
+                                  key: ValueKey('switcher_duplicate_${p.id}'),
+                                  onTap: () => Navigator.of(ctx).pop('__duplicate__:${p.id}'),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.copy_all_rounded,
                                       size: 12.5,
                                       color: textSecondary,
                                     ),
@@ -1117,7 +1149,7 @@ class WorkbenchShell extends StatelessWidget {
           },
         );
       },
-    );
+    ).whenComplete(collabEmailCtrl.dispose);
   }
 
   void _showAiSettingsDialog(BuildContext context) {
@@ -1392,7 +1424,7 @@ class WorkbenchShell extends StatelessWidget {
           },
         );
       },
-    );
+    ).whenComplete(keyController.dispose);
   }
 
   Widget _buildModelOptionTile({
@@ -1539,6 +1571,7 @@ class WorkbenchShell extends StatelessWidget {
         ],
       ),
     );
+    ctrl.dispose();
     if (newTitle != null && newTitle.trim().isNotEmpty) {
       workbench.renameProject(proj.id, newTitle.trim());
       return true;

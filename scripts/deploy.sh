@@ -30,7 +30,6 @@ BUILD_ARGS=(
     "--release"
     "--base-href" "/LAYERS-Agentic/"
     "--no-web-resources-cdn"
-    "--pwa-strategy=none"
 )
 
 if [ -n "$GEMINI_API_KEY" ]; then
