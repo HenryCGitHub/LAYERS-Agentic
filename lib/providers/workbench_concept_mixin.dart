@@ -294,33 +294,28 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             'v0.1: ${draft.title.trim().isEmpty ? "Game" : draft.title.trim()} Core Loop - Prototype',
           ];
     final isSplitPrototype = trainTitles.length > 1;
-    for (int i = 0; i < trainTitles.length; i++) {
-      final relId = projId == 'proj_main'
-          ? 'rel_v0_${i + 1}'
-          : '${projId}_rel_v0_${i + 1}';
-      final relTitle = trainTitles[i];
-      final existingRel = documents[relId];
+    final relId = projId == 'proj_main' ? 'rel_v0_1' : '${projId}_rel_v0_1';
+    final relTitle = trainTitles.first;
+    final existingRel = documents[relId];
 
-      if (existingRel != null) {
-        existingRel.title = relTitle;
-        existingRel.sections['phase'] ??= ProductionPhase.prototype.name;
-        if (isSplitPrototype) {
-          existingRel.sections['prototypePart'] = '${i + 1}';
-        } else {
-          existingRel.sections.remove('prototypePart');
-        }
-        if (existingRel.childrenIds.isEmpty) {
-          existingRel.sections['releaseScope'] = ReleaseScope.prototype.name;
-          if (i == 0) {
-            existingRel.sections['scope'] =
-                'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
-          }
-        }
-        _persistDocument(existingRel);
-        releaseIds.add(relId);
-        continue;
+    if (existingRel != null) {
+      existingRel.title = relTitle;
+      existingRel.sections['phase'] ??= ProductionPhase.prototype.name;
+      if (isSplitPrototype) {
+        existingRel.sections['prototypePart'] = '1';
+        existingRel.sections['splitPrototypePart2Title'] = trainTitles[1];
+      } else {
+        existingRel.sections.remove('prototypePart');
+        existingRel.sections.remove('splitPrototypePart2Title');
       }
-
+      if (existingRel.childrenIds.isEmpty) {
+        existingRel.sections['releaseScope'] = ReleaseScope.prototype.name;
+        existingRel.sections['scope'] =
+            'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
+      }
+      _persistDocument(existingRel);
+      releaseIds.add(relId);
+    } else {
       final relDoc = TierDocument(
         id: relId,
         title: relTitle,
@@ -329,10 +324,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         sections: {
           'releaseScope': ReleaseScope.prototype.name,
           'phase': ProductionPhase.prototype.name,
-          if (isSplitPrototype) 'prototypePart': '${i + 1}',
-          'scope': i == 0
-              ? 'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}'
-              : 'Goal: Complete the remaining Core Loop Epics for the ${draft.title} prototype.\n\nIn Scope:\n• Remaining Core Loop Epics from ${draft.title}\n\nDone When: Full prototype core loop connects end-to-end.',
+          if (isSplitPrototype) 'prototypePart': '1',
+          if (isSplitPrototype) 'splitPrototypePart2Title': trainTitles[1],
+          'scope':
+              'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}',
         },
       );
       documents[relId] = relDoc;
@@ -340,18 +335,15 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       releaseIds.add(relDoc.id);
     }
 
-    // Preserve any existing Phase 2 (MVP), Phase 3 (Vertical Slice), or Phase 4 (Full Production)
-    // releases—or any subsequent release already built—so revisiting Stage 1 mid-project
-    // never detaches unlocked phases.
+    // Preserve only already-built subsequent releases (never pre-queue unbuilt future releases)
+    // so revisiting Stage 1 mid-project keeps built releases intact without queuing unbuilt ones.
     if (existingProj != null) {
       for (final existingRelId in existingProj.childrenIds) {
         if (releaseIds.contains(existingRelId)) continue;
         final existingRelDoc = documents[existingRelId];
         if (existingRelDoc == null) continue;
-        final relPhase = existingRelDoc.sections['phase'] ?? '';
-        final isNonPrototypePhase = relPhase.isNotEmpty &&
-            relPhase != ProductionPhase.prototype.name;
-        if (isNonPrototypePhase || existingRelDoc.childrenIds.isNotEmpty) {
+        if (existingRelDoc.childrenIds.isNotEmpty ||
+            existingRelId == _activeReleaseId) {
           releaseIds.add(existingRelId);
         }
       }

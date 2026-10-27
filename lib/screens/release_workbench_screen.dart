@@ -52,6 +52,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   double _outlinerWidth = 232.0;
   bool _isHalfScreenOutlinerOpen = false;
   bool _isProgressiveModalOpen = false;
+  String? _progressivePrevReleaseId;
+  ProductionPhase? _progressivePrevPhase;
+  int _selectedProgressiveTrackIndex = 0;
+  String? _addingFeatureToBeatId;
+  final TextEditingController _progressiveDirectiveCtrl =
+      TextEditingController();
+  final TextEditingController _progressiveNewFeatCtrl =
+      TextEditingController();
   String? _inlineEditingTuningNodeId;
   final TextEditingController _inlineTuningEditController =
       TextEditingController();
@@ -61,6 +69,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
   @override
   void dispose() {
+    _progressiveDirectiveCtrl.dispose();
+    _progressiveNewFeatCtrl.dispose();
     _inlineTuningEditController.dispose();
     _stage2InlineEditController.dispose();
     super.dispose();
@@ -144,10 +154,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 ),
               ),
               Expanded(
-                child: _buildFeatureMainCanvas(
-                  rel,
-                  isHalfScreenOverlayMode: false,
-                ),
+                child: _isProgressiveModalOpen
+                    ? _buildProgressiveReleasePlannerCanvas(context)
+                    : _buildFeatureMainCanvas(
+                        rel,
+                        isHalfScreenOverlayMode: false,
+                      ),
               ),
             ],
           );
@@ -159,10 +171,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         return Stack(
           children: [
             Positioned.fill(
-              child: _buildFeatureMainCanvas(
-                rel,
-                isHalfScreenOverlayMode: true,
-              ),
+              child: _isProgressiveModalOpen
+                  ? _buildProgressiveReleasePlannerCanvas(context)
+                  : _buildFeatureMainCanvas(
+                      rel,
+                      isHalfScreenOverlayMode: true,
+                    ),
             ),
             if (_isHalfScreenOutlinerOpen)
               Positioned.fill(

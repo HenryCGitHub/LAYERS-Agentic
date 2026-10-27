@@ -243,6 +243,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String? releaseId,
     bool transitionToGateStage = false,
   }) async {
+    if (releaseId != null) {
+      _activeReleaseId = releaseId;
+    }
     if (_conceptDraft != null) {
       _commitConceptToVault(_conceptDraft!, syncBuiltWorkbench: false);
     }
@@ -254,6 +257,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         _activeReleaseId ??
         (proj.childrenIds.isNotEmpty ? proj.childrenIds.first : null);
     if (targetRelId == null) return;
+    _activeReleaseId = targetRelId;
 
     // Collect existing live Beats & Features from prior releases (never from targetRelId itself,
     // and never when planning the initial v0.1 release) so v0.1 starts clean at 0% and v0.2+ preserves the single live game tree!
@@ -377,6 +381,291 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           }
         }
       }
+    }
+  }
+
+  /// Toggles an existing Feature in the Progressive Release Planner between `UPGRADE` (`+4h` delta checkpoint)
+  /// and `STABLE ✓` (`0h`, locked at 100%).
+  void toggleProposedFeatureUpgradeOrStable(
+    String beatId,
+    String featureId,
+  ) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    final verTag = bp.releaseVersionTag;
+    for (final beat in bp.beats) {
+      if (beat.id == beatId) {
+        for (final feat in beat.features) {
+          if (feat.id == featureId) {
+            if (feat.lifecycle == FeatureLifecycleStatus.upgrade) {
+              feat.lifecycle = FeatureLifecycleStatus.stable;
+              feat.estimatedHours = 0;
+              feat.included = true;
+            } else {
+              feat.lifecycle = FeatureLifecycleStatus.upgrade;
+              feat.included = true;
+              if (feat.estimatedHours <= 0) {
+                feat.estimatedHours = 4;
+              }
+              if (feat.checkpoints.isEmpty) {
+                feat.checkpoints = [
+                  ProposedCheckpointBlueprint(
+                    title: '${feat.title} $verTag Upgrade',
+                    playtestCriteria:
+                        'Trigger ${feat.title} in playtest -> verify $verTag upgrade and polish',
+                    tasks: [
+                      'Component & State Upgrade (2h)',
+                      'Logic & Feel Extension (1h)',
+                      'State & Bounds Guard (1h)',
+                    ],
+                    coveredScope: feat.inScope.isNotEmpty
+                        ? List<String>.from(feat.inScope)
+                        : ['${feat.title} $verTag upgrade'],
+                    tuningParams: List<String>.from(feat.tuningParams),
+                    edgeCases: List<String>.from(feat.edgeCases),
+                    releaseVersion: verTag,
+                  ),
+                ];
+              }
+            }
+            _syncActiveProjectMetadata();
+            notifyListeners();
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  /// Adds a custom `+ NEW` feature to a Beat inside the Progressive Release Planner (`_releaseBlueprint`).
+  ProposedFeatureBlueprint? addCustomFeatureToProposedBeat(
+    String beatId,
+    String rawTitle, {
+    String? customGoal,
+  }) {
+    final bp = _releaseBlueprint;
+    final cleanTitle = rawTitle
+        .replaceFirst(RegExp(r'^No\s+', caseSensitive: false), '')
+        .trim();
+    if (bp == null || cleanTitle.isEmpty) return null;
+    final verTag = bp.releaseVersionTag;
+    for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+      final beat = bp.beats[bIdx];
+      if (beat.id == beatId) {
+        final newFeatId =
+            'feat_${verTag}_${bIdx + 1}_${beat.features.length + 1}';
+        final goalText = (customGoal != null && customGoal.trim().isNotEmpty)
+            ? customGoal.trim()
+            : 'Build $cleanTitle inside ${beat.title} for $verTag.';
+        final created = ProposedFeatureBlueprint(
+          id: newFeatId,
+          title: cleanTitle,
+          goal: goalText,
+          doneWhen: 'Playtester verifies $cleanTitle in the arena.',
+          estimatedHours: 4,
+          included: true,
+          lifecycle: FeatureLifecycleStatus.newFeature,
+          originVersion: verTag,
+          inScope: ['$cleanTitle core setup & feedback'],
+          outOfScope: const [],
+          tuningParams: const ['responseWindowSec: 0.25 s'],
+          edgeCases: const ['[STATE GUARD] Prevent duplicate trigger while active'],
+          checkpoints: [
+            ProposedCheckpointBlueprint(
+              title: '$cleanTitle Core',
+              playtestCriteria:
+                  'Trigger $cleanTitle in playtest -> responds cleanly on screen',
+              tasks: const [
+                'Actor & Component Setup (2h)',
+                'Input & Core Logic (1h)',
+                'State & Cooldown Guard (1h)',
+              ],
+              coveredScope: ['$cleanTitle core setup & feedback'],
+              tuningParams: const ['responseWindowSec: 0.25 s'],
+              edgeCases: const [
+                '[STATE GUARD] Prevent duplicate trigger while active',
+              ],
+              releaseVersion: verTag,
+            ),
+          ],
+        );
+        beat.features.add(created);
+        _syncActiveProjectMetadata();
+        notifyListeners();
+        return created;
+      }
+    }
+    return null;
+  }
+
+  /// Promotes an Out-of-Scope exclusion item into a `+ NEW` feature in the Progressive Release Planner.
+  ProposedFeatureBlueprint? promoteExclusionToNextRelease(
+    String exclusionText, {
+    String? targetBeatId,
+  }) {
+    final bp = _releaseBlueprint;
+    if (bp == null || bp.beats.isEmpty) return null;
+    final cleanEx = exclusionText.trim();
+    if (cleanEx.isEmpty) return null;
+    final shortTitle = cleanEx
+        .replaceFirst(RegExp(r'^\[CUT\]\s*', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^No\s+', caseSensitive: false), '')
+        .split('—')
+        .first
+        .split(':')
+        .first
+        .trim();
+    final targetBeat = targetBeatId != null
+        ? bp.beats.firstWhere(
+            (b) => b.id == targetBeatId,
+            orElse: () => bp.beats.last,
+          )
+        : bp.beats.last;
+    bp.explicitExclusions.removeWhere(
+      (e) => e.toLowerCase().trim() == cleanEx.toLowerCase().trim(),
+    );
+    return addCustomFeatureToProposedBeat(
+      targetBeat.id,
+      shortTitle.isNotEmpty ? shortTitle : cleanEx,
+      customGoal: 'Promote "$shortTitle" into playable ${bp.releaseVersionTag} scope.',
+    );
+  }
+
+  /// Applies one of the 4 AI Focus Tracks to the Progressive Release draft (`_releaseBlueprint`).
+  Future<void> applyProgressiveFocusTrack(
+    int trackIndex, {
+    String? agentDirective,
+  }) async {
+    final bp = _releaseBlueprint;
+    if (bp == null || bp.beats.isEmpty) return;
+    final verTag = bp.releaseVersionTag;
+
+    void ensureUpgradeState(ProposedFeatureBlueprint f, String suffix) {
+      f.lifecycle = FeatureLifecycleStatus.upgrade;
+      f.included = true;
+      if (f.estimatedHours <= 0) f.estimatedHours = 4;
+      if (f.checkpoints.isEmpty) {
+        f.checkpoints = [
+          ProposedCheckpointBlueprint(
+            title: '${f.title} $suffix',
+            playtestCriteria: 'Verify ${f.title} $suffix in playtest',
+            tasks: const [
+              'Component & State Upgrade (2h)',
+              'Logic & Feel Extension (1h)',
+              'State & Bounds Guard (1h)',
+            ],
+            coveredScope: f.inScope.isNotEmpty
+                ? List<String>.from(f.inScope)
+                : ['${f.title} $suffix'],
+            tuningParams: List<String>.from(f.tuningParams),
+            edgeCases: List<String>.from(f.edgeCases),
+            releaseVersion: verTag,
+          ),
+        ];
+      }
+    }
+
+    if (trackIndex == 0) {
+      // Track 0: Deepen Core Mechanics & Game Feel (Upgrade E01 & E02 primary features, keep later Epics stable)
+      bp.goal =
+          'Deepen core player mechanics, movement responsiveness, and action feel for $verTag.';
+      for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+        final beat = bp.beats[bIdx];
+        for (int fIdx = 0; fIdx < beat.features.length; fIdx++) {
+          final f = beat.features[fIdx];
+          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
+            f.included = false;
+          } else if (bIdx < 2 && fIdx == 0) {
+            ensureUpgradeState(f, '$verTag Feel & Combo Upgrade');
+          } else {
+            f.lifecycle = FeatureLifecycleStatus.stable;
+            f.estimatedHours = 0;
+            f.included = true;
+          }
+        }
+      }
+    } else if (trackIndex == 1) {
+      // Track 1: Expand Encounter, Hazard & Target Variety
+      bp.goal =
+          'Expand encounter variety, reactive hazards, and target archetypes in $verTag.';
+      final targetBeatIdx = bp.beats.length > 1 ? 1 : 0;
+      for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+        final beat = bp.beats[bIdx];
+        for (int fIdx = 0; fIdx < beat.features.length; fIdx++) {
+          final f = beat.features[fIdx];
+          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
+            f.included = true;
+          } else if (bIdx == targetBeatIdx && fIdx == 0) {
+            ensureUpgradeState(f, '$verTag Encounter Escalation');
+          } else {
+            f.lifecycle = FeatureLifecycleStatus.stable;
+            f.estimatedHours = 0;
+            f.included = true;
+          }
+        }
+      }
+      final hasNewFeat = bp.beats.any(
+        (b) => b.features.any(
+          (f) => f.lifecycle == FeatureLifecycleStatus.newFeature && f.included,
+        ),
+      );
+      if (!hasNewFeat) {
+        addCustomFeatureToProposedBeat(
+          bp.beats[targetBeatIdx].id,
+          'Elite Hazard Variant',
+          customGoal:
+              'Add a reactive hazard or enemy variant to pressure the player in ${bp.beats[targetBeatIdx].title}.',
+        );
+      }
+    } else if (trackIndex == 2) {
+      // Track 2: Promote Backlog & Meta-Progression
+      bp.goal =
+          'Promote deferred Out-of-Scope systems and meta-progression rewards into $verTag.';
+      for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+        final beat = bp.beats[bIdx];
+        for (final f in beat.features) {
+          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
+            f.included = true;
+          } else if (bIdx == bp.beats.length - 1 &&
+              f == beat.features.first) {
+            ensureUpgradeState(f, '$verTag Progression & Reward Loop');
+          } else {
+            f.lifecycle = FeatureLifecycleStatus.stable;
+            f.estimatedHours = 0;
+            f.included = true;
+          }
+        }
+      }
+      if (bp.explicitExclusions.isNotEmpty) {
+        promoteExclusionToNextRelease(bp.explicitExclusions.first);
+      }
+    } else if (trackIndex == 3) {
+      // Track 3: Playtest Hardening & Edge-Case Polish
+      bp.goal =
+          'Harden existing mechanics with stricter edge-case guards, HUD clarity, and balance tuning in $verTag.';
+      for (final beat in bp.beats) {
+        for (int fIdx = 0; fIdx < beat.features.length; fIdx++) {
+          final f = beat.features[fIdx];
+          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
+            f.included = false;
+          } else if (fIdx == 0) {
+            ensureUpgradeState(f, '$verTag Playtest Hardening');
+          } else {
+            f.lifecycle = FeatureLifecycleStatus.stable;
+            f.estimatedHours = 0;
+            f.included = true;
+          }
+        }
+      }
+    }
+
+    _syncActiveProjectMetadata();
+    notifyListeners();
+
+    if (agentDirective != null &&
+        agentDirective.trim().isNotEmpty &&
+        GeminiAgentClient.hasKey(_apiKey)) {
+      await sendReleasePlanChatMessage(agentDirective.trim());
     }
   }
 
@@ -1004,15 +1293,26 @@ Return ONLY a JSON object with this schema:
       // before syncing project metadata so selected_beat_id / selected_feature_id are persisted together.
       _selectFirstIncompleteFeatureInActiveRelease();
       _syncActiveProjectMetadata();
-      if (_selectedFeatureId != null &&
-          (GeminiAgentClient.hasKey(_apiKey) ||
-              GeminiAgentClient.testMockResponder != null)) {
-        final firstTitle =
-            documents[_selectedFeatureId!]?.title ?? 'first feature';
-        _agentProgressStep =
-            'Synthesizing engine steps for "$firstTitle" ($_planningModel)...';
-        notifyListeners();
-        await synthesizeFeatureHowToStepsWithAi(_selectedFeatureId!);
+      if (GeminiAgentClient.hasKey(_apiKey) ||
+          GeminiAgentClient.testMockResponder != null) {
+        final activeFeatureIds = <String>[
+          for (final b in activeReleaseBeats)
+            for (final f in featuresForBeat(b.id))
+              if (f.sections['lifecycle'] !=
+                  FeatureLifecycleStatus.stable.name)
+                f.id,
+        ];
+        if (activeFeatureIds.isNotEmpty) {
+          _agentProgressStep =
+              'Synthesizing Engine Steps for all ${activeFeatureIds.length} Features in ${relDoc.title} ($_planningModel)...';
+          _executionLog.add(_agentProgressStep!);
+          notifyListeners();
+          await Future.wait(
+            activeFeatureIds.map(
+              (fId) => synthesizeFeatureHowToStepsWithAi(fId),
+            ),
+          );
+        }
       }
     } finally {
       _isAgentBusy = false;
@@ -1876,7 +2176,18 @@ Return ONLY valid JSON:
     }
     notifyListeners();
     if (GeminiAgentClient.hasKey(_apiKey)) {
-      synthesizeFeatureHowToStepsWithAi(featureId);
+      final states = FeatureStateNode.getStatesForDocument(feat);
+      final activeCp = states.isNotEmpty ? states.last : null;
+      final alreadySynthesized = activeCp != null &&
+          activeCp.checklist.isNotEmpty &&
+          activeCp.checklist.every(
+            (t) =>
+                t.children.isNotEmpty &&
+                t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
+          );
+      if (!alreadySynthesized) {
+        synthesizeFeatureHowToStepsWithAi(featureId);
+      }
     }
   }
 
@@ -2069,7 +2380,7 @@ Return ONLY valid JSON:
 
     final currentIdx = releases.indexWhere((r) => r.id == _activeReleaseId);
     final nextIdx = currentIdx + 1;
-    if (nextIdx < releases.length) {
+    if (currentIdx >= 0 && nextIdx < releases.length) {
       final nextRel = releases[nextIdx];
       final phaseStr = nextRel.sections['phase'];
       if (phaseStr != null && phaseStr.isNotEmpty) {
@@ -2084,57 +2395,88 @@ Return ONLY valid JSON:
       return;
     }
 
-    // Current Phase has no more queued releases — unlock and define the next Production Phase!
-    if (_currentPhase == ProductionPhase.prototype) {
-      _currentPhase = ProductionPhase.mvp;
-      final beatNames = <String>[];
-      final existingBeats = activeReleaseBeats;
-      if (existingBeats.isNotEmpty) {
-        for (final b in existingBeats) {
-          beatNames.add(b.title);
-        }
-      } else if (_conceptDraft != null &&
-          _conceptDraft!.coreLoopBeats.isNotEmpty) {
-        for (final raw in _conceptDraft!.coreLoopBeats) {
-          final cleanTitle = raw.split(':').first.split('—').first.trim();
-          beatNames.add(cleanTitle.isNotEmpty ? cleanTitle : raw);
-        }
-      }
-      if (beatNames.isEmpty) {
-        beatNames.add('Core Gameplay Systems');
-      }
-
-      String? firstNewMvpId;
-      for (int i = 0; i < beatNames.length; i++) {
-        final newIndex = proj.childrenIds.length + 1;
-        final newRelId = proj.id == 'proj_main'
-            ? 'rel_v0_$newIndex'
-            : '${proj.id}_rel_v0_$newIndex';
-        final beatLabel = beatNames[i];
-        final newRelDoc = TierDocument(
-          id: newRelId,
-          title: 'v0.$newIndex: MVP Epic ${i + 1} ($beatLabel) - MVP',
-          tier: TierType.release,
-          parentId: proj.id,
-          sections: {
-            'releaseScope': ReleaseScope.mvp.name,
-            'phase': ProductionPhase.mvp.name,
-            'targetEpicIndex': '$i',
-            'scope':
-                'Goal: Build and connect MVP systems for Epic ${i + 1} ($beatLabel).\n\nIn Scope:\n• $beatLabel\n\nDone When: Epic ${i + 1} is playable end-to-end inside the rough representative level.',
-          },
-        );
-        documents[newRelId] = newRelDoc;
-        _persistDocument(newRelDoc);
-        proj.childrenIds.add(newRelId);
-        firstNewMvpId ??= newRelId;
-      }
+    // Current Phase has no more queued releases — create ONLY 1 single next Release on demand!
+    final currentRel = activeRelease ?? releases.last;
+    if (_currentPhase == ProductionPhase.prototype &&
+        currentRel.sections['prototypePart'] == '1') {
+      final newIndex = proj.childrenIds.length + 1;
+      final newRelId = proj.id == 'proj_main'
+          ? 'rel_v0_$newIndex'
+          : '${proj.id}_rel_v0_$newIndex';
+      final part2Title = currentRel.sections['splitPrototypePart2Title'] ??
+          'v0.$newIndex: Prototype — Part 2: Progression & Loop Reset';
+      final newRelDoc = TierDocument(
+        id: newRelId,
+        title: part2Title,
+        tier: TierType.release,
+        parentId: proj.id,
+        sections: {
+          'releaseScope': ReleaseScope.prototype.name,
+          'phase': ProductionPhase.prototype.name,
+          'prototypePart': '2',
+          'scope':
+              'Goal: Complete the remaining Core Loop Epics for the ${proj.title} prototype.\n\nIn Scope:\n• Remaining Core Loop Epics from ${proj.title}\n\nDone When: Full prototype core loop connects end-to-end.',
+        },
+      );
+      documents[newRelId] = newRelDoc;
+      _persistDocument(newRelDoc);
+      proj.childrenIds.add(newRelId);
       _syncActiveProjectMetadata();
+      await openGateAndRecordRetro(newRelId);
+      return;
+    }
 
-      if (firstNewMvpId != null) {
-        await openGateAndRecordRetro(firstNewMvpId);
-        return;
+    final beatNames = <String>[];
+    final existingBeats = activeReleaseBeats;
+    if (existingBeats.isNotEmpty) {
+      for (final b in existingBeats) {
+        beatNames.add(b.title);
       }
+    } else if (_conceptDraft != null &&
+        _conceptDraft!.coreLoopBeats.isNotEmpty) {
+      for (final raw in _conceptDraft!.coreLoopBeats) {
+        final cleanTitle = raw.split(':').first.split('—').first.trim();
+        beatNames.add(cleanTitle.isNotEmpty ? cleanTitle : raw);
+      }
+    }
+    if (beatNames.isEmpty) {
+      beatNames.add('Core Gameplay Systems');
+    }
+
+    final existingMvpCount = releases
+        .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
+        .length;
+
+    if (_currentPhase == ProductionPhase.prototype ||
+        (_currentPhase == ProductionPhase.mvp &&
+            existingMvpCount < beatNames.length)) {
+      _currentPhase = ProductionPhase.mvp;
+      final i = existingMvpCount;
+      final newIndex = proj.childrenIds.length + 1;
+      final newRelId = proj.id == 'proj_main'
+          ? 'rel_v0_$newIndex'
+          : '${proj.id}_rel_v0_$newIndex';
+      final beatLabel = beatNames[i];
+      final newRelDoc = TierDocument(
+        id: newRelId,
+        title: 'v0.$newIndex: MVP Epic ${i + 1} ($beatLabel) - MVP',
+        tier: TierType.release,
+        parentId: proj.id,
+        sections: {
+          'releaseScope': ReleaseScope.mvp.name,
+          'phase': ProductionPhase.mvp.name,
+          'targetEpicIndex': '$i',
+          'mvpEpicTotal': '${beatNames.length}',
+          'scope':
+              'Goal: Build and connect MVP systems for Epic ${i + 1} ($beatLabel).\n\nIn Scope:\n• $beatLabel\n\nDone When: Epic ${i + 1} is playable end-to-end inside the rough representative level.',
+        },
+      );
+      documents[newRelId] = newRelDoc;
+      _persistDocument(newRelDoc);
+      proj.childrenIds.add(newRelId);
+      _syncActiveProjectMetadata();
+      await openGateAndRecordRetro(newRelId);
+      return;
     } else if (_currentPhase == ProductionPhase.mvp) {
       _currentPhase = ProductionPhase.verticalSlice;
       final newIndex = proj.childrenIds.length + 1;

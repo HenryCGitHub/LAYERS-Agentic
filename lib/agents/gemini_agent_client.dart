@@ -101,7 +101,7 @@ RULES:
           final isHeavyPlanningModel =
               model.contains('argon') || model.contains('pro');
           final timeoutDuration = Duration(
-            seconds: isHeavyPlanningModel ? 15 : 8,
+            seconds: isHeavyPlanningModel ? 35 : 18,
           );
 
           final response = await http

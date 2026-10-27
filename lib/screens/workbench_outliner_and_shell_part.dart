@@ -230,9 +230,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         }
                       },
                       itemBuilder: (context) {
-                        final queuedDeferredCount = widget.workbench.releaseBlueprint?.beats
-                                .fold<int>(0, (sum, b) => sum + b.deferredFeatures.length) ??
-                            0;
+                        final builtReleases = releases
+                            .where((r) => r.childrenIds.isNotEmpty)
+                            .toList();
+                        final displayReleases = builtReleases.isNotEmpty
+                            ? builtReleases
+                            : releases;
+                        final isRelComplete =
+                            widget.workbench.isActiveReleaseComplete;
                         return [
                           PopupMenuItem<String>(
                             enabled: false,
@@ -247,19 +252,21 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               ),
                             ),
                           ),
-                          for (int rIdx = 0; rIdx < releases.length; rIdx++)
+                          for (int rIdx = 0;
+                              rIdx < displayReleases.length;
+                              rIdx++)
                             PopupMenuItem<String>(
-                              value: 'rel:${releases[rIdx].id}',
+                              value: 'rel:${displayReleases[rIdx].id}',
                               child: Builder(
                                 builder: (context) {
-                                  final r = releases[rIdx];
+                                  final r = displayReleases[rIdx];
                                   final isCurrent = r.id == rel.id;
-                                  final isBuilt = r.childrenIds.isNotEmpty;
                                   final rVer =
                                       widget.workbench.releaseVersionTagFor(r);
                                   final rScopeLabel =
                                       widget.workbench.releaseConciseLabel(r);
-                                  final rProg = widget.workbench.getDocumentProgress(r.id);
+                                  final rProg = widget.workbench
+                                      .getDocumentProgress(r.id);
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
@@ -278,119 +285,76 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         ),
                                       ),
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Flexible(
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    isCurrent
-                                                        ? '● '
-                                                        : (isBuilt ? '✓ ' : '◌ '),
-                                                    style: GoogleFonts.jetBrainsMono(
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.w800,
-                                                      color: isCurrent
-                                                          ? accentCyan
-                                                          : (isBuilt
-                                                              ? accentEmerald
-                                                              : accentAmber),
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    '$rVer ',
-                                                    style: GoogleFonts.jetBrainsMono(
-                                                      fontSize: 11.5,
-                                                      fontWeight: FontWeight.w800,
-                                                      color: isCurrent
-                                                          ? accentCyan
-                                                          : textPrimary,
-                                                    ),
-                                                  ),
-                                                  Flexible(
-                                                    child: Text(
-                                                      rScopeLabel,
-                                                      style: GoogleFonts.inter(
-                                                        fontSize: 11.5,
-                                                        fontWeight: isCurrent
-                                                            ? FontWeight.w700
-                                                            : FontWeight.w500,
-                                                        color: isCurrent
-                                                            ? textPrimary
-                                                            : textSecondary,
-                                                      ),
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
+                                        Flexible(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                isCurrent ? '● ' : '✓ ',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isCurrent
+                                                      ? accentCyan
+                                                      : accentEmerald,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            if (isCurrent)
                                               Text(
-                                                '$relProgress% · $releaseRemHoursStr left',
-                                                style: GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: accentEmerald,
+                                                '$rVer ',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isCurrent
+                                                      ? accentCyan
+                                                      : textPrimary,
                                                 ),
-                                              )
-                                            else if (isBuilt)
-                                              Text(
-                                                '$rProg%',
-                                                style: GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: rProg >= 100
-                                                      ? accentEmerald
-                                                      : textMuted,
-                                                ),
-                                              )
-                                            else
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: accentAmber.withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                    color: accentAmber.withValues(alpha: 0.35),
-                                                  ),
-                                                ),
+                                              ),
+                                              Flexible(
                                                 child: Text(
-                                                  'Build Release →',
-                                                  style: GoogleFonts.jetBrainsMono(
-                                                    fontSize: 9.5,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: accentAmber,
+                                                  rScopeLabel,
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 11.5,
+                                                    fontWeight: isCurrent
+                                                        ? FontWeight.w700
+                                                        : FontWeight.w500,
+                                                    color: isCurrent
+                                                        ? textPrimary
+                                                        : textSecondary,
                                                   ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                        if (!isBuilt && queuedDeferredCount > 0) ...[
-                                          const SizedBox(height: 3),
-                                          Padding(
-                                            padding: const EdgeInsets.only(left: 14),
-                                            child: Text(
-                                              '↪ $queuedDeferredCount Features queued from $activeVer',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.w600,
-                                                color: accentAmber,
-                                              ),
+                                        const SizedBox(width: 10),
+                                        if (isCurrent)
+                                          Text(
+                                            '$relProgress% · $releaseRemHoursStr left',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: accentEmerald,
+                                            ),
+                                          )
+                                        else
+                                          Text(
+                                            '$rProg%',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: rProg >= 100
+                                                  ? accentEmerald
+                                                  : textMuted,
                                             ),
                                           ),
-                                        ],
                                       ],
                                     ),
                                   );
@@ -429,21 +393,30 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  '+ New Progressive Release (${widget.workbench.nextProgressiveVersionLabel})',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: accentEmerald,
+                                Flexible(
+                                  child: Text(
+                                    isRelComplete
+                                        ? '+ Plan Next Release (${widget.workbench.nextProgressiveVersionLabel})'
+                                        : '🔒 Complete $activeVer ($relProgress%) to unlock ${widget.workbench.nextProgressiveVersionLabel}',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: isRelComplete
+                                          ? accentEmerald
+                                          : textMuted,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'AI Co-Pilot ✦',
+                                  isRelComplete ? 'AI Co-Pilot ✦' : 'LOCKED',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w700,
-                                    color: accentEmerald,
+                                    color: isRelComplete
+                                        ? accentEmerald
+                                        : accentAmber,
                                   ),
                                 ),
                               ],
@@ -799,39 +772,49 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
-          child: InkWell(
-            key: const ValueKey('outliner_new_progressive_release_btn'),
-            onTap: () => _showProgressiveNextReleaseModal(context),
-            borderRadius: BorderRadius.circular(5),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      '+ New Release (${widget.workbench.nextProgressiveVersionLabel})',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: accentEmerald,
+          child: Builder(
+            builder: (context) {
+              final isRelComplete = widget.workbench.isActiveReleaseComplete;
+              final nextVerLabel =
+                  widget.workbench.nextProgressiveVersionLabel;
+              return InkWell(
+                key: const ValueKey('outliner_new_progressive_release_btn'),
+                onTap: () => _showProgressiveNextReleaseModal(context),
+                borderRadius: BorderRadius.circular(5),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          isRelComplete
+                              ? '+ Plan Next Release ($nextVerLabel)'
+                              : '🔒 Complete $activeVer ($relProgress%) → $nextVerLabel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: isRelComplete ? accentEmerald : textMuted,
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isRelComplete ? '✦ AI' : 'LOCKED',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: isRelComplete ? accentCyan : accentAmber,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '✦ AI',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: accentCyan,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ],

@@ -553,7 +553,7 @@ enum FeatureLifecycleStatus {
 /// The user can toggle `included` on/off at the Confirmation Gate;
 /// unchecked features automatically move into `Out of Scope` (YAGNI).
 class ProposedFeatureBlueprint {
-  final String id;
+  String id;
   String title;
   String goal;
   String doneWhen;
@@ -699,7 +699,7 @@ class ProposedCheckpointBlueprint {
 
 /// A proposed Core Loop Beat (Tier 3 Epic) inside a Release Blueprint.
 class ProposedBeatBlueprint {
-  final String id;
+  String id;
   String title;
   String goal;
   String doneWhen;

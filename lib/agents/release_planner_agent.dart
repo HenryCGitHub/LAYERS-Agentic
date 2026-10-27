@@ -563,7 +563,28 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
 
     if (existingBeats.isEmpty) return parsed;
 
-    // Bind existing Beat/Feature Vault IDs where titles or IDs match
+    // Ensure all existing Beats are represented in parsed.beats so no prior Epic is lost in v0.2+
+    for (int ebIdx = 0; ebIdx < existingBeats.length; ebIdx++) {
+      final eb = existingBeats[ebIdx];
+      final alreadyHasBeat = parsed.beats.any(
+        (b) =>
+            b.id == eb.id ||
+            b.title.toLowerCase().trim() == eb.title.toLowerCase().trim(),
+      );
+      if (!alreadyHasBeat && ebIdx >= parsed.beats.length) {
+        parsed.beats.add(
+          ProposedBeatBlueprint(
+            id: eb.id,
+            title: eb.title,
+            goal: SectionTextUtils.resolveGoal(eb.sections),
+            doneWhen: SectionTextUtils.resolveDoneWhen(eb.sections),
+            features: <ProposedFeatureBlueprint>[],
+          ),
+        );
+      }
+    }
+
+    // Bind existing Beat/Feature Vault IDs where titles or IDs match, and carry forward omitted prior features as STABLE ✓
     for (int bIdx = 0; bIdx < parsed.beats.length; bIdx++) {
       final llmBeat = parsed.beats[bIdx];
       TierDocument? matchedBeatDoc;
@@ -579,17 +600,43 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         matchedBeatDoc = existingBeats[bIdx];
       }
       if (matchedBeatDoc != null) {
+        llmBeat.id = matchedBeatDoc.id;
         final existingFeats =
             existingFeaturesByBeat[matchedBeatDoc.id] ?? const <TierDocument>[];
+        final matchedExistingIds = <String>{};
         for (int fIdx = 0; fIdx < llmBeat.features.length; fIdx++) {
           final lf = llmBeat.features[fIdx];
           for (final ef in existingFeats) {
             if (ef.id == lf.id ||
                 ef.title.toLowerCase().trim() ==
                     lf.title.toLowerCase().trim()) {
+              lf.id = ef.id;
               lf.originVersion = ef.sections['originVersion'] ?? 'v0.1';
+              matchedExistingIds.add(ef.id);
               break;
             }
+          }
+        }
+        // Carry forward any prior feature omitted by the LLM as STABLE ✓ (0h) so it is never dropped
+        for (final ef in existingFeats) {
+          if (!matchedExistingIds.contains(ef.id)) {
+            llmBeat.features.add(
+              ProposedFeatureBlueprint(
+                id: ef.id,
+                title: ef.title,
+                goal: SectionTextUtils.resolveGoal(ef.sections),
+                doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
+                estimatedHours: 0,
+                included: true,
+                lifecycle: FeatureLifecycleStatus.stable,
+                originVersion: ef.sections['originVersion'] ?? 'v0.1',
+                inScope: SectionTextUtils.resolveInScope(ef.sections),
+                outOfScope: const [],
+                tuningParams: const [],
+                edgeCases: const [],
+                checkpoints: const [],
+              ),
+            );
           }
         }
       }

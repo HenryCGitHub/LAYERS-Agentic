@@ -280,10 +280,23 @@ class WorkbenchProvider extends ChangeNotifier {
   List<TierDocument> get activeReleaseBeats {
     final rel = activeRelease;
     if (rel == null) return const [];
-    return rel.childrenIds
-        .map((id) => documents[id])
-        .whereType<TierDocument>()
-        .toList();
+    if (rel.childrenIds.isNotEmpty) {
+      return rel.childrenIds
+          .map((id) => documents[id])
+          .whereType<TierDocument>()
+          .toList();
+    }
+    // While drafting a new progressive release (before approveAndExecuteReleasePlan),
+    // fall back to the most recent built release's Beats so the Left Outliner Rail stays populated.
+    for (final priorRel in projectReleases.reversed) {
+      if (priorRel.id != rel.id && priorRel.childrenIds.isNotEmpty) {
+        return priorRel.childrenIds
+            .map((id) => documents[id])
+            .whereType<TierDocument>()
+            .toList();
+      }
+    }
+    return const [];
   }
 
   List<TierDocument> featuresForBeat(String beatId) {
@@ -507,6 +520,10 @@ class WorkbenchProvider extends ChangeNotifier {
     final allRels = projectReleases;
     switch (_currentPhase) {
       case ProductionPhase.prototype:
+        final protoPart = rel?.sections['prototypePart'] ?? '';
+        if (protoPart == '1' || protoPart == '2') {
+          return 'PHASE 1 · PROTOTYPE ($protoPart/2)';
+        }
         final protoRels = allRels
             .where(
               (r) =>
@@ -526,10 +543,18 @@ class WorkbenchProvider extends ChangeNotifier {
         final mvpRels = allRels
             .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
             .toList();
-        if (mvpRels.isNotEmpty && rel != null) {
-          final idx = mvpRels.indexWhere((r) => r.id == rel.id);
-          if (idx >= 0) {
-            return 'PHASE 2 · MVP EPIC ${idx + 1} OF ${mvpRels.length}';
+        if (rel != null) {
+          final explicitIdx =
+              int.tryParse(rel.sections['targetEpicIndex'] ?? '');
+          final explicitTotal =
+              int.tryParse(rel.sections['mvpEpicTotal'] ?? '');
+          final idx = explicitIdx ?? mvpRels.indexWhere((r) => r.id == rel.id);
+          final total = explicitTotal ??
+              (activeReleaseBeats.isNotEmpty
+                  ? activeReleaseBeats.length
+                  : mvpRels.length);
+          if (idx >= 0 && total > 0) {
+            return 'PHASE 2 · MVP EPIC ${idx + 1} OF $total';
           }
         }
         return 'PHASE 2 · MVP TRACK';
@@ -543,10 +568,11 @@ class WorkbenchProvider extends ChangeNotifier {
 
   /// Descriptive CTA label for the Stage 3 `Ship & Plan Next Release` button naming the exact next milestone or phase unlock.
   String get nextReleaseActionLabel {
+    final rel = activeRelease;
     final releases = projectReleases;
     final currentIdx = releases.indexWhere((r) => r.id == _activeReleaseId);
     final nextIdx = currentIdx + 1;
-    if (nextIdx >= 0 && nextIdx < releases.length) {
+    if (currentIdx >= 0 && nextIdx < releases.length) {
       final nextRel = releases[nextIdx];
       final nextVer = releaseVersionTagFor(nextRel);
       if (nextRel.sections['phase'] == ProductionPhase.mvp.name) {
@@ -561,8 +587,19 @@ class WorkbenchProvider extends ChangeNotifier {
     }
     switch (_currentPhase) {
       case ProductionPhase.prototype:
+        if (rel?.sections['prototypePart'] == '1') {
+          return 'Ship & Plan v0.2 (Prototype Part 2) ✦';
+        }
         return 'Ship & Unlock Phase 2 (MVP Epic 1) ✦';
       case ProductionPhase.mvp:
+        final explicitIdx =
+            int.tryParse(rel?.sections['targetEpicIndex'] ?? '') ?? 0;
+        final explicitTotal = int.tryParse(rel?.sections['mvpEpicTotal'] ?? '') ??
+            (activeReleaseBeats.isNotEmpty ? activeReleaseBeats.length : 1);
+        if ((explicitIdx + 1) < explicitTotal) {
+          final nextVer = 'v0.${releases.length + 1}';
+          return 'Ship & Plan $nextVer (MVP Epic ${explicitIdx + 2}) ✦';
+        }
         return 'Ship & Unlock Phase 3 (Vertical Slice) ✦';
       case ProductionPhase.verticalSlice:
         return 'Ship & Unlock Phase 4 (Full Production) ✦';

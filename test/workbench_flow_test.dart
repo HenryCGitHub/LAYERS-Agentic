@@ -1448,10 +1448,38 @@ void main() {
         await tester.tap(completeTask0Btn);
         await tester.pumpAndSettle();
 
-        // Verify Progressive AI Release Co-Pilot Modal (+ New Release (v0.2) ✦) with 1-click AI Direction Presets
+        // Verify Progressive AI Release Co-Pilot Modal (+ Plan Next Release (v0.2) ✦) enforces the 100% completion gate:
+        // 1. Before v0.1 is 100% complete, tapping the button does NOT open the planner
         final newProgRelBtn = find.byKey(
           const ValueKey('outliner_new_progressive_release_btn'),
         );
+        await tester.ensureVisible(newProgRelBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(newProgRelBtn);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('progressive_next_release_modal')),
+          findsNothing,
+        );
+
+        // 2. Mark all features in v0.1 100% complete to unlock the Progressive Release Interface
+        for (final beat in provider.activeReleaseBeats) {
+          for (final feat in provider.featuresForBeat(beat.id)) {
+            final states = FeatureStateNode.getStatesForDocument(feat);
+            for (final cp in states) {
+              for (final task in cp.checklist) {
+                task.completed = true;
+                for (final child in task.children) {
+                  child.completed = true;
+                }
+              }
+            }
+            provider.updateFeatureStates(feat.id, states);
+          }
+        }
+        await tester.pumpAndSettle();
+        expect(provider.isActiveReleaseComplete, isTrue);
+
         await tester.ensureVisible(newProgRelBtn);
         await tester.pumpAndSettle();
         await tester.tap(newProgRelBtn);
@@ -1464,7 +1492,40 @@ void main() {
           find.byKey(const ValueKey('progressive_preset_chip_0')),
           findsOneWidget,
         );
+        // Verify interactive tree toggles inside the Progressive Release Interface:
+        // - Toggling an existing feature switches between UPGRADE (+4h) and STABLE (0h)
+        // - Adding a custom feature appends a + NEW feature to the Beat
+        final draftBp = provider.releaseBlueprint!;
+        final firstDraftBeat = draftBp.beats.first;
+        final firstDraftFeat = firstDraftBeat.features.first;
+        final initialLifecycle = firstDraftFeat.lifecycle;
+        provider.toggleProposedFeatureUpgradeOrStable(
+          firstDraftBeat.id,
+          firstDraftFeat.id,
+        );
+        expect(firstDraftFeat.lifecycle, isNot(equals(initialLifecycle)));
+        provider.addCustomFeatureToProposedBeat(
+          firstDraftBeat.id,
+          'Shield Drone Companion',
+        );
+        expect(
+          firstDraftBeat.features.any(
+            (f) =>
+                f.title == 'Shield Drone Companion' &&
+                f.lifecycle == FeatureLifecycleStatus.newFeature,
+          ),
+          isTrue,
+        );
         await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        // Restore first feature's Task 0 to incomplete so the half-width step dropdown assertion below remains active
+        final activeStates = FeatureStateNode.getStatesForDocument(activeFeat);
+        activeStates.first.checklist.first.completed = false;
+        for (final c in activeStates.first.checklist.first.children) {
+          c.completed = false;
+        }
+        provider.updateFeatureStates(activeFeat.id, activeStates);
         await tester.pumpAndSettle();
 
         // Resize to Half-Width (720px) and verify 1-Line Unified Context Bar + Step Dropdown
@@ -2131,13 +2192,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         // Stage 3 auto-focuses the first incomplete NEW Beat (Beat 3, index 2) and marks Part 1 STABLE features 100% complete
         expect(provider.selectedBeatId, provider.activeReleaseBeats[2].id);
 
-        // Advance to Phase 2 · Per-Epic MVPs (unlocks 4 MVP Epic releases, 1 per Prototype Beat)
+        // Advance to Phase 2 · Per-Epic MVPs (unlocks 1 MVP Epic release at a time, zero pre-queued releases)
         await provider.advanceToNextRelease();
         expect(provider.currentPhase, ProductionPhase.mvp);
         final mvpReleases = provider.projectReleases
             .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
             .toList();
-        expect(mvpReleases.length, 4);
+        expect(mvpReleases.length, 1);
 
         for (int epicIdx = 0; epicIdx < 4; epicIdx++) {
           expect(provider.currentPhase, ProductionPhase.mvp);
@@ -2209,7 +2270,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               }
             }
           }
-          // Verify revisiting Stage 1 mid-project preserves all unlocked Phase 2 MVP releases
+          // Verify revisiting Stage 1 mid-project preserves built Phase 2 MVP releases without pre-queuing unbuilt ones
           if (epicIdx == 0) {
             provider.updateConceptDraft((draft) {
               draft.exclusions = [
@@ -2221,7 +2282,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               provider.projectReleases
                   .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
                   .length,
-              4,
+              1,
             );
           }
           if (epicIdx == 3) {

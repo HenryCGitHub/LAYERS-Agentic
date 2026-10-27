@@ -2,7 +2,9 @@ part of 'project_pitch_screen.dart';
 
 extension _PitchFullReviewExt on _ProjectPitchScreenState {
   Widget _buildReleaseTrainPipeline(ProjectConceptBlueprint draft) {
-    final releases = draft.releaseTrainTitles;
+    final firstReleaseTitle = draft.releaseTrainTitles.isNotEmpty
+        ? draft.releaseTrainTitles.first
+        : 'v0.1: ${draft.title} Core Loop - Prototype';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -16,7 +18,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'PROGRESSIVE AI RELEASE TRACK (v0.1 → v0.2 → v0.3+)',
+                'INITIAL RELEASE TARGET (v0.1)',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -36,35 +38,38 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
         ),
         const SizedBox(height: 6),
         Text(
-          'Approving this Concept immediately builds v0.1 in the Workbench. For v0.2 → v0.3+, the Agentic AI guides which existing features to Upgrade and which New Systems to add next.',
+          'Approving this Concept builds v0.1 in the Workbench. Future releases (v0.2+) are never queued ahead of time—once v0.1 is 100% complete, the Progressive Release Planner unlocks to help you decide what to upgrade and add next.',
           style: GoogleFonts.inter(
             fontSize: 12.5,
             color: textSecondary,
           ),
         ),
         const SizedBox(height: 10),
-        for (int i = 0; i < releases.length; i++)
-          if (_activeInlineEditKey == 'release_train_$i')
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: _buildInlineEditorBox(
-                editKey: 'release_train_$i',
-                hintText: 'Edit Release v0.${i + 1} scope...',
-                onSave: (val) => widget.workbench.updateConceptDraft((d) {
-                  final next = List<String>.from(d.releaseTrainTitles);
-                  next[i] = val;
-                  d.releaseTrainTitles = next;
-                }),
-              ),
-            )
-          else
-            _buildReleaseStepCard(
-              releases[i],
-              draft: draft,
-              isFirst: i == 0,
-              index: i,
-              onTap: () => _startInlineEdit('release_train_$i', releases[i]),
+        if (_activeInlineEditKey == 'release_train_0')
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: _buildInlineEditorBox(
+              editKey: 'release_train_0',
+              hintText: 'Edit Release v0.1 scope...',
+              onSave: (val) => widget.workbench.updateConceptDraft((d) {
+                final next = List<String>.from(d.releaseTrainTitles);
+                if (next.isEmpty) {
+                  next.add(val);
+                } else {
+                  next[0] = val;
+                }
+                d.releaseTrainTitles = next;
+              }),
             ),
+          )
+        else
+          _buildReleaseStepCard(
+            firstReleaseTitle,
+            draft: draft,
+            isFirst: true,
+            index: 0,
+            onTap: () => _startInlineEdit('release_train_0', firstReleaseTitle),
+          ),
       ],
     );
   }
