@@ -12,16 +12,25 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     setState(() {
       _isProgressiveModalOpen = true;
     });
+    ReleaseBlueprint? preparedBp;
     try {
-      await widget.workbench.prepareProgressiveNextReleaseDraft();
+      preparedBp = await widget.workbench.prepareProgressiveNextReleaseDraft();
     } finally {
       if (mounted) {
         // ignore: invalid_use_of_protected_member
         setState(() {});
       }
     }
-    if (!context.mounted) {
-      _isProgressiveModalOpen = false;
+    if (!context.mounted || preparedBp == null) {
+      // ignore: invalid_use_of_protected_member
+      if (mounted) {
+        // ignore: invalid_use_of_protected_member
+        setState(() {
+          _isProgressiveModalOpen = false;
+        });
+      } else {
+        _isProgressiveModalOpen = false;
+      }
       widget.workbench.restoreActiveReleaseAfterCancel(prevReleaseId, prevPhase);
       return;
     }
@@ -1172,7 +1181,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     if (!mounted || action != 'tailor') return;
     final contextText = ctrl.text.trim();
     if (contextText.isEmpty) return;
-    await widget.workbench.tailorTaskHowToSubSteps(
+    final ok = await widget.workbench.tailorTaskHowToSubSteps(
       featureId: feat.id,
       states: states,
       checkpointIndex: checkpointIndex,
@@ -1182,6 +1191,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     if (!mounted) return;
     // ignore: invalid_use_of_protected_member
     setState(() {});
+    if (!ok) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: bgSurface,
@@ -1372,7 +1382,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         ctrl.text.trim().isNotEmpty &&
         cpIdx >= 0 &&
         cpIdx < states.length) {
-      final hrs = int.tryParse(hoursCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 2;
+      final hrs =
+          int.tryParse(hoursCtrl.text.replaceAll(_ReleaseWorkbenchScreenState._nonDigitRegex, '')) ??
+              2;
       final cpNode = states[cpIdx];
       final newTask = Subtask(
         id: 'task_${DateTime.now().millisecondsSinceEpoch}',

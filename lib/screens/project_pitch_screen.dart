@@ -910,6 +910,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _agentNotesBySection.clear();
       _hoveredReviewSectionIdx = null;
       _inlineEditingSectionIdx = null;
+      _sparkController.clear();
+      _agentPromptController.clear();
+      _inlineReviewPromptController.clear();
     }
 
     final draft = widget.workbench.conceptDraft;

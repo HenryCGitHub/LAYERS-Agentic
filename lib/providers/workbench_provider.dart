@@ -427,6 +427,9 @@ class WorkbenchProvider extends ChangeNotifier {
 
     final newReleaseIds = <String>[];
     String? mappedActiveReleaseId;
+    final mappedBeatIds = <String, String>{};
+    final mappedFeatIds = <String, String>{};
+
     for (int rIdx = 0; rIdx < src.childrenIds.length; rIdx++) {
       final oldRelId = src.childrenIds[rIdx];
       final oldRel = documents[oldRelId];
@@ -436,18 +439,32 @@ class WorkbenchProvider extends ChangeNotifier {
         mappedActiveReleaseId = newRelId;
       }
 
-      // Deep-clone Tier 3 Beats and Tier 4 Features under this Release
+      // Deep-clone Tier 3 Beats and Tier 4 Features under this Release while preserving shared Live-Tree identity across releases
       final newBeatIds = <String>[];
       for (int bIdx = 0; bIdx < oldRel.childrenIds.length; bIdx++) {
-        final oldBeat = documents[oldRel.childrenIds[bIdx]];
+        final oldBeatId = oldRel.childrenIds[bIdx];
+        final existingMappedBeatId = mappedBeatIds[oldBeatId];
+        if (existingMappedBeatId != null) {
+          newBeatIds.add(existingMappedBeatId);
+          continue;
+        }
+        final oldBeat = documents[oldBeatId];
         if (oldBeat == null) continue;
-        final newBeatId = '${newRelId}_beat_${bIdx + 1}';
+        final newBeatId = '${newId}_beat_${mappedBeatIds.length + 1}';
+        mappedBeatIds[oldBeatId] = newBeatId;
 
         final newFeatIds = <String>[];
         for (int fIdx = 0; fIdx < oldBeat.childrenIds.length; fIdx++) {
-          final oldFeat = documents[oldBeat.childrenIds[fIdx]];
+          final oldFeatId = oldBeat.childrenIds[fIdx];
+          final existingMappedFeatId = mappedFeatIds[oldFeatId];
+          if (existingMappedFeatId != null) {
+            newFeatIds.add(existingMappedFeatId);
+            continue;
+          }
+          final oldFeat = documents[oldFeatId];
           if (oldFeat == null) continue;
           final newFeatId = '${newBeatId}_feat_${fIdx + 1}';
+          mappedFeatIds[oldFeatId] = newFeatId;
           final clonedFeat = oldFeat.copyWith(
             id: newFeatId,
             parentId: newBeatId,
@@ -481,9 +498,42 @@ class WorkbenchProvider extends ChangeNotifier {
       newReleaseIds.add(newRelId);
     }
 
+    // Clone any superseded/archived features whose parent Beat belongs to this project
+    final supersededToClone = documents.values
+        .where(
+          (d) =>
+              d.tier == TierType.feature &&
+              !mappedFeatIds.containsKey(d.id) &&
+              d.parentId != null &&
+              mappedBeatIds.containsKey(d.parentId),
+        )
+        .toList();
+    for (int sIdx = 0; sIdx < supersededToClone.length; sIdx++) {
+      final oldSup = supersededToClone[sIdx];
+      final newBeatId = mappedBeatIds[oldSup.parentId!]!;
+      final newSupId = '${newBeatId}_sup_${sIdx + 1}';
+      mappedFeatIds[oldSup.id] = newSupId;
+      final clonedSup = oldSup.copyWith(
+        id: newSupId,
+        parentId: newBeatId,
+        sections: Map<String, String>.from(oldSup.sections),
+        subtasks: oldSup.subtasks.map((st) => st.copyWith()).toList(),
+      );
+      documents[newSupId] = clonedSup;
+      _persistDocument(clonedSup);
+    }
+
     if (newReleaseIds.isNotEmpty) {
       copiedSections['active_release_id'] =
           mappedActiveReleaseId ?? newReleaseIds.first;
+    }
+    final oldSelectedBeat = copiedSections['selected_beat_id'];
+    if (oldSelectedBeat != null && mappedBeatIds.containsKey(oldSelectedBeat)) {
+      copiedSections['selected_beat_id'] = mappedBeatIds[oldSelectedBeat]!;
+    }
+    final oldSelectedFeat = copiedSections['selected_feature_id'];
+    if (oldSelectedFeat != null && mappedFeatIds.containsKey(oldSelectedFeat)) {
+      copiedSections['selected_feature_id'] = mappedFeatIds[oldSelectedFeat]!;
     }
 
     final copyDoc = TierDocument(
@@ -516,6 +566,12 @@ class WorkbenchProvider extends ChangeNotifier {
             idsToRemove.addAll(beatDoc.childrenIds);
           }
         }
+      }
+    }
+    // Also collect any detached/superseded child documents whose parentId belongs to this project
+    for (final doc in documents.values) {
+      if (doc.parentId != null && idsToRemove.contains(doc.parentId)) {
+        idsToRemove.add(doc.id);
       }
     }
 
@@ -1143,13 +1199,21 @@ class WorkbenchProvider extends ChangeNotifier {
         .toList();
   }
 
-  /// All superseded/archived testbed features across the vault.
+  /// All superseded/archived testbed features belonging to the active project.
   List<TierDocument> get supersededFeatures {
+    final proj = activeProject;
+    if (proj == null) return const [];
+    final projectBeatIds = <String>{
+      for (final relId in proj.childrenIds)
+        ...?documents[relId]?.childrenIds,
+    };
     return documents.values
         .where(
           (d) =>
               d.tier == TierType.feature &&
-              d.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name,
+              d.sections['lifecycle'] ==
+                  FeatureLifecycleStatus.superseded.name &&
+              (d.parentId != null && projectBeatIds.contains(d.parentId)),
         )
         .toList();
   }
@@ -1420,14 +1484,26 @@ class WorkbenchProvider extends ChangeNotifier {
     return 'v0.${builtCount + 1}';
   }
 
+  Set<String>? _preModalReleaseIds;
+  ReleaseBlueprint? _preModalReleaseBlueprint;
+
   /// Prepares the next Progressive Release (`v0.2`, `v0.3+`) blueprint in-memory while keeping
   /// the user inside `2. Workbench`, optionally applying a natural-language directive from the
   /// Agentic Next-Release Co-Pilot.
   Future<ReleaseBlueprint?> prepareProgressiveNextReleaseDraft({
     String? agentDirective,
   }) async {
+    _preModalReleaseIds = Set<String>.from(
+      activeProject?.childrenIds ?? const <String>[],
+    );
+    _preModalReleaseBlueprint = _releaseBlueprint;
     await advanceToNextRelease(transitionToGateStage: false);
     _currentStage = WorkbenchStage.releaseWorkbench;
+    if (_releaseBlueprint == null ||
+        _releaseBlueprint!.releaseDocId != _activeReleaseId) {
+      notifyListeners();
+      return null;
+    }
     if (agentDirective != null && agentDirective.trim().isNotEmpty) {
       await sendReleasePlanChatMessage(agentDirective.trim());
     }
@@ -1435,11 +1511,37 @@ class WorkbenchProvider extends ChangeNotifier {
     return _releaseBlueprint;
   }
 
-  /// Restores the active release and production phase if the user cancels the Progressive Next Release modal.
+  /// Restores the active release, blueprint, and production phase if the user cancels (or fails offline in)
+  /// the Progressive Next Release modal, and removes any newly created unbuilt draft release documents.
   void restoreActiveReleaseAfterCancel(
     String? previousReleaseId,
     ProductionPhase previousPhase,
   ) {
+    final proj = activeProject;
+    final preIds = _preModalReleaseIds;
+    if (proj != null && preIds != null) {
+      final addedUnbuiltIds = proj.childrenIds
+          .where((id) {
+            if (preIds.contains(id)) return false;
+            final relDoc = documents[id];
+            return relDoc != null && relDoc.childrenIds.isEmpty;
+          })
+          .toList();
+      final user = _authService.currentUser;
+      for (final id in addedUnbuiltIds) {
+        proj.childrenIds.remove(id);
+        documents.remove(id);
+        LocalVaultService.deleteDocument(id);
+        if (user != null) {
+          _firestoreService.deleteDocument(uid: user.uid, docId: id);
+        }
+      }
+    }
+    if (_preModalReleaseBlueprint != null) {
+      _releaseBlueprint = _preModalReleaseBlueprint;
+    }
+    _preModalReleaseIds = null;
+    _preModalReleaseBlueprint = null;
     if (previousReleaseId != null && documents.containsKey(previousReleaseId)) {
       _activeReleaseId = previousReleaseId;
     }
@@ -2066,8 +2168,9 @@ Return ONLY a JSON object with 3 concrete fix steps:
   }
 
   /// Tailors the checkable How-To sub-steps (`Step X.1` through `Step X.N`) for a specific
-  /// Parent Task in Stage 3 using Gemini AI (`gemini-flash-latest`).
-  Future<void> tailorTaskHowToSubSteps({
+  /// Parent Task in `2. Workbench` using Gemini AI (`gemini-flash-latest`).
+  /// Returns `true` if AI sub-steps were synthesized and applied, or `false` if offline/failed.
+  Future<bool> tailorTaskHowToSubSteps({
     required String featureId,
     required List<FeatureStateNode> states,
     required int checkpointIndex,
@@ -2078,10 +2181,10 @@ Return ONLY a JSON object with 3 concrete fix steps:
     if (cleanContext.isEmpty ||
         checkpointIndex < 0 ||
         checkpointIndex >= states.length) {
-      return;
+      return false;
     }
     final cpNode = states[checkpointIndex];
-    if (taskIndex < 0 || taskIndex >= cpNode.checklist.length) return;
+    if (taskIndex < 0 || taskIndex >= cpNode.checklist.length) return false;
     final parentTask = cpNode.checklist[taskIndex];
     final featDoc = documents[featureId];
     final engineHint = _activeEngineHint;
@@ -2098,10 +2201,13 @@ Return ONLY a JSON object with 3 concrete fix steps:
 
     if (!GeminiAgentClient.hasKey(_apiKey)) {
       _setOfflineState();
-      return;
+      return false;
     }
 
-    final prompt = '''
+    _synthesizingFeatureIds.add(featureId);
+    notifyListeners();
+    try {
+      final prompt = '''
 You are a senior game engine programmer assisting with a concrete implementation task.
 Engine: $engineLabel
 Feature: "${featDoc?.title ?? cpNode.name}"
@@ -2124,53 +2230,58 @@ Return ONLY a JSON object with this schema:
   ]
 }
 ''';
-    final json = await GeminiAgentClient.generateJson(
-      prompt: prompt,
-      apiKey: _apiKey,
-      preferredModel: _conversationModel,
-      thinkingLevel: _thinkingLevel,
-      temperature: 0.25,
-    );
-    final rawSubs = json?['subSteps'];
-    if (rawSubs is List && rawSubs.isNotEmpty) {
-      final newChildren = <Subtask>[];
-      for (int i = 0; i < rawSubs.length; i++) {
-        final item = rawSubs[i];
-        if (item is Map) {
-          final t = (item['title'] ?? '').toString().trim();
-          final path = (item['stepPath'] ?? '').toString().trim();
-          final instr = (item['instruction'] ?? '').toString().trim();
-          final code = (item['codeFormula'] ?? '').toString().trim();
-          final verify = (item['verifyResult'] ?? '').toString().trim();
-          final prevDone = i < parentTask.children.length
-              ? parentTask.children[i].completed
-              : parentTask.completed;
-          newChildren.add(
-            Subtask(
-              id: '${parentTask.id}_sub_${i + 1}',
-              text: t.isNotEmpty
-                  ? t
-                  : 'STEP $taskNum.${i + 1} · IMPLEMENT STEP ${i + 1}',
-              specNotes: instr,
-              codeSnippet: code,
-              codeLanguage: path,
-              verification: verify,
-              codeTargetFile: 'custom_snippet',
-              completed: prevDone,
-            ),
-          );
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: _apiKey,
+        preferredModel: _conversationModel,
+        thinkingLevel: _thinkingLevel,
+        temperature: 0.25,
+      );
+      final rawSubs = json?['subSteps'];
+      if (rawSubs is List && rawSubs.isNotEmpty) {
+        final newChildren = <Subtask>[];
+        for (int i = 0; i < rawSubs.length; i++) {
+          final item = rawSubs[i];
+          if (item is Map) {
+            final t = (item['title'] ?? '').toString().trim();
+            final path = (item['stepPath'] ?? '').toString().trim();
+            final instr = (item['instruction'] ?? '').toString().trim();
+            final code = (item['codeFormula'] ?? '').toString().trim();
+            final verify = (item['verifyResult'] ?? '').toString().trim();
+            final prevDone = i < parentTask.children.length
+                ? parentTask.children[i].completed
+                : parentTask.completed;
+            newChildren.add(
+              Subtask(
+                id: '${parentTask.id}_sub_${i + 1}',
+                text: t.isNotEmpty
+                    ? t
+                    : 'STEP $taskNum.${i + 1} · IMPLEMENT STEP ${i + 1}',
+                specNotes: instr,
+                codeSnippet: code,
+                codeLanguage: path,
+                verification: verify,
+                codeTargetFile: 'custom_snippet',
+                completed: prevDone,
+              ),
+            );
+          }
+        }
+        if (newChildren.isNotEmpty) {
+          _offlineErrorMessage = null;
+          parentTask.children = newChildren;
+          TaskHowToBlueprint.clearCache();
+          updateFeatureStates(featureId, states);
+          return true;
         }
       }
-      if (newChildren.isNotEmpty) {
-        _offlineErrorMessage = null;
-        parentTask.children = newChildren;
-        TaskHowToBlueprint.clearCache();
-        updateFeatureStates(featureId, states);
-        return;
-      }
-    }
 
-    _setOfflineState();
+      _setOfflineState();
+      return false;
+    } finally {
+      _synthesizingFeatureIds.remove(featureId);
+      notifyListeners();
+    }
   }
 
   /// Stage 2 -> Stage 3: User approves the Release Plan Gate; Executor Agent builds or evolves the Release hierarchy.
@@ -2678,7 +2789,17 @@ Return ONLY valid JSON:
     final currentIdx = releases.indexWhere((r) => r.id == _activeReleaseId);
     final nextIdx = currentIdx + 1;
     if (nextIdx < releases.length) {
-      await openGateAndRecordRetro(releases[nextIdx].id);
+      final nextRel = releases[nextIdx];
+      final phaseStr = nextRel.sections['phase'];
+      if (phaseStr != null && phaseStr.isNotEmpty) {
+        for (final p in ProductionPhase.values) {
+          if (p.name == phaseStr) {
+            _currentPhase = p;
+            break;
+          }
+        }
+      }
+      await openGateAndRecordRetro(nextRel.id);
       return;
     }
 

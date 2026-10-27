@@ -66,6 +66,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
   }
 
+  static final RegExp _nonDigitRegex = RegExp(r'[^0-9]');
+
   @override
   bool get isDark => widget.workbench.isDark;
 

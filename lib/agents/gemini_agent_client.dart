@@ -158,10 +158,14 @@ RULES:
     return null;
   }
 
+  static final RegExp _jsonFenceStartRegex =
+      RegExp(r'^```json\s*', multiLine: true);
+  static final RegExp _genericFenceRegex = RegExp(r'^```\s*', multiLine: true);
+
   static String _extractJsonObject(String raw) {
     final trimmed = raw
-        .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
-        .replaceAll(RegExp(r'^```\s*', multiLine: true), '')
+        .replaceAll(_jsonFenceStartRegex, '')
+        .replaceAll(_genericFenceRegex, '')
         .trim();
     final start = trimmed.indexOf('{');
     final end = trimmed.lastIndexOf('}');

@@ -12,6 +12,8 @@ import 'gemini_agent_client.dart';
 class ReleasePlannerAgent {
   static final RegExp _releaseVersionRegex =
       RegExp(r'(v\d+\.\d+(?:\.\d+)?)', caseSensitive: false);
+  static final RegExp _mvpEpicNumRegex =
+      RegExp(r'MVP Epic\s*(\d+)', caseSensitive: false);
 
   static String extractReleaseVersionTag(String releaseTitle) {
     final match = _releaseVersionRegex.firstMatch(releaseTitle);
@@ -43,8 +45,7 @@ class ReleasePlannerAgent {
     final releasePhase = releaseDoc.sections['phase'] ?? '';
     final prototypePart = releaseDoc.sections['prototypePart'] ?? '';
     final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
-    final mvpEpicMatch = RegExp(r'MVP Epic\s*(\d+)', caseSensitive: false)
-        .firstMatch(releaseDoc.title);
+    final mvpEpicMatch = _mvpEpicNumRegex.firstMatch(releaseDoc.title);
     final int? targetMvpEpicIndex = rawTargetEpicIdx != null
         ? int.tryParse(rawTargetEpicIdx)
         : (mvpEpicMatch != null
@@ -643,6 +644,7 @@ Return ONLY valid JSON:
 /// - Stamps newly added Checkpoints (`FeatureStateNode`) with `releaseVersion`.
 class ReleaseExecutorAgent {
   static final RegExp _bulletStripRegex = RegExp(r'^[•\-\*\s]+');
+  static final RegExp _recommendedPrefixRegex = RegExp(r'^\(Recommended\)\s*');
   static Future<List<TierDocument>> executeBlueprint({
     required TierDocument releaseDoc,
     required ReleaseBlueprint blueprint,
@@ -970,7 +972,7 @@ class ReleaseExecutorAgent {
 
     final focusAnswer = blueprint.questions.isNotEmpty
         ? blueprint.questions.first.effectiveAnswer
-            .replaceFirst(RegExp(r'^\(Recommended\)\s*'), '')
+            .replaceFirst(_recommendedPrefixRegex, '')
         : '';
     final effectiveGoal = focusAnswer.isNotEmpty
         ? '${blueprint.goal} (Playtest Focus: $focusAnswer)'

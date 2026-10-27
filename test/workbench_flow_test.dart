@@ -2631,6 +2631,34 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isTrue,
           reason: 'Completed sub-step state must be preserved when tuning parameters update',
         );
+
+        // Round 6: Cancelling Progressive Next Release cleanly rolls back unbuilt v0.2 releases, phase, and blueprint
+        final preCancelRelId = courierProvider.activeReleaseId;
+        final preCancelPhase = courierProvider.currentPhase;
+        final preCancelReleaseCount = courierProvider.projectReleases.length;
+        final draftV02 =
+            await courierProvider.prepareProgressiveNextReleaseDraft();
+        expect(draftV02, isNotNull);
+        expect(
+          courierProvider.projectReleases.length,
+          greaterThan(preCancelReleaseCount),
+        );
+        courierProvider.restoreActiveReleaseAfterCancel(
+          preCancelRelId,
+          preCancelPhase,
+        );
+        expect(courierProvider.activeReleaseId, equals(preCancelRelId));
+        expect(courierProvider.currentPhase, equals(preCancelPhase));
+        expect(
+          courierProvider.projectReleases.length,
+          equals(preCancelReleaseCount),
+          reason:
+              'Unbuilt progressive release documents must be removed on modal cancel',
+        );
+        expect(
+          courierProvider.releaseBlueprint?.releaseDocId,
+          equals(preCancelRelId),
+        );
       },
     );
   });
