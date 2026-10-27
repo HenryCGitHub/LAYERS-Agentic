@@ -1123,8 +1123,13 @@ void main() {
         await tester.pumpAndSettle();
         expect(provider.sparkIntake!.expansionCards.first.isSelected, isFalse);
 
-        // Explicitly click "Start Concept Blueprint →" to accept and launch Stage 1B
+        // Explicitly click "Start Concept Blueprint →" to accept and launch Stage 1B (Option A Single-Page Blueprint default)
         await tester.tap(find.byKey(const ValueKey('start_concept_interview_btn')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
+        // Click Section 01 in the Left Outliner Rail to verify the Focused One-Section-at-a-Time view
+        await tester.tap(find.byKey(const ValueKey('step_node_0')));
         await tester.pumpAndSettle();
 
         // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..08) ──
@@ -3100,6 +3105,215 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('Hook Runner (Imported)'),
         );
         expect(freshProvider.savedProjects.length, equals(2));
+      },
+    );
+
+    testWidgets(
+      '17. Option A Single-Page Blueprint Default & 5 Frictionless Workflow Upgrades',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1600, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        // ── 1. Option A: Single-Page Live Blueprint by Default + Compact AI Pills + KV Dropdowns + Global Chat ──
+        await provider.startConceptInterview(
+          'A fast top-down mech arena shooter in Godot 4.',
+        );
+        await tester.pumpAndSettle();
+
+        // Lands directly on the Single-Page Complete Blueprint (no 8-step click-through required)
+        expect(
+          find.byKey(const ValueKey('project_blueprint_card')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('full_blueprint_global_chat_input')),
+          findsOneWidget,
+        );
+
+        // Compact 1-line AI Option Pill on Section 01 (Goal) updates Goal in 1 click
+        final initialGoal = provider.conceptDraft!.goal;
+        final compactGoalPill = find.byKey(
+          const ValueKey('compact_option_pill_0_1'),
+        );
+        expect(compactGoalPill, findsOneWidget);
+        await tester.ensureVisible(compactGoalPill);
+        await tester.pumpAndSettle();
+        await tester.tap(compactGoalPill);
+        await tester.pumpAndSettle();
+        expect(provider.conceptDraft!.goal, isNot(equals(initialGoal)));
+
+        // Direct 1-Click KV Cell Dropdown on 02 Game Spec updates cell 0 without opening a modal dialog
+        final gameCellDropdown = find.byKey(
+          const ValueKey('kv_cell_dropdown_game_0'),
+        );
+        expect(gameCellDropdown, findsOneWidget);
+        await tester.ensureVisible(gameCellDropdown);
+        await tester.pumpAndSettle();
+        await tester.tap(gameCellDropdown);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('3D Isometric').last);
+        await tester.pumpAndSettle();
+        expect(
+          provider.conceptDraft!.gameSpec.first,
+          contains('3D Isometric'),
+        );
+
+        // ── 2. Upgrade 2 (Stage 1 Inline Click-to-Edit without AlertDialog) ──
+        final goalCard = find.byKey(
+          const ValueKey('stage1_goal_structured_card'),
+        );
+        await tester.ensureVisible(goalCard);
+        await tester.pumpAndSettle();
+        await tester.tap(goalCard);
+        await tester.pumpAndSettle();
+
+        final inlineGoalInput = find.byKey(
+          const ValueKey('stage1_inline_edit_field_goal'),
+        );
+        expect(inlineGoalInput, findsOneWidget);
+        await tester.enterText(
+          inlineGoalInput,
+          'Build a responsive mech arena prototype where you dash, lock missiles, and extract scrap.',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('stage1_inline_save_btn_goal')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          provider.conceptDraft!.goal,
+          contains('lock missiles, and extract scrap'),
+        );
+
+        // ── 3. Upgrade 4: Focused Section "Anytime Build" Header + "Use & Next →" on Option Cards ──
+        await tester.tap(find.byKey(const ValueKey('step_node_0')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('section_header_approve_build_btn')),
+          findsOneWidget,
+        );
+        final useAndNextBtn = find.byKey(
+          const ValueKey('use_and_next_option_btn_0_0'),
+        );
+        expect(useAndNextBtn, findsOneWidget);
+        await tester.ensureVisible(useAndNextBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(useAndNextBtn);
+        await tester.pumpAndSettle();
+        // Advanced immediately to Section 02 / 08
+        expect(find.text('SECTION 02 / 08'), findsOneWidget);
+
+        // ── 4. Upgrade 1: 1-Click Express Build v0.1 from Spark ──
+        await tester.tap(find.byKey(const ValueKey('new_spark_reset_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('express_build_v01_btn')),
+          findsOneWidget,
+        );
+        final expressFuture = provider.expressBuildReleaseFromSpark(
+          'A fast twin-stick cyber-mech arena shooter in Godot 4.',
+        );
+        await tester.pumpAndSettle();
+        await expressFuture;
+        await tester.pumpAndSettle();
+        expect(provider.currentStage, equals(WorkbenchStage.releaseWorkbench));
+        expect(provider.activeReleaseBeats, isNotEmpty);
+
+        // ── 5. Upgrade 2 (Stage 2 Inline Tuning Pill Edit + Cross-Feature Variable Rename) ──
+        final allFeats = <TierDocument>[
+          for (final b in provider.activeReleaseBeats)
+            ...provider.featuresForBeat(b.id),
+        ];
+        final feat0 = allFeats.first;
+        final states0 = FeatureStateNode.getStatesForDocument(feat0);
+        final node0 = states0.first;
+        node0.tuningParams = ['mechDashSpeed: 650.0'];
+        provider.updateFeatureStates(feat0.id, states0);
+        await tester.pumpAndSettle();
+
+        final inlineTuningPill = find.byKey(
+          ValueKey('inline_tuning_pill_${node0.id}'),
+        );
+        expect(inlineTuningPill, findsOneWidget);
+        await tester.tap(inlineTuningPill);
+        await tester.pumpAndSettle();
+
+        final inlineTuningInput = find.byKey(
+          ValueKey('inline_tuning_input_${node0.id}'),
+        );
+        expect(inlineTuningInput, findsOneWidget);
+        await tester.enterText(inlineTuningInput, 'boostThrustSpeed: 820.0');
+        await tester.tap(
+          find.byKey(ValueKey('inline_tuning_save_btn_${node0.id}')),
+        );
+        await tester.pumpAndSettle();
+
+        final updatedStates0 = FeatureStateNode.getStatesForDocument(feat0);
+        expect(
+          updatedStates0.first.tuningParams.first,
+          equals('boostThrustSpeed: 820.0'),
+        );
+
+        // ── 6. Upgrade 3 & 5: 1-Click "⧉ Copy & Next →", "▶ Next Incomplete", and Release Complete Banner ──
+        final copyNextBtn = find.byKey(
+          ValueKey('copy_and_complete_next_btn_${node0.id}'),
+        );
+        expect(copyNextBtn, findsOneWidget);
+        await tester.ensureVisible(copyNextBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(copyNextBtn);
+        await tester.pumpAndSettle();
+
+        final afterCopyNextStates = FeatureStateNode.getStatesForDocument(feat0);
+        expect(
+          afterCopyNextStates.first.checklist.first.children.first.completed,
+          isTrue,
+        );
+
+        // Click the completed first step row in the Left Step List so "▶ Next Incomplete" appears in the Feature Header Bar
+        final firstStepRow = find.byKey(
+          ValueKey('task_sheet_step_row_${node0.id}_0_0'),
+        );
+        await tester.ensureVisible(firstStepRow);
+        await tester.pumpAndSettle();
+        await tester.tap(firstStepRow);
+        await tester.pumpAndSettle();
+        final resumeNextBtn = find.byKey(
+          const ValueKey('resume_next_incomplete_step_btn'),
+        );
+        expect(resumeNextBtn, findsOneWidget);
+        await tester.ensureVisible(resumeNextBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(resumeNextBtn);
+        await tester.pumpAndSettle();
+
+        // Mark all features in v0.1 complete and verify the auto-surfaced Release Complete -> Next Release banner
+        for (final f in allFeats) {
+          final st = FeatureStateNode.getStatesForDocument(f);
+          for (final cp in st) {
+            for (final t in cp.checklist) {
+              t.completed = true;
+              for (final c in t.children) {
+                c.completed = true;
+              }
+            }
+          }
+          provider.updateFeatureStates(f.id, st);
+        }
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('release_complete_next_release_banner')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('banner_launch_next_release_btn')),
+          findsOneWidget,
+        );
       },
     );
   });

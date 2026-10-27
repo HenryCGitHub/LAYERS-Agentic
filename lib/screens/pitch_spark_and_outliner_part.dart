@@ -453,6 +453,41 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
               ],
             ],
           ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey('express_build_v01_btn'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: accentAmber,
+                backgroundColor: accentAmber.withValues(alpha: 0.08),
+                side: BorderSide(color: accentAmber.withValues(alpha: 0.55)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              onPressed: widget.workbench.isAgentBusy
+                  ? null
+                  : () => widget.workbench.expressBuildReleaseFromSpark(
+                        _sparkController.text
+                            .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+                            .trim(),
+                      ),
+              icon: Icon(Icons.bolt_rounded, size: 15, color: accentAmber),
+              label: Text(
+                'Express Build v0.1 →',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: accentAmber,
+                ),
+              ),
+            ),
+          ),
           if (intake != null) ...[
             const SizedBox(height: 18),
             Container(

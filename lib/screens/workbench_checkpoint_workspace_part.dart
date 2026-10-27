@@ -82,6 +82,91 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     }
   }
 
+  void _jumpToNextIncompleteStep(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureStateNode node,
+  ) {
+    // 1. Check current checkpoint for any incomplete step
+    for (int tIdx = 0; tIdx < node.checklist.length; tIdx++) {
+      final t = node.checklist[tIdx];
+      for (int sIdx = 0; sIdx < t.children.length; sIdx++) {
+        if (!t.children[sIdx].completed) {
+          _rebuild(() {
+            _selectedTaskIndexByCheckpoint[node.id] = tIdx;
+            _selectedSubStepIndexByTask['${node.id}_$tIdx'] = sIdx;
+          });
+          return;
+        }
+      }
+      if (!t.completed) {
+        _rebuild(() {
+          _selectedTaskIndexByCheckpoint[node.id] = tIdx;
+          _selectedSubStepIndexByTask['${node.id}_$tIdx'] = 0;
+        });
+        return;
+      }
+    }
+
+    // 2. Check other checkpoints in the current feature
+    final nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+    if (nextCpIdx != -1) {
+      final nextCp = states[nextCpIdx];
+      int targetTask = nextCp.checklist.indexWhere((t) => !t.completed);
+      if (targetTask == -1) targetTask = 0;
+      int targetStep = targetTask < nextCp.checklist.length
+          ? nextCp.checklist[targetTask].children.indexWhere((c) => !c.completed)
+          : 0;
+      if (targetStep == -1) targetStep = 0;
+      _rebuild(() {
+        _manualCheckpointFocusIndex = nextCpIdx;
+        _selectedTaskIndexByCheckpoint[nextCp.id] = targetTask;
+        _selectedSubStepIndexByTask['${nextCp.id}_$targetTask'] = targetStep;
+      });
+      return;
+    }
+
+    // 3. Otherwise jump to the next incomplete feature in the active release
+    final nextFeat = widget.workbench.nextIncompleteFeature;
+    if (nextFeat != null) {
+      _rebuild(() {
+        _manualCheckpointFocusIndex = null;
+      });
+      widget.workbench.selectFeature(nextFeat.id);
+    }
+  }
+
+  void _saveInlineTuningParam({
+    required TierDocument feat,
+    required List<FeatureStateNode> states,
+    required FeatureStateNode node,
+    required int selectedTaskIdx,
+    required String rawValue,
+  }) {
+    final trimmed = rawValue.trim();
+    if (trimmed.isEmpty) {
+      _rebuild(() => _inlineEditingTuningNodeId = null);
+      return;
+    }
+    final tuningItems = node.tuningParams;
+    final targetIdx =
+        tuningItems.isNotEmpty ? (selectedTaskIdx % tuningItems.length) : 0;
+    final oldEntry = tuningItems.isNotEmpty ? tuningItems[targetIdx] : '';
+    final oldVar = oldEntry.split(RegExp(r'[:=]')).first.trim();
+    final newVar = trimmed.split(RegExp(r'[:=]')).first.trim();
+
+    if (tuningItems.isNotEmpty) {
+      node.tuningParams[targetIdx] = trimmed;
+    } else {
+      node.tuningParams.add(trimmed);
+    }
+    widget.workbench.updateFeatureStates(feat.id, states);
+    if (oldVar.isNotEmpty && newVar.isNotEmpty && oldVar != newVar) {
+      widget.workbench.propagateVariableRenameAcrossProject(oldVar, newVar);
+    }
+    _rebuild(() => _inlineEditingTuningNodeId = null);
+  }
+
   void _retreatToPreviousStep(
     List<FeatureStateNode> states,
     int checkpointIndex,
@@ -515,6 +600,43 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                         const SizedBox(width: 12),
+                        if ((activeSubStep.subtask.completed ||
+                                node.isCompleted) &&
+                            !widget.workbench.isActiveReleaseComplete) ...[
+                          InkWell(
+                            key: const ValueKey(
+                              'resume_next_incomplete_step_btn',
+                            ),
+                            onTap: () => _jumpToNextIncompleteStep(
+                              feat,
+                              states,
+                              node,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: accentAmber.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: accentAmber.withValues(alpha: 0.55),
+                                ),
+                              ),
+                              child: Text(
+                                '▶ Next Incomplete',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: accentAmber,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         InkWell(
                           key: ValueKey('copy_feature_ai_prompt_btn_${feat.id}'),
                           onTap: () => _copyActiveFeaturePrompt(feat),
@@ -1253,62 +1375,263 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       ),
                                     ),
                                     const SizedBox(height: 6),
-                                    // 1-Line Spec Context Subtitle (Target File · Tuning Param · Guard + Edit Spec)
-                                    InkWell(
-                                      key: ValueKey(
-                                        'task_sheet_tuning_chip_${node.id}',
-                                      ),
-                                      borderRadius: BorderRadius.circular(4),
-                                      onTap: () =>
-                                          _showEditCheckpointTuningAndGuardsDialog(
-                                        feat,
-                                        states,
-                                        node,
-                                      ),
-                                      child: Padding(
+                                    // 1-Line Spec Context Subtitle (Target File · Inline Tuning Pill · Guard + Edit Spec)
+                                    if (_inlineEditingTuningNodeId == node.id)
+                                      Container(
                                         padding: const EdgeInsets.symmetric(
-                                          vertical: 2,
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: bgRecessed,
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          border: Border.all(
+                                            color: accentCyan.withValues(
+                                              alpha: 0.65,
+                                            ),
+                                          ),
                                         ),
                                         child: Row(
                                           children: [
                                             Expanded(
-                                              child: Text(
-                                                [
-                                                  activeSubStep
-                                                          .stepPath.isNotEmpty
-                                                      ? activeSubStep.stepPath
-                                                      : selectedHowTo
-                                                          .whereLocation,
-                                                  if (primaryTuningLabel
-                                                      .isNotEmpty)
-                                                    primaryTuningLabel,
-                                                  if (primaryGuardLabel
-                                                      .isNotEmpty)
-                                                    'Guard: $primaryGuardLabel',
-                                                ].join('  ·  '),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                              child: TextField(
+                                                key: ValueKey(
+                                                  'inline_tuning_input_${node.id}',
+                                                ),
+                                                controller:
+                                                    _inlineTuningEditController,
+                                                autofocus: true,
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: textMuted,
+                                                  fontSize: 11,
+                                                  color: textPrimary,
+                                                ),
+                                                decoration: InputDecoration(
+                                                  hintText:
+                                                      'e.g. moveSpeed: 600',
+                                                  hintStyle:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10.5,
+                                                    color: textMuted,
+                                                  ),
+                                                  border: InputBorder.none,
+                                                  enabledBorder:
+                                                      InputBorder.none,
+                                                  focusedBorder:
+                                                      InputBorder.none,
+                                                  isDense: true,
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                    vertical: 4,
+                                                  ),
+                                                ),
+                                                onSubmitted: (val) =>
+                                                    _saveInlineTuningParam(
+                                                  feat: feat,
+                                                  states: states,
+                                                  node: node,
+                                                  selectedTaskIdx:
+                                                      selectedTaskIdx,
+                                                  rawValue: val,
                                                 ),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
-                                            Text(
-                                              '✎ Spec',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: textSecondary,
+                                            InkWell(
+                                              key: ValueKey(
+                                                'inline_tuning_save_btn_${node.id}',
+                                              ),
+                                              onTap: () =>
+                                                  _saveInlineTuningParam(
+                                                feat: feat,
+                                                states: states,
+                                                node: node,
+                                                selectedTaskIdx:
+                                                    selectedTaskIdx,
+                                                rawValue:
+                                                    _inlineTuningEditController
+                                                        .text,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: accentCyan.withValues(
+                                                    alpha: 0.16,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: accentCyan.withValues(
+                                                      alpha: 0.6,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '✓ Save',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: accentCyan,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            InkWell(
+                                              key: ValueKey(
+                                                'inline_tuning_cancel_btn_${node.id}',
+                                              ),
+                                              onTap: () => _rebuild(
+                                                () =>
+                                                    _inlineEditingTuningNodeId =
+                                                        null,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 5,
+                                                  vertical: 3,
+                                                ),
+                                                child: Text(
+                                                  '×',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: textMuted,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
+                                      )
+                                    else
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: InkWell(
+                                              key: ValueKey(
+                                                'task_sheet_tuning_chip_${node.id}',
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              onTap: () =>
+                                                  _showEditCheckpointTuningAndGuardsDialog(
+                                                feat,
+                                                states,
+                                                node,
+                                              ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical: 2,
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        [
+                                                          activeSubStep.stepPath
+                                                                  .isNotEmpty
+                                                              ? activeSubStep
+                                                                  .stepPath
+                                                              : selectedHowTo
+                                                                  .whereLocation,
+                                                          if (primaryTuningLabel
+                                                              .isNotEmpty)
+                                                            primaryTuningLabel,
+                                                          if (primaryGuardLabel
+                                                              .isNotEmpty)
+                                                            'Guard: $primaryGuardLabel',
+                                                        ].join('  ·  '),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10.5,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: textMuted,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      '✎ Spec',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 9.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          InkWell(
+                                            key: ValueKey(
+                                              'inline_tuning_pill_${node.id}',
+                                            ),
+                                            onTap: () => _rebuild(() {
+                                              _inlineEditingTuningNodeId =
+                                                  node.id;
+                                              _inlineTuningEditController.text =
+                                                  primaryTuningLabel.isNotEmpty
+                                                      ? primaryTuningLabel
+                                                      : 'moveSpeed: 600';
+                                            }),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 7,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: accentCyan.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: accentCyan.withValues(
+                                                    alpha: 0.35,
+                                                  ),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                primaryTuningLabel.isNotEmpty
+                                                    ? '⚡ $primaryTuningLabel ✎'
+                                                    : '⚡ + Tuning ✎',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: accentCyan,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
                                     const SizedBox(height: 16),
 
                                     // 1. HOW TO BUILD Section Overline + Instruction
@@ -1420,55 +1743,126 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                   spacing: 12,
                                   runSpacing: 8,
                                   children: [
-                                    ElevatedButton.icon(
-                                      key: ValueKey(
-                                        'one_click_complete_next_btn_${node.id}',
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: accentCyan,
-                                        foregroundColor:
-                                            const Color(0xFF04131D),
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 11,
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ElevatedButton.icon(
+                                          key: ValueKey(
+                                            'one_click_complete_next_btn_${node.id}',
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: accentCyan,
+                                            foregroundColor:
+                                                const Color(0xFF04131D),
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 11,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(7),
+                                            ),
+                                          ),
+                                          onPressed: () {
+                                            if (!activeSubStep
+                                                .subtask.completed) {
+                                              _toggleHowToSubStepCompletion(
+                                                feat,
+                                                states,
+                                                node,
+                                                selectedTaskIdx,
+                                                activeSubStepIdx,
+                                              );
+                                            }
+                                            _advanceToNextStep(
+                                              feat,
+                                              states,
+                                              node,
+                                              selectedTaskIdx,
+                                              activeSubStepIdx,
+                                            );
+                                          },
+                                          icon: const Icon(
+                                            Icons.check_rounded,
+                                            size: 15,
+                                          ),
+                                          label: Text(
+                                            isFinalCheckpointStep
+                                                ? 'Complete Feature →'
+                                                : 'Complete & Next →',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
                                         ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(7),
+                                        const SizedBox(width: 8),
+                                        OutlinedButton.icon(
+                                          key: ValueKey(
+                                            'copy_and_complete_next_btn_${node.id}',
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: accentCyan,
+                                            backgroundColor: accentCyan
+                                                .withValues(alpha: 0.08),
+                                            side: BorderSide(
+                                              color: accentCyan.withValues(
+                                                alpha: 0.45,
+                                              ),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 13,
+                                              vertical: 11,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(7),
+                                            ),
+                                          ),
+                                          onPressed: () {
+                                            final snippet = activeSubStep
+                                                    .codeFormula
+                                                    .trim()
+                                                    .isNotEmpty
+                                                ? activeSubStep.codeFormula
+                                                    .trim()
+                                                : activeSubStep.instruction
+                                                    .trim();
+                                            Clipboard.setData(
+                                              ClipboardData(text: snippet),
+                                            );
+                                            if (!activeSubStep
+                                                .subtask.completed) {
+                                              _toggleHowToSubStepCompletion(
+                                                feat,
+                                                states,
+                                                node,
+                                                selectedTaskIdx,
+                                                activeSubStepIdx,
+                                              );
+                                            }
+                                            _advanceToNextStep(
+                                              feat,
+                                              states,
+                                              node,
+                                              selectedTaskIdx,
+                                              activeSubStepIdx,
+                                            );
+                                          },
+                                          icon: const Icon(
+                                            Icons.copy_rounded,
+                                            size: 13,
+                                          ),
+                                          label: Text(
+                                            '⧉ Copy & Next →',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      onPressed: () {
-                                        if (!activeSubStep.subtask.completed) {
-                                          _toggleHowToSubStepCompletion(
-                                            feat,
-                                            states,
-                                            node,
-                                            selectedTaskIdx,
-                                            activeSubStepIdx,
-                                          );
-                                        }
-                                        _advanceToNextStep(
-                                          feat,
-                                          states,
-                                          node,
-                                          selectedTaskIdx,
-                                          activeSubStepIdx,
-                                        );
-                                      },
-                                      icon: const Icon(
-                                        Icons.check_rounded,
-                                        size: 15,
-                                      ),
-                                      label: Text(
-                                        isFinalCheckpointStep
-                                            ? 'Complete Feature →'
-                                            : 'Complete & Next →',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
+                                      ],
                                     ),
                                     Wrap(
                                       spacing: 12,

@@ -167,10 +167,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 8-section Concept Blueprint.
-  /// When [jumpToFullReview] is true, lands directly on Full Concept Review (`09 · Full Concept Review`).
+  /// When [jumpToFullReview] is true (default), lands directly on the Single-Page Complete Concept Blueprint.
   Future<void> startConceptInterview([
     String sparkText = '',
-    bool jumpToFullReview = false,
+    bool jumpToFullReview = true,
   ]) async {
     final cleanText = sparkText.trim();
     final effectiveSpark = cleanText.isNotEmpty
@@ -204,6 +204,17 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
+    }
+  }
+
+  /// 1-Click Express Build from Spark: Synthesizes the 8-section Concept Blueprint
+  /// (if not yet drafted) and immediately builds the v0.1 Release Workbench in a single pass.
+  Future<void> expressBuildReleaseFromSpark([String sparkText = '']) async {
+    if (_conceptDraft == null || sparkText.trim().isNotEmpty) {
+      await startConceptInterview(sparkText, true);
+    }
+    if (_conceptDraft != null) {
+      await approveConceptAndBuildRelease();
     }
   }
 

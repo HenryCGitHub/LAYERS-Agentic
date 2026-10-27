@@ -52,6 +52,15 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   double _outlinerWidth = 232.0;
   bool _isHalfScreenOutlinerOpen = false;
   bool _isProgressiveModalOpen = false;
+  String? _inlineEditingTuningNodeId;
+  final TextEditingController _inlineTuningEditController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    _inlineTuningEditController.dispose();
+    super.dispose();
+  }
 
   String _formatOutlineBeatDisplayTitle(String rawBeatTitle) {
     return MechanicArchetypeProfile.concreteBeatDisplayTitle(rawBeatTitle);

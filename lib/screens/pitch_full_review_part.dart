@@ -407,9 +407,9 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     required Widget child,
   }) {
     final sec = _sections[sectionIdx];
-    final isHovered = _hoveredReviewSectionIdx == sectionIdx;
     final isInlineOpen = _inlineEditingSectionIdx == sectionIdx;
-    final showControls = isHovered || isInlineOpen;
+    final options = _optionsForSection(draft, sectionIdx);
+    final showCompactPills = sectionIdx != 1 && sectionIdx != 2 && options.isNotEmpty;
 
     return MouseRegion(
       onEnter: (_) => _rebuild(() => _hoveredReviewSectionIdx = sectionIdx),
@@ -468,72 +468,188 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                     ],
                   ),
                 ),
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 140),
-                  opacity: showControls ? 1.0 : 0.0,
-                  child: IgnorePointer(
-                    ignoring: !showControls,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () {
-                            _rebuild(() {
-                              if (_inlineEditingSectionIdx == sectionIdx) {
-                                _inlineEditingSectionIdx = null;
-                              } else {
-                                _inlineEditingSectionIdx = sectionIdx;
-                                _inlineReviewPromptController.clear();
-                              }
-                            });
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: isInlineOpen ? focalAccentFg : textPrimary,
-                            backgroundColor: isInlineOpen ? focalAccent : bgRecessed,
-                            side: BorderSide(color: borderBright),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            minimumSize: const Size(0, 28),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                          child: Text(
-                            isInlineOpen ? 'Close Agent Edit' : 'Edit with Agent',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton(
+                      key: ValueKey('inline_agent_toggle_$sectionIdx'),
+                      onPressed: () {
+                        _rebuild(() {
+                          if (_inlineEditingSectionIdx == sectionIdx) {
+                            _inlineEditingSectionIdx = null;
+                          } else {
+                            _inlineEditingSectionIdx = sectionIdx;
+                            _inlineReviewPromptController.clear();
+                          }
+                        });
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isInlineOpen ? focalAccentFg : textPrimary,
+                        backgroundColor: isInlineOpen ? focalAccent : bgRecessed,
+                        side: BorderSide(color: borderBright),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        minimumSize: const Size(0, 26),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                        const SizedBox(width: 6),
-                        OutlinedButton(
-                          onPressed: () => _goToStep(sectionIdx),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: textSecondary,
-                            backgroundColor: bgRecessed,
-                            side: BorderSide(color: borderSubtle),
-                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                            minimumSize: const Size(0, 28),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                          child: Text(
-                            'Revisit →',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                      ),
+                      child: Text(
+                        isInlineOpen ? 'Close Agent' : '💬 Ask Agent',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 6),
+                    OutlinedButton(
+                      onPressed: () => _goToStep(sectionIdx),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textSecondary,
+                        backgroundColor: bgRecessed,
+                        side: BorderSide(color: borderSubtle),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                        minimumSize: const Size(0, 26),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      child: Text(
+                        'Focus →',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 12),
             child,
+
+            // Compact 28px 1-Line AI Quick-Toggle / Preset Pills (Space-Saving Replacement for Tall Cards)
+            if (showCompactPills) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    sec.isMultiSelect ? '✦ Quick Add:' : '✦ Presets:',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: textMuted,
+                    ),
+                  ),
+                  for (int optIdx = 0; optIdx < options.length; optIdx++)
+                    Builder(
+                      builder: (context) {
+                        final rawOpt = options[optIdx];
+                        final split = _splitOptionIntoCardTitleAndBody(
+                          rawOpt,
+                          sectionIdx,
+                          optIdx,
+                        );
+                        final isSelected = _isSectionOptionSelected(
+                          sectionIdx,
+                          optIdx,
+                        );
+                        final activeColor = sec.isMultiSelect
+                            ? accentEmerald
+                            : accentCyan;
+                        final pillLabel = sec.isMultiSelect
+                            ? (isSelected
+                                ? '✓ ${split.title}'
+                                : '+ ${split.title}')
+                            : (isSelected
+                                ? '● ${split.title}'
+                                : '✦ ${split.title}');
+                        return Tooltip(
+                          message: rawOpt,
+                          waitDuration: const Duration(milliseconds: 220),
+                          child: InkWell(
+                            key: ValueKey(
+                              'compact_option_pill_${sectionIdx}_$optIdx',
+                            ),
+                            onTap: widget.workbench.isAgentBusy
+                                ? null
+                                : () => _selectSectionOption(
+                                      draft,
+                                      sectionIdx,
+                                      optIdx,
+                                    ),
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? activeColor.withValues(alpha: 0.14)
+                                    : bgRecessed,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? activeColor.withValues(alpha: 0.7)
+                                      : borderSubtle,
+                                ),
+                              ),
+                              child: Text(
+                                pillLabel,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10.5,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                  color: isSelected
+                                      ? activeColor
+                                      : textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  Tooltip(
+                    message: 'Generate fresh AI options for ${sec.shortTitle}',
+                    child: InkWell(
+                      key: ValueKey('compact_shuffle_options_btn_$sectionIdx'),
+                      onTap: widget.workbench.isAgentBusy
+                          ? null
+                          : () => widget.workbench.regenerateStage1SectionOptions(
+                                sec.optionKey,
+                              ),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: borderSubtle),
+                        ),
+                        child: Text(
+                          '↻',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: accentCyan,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             // Contextual Inline Agent Drawer (Adjust section right inside Full Review without losing context)
             if (isInlineOpen) ...[

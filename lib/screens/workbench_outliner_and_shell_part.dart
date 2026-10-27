@@ -1578,76 +1578,89 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
   Widget _buildReleaseShippedBanner(TierDocument rel) {
     final nextVer = widget.workbench.nextProgressiveVersionLabel;
     return Container(
-      key: const ValueKey('release_complete_banner'),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: accentEmerald.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accentEmerald.withValues(alpha: 0.45)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.verified_rounded, color: accentEmerald, size: 18),
-              const SizedBox(width: 10),
-              Text(
-                'All Features in ${rel.title} are 100% Complete ✓!',
-                style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  color: textPrimary,
-                ),
+      key: const ValueKey('release_complete_next_release_banner'),
+      child: Container(
+        key: const ValueKey('release_complete_banner'),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: accentEmerald.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: accentEmerald.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(Icons.verified_rounded, color: accentEmerald, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'All Features in ${rel.title} are 100% Complete ✓!',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OutlinedButton.icon(
-                key: const ValueKey('release_shipped_summary_btn'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: accentEmerald,
-                  side: BorderSide(color: accentEmerald.withValues(alpha: 0.5)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
+            ),
+            const SizedBox(width: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton.icon(
+                  key: const ValueKey('release_shipped_summary_btn'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: accentEmerald,
+                    side: BorderSide(color: accentEmerald.withValues(alpha: 0.5)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  onPressed: () => _showReleaseShippedSummaryModal(context, rel),
+                  icon: const Icon(Icons.emoji_events_outlined, size: 14),
+                  label: Text(
+                    'Release Summary',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                onPressed: () => _showReleaseShippedSummaryModal(context, rel),
-                icon: const Icon(Icons.emoji_events_outlined, size: 14),
-                label: Text(
-                  'Release Summary',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
+                const SizedBox(width: 8),
+                Container(
+                  key: const ValueKey('banner_launch_next_release_btn'),
+                  child: ElevatedButton.icon(
+                    key: const ValueKey('ship_and_plan_next_release_btn'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: focalAccent,
+                      foregroundColor: focalAccentFg,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    onPressed: () => _showProgressiveNextReleaseModal(context),
+                    icon: const Icon(Icons.auto_awesome_rounded, size: 14),
+                    label: Text(
+                      '+ New Release ($nextVer) ✦',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                key: const ValueKey('ship_and_plan_next_release_btn'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: focalAccent,
-                  foregroundColor: focalAccentFg,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                onPressed: () => _showProgressiveNextReleaseModal(context),
-                icon: const Icon(Icons.auto_awesome_rounded, size: 14),
-                label: Text(
-                  '+ New Release ($nextVer) ✦',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

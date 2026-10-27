@@ -159,10 +159,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final RegExp _goalClauseSplitRegex = RegExp(r',\s*and\s+|,\s+');
   final RegExp _nonWordStripRegex = RegExp(r'[^\w\s-]');
 
-  /// Active step index: `0`..`7` for sections `01`..`08`, and `8` for `09 · Full Concept Review`.
+  /// Active step index: `0`..`7` for sections `01`..`08`, and `8` (default) for `09 · Full Concept Review` (Single-Page Blueprint).
   String? _lastTrackedProjectId;
-  int _currentStep = 0;
-  final Set<int> _visitedSteps = {0};
+  int _currentStep = 8;
+  final Set<int> _visitedSteps = {0, 1, 2, 3, 4, 5, 6, 7};
   final Map<int, int?> _selectedOptionBySection = {};
   final Map<int, Set<int>> _selectedOptionsBySection = {};
   final Map<int, dynamic> _initialSectionDefaults = {};
@@ -171,6 +171,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   /// Step 10 Full Review hover & inline contextual Agent drawer state.
   int? _hoveredReviewSectionIdx;
   int? _inlineEditingSectionIdx;
+
+  /// Inline Click-to-Edit state (Upgrade 2: replaces popup AlertDialogs across Stage 1).
+  String? _activeInlineEditKey;
+  final TextEditingController _inlineItemEditController =
+      TextEditingController();
 
   @override
   bool get isDark => widget.workbench.isDark;
@@ -322,6 +327,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     _sparkController.dispose();
     _agentPromptController.dispose();
     _inlineReviewPromptController.dispose();
+    _inlineItemEditController.dispose();
     _sparkFocusNode.dispose();
     _conceptChatFocusNode.dispose();
     super.dispose();
@@ -730,140 +736,30 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     );
   }
 
-  void _showDirectKvEditDialog({
-    required bool isGameSpec,
-    required int cellIndex,
-    required String label,
-    required String currentValue,
-  }) {
-    final controller = TextEditingController(text: currentValue);
+  List<String> _kvPresetsForCell(bool isGameSpec, int cellIndex) {
     const gameSpecPresets = <int, List<String>>{
-      0: ['2D Top-Down', '2D Side-Scrolling', '3D First-Person', '3D Isometric'],
+      0: ['2D Top-Down', '2D Side-Scrolling', '3D First-Person', '3D Third-Person', '3D Isometric'],
       1: ['Twin-Stick (WASD + Aim)', 'Mouse + WASD', 'Gamepad / Precision Platformer', 'Point & Click'],
       2: ['Singleplayer', 'Local Couch Co-Op', 'Singleplayer + Leaderboards'],
       3: ['Single-Screen Wave Arena', 'Continuous Single Overworld', 'Multi-Room Obstacle Course', 'Procedural Room Grid'],
     };
     const techSpecPresets = <int, List<String>>{
-      0: ['Godot 4 (2D)', 'Unity 6', 'Unreal Engine 5', 'Custom / Raylib'],
+      0: ['Godot 4 (GDScript)', 'Unity 6 (C#)', 'Unreal Engine 5', 'Custom / Raylib'],
       1: ['PC Desktop', 'PC & Steam Deck', 'Web + Desktop'],
       2: ['2D Sprites + Particles', '3D Greybox Meshes', '2D/3D Hybrid Pipeline', 'Low-Poly Stylized'],
       3: ['Offline Local Save', 'Steam Cloud Save', 'Stateless Arcade Session'],
     };
-    final presets = (isGameSpec ? gameSpecPresets[cellIndex] : techSpecPresets[cellIndex]) ?? const <String>[];
+    return (isGameSpec ? gameSpecPresets[cellIndex] : techSpecPresets[cellIndex]) ?? const <String>[];
+  }
 
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: bgSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: borderBright),
-          ),
-          title: Text(
-            'Edit $label',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: textPrimary,
-            ),
-          ),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  style: GoogleFonts.inter(fontSize: 13.5, color: textPrimary),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: bgRecessed,
-                    hintText: 'Enter $label...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderSubtle),
-                    ),
-                  ),
-                  onSubmitted: (val) {
-                    _applyDirectKvValue(isGameSpec: isGameSpec, cellIndex: cellIndex, newValue: val);
-                    Navigator.of(ctx).pop();
-                  },
-                ),
-                if (presets.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'QUICK PRESETS',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final p in presets)
-                        InkWell(
-                          onTap: () {
-                            _applyDirectKvValue(isGameSpec: isGameSpec, cellIndex: cellIndex, newValue: p);
-                            Navigator.of(ctx).pop();
-                          },
-                          borderRadius: BorderRadius.circular(4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: bgRecessed,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: borderSubtle),
-                            ),
-                            child: Text(
-                              p,
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text('Cancel', style: GoogleFonts.inter(fontSize: 12, color: textSecondary)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: focalAccent,
-                foregroundColor: focalAccentFg,
-                elevation: 0,
-              ),
-              onPressed: () {
-                _applyDirectKvValue(
-                  isGameSpec: isGameSpec,
-                  cellIndex: cellIndex,
-                  newValue: controller.text,
-                );
-                Navigator.of(ctx).pop();
-              },
-              child: Text(
-                'Save',
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+  void _startInlineEdit(String key, String initialText) {
+    _rebuild(() {
+      _activeInlineEditKey = key;
+      _inlineItemEditController.text = initialText;
+      _inlineItemEditController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _inlineItemEditController.text.length),
+      );
+    });
   }
 
   void _applyDirectKvValue({
@@ -907,16 +803,17 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     final currentProjectId = widget.workbench.activeProjectId;
     if (currentProjectId != _lastTrackedProjectId) {
       _lastTrackedProjectId = currentProjectId;
-      _currentStep = 0;
+      _currentStep = _sections.length;
       _visitedSteps
         ..clear()
-        ..add(0);
+        ..addAll(List<int>.generate(_sections.length, (i) => i));
       _selectedOptionBySection.clear();
       _selectedOptionsBySection.clear();
       _initialSectionDefaults.clear();
       _agentNotesBySection.clear();
       _hoveredReviewSectionIdx = null;
       _inlineEditingSectionIdx = null;
+      _activeInlineEditKey = null;
       _sparkController.clear();
       _agentPromptController.clear();
       _inlineReviewPromptController.clear();
