@@ -596,9 +596,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           if (specParts.isNotEmpty) {
             d.gameSpec = [
               specParts[0],
-              specParts.length > 1 ? specParts[1] : (d.gameSpec.length > 1 ? d.gameSpec[1] : 'Standard Controls'),
-              specParts.length >= 4 ? specParts[2] : (d.gameSpec.length > 2 ? d.gameSpec[2] : 'Singleplayer'),
-              specParts.length >= 3 ? specParts.last : (d.gameSpec.length > 3 ? d.gameSpec[3] : 'Core Arena'),
+              specParts.length > 1 ? specParts[1] : (d.gameSpec.length > 1 ? d.gameSpec[1] : ''),
+              specParts.length >= 4 ? specParts[2] : (d.gameSpec.length > 2 ? d.gameSpec[2] : ''),
+              specParts.length >= 3 ? specParts.last : (d.gameSpec.length > 3 ? d.gameSpec[3] : ''),
             ];
           }
           break;
@@ -611,9 +611,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           if (techParts.isNotEmpty) {
             d.techSpec = [
               techParts[0],
-              techParts.length > 1 ? techParts[1] : (d.techSpec.length > 1 ? d.techSpec[1] : 'PC Desktop'),
-              techParts.length > 2 ? techParts[2] : (d.techSpec.length > 2 ? d.techSpec[2] : 'Greybox Assets'),
-              techParts.length > 3 ? techParts[3] : (d.techSpec.length > 3 ? d.techSpec[3] : 'Offline Local Save'),
+              techParts.length > 1 ? techParts[1] : (d.techSpec.length > 1 ? d.techSpec[1] : ''),
+              techParts.length > 2 ? techParts[2] : (d.techSpec.length > 2 ? d.techSpec[2] : ''),
+              techParts.length > 3 ? techParts[3] : (d.techSpec.length > 3 ? d.techSpec[3] : ''),
             ];
           }
           break;

@@ -897,10 +897,29 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
     return null;
   }
 
+  if (prompt.contains('Tailor this newly added Feature')) {
+    return {
+      'goal': 'Build zipline anchor attach and momentum release mechanics.',
+      'doneWhen': 'Player attaches to zipline and detaches cleanly in playtest.',
+      'checkpointTitle': 'Zipline Attach & Detach',
+      'playtestGate': 'Press interact near zipline -> slide and detach cleanly',
+      'tasks': [
+        'Zipline Anchor Setup (2h)',
+        'Slide Velocity Logic (1h)',
+        'Detach Momentum Guard (1h)',
+      ],
+      'tuningParams': [
+        'ziplineSpeed: 320.0 px/s',
+        'detachImpulse: 180.0 px/s',
+      ],
+      'edgeCases': [
+        '[DETACH GUARD] Ignore re-attach for 250ms after jump',
+      ],
+    };
+  }
+
   if (prompt.contains('Rewrite the implementation sub-steps') ||
-      prompt.contains('Tailor this newly added Feature') ||
-      prompt.contains('Playtest Root-Cause Debugger') ||
-      prompt.contains('Systems Stress & Playtest Simulator')) {
+      prompt.contains('Playtest Root-Cause Debugger')) {
     return null;
   }
 
@@ -2024,32 +2043,18 @@ void main() {
         final firstFeat = provider.featuresForBeat(firstBeat.id).first;
         final states = FeatureStateNode.getStatesForDocument(firstFeat);
 
-        // Option 3: Stage 3 AI Playtest Simulator (`⚡ Simulate`)
-        final sim = provider.simulateCheckpointPlaytest(
-          featureDoc: firstFeat,
+        // Log a Playtest Issue on Checkpoint 1 to verify [PLAYTEST GUARD] & [FIX] task injection
+        provider.logPlaytestIssueOnCheckpoint(
+          featureId: firstFeat.id,
           states: states,
           checkpointIndex: 0,
+          issueDescription: 'Rapid input causes duplicate dash trigger',
         );
-        expect(sim.recommendedTuningClamp, 'min_retrigger_lockout_ms: 110 ms');
-        final afterSimStates = FeatureStateNode.getStatesForDocument(firstFeat);
+        final afterFixStates = FeatureStateNode.getStatesForDocument(firstFeat);
         expect(
-          afterSimStates.first.tuningParams,
-          contains('min_retrigger_lockout_ms: 110 ms'),
-        );
-        expect(
-          afterSimStates.first.edgeCases.any((g) => g.startsWith('[SIMULATION GUARD]')),
+          afterFixStates.first.edgeCases.any((g) => g.startsWith('[PLAYTEST GUARD]')),
           isTrue,
         );
-
-        // Option 1: Stage 3 Generate Starter Script Bundle (`.gd` for Godot 4)
-        final scriptBundle = provider.generateStarterScriptForFeature(
-          firstFeat,
-          afterSimStates,
-        );
-        expect(scriptBundle.fileName, endsWith('.gd'));
-        expect(scriptBundle.code, contains('@export var '));
-        expect(scriptBundle.code, contains('min_retrigger_lockout_ms'));
-        expect(scriptBundle.code, contains('[SIMULATION GUARD]'));
 
         // Option 4: Post-Release Retrospective & Auto-Carryover Summary into v0.2
         final retro = provider.buildActiveReleaseRetrospective();
@@ -2594,12 +2599,21 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(newLiveFeatId, isNotNull);
         expect(courierProvider.selectedFeatureId, newLiveFeatId);
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          courierProvider.documents[newLiveFeatId!]!.sections['scope'],
+          contains('Goal: Build zipline anchor attach and momentum release mechanics.'),
+        );
+        expect(
+          courierProvider.documents[newLiveFeatId]!.sections['scope'],
+          contains('Done When: Player attaches to zipline and detaches cleanly in playtest.'),
+        );
         expect(
           courierProvider.featuresForBeat(firstBeatDoc.id).length,
           initialBeatFeatCount + 1,
         );
         courierProvider.renameLiveFeature(
-          newLiveFeatId!,
+          newLiveFeatId,
           'Zipline Boost & Detach',
         );
         expect(

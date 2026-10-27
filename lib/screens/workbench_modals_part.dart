@@ -2,11 +2,31 @@ part of 'release_workbench_screen.dart';
 
 extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
   Future<void> _showProgressiveNextReleaseModal(BuildContext context) async {
-    await widget.workbench.prepareProgressiveNextReleaseDraft();
-    if (!context.mounted) return;
+    final prevReleaseId = widget.workbench.activeReleaseId;
+    final prevPhase = widget.workbench.currentPhase;
+    final activeBeats = List<TierDocument>.from(
+      widget.workbench.activeReleaseBeats,
+    );
+
+    // ignore: invalid_use_of_protected_member
+    setState(() {
+      _isProgressiveModalOpen = true;
+    });
+    try {
+      await widget.workbench.prepareProgressiveNextReleaseDraft();
+    } finally {
+      if (mounted) {
+        // ignore: invalid_use_of_protected_member
+        setState(() {});
+      }
+    }
+    if (!context.mounted) {
+      _isProgressiveModalOpen = false;
+      widget.workbench.restoreActiveReleaseAfterCancel(prevReleaseId, prevPhase);
+      return;
+    }
 
     final directiveCtrl = TextEditingController();
-    final activeBeats = widget.workbench.activeReleaseBeats;
     final b1Title = activeBeats.isNotEmpty
         ? _formatOutlineBeatDisplayTitle(activeBeats[0].title)
         : 'Core Controls';
@@ -36,7 +56,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
       ),
     ];
 
-    await showDialog<void>(
+    bool isModalBusy = false;
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
@@ -44,16 +65,34 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
             final bp = widget.workbench.releaseBlueprint;
             final nextVer = bp?.releaseVersionTag ??
                 widget.workbench.nextProgressiveVersionLabel;
-            final upgradeFeats = <({ProposedBeatBlueprint beat, ProposedFeatureBlueprint feat})>[];
-            final newFeats = <({ProposedBeatBlueprint beat, ProposedFeatureBlueprint feat})>[];
+            final upgradeFeats = <({int beatIdx, ProposedBeatBlueprint beat, ProposedFeatureBlueprint feat})>[];
+            final newFeats = <({int beatIdx, ProposedBeatBlueprint beat, ProposedFeatureBlueprint feat})>[];
             if (bp != null) {
-              for (final b in bp.beats) {
+              for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+                final b = bp.beats[bIdx];
                 for (final f in b.features) {
                   if (f.lifecycle == FeatureLifecycleStatus.upgrade) {
-                    upgradeFeats.add((beat: b, feat: f));
+                    upgradeFeats.add((beatIdx: bIdx, beat: b, feat: f));
                   } else if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
-                    newFeats.add((beat: b, feat: f));
+                    newFeats.add((beatIdx: bIdx, beat: b, feat: f));
                   }
+                }
+              }
+            }
+
+            Future<void> submitDirective(String promptText) async {
+              final cleanPrompt = promptText.trim();
+              if (cleanPrompt.isEmpty || isModalBusy) return;
+              setModalState(() {
+                isModalBusy = true;
+              });
+              try {
+                await widget.workbench.sendReleasePlanChatMessage(cleanPrompt);
+              } finally {
+                if (ctx.mounted) {
+                  setModalState(() {
+                    isModalBusy = false;
+                  });
                 }
               }
             }
@@ -103,6 +142,23 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (isModalBusy || widget.workbench.isAgentBusy) ...[
+                        LinearProgressIndicator(
+                          color: accentCyan,
+                          backgroundColor: bgRecessed,
+                          minHeight: 2,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '✦ Agent is updating $nextVer scope & features...',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: accentCyan,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       Text(
                         'The Agent analyzed your live game tree and recommends what to Upgrade (UPGRADE) and what New Systems (NEW) to add in $nextVer:',
                         style: GoogleFonts.inter(
@@ -120,15 +176,11 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             InkWell(
                               key: ValueKey('progressive_preset_chip_$pIdx'),
                               borderRadius: BorderRadius.circular(5),
-                              onTap: widget.workbench.isAgentBusy
+                              onTap: (isModalBusy || widget.workbench.isAgentBusy)
                                   ? null
-                                  : () async {
-                                      await widget.workbench
-                                          .sendReleasePlanChatMessage(
+                                  : () => submitDirective(
                                         aiDirectionPresets[pIdx].prompt,
-                                      );
-                                      if (ctx.mounted) setModalState(() {});
-                                    },
+                                      ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 9,
@@ -187,10 +239,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               ),
                               onSubmitted: (val) async {
                                 if (val.trim().isEmpty) return;
-                                await widget.workbench
-                                    .sendReleasePlanChatMessage(val.trim());
                                 directiveCtrl.clear();
-                                if (ctx.mounted) setModalState(() {});
+                                await submitDirective(val);
                               },
                             ),
                           ),
@@ -209,15 +259,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 vertical: 11,
                               ),
                             ),
-                            onPressed: widget.workbench.isAgentBusy
+                            onPressed: (isModalBusy || widget.workbench.isAgentBusy)
                                 ? null
                                 : () async {
                                     final text = directiveCtrl.text.trim();
                                     if (text.isEmpty) return;
-                                    await widget.workbench
-                                        .sendReleasePlanChatMessage(text);
                                     directiveCtrl.clear();
-                                    if (ctx.mounted) setModalState(() {});
+                                    await submitDirective(text);
                                   },
                             child: Text(
                               'Ask Agent ✦',
@@ -254,32 +302,89 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 5),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    item.feat.included
-                                        ? Icons.check_box_rounded
-                                        : Icons.check_box_outline_blank_rounded,
-                                    size: 16,
-                                    color: item.feat.included
-                                        ? accentAmber
-                                        : textMuted,
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Icon(
+                                      item.feat.included
+                                          ? Icons.check_box_rounded
+                                          : Icons.check_box_outline_blank_rounded,
+                                      size: 16,
+                                      color: item.feat.included
+                                          ? accentAmber
+                                          : textMuted,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
-                                      _formatOutlineFeatureDisplayTitle(
-                                        item.feat.title,
-                                        item.beat.title,
-                                      ),
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: item.feat.included
-                                            ? textPrimary
-                                            : textMuted,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 5,
+                                                vertical: 1,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: bgRecessed,
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                                border: Border.all(
+                                                  color: borderSubtle,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'E${(item.beatIdx + 1).toString().padLeft(2, '0')}',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: textSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                _formatOutlineFeatureDisplayTitle(
+                                                  item.feat.title,
+                                                  item.beat.title,
+                                                ),
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 12.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: item.feat.included
+                                                      ? textPrimary
+                                                      : textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (item.feat.goal.trim().isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 2,
+                                            ),
+                                            child: Text(
+                                              item.feat.goal.trim(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                color: textMuted,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
                                     'UPGRADE · +${item.feat.activeDeltaHours}h',
                                     style: GoogleFonts.jetBrainsMono(
@@ -318,32 +423,89 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 5),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    item.feat.included
-                                        ? Icons.check_box_rounded
-                                        : Icons.check_box_outline_blank_rounded,
-                                    size: 16,
-                                    color: item.feat.included
-                                        ? accentEmerald
-                                        : textMuted,
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Icon(
+                                      item.feat.included
+                                          ? Icons.check_box_rounded
+                                          : Icons.check_box_outline_blank_rounded,
+                                      size: 16,
+                                      color: item.feat.included
+                                          ? accentEmerald
+                                          : textMuted,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text(
-                                      _formatOutlineFeatureDisplayTitle(
-                                        item.feat.title,
-                                        item.beat.title,
-                                      ),
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: item.feat.included
-                                            ? textPrimary
-                                            : textMuted,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 5,
+                                                vertical: 1,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: bgRecessed,
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                                border: Border.all(
+                                                  color: borderSubtle,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'E${(item.beatIdx + 1).toString().padLeft(2, '0')}',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: textSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                _formatOutlineFeatureDisplayTitle(
+                                                  item.feat.title,
+                                                  item.beat.title,
+                                                ),
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 12.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: item.feat.included
+                                                      ? textPrimary
+                                                      : textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (item.feat.goal.trim().isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 2,
+                                            ),
+                                            child: Text(
+                                              item.feat.goal.trim(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                color: textMuted,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
                                     'NEW · +${item.feat.activeDeltaHours}h',
                                     style: GoogleFonts.jetBrainsMono(
@@ -363,7 +525,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
+                  onPressed: () => Navigator.of(ctx).pop(false),
                   child: Text(
                     'Cancel',
                     style: GoogleFonts.inter(
@@ -383,10 +545,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       vertical: 12,
                     ),
                   ),
-                  onPressed: () async {
-                    Navigator.of(ctx).pop();
-                    await widget.workbench.approveAndExecuteReleasePlan();
-                  },
+                  onPressed: (isModalBusy || widget.workbench.isAgentBusy)
+                      ? null
+                      : () => Navigator.of(ctx).pop(true),
                   child: Text(
                     'Build $nextVer in Workbench →',
                     style: GoogleFonts.inter(
@@ -401,6 +562,21 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         );
       },
     );
+
+    if (mounted) {
+      // ignore: invalid_use_of_protected_member
+      setState(() {
+        _isProgressiveModalOpen = false;
+      });
+    } else {
+      _isProgressiveModalOpen = false;
+    }
+
+    if (confirmed == true) {
+      await widget.workbench.approveAndExecuteReleasePlan();
+    } else {
+      widget.workbench.restoreActiveReleaseAfterCancel(prevReleaseId, prevPhase);
+    }
   }
 
   void _showReleaseShippedSummaryModal(BuildContext context, TierDocument rel) {
@@ -1149,6 +1325,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         unrealCppMode: _unrealCppMode,
       );
       widget.workbench.updateFeatureStates(feat.id, states);
+      widget.workbench.synthesizeFeatureHowToStepsWithAi(
+        feat.id,
+        forceRefresh: true,
+      );
       // ignore: invalid_use_of_protected_member
       setState(() {
         _manualCheckpointFocusIndex = cpIdx;
@@ -1161,9 +1341,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
   Future<void> _showEditBuildTaskTitleDialog(
     TierDocument feat,
     List<FeatureStateNode> states,
-    Subtask parentTask,
-  ) async {
+    Subtask parentTask, {
+    FeatureStateNode? cpNode,
+    int? taskIndex,
+  }) async {
     final ctrl = TextEditingController(text: parentTask.text);
+    final canDelete =
+        cpNode != null && taskIndex != null && cpNode.checklist.length > 1;
     final saved = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1173,7 +1357,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
           side: BorderSide(color: borderBright),
         ),
         title: Text(
-          'Rename Build Task',
+          'Edit Build Task',
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.w800,
@@ -1200,6 +1384,24 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
           ),
         ),
         actions: [
+          if (canDelete)
+            TextButton.icon(
+              key: const ValueKey('delete_stage3_task_btn'),
+              onPressed: () => Navigator.of(ctx).pop('__DELETE_TASK__'),
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                size: 14,
+                color: accentCrimson,
+              ),
+              label: Text(
+                'Delete Task',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: accentCrimson,
+                ),
+              ),
+            ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text(
@@ -1223,8 +1425,26 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         ],
       ),
     );
+    if (saved == '__DELETE_TASK__' &&
+        canDelete &&
+        taskIndex < cpNode.checklist.length &&
+        mounted) {
+      cpNode.checklist.removeAt(taskIndex);
+      TaskHowToBlueprint.clearCache();
+      widget.workbench.updateFeatureStates(feat.id, states);
+      // ignore: invalid_use_of_protected_member
+      setState(() {
+        final nextIdx = cpNode.checklist.isEmpty
+            ? 0
+            : taskIndex.clamp(0, cpNode.checklist.length - 1);
+        _selectedTaskIndexByCheckpoint[cpNode.id] = nextIdx;
+        _selectedSubStepIndexByTask['${cpNode.id}_$nextIdx'] = 0;
+      });
+      return;
+    }
     if (saved != null && saved.trim().isNotEmpty && mounted) {
       parentTask.text = saved.trim();
+      TaskHowToBlueprint.clearCache();
       widget.workbench.updateFeatureStates(feat.id, states);
     }
   }

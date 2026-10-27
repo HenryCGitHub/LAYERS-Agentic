@@ -57,31 +57,20 @@ class WorkbenchShell extends StatelessWidget {
     final bp = workbench.releaseBlueprint;
     final rel = workbench.activeRelease;
     final sb = StringBuffer();
-    final title = draft != null && draft.sparkIdea.trim().isNotEmpty
-        ? draft.sparkIdea.trim()
-        : 'LAYERS-Agentic Game Project';
+    final title = draft != null && draft.title.trim().isNotEmpty
+        ? draft.title.trim()
+        : (draft != null && draft.sparkIdea.trim().isNotEmpty
+            ? draft.sparkIdea.trim()
+            : 'LAYERS-Agentic Game Project');
     sb.writeln('# $title — Project & Release Specification');
     if (draft != null) {
       sb.writeln('\n## Stage 1: Project Concept Blueprint');
       sb.writeln(draft.toFormattedScopeSection());
     }
-    if (bp != null) {
-      sb.writeln(
-        '\n## Stage 2: ${bp.releaseTitle} (${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h)',
-      );
-      for (int i = 0; i < bp.beats.length; i++) {
-        final b = bp.beats[i];
-        sb.writeln('\n### Epic ${i + 1}: ${b.title}');
-        for (final f in b.features) {
-          final status = f.included ? 'INCLUDED (${f.estimatedHours}h)' : 'DEFERRED';
-          sb.writeln('- **${f.title}** [$status]: ${f.goal}');
-        }
-      }
-    }
-    if (rel != null) {
+    final beats = workbench.activeReleaseBeats;
+    if (rel != null && beats.isNotEmpty) {
       final relProgress = workbench.getDocumentProgress(rel.id);
-      sb.writeln('\n## Stage 3: Active Release Workbench (${rel.title} · $relProgress% Verified)');
-      final beats = workbench.activeReleaseBeats;
+      sb.writeln('\n## Stage 2: Active Release Workbench (${rel.title} · $relProgress% Verified)');
       for (int bIdx = 0; bIdx < beats.length; bIdx++) {
         final beat = beats[bIdx];
         sb.writeln('\n### Epic ${bIdx + 1}: ${beat.title}');
@@ -104,6 +93,18 @@ class WorkbenchShell extends StatelessWidget {
               sb.writeln('    - [$tDone] ${task.text}');
             }
           }
+        }
+      }
+    } else if (bp != null) {
+      sb.writeln(
+        '\n## Stage 2: ${bp.releaseTitle} (${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h)',
+      );
+      for (int i = 0; i < bp.beats.length; i++) {
+        final b = bp.beats[i];
+        sb.writeln('\n### Epic ${i + 1}: ${b.title}');
+        for (final f in b.features) {
+          final status = f.included ? 'INCLUDED (${f.estimatedHours}h)' : 'DEFERRED';
+          sb.writeln('- **${f.title}** [$status]: ${f.goal}');
         }
       }
     }
@@ -788,7 +789,7 @@ class WorkbenchShell extends StatelessWidget {
                                   const SizedBox(height: 3),
                                   Text(
                                     isSynced
-                                        ? 'All Stage 1 Concepts, Stage 2 Release Plans, and Stage 3 Checkpoints sync live to Firebase project layers-b8a16.'
+                                        ? 'All Stage 1 Concepts and Stage 2 Release Workbench Checkpoints sync live to Firebase project layers-b8a16.'
                                         : 'Every change is automatically saved to browser local storage. Sign in with Google to sync across devices via Cloud Firestore.',
                                     style: GoogleFonts.inter(
                                       fontSize: 11.5,
@@ -1317,8 +1318,8 @@ class WorkbenchShell extends StatelessWidget {
                           ),
                           child: Text(
                             workbench.aiLastErrorStatus == 'HTTP 402'
-                                ? 'API Notice (HTTP 402): AI Studio prepayment credits are depleted on the current key. Using built-in synthesizer fallback until credits are topped up or a new key is saved below.'
-                                : 'API Notice (${workbench.aiLastErrorStatus}): Live Gemini call returned an auth/quota error. Using built-in synthesizer fallback.',
+                                ? 'API Notice (HTTP 402): AI Studio prepayment credits are depleted on the current key. App is offline until credits are topped up or a new Gemini API key is saved below.'
+                                : 'API Notice (${workbench.aiLastErrorStatus}): Live Gemini call returned an auth/quota error. App is offline until a valid Gemini API key is saved below.',
                             style: GoogleFonts.inter(
                               fontSize: 11.5,
                               height: 1.35,

@@ -43,6 +43,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   bool _unrealCppMode = false;
   double _outlinerWidth = 232.0;
   bool _isHalfScreenOutlinerOpen = false;
+  bool _isProgressiveModalOpen = false;
 
   String _formatOutlineBeatDisplayTitle(String rawBeatTitle) {
     return MechanicArchetypeProfile.concreteBeatDisplayTitle(rawBeatTitle);
@@ -78,7 +79,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       );
     }
 
-    if (widget.workbench.isAgentBusy) {
+    if (widget.workbench.isAgentBusy && !_isProgressiveModalOpen) {
       return _buildAgentExecutionProgress(rel);
     }
 
@@ -1204,18 +1205,72 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
               ],
             ),
           ),
-          // Preserve offstage checkpoint keys for test compatibility while keeping the UI 100% unified
-          for (int cpIdx = 0; cpIdx < states.length; cpIdx++)
+          if (states.length == 1)
             Offstage(
               offstage: true,
               child: InkWell(
-                key: ValueKey('outline_cp_${feat.id}_$cpIdx'),
+                key: ValueKey('outline_cp_${feat.id}_0'),
                 onTap: () {
                   setState(() {
-                    _manualCheckpointFocusIndex = cpIdx;
+                    _manualCheckpointFocusIndex = 0;
                   });
                 },
                 child: const SizedBox.shrink(),
+              ),
+            )
+          else if (states.length > 1)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: bgRecessed,
+                border: Border(
+                  bottom: BorderSide(color: borderSubtle),
+                ),
+              ),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (int cpIdx = 0; cpIdx < states.length; cpIdx++)
+                    InkWell(
+                      key: ValueKey('outline_cp_${feat.id}_$cpIdx'),
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () {
+                        setState(() {
+                          _manualCheckpointFocusIndex = cpIdx;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cpIdx == checkpointIndex
+                              ? accentCyan.withValues(alpha: 0.14)
+                              : bgSurface,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: cpIdx == checkpointIndex
+                                ? accentCyan.withValues(alpha: 0.55)
+                                : borderSubtle,
+                          ),
+                        ),
+                        child: Text(
+                          'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}${states[cpIdx].isCompleted ? ' ✓' : ''}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: cpIdx == checkpointIndex
+                                ? accentCyan
+                                : (states[cpIdx].isCompleted
+                                    ? accentEmerald
+                                    : textSecondary),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           Column(
@@ -1298,6 +1353,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       ),
                                     ),
                                     const SizedBox(width: 6),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'edit_active_task_title_btn_${cpNode.id}_$tIdx',
+                                      ),
+                                      onTap: () => _showEditBuildTaskTitleDialog(
+                                        feat,
+                                        states,
+                                        task,
+                                        cpNode: cpNode,
+                                        taskIndex: tIdx,
+                                      ),
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 3,
+                                          vertical: 1,
+                                        ),
+                                        child: Icon(
+                                          Icons.edit_outlined,
+                                          size: 11,
+                                          color: isTaskActive
+                                              ? accentCyan
+                                              : textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 2),
                                     InkWell(
                                       key: ValueKey(
                                         'complete_task_group_${cpNode.id}_$tIdx',
@@ -2201,11 +2283,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
     final primaryTuningLabel = tuningItems.isNotEmpty
         ? tuningItems[selectedTaskIdx % tuningItems.length]
-        : 'responseTime: 0.12s';
+        : '';
     final primaryGuardLabel = edgeItems.isNotEmpty
         ? edgeItems[selectedTaskIdx % edgeItems.length]
             .replaceFirst(RegExp(r'^\[[^\]]+\]\s*'), '')
-        : 'Ignore duplicate trigger while active';
+        : '';
 
     final pinnedActiveStepWindow = (selectedParentTask != null &&
             selectedHowTo != null &&
@@ -2872,15 +2954,60 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                       ),
                                     ),
                                     const SizedBox(height: 6),
-                                    // 1-Line Spec Context Subtitle (Target File · Tuning Param · Guard)
-                                    Text(
-                                      '${activeSubStep.stepPath.isNotEmpty ? activeSubStep.stepPath : selectedHowTo.whereLocation}  ·  $primaryTuningLabel  ·  Guard: $primaryGuardLabel',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: textMuted,
+                                    // 1-Line Spec Context Subtitle (Target File · Tuning Param · Guard + Edit Spec)
+                                    InkWell(
+                                      key: ValueKey(
+                                        'task_sheet_tuning_chip_${node.id}',
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      onTap: () =>
+                                          _showEditCheckpointTuningAndGuardsDialog(
+                                        feat,
+                                        states,
+                                        node,
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 2,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                [
+                                                  activeSubStep
+                                                          .stepPath.isNotEmpty
+                                                      ? activeSubStep.stepPath
+                                                      : selectedHowTo
+                                                          .whereLocation,
+                                                  if (primaryTuningLabel
+                                                      .isNotEmpty)
+                                                    primaryTuningLabel,
+                                                  if (primaryGuardLabel
+                                                      .isNotEmpty)
+                                                    'Guard: $primaryGuardLabel',
+                                                ].join('  ·  '),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              '✎ Spec',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 16),
@@ -3235,18 +3362,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                               ),
                           InkWell(
                             key: ValueKey(
-                              'task_sheet_tuning_chip_${node.id}',
-                            ),
-                            onTap: () =>
-                                _showEditCheckpointTuningAndGuardsDialog(
-                              feat,
-                              states,
-                              node,
-                            ),
-                            child: const SizedBox(width: 4, height: 1),
-                          ),
-                          InkWell(
-                            key: ValueKey(
                               'task_sheet_guards_chip_${node.id}',
                             ),
                             onTap: () =>
@@ -3257,17 +3372,20 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             ),
                             child: const SizedBox(width: 4, height: 1),
                           ),
-                          InkWell(
-                            key: ValueKey(
-                              'edit_active_task_title_btn_${node.id}_$selectedTaskIdx',
+                          if (isHalfScreenOverlayMode)
+                            InkWell(
+                              key: ValueKey(
+                                'edit_active_task_title_btn_${node.id}_$selectedTaskIdx',
+                              ),
+                              onTap: () => _showEditBuildTaskTitleDialog(
+                                feat,
+                                states,
+                                selectedParentTask,
+                                cpNode: node,
+                                taskIndex: selectedTaskIdx,
+                              ),
+                              child: const SizedBox(width: 4, height: 1),
                             ),
-                            onTap: () => _showEditBuildTaskTitleDialog(
-                              feat,
-                              states,
-                              selectedParentTask,
-                            ),
-                            child: const SizedBox(width: 4, height: 1),
-                          ),
                           InkWell(
                             key: ValueKey(
                               'copy_all_task_code_btn_${node.id}_$selectedTaskIdx',

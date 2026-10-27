@@ -1181,19 +1181,6 @@ class WorkbenchProvider extends ChangeNotifier {
     ).where((i) => !_keptInterventionIds.contains(i.id)).toList();
   }
 
-  /// 0-Token Autonomous Producer & Engine Architect Interventions for Stage 3 (`Active Release Workbench`).
-  List<AgentIntervention> stage3InterventionsForFeature(
-    TierDocument featureDoc,
-    List<FeatureStateNode> states,
-    int activeCheckpointIndex,
-  ) {
-    return WorkspaceAgentOrchestrator.auditStage3Feature(
-      featureDoc: featureDoc,
-      states: states,
-      activeCheckpointIndex: activeCheckpointIndex,
-    );
-  }
-
   /// Executes a 1-click `[Let Agent Fix ✦]` intervention from the Autonomous Producer / Engine Architect.
   Future<void> applyAgentIntervention(
     AgentIntervention intervention, {
@@ -1599,164 +1586,6 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Option 1: Generates a complete Starter Script Bundle (`.gd`, `.cs`, or `.cpp`) for a Stage 3 Feature.
-  FeatureScriptBundle generateStarterScriptForFeature(
-    TierDocument featureDoc,
-    List<FeatureStateNode> states,
-  ) {
-    final engineLabel = _activeEngineLabel;
-    final bundle = WorkspaceAgentOrchestrator.generateFeatureScriptBundle(
-      featureDoc: featureDoc,
-      states: states,
-      engineLabel: engineLabel,
-    );
-    _recordAgentTrace(AgentRunTrace(
-      agentRole: 'Engine Architect Agent',
-      userGoal: 'Generate Starter Script for ${featureDoc.title}',
-      reasoning:
-          'Compiled ${bundle.fileName} ($engineLabel) with ${bundle.exportedVariables.length} exported tuning variables and ${bundle.embeddedGuards.length} embedded guard clauses.',
-      toolCalls: [
-        AgentToolCall(
-          toolName: 'generate_starter_script_bundle',
-          targetTitle: bundle.fileName,
-          summary: 'Generated ${bundle.fileName} (${bundle.exportedVariables.length} tuning vars, ${states.length} checkpoints)',
-        ),
-      ],
-    ));
-    notifyListeners();
-    return bundle;
-  }
-
-  /// Async AI-powered Starter Script synthesis (`gemini-4-argon` via `_planningModel`).
-  Future<FeatureScriptBundle> generateAiStarterScriptForFeature(
-    TierDocument featureDoc,
-    List<FeatureStateNode> states,
-  ) async {
-    final engineLabel = _activeEngineLabel;
-    final bundle =
-        await WorkspaceAgentOrchestrator.generateFeatureScriptBundleWithAi(
-      featureDoc: featureDoc,
-      states: states,
-      engineLabel: engineLabel,
-      apiKey: _apiKey,
-      preferredModel: _planningModel,
-    );
-    _recordAgentTrace(AgentRunTrace(
-      agentRole: 'Engine Architect Agent ($_planningModel)',
-      userGoal: 'Synthesize AI Starter Script for ${featureDoc.title}',
-      reasoning:
-          'Synthesized complete ${bundle.fileName} ($engineLabel) using $_planningModel with ${bundle.exportedVariables.length} exported tuning variables and ${bundle.embeddedGuards.length} embedded guard clauses.',
-      toolCalls: [
-        AgentToolCall(
-          toolName: 'generate_ai_starter_script_bundle',
-          targetTitle: bundle.fileName,
-          summary: 'Synthesized ${bundle.fileName} via $_planningModel',
-        ),
-      ],
-    ));
-    notifyListeners();
-    return bundle;
-  }
-
-  /// Option 3: Runs the Stage 3 AI Playtest Simulator / Dry-Run Stress Test on a Checkpoint.
-  /// Returns the deterministic stress result immediately and enriches asynchronously via `_planningModel` (`gemini-4-argon`).
-  PlaytestSimulationResult simulateCheckpointPlaytest({
-    required TierDocument featureDoc,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-  }) {
-    _pushAgentUndoSnapshot();
-    final engineLabel = _activeEngineLabel;
-    final result = WorkspaceAgentOrchestrator.simulateCheckpointPlaytest(
-      featureDoc: featureDoc,
-      states: states,
-      checkpointIndex: checkpointIndex,
-      engineLabel: engineLabel,
-      onSaveStates: (featId, updatedStates) {
-        updateFeatureStates(featId, updatedStates);
-      },
-    );
-    _recordAgentTrace(result.trace);
-    notifyListeners();
-
-    if (GeminiAgentClient.hasKey(_apiKey)) {
-      _enrichSimulationWithAi(
-        featureDoc: featureDoc,
-        states: states,
-        checkpointIndex: checkpointIndex,
-        engineLabel: engineLabel,
-      );
-    }
-    return result;
-  }
-
-  Future<void> _enrichSimulationWithAi({
-    required TierDocument featureDoc,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-    required String engineLabel,
-  }) async {
-    final idx = (checkpointIndex >= 0 && checkpointIndex < states.length)
-        ? checkpointIndex
-        : 0;
-    if (idx >= states.length) return;
-    final cp = states[idx];
-    final prompt = '''
-You are the Systems Stress & Playtest Simulator for LAYERS-Agentic ($engineLabel).
-Analyze this feature checkpoint for physics, frame-spike, or rapid-input exploits:
-Feature: "${featureDoc.title}"
-Checkpoint: "${cp.cleanStageTitle}"
-Playtest Gate: "${cp.playtestCondition}"
-Tasks: ${cp.checklist.map((t) => t.text).join('; ')}
-Current Tuning: ${cp.tuningParams.join(', ')}
-Current Guards: ${cp.edgeCases.join(', ')}
-
-Return ONLY a JSON object:
-{
-  "exploitTitle": "<concise 4-7 word exploit title>",
-  "exploitDescription": "<1 sentence describing the exact state/timing exploit>",
-  "recommendedTuningClamp": "<varName: numericValue unit>",
-  "simulationGuard": "[SIMULATION GUARD] <1 concise guard rule preventing the exploit>"
-}''';
-    final json = await GeminiAgentClient.generateJson(
-      prompt: prompt,
-      apiKey: _apiKey,
-      preferredModel: _planningModel,
-      thinkingLevel: _thinkingLevel,
-      temperature: 0.35,
-    );
-    if (json == null) return;
-    final clamp = json['recommendedTuningClamp']?.toString().trim() ?? '';
-    final guard = json['simulationGuard']?.toString().trim() ?? '';
-    final desc = json['exploitDescription']?.toString().trim() ?? '';
-    if (clamp.contains(':') && !cp.tuningParams.contains(clamp)) {
-      cp.tuningParams = [...cp.tuningParams, clamp];
-    }
-    if (guard.isNotEmpty) {
-      final normalizedGuard = guard.startsWith('[SIMULATION GUARD]')
-          ? guard
-          : '[SIMULATION GUARD] $guard';
-      if (!cp.edgeCases.contains(normalizedGuard)) {
-        cp.edgeCases = [...cp.edgeCases, normalizedGuard];
-      }
-    }
-    updateFeatureStates(featureDoc.id, states);
-    if (desc.isNotEmpty) {
-      _recordAgentTrace(AgentRunTrace(
-        agentRole: 'AI Playtest Stress Simulator ($_planningModel)',
-        userGoal: 'Deep Stress Analysis on ${featureDoc.title}',
-        reasoning: desc,
-        toolCalls: [
-          AgentToolCall(
-            toolName: 'ai_simulate_playtest_stress',
-            targetTitle: '${featureDoc.title} · Checkpoint ${idx + 1}',
-            summary: 'Injected AI stress clamp ($clamp) & guard via $_planningModel',
-          ),
-        ],
-      ));
-    }
-  }
-
   /// Option 4: Builds a Post-Release Retrospective & Auto-Carryover Summary for the active Release.
   ReleaseRetrospectiveSummary buildActiveReleaseRetrospective() {
     final rel = activeRelease;
@@ -2145,6 +1974,19 @@ Return ONLY a JSON object:
     }
     notifyListeners();
     return _releaseBlueprint;
+  }
+
+  /// Restores the active release and production phase if the user cancels the Progressive Next Release modal.
+  void restoreActiveReleaseAfterCancel(
+    String? previousReleaseId,
+    ProductionPhase previousPhase,
+  ) {
+    if (previousReleaseId != null && documents.containsKey(previousReleaseId)) {
+      _activeReleaseId = previousReleaseId;
+    }
+    _currentPhase = previousPhase;
+    _syncActiveProjectMetadata();
+    notifyListeners();
   }
 
   /// Executes the prepared (or newly synthesized) next Progressive Release (`v0.2`, `v0.3+`)
@@ -2684,11 +2526,37 @@ Return ONLY a JSON object:
     );
     if (json != null && documents.containsKey(featureId)) {
       final cp = states.first;
+      final aiGoal = json['goal']?.toString().trim() ?? '';
+      final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
       final aiTitle = json['checkpointTitle']?.toString().trim() ?? '';
       final aiGate = json['playtestGate']?.toString().trim() ?? '';
       final rawTasks = json['tasks'];
       final rawTuning = json['tuningParams'];
       final rawGuards = json['edgeCases'];
+      if (aiGoal.isNotEmpty || aiDoneWhen.isNotEmpty) {
+        final effectiveGoal = aiGoal.isNotEmpty
+            ? aiGoal
+            : 'Build ${featDoc.title} inside $beatTitle.';
+        final effectiveDoneWhen = aiDoneWhen.isNotEmpty
+            ? aiDoneWhen
+            : (aiGate.isNotEmpty
+                ? aiGate
+                : 'Playtester verifies ${featDoc.title} in the test arena.');
+        featDoc.sections['scope'] =
+            'Goal: $effectiveGoal\n\nIn Scope:\n• ${featDoc.title}\n\nDone When: $effectiveDoneWhen';
+        _persistDocument(featDoc);
+        final bp = _releaseBlueprint;
+        if (bp != null) {
+          for (final b in bp.beats) {
+            for (final f in b.features) {
+              if (f.id == featureId) {
+                f.goal = effectiveGoal;
+                f.doneWhen = effectiveDoneWhen;
+              }
+            }
+          }
+        }
+      }
       if (aiTitle.isNotEmpty) {
         cp.name = 'Checkpoint 1: $aiTitle';
       }
@@ -2715,7 +2583,7 @@ Return ONLY a JSON object:
       }
       updateFeatureStates(featureId, states);
     }
-    await synthesizeFeatureHowToStepsWithAi(featureId);
+    await synthesizeFeatureHowToStepsWithAi(featureId, forceRefresh: true);
   }
 
   /// Renames an active Feature document directly inside `2. Workbench` and syncs `_releaseBlueprint`.
@@ -2958,7 +2826,8 @@ Return ONLY a JSON object:
       ],
     ));
     updateFeatureStates(featureId, states);
-    if (GeminiAgentClient.hasKey(_apiKey)) {
+    if (GeminiAgentClient.hasKey(_apiKey) ||
+        GeminiAgentClient.testMockResponder != null) {
       _enrichPlaytestFixWithAi(
         featureId: featureId,
         states: states,
@@ -2966,6 +2835,9 @@ Return ONLY a JSON object:
         fixTaskIndex: newTaskIndex,
         issueDescription: cleanIssue,
       );
+    } else {
+      _setOfflineState();
+      notifyListeners();
     }
     return newTaskIndex;
   }
@@ -2985,7 +2857,10 @@ Return ONLY a JSON object:
     final engineLabel = _activeEngineLabel;
     final taskNum = fixTaskIndex + 1;
 
-    final prompt = '''
+    _synthesizingFeatureIds.add(featureId);
+    notifyListeners();
+    try {
+      final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize a concrete 3-step engine fix:
 Reported Bug: "$issueDescription"
@@ -3005,60 +2880,65 @@ Return ONLY a JSON object with 3 concrete fix steps:
     }
   ]
 }''';
-    final json = await GeminiAgentClient.generateJson(
-      prompt: prompt,
-      apiKey: _apiKey,
-      preferredModel: _planningModel,
-      thinkingLevel: _thinkingLevel,
-      temperature: 0.3,
-    );
-    if (json == null) return;
-    final rawSteps = json['steps'];
-    if (rawSteps is List && rawSteps.isNotEmpty) {
-      final updatedSubs = <Subtask>[];
-      for (int i = 0; i < rawSteps.length; i++) {
-        final item = rawSteps[i];
-        if (item is Map) {
-          final title = item['title']?.toString().trim() ?? '';
-          final path = item['stepPath']?.toString().trim() ?? '';
-          final instr = item['instruction']?.toString().trim() ?? '';
-          final code = item['codeFormula']?.toString().trim() ?? '';
-          final verify = item['verifyResult']?.toString().trim() ?? '';
-          final prevDone = i < fixTask.children.length
-              ? fixTask.children[i].completed
-              : false;
-          updatedSubs.add(
-            Subtask(
-              id: i < fixTask.children.length
-                  ? fixTask.children[i].id
-                  : generateUniqueId('fix_ai_sub_${i + 1}'),
-              text: title.isNotEmpty
-                  ? title
-                  : 'STEP $taskNum.${i + 1} · APPLY ROOT-CAUSE FIX ${i + 1}',
-              specNotes: instr,
-              codeSnippet: code,
-              codeLanguage: path,
-              verification: verify,
-              codeTargetFile: 'custom_snippet',
-              completed: prevDone,
-            ),
-          );
+      final json = await GeminiAgentClient.generateJson(
+        prompt: prompt,
+        apiKey: _apiKey,
+        preferredModel: _planningModel,
+        thinkingLevel: _thinkingLevel,
+        temperature: 0.3,
+      );
+      if (json == null) return;
+      final rawSteps = json['steps'];
+      if (rawSteps is List && rawSteps.isNotEmpty) {
+        final updatedSubs = <Subtask>[];
+        for (int i = 0; i < rawSteps.length; i++) {
+          final item = rawSteps[i];
+          if (item is Map) {
+            final title = item['title']?.toString().trim() ?? '';
+            final path = item['stepPath']?.toString().trim() ?? '';
+            final instr = item['instruction']?.toString().trim() ?? '';
+            final code = item['codeFormula']?.toString().trim() ?? '';
+            final verify = item['verifyResult']?.toString().trim() ?? '';
+            final prevDone = i < fixTask.children.length
+                ? fixTask.children[i].completed
+                : false;
+            updatedSubs.add(
+              Subtask(
+                id: i < fixTask.children.length
+                    ? fixTask.children[i].id
+                    : generateUniqueId('fix_ai_sub_${i + 1}'),
+                text: title.isNotEmpty
+                    ? title
+                    : 'STEP $taskNum.${i + 1} · APPLY ROOT-CAUSE FIX ${i + 1}',
+                specNotes: instr,
+                codeSnippet: code,
+                codeLanguage: path,
+                verification: verify,
+                codeTargetFile: 'custom_snippet',
+                completed: prevDone,
+              ),
+            );
+          }
+        }
+        if (updatedSubs.isNotEmpty) {
+          fixTask.children = updatedSubs;
         }
       }
-      if (updatedSubs.isNotEmpty) {
-        fixTask.children = updatedSubs;
+      final aiGuard = json['playtestGuard']?.toString().trim() ?? '';
+      if (aiGuard.isNotEmpty) {
+        final normGuard = aiGuard.startsWith('[PLAYTEST GUARD]')
+            ? aiGuard
+            : '[PLAYTEST GUARD] $aiGuard';
+        if (!cpNode.edgeCases.contains(normGuard)) {
+          cpNode.edgeCases = [...cpNode.edgeCases, normGuard];
+        }
       }
+      TaskHowToBlueprint.clearCache();
+      updateFeatureStates(featureId, states);
+    } finally {
+      _synthesizingFeatureIds.remove(featureId);
+      notifyListeners();
     }
-    final aiGuard = json['playtestGuard']?.toString().trim() ?? '';
-    if (aiGuard.isNotEmpty) {
-      final normGuard = aiGuard.startsWith('[PLAYTEST GUARD]')
-          ? aiGuard
-          : '[PLAYTEST GUARD] $aiGuard';
-      if (!cpNode.edgeCases.contains(normGuard)) {
-        cpNode.edgeCases = [...cpNode.edgeCases, normGuard];
-      }
-    }
-    updateFeatureStates(featureId, states);
   }
 
   /// Tailors the checkable How-To sub-steps (`Step X.1` through `Step X.N`) for a specific
