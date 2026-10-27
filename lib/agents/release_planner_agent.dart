@@ -266,7 +266,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     for (int bIdx = 0; bIdx < rawBeats.length; bIdx++) {
       final bMap = rawBeats[bIdx];
       if (bMap is! Map) continue;
-      final bTitle = (bMap['title'] ?? 'Epic ${bIdx + 1}').toString().trim();
+      final bTitle = MechanicArchetypeProfile.concreteBeatDisplayTitle(
+        (bMap['title'] ?? 'Epic ${bIdx + 1}').toString().trim(),
+        beatIndex: bIdx,
+      );
       final bGoal = (bMap['goal'] ?? '').toString().trim();
       final bDone = (bMap['doneWhen'] ?? '').toString().trim();
       final rawFeats = bMap['features'];
@@ -276,8 +279,12 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       for (int fIdx = 0; fIdx < rawFeats.length; fIdx++) {
         final fMap = rawFeats[fIdx];
         if (fMap is! Map) continue;
-        final fTitle =
-            (fMap['title'] ?? 'Feature ${fIdx + 1}').toString().trim();
+        final fTitle = MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+          (fMap['title'] ?? 'Feature ${fIdx + 1}').toString().trim(),
+          beatTitle: bTitle,
+          beatGoal: bGoal,
+          beatIndex: bIdx,
+        );
         final fGoal = (fMap['goal'] ?? '').toString().trim();
         final fDone = (fMap['doneWhen'] ?? '').toString().trim();
 
@@ -707,29 +714,39 @@ class ReleaseExecutorAgent {
       final includedFeats = beatBp.includedFeatures;
       if (includedFeats.isEmpty) continue;
 
-      beatTitles.add(beatBp.title);
+      final concreteBeatTitle =
+          MechanicArchetypeProfile.concreteBeatDisplayTitle(
+        beatBp.title,
+        beatIndex: bIdx,
+      );
+      beatTitles.add(concreteBeatTitle);
       onProgress?.call(
-        'Syncing Core Loop Epic ${bIdx + 1}: ${beatBp.title}...',
+        'Syncing Core Loop Epic ${bIdx + 1}: $concreteBeatTitle...',
       );
       await Future<void>.delayed(const Duration(milliseconds: 40));
 
       final existingBeat = projectScopedDocs[beatBp.id] ??
+          existingBeatsByTitle[concreteBeatTitle.toLowerCase().trim()] ??
           existingBeatsByTitle[beatBp.title.toLowerCase().trim()];
       final beatId = existingBeat?.id ?? 'epic_${releaseDoc.id}_${bIdx + 1}';
 
-      final featTitlesForBeat =
-          includedFeats.map((f) => '• ${f.title}: ${f.goal}').join('\n');
+      final featTitlesForBeat = includedFeats
+          .map(
+            (f) =>
+                '• ${MechanicArchetypeProfile.concreteFeatureTitleForBeat(f.title, beatTitle: concreteBeatTitle, beatGoal: beatBp.goal, beatIndex: bIdx)}: ${f.goal}',
+          )
+          .join('\n');
       final deferredForBeat =
           beatBp.deferredFeatures.map((f) => '• ${f.title}').join('\n');
 
       final beatDoc = existingBeat ??
           TierDocument(
             id: beatId,
-            title: beatBp.title,
+            title: concreteBeatTitle,
             tier: TierType.epic,
             parentId: releaseDoc.id,
           );
-      beatDoc.title = beatBp.title;
+      beatDoc.title = concreteBeatTitle;
       beatDoc.parentId = releaseDoc.id;
       beatDoc.estimatedDuration = '${beatBp.totalIncludedHours}h';
       beatDoc.sections['scope'] = 'Goal: ${beatBp.goal}\n\n'
@@ -884,12 +901,12 @@ class ReleaseExecutorAgent {
         final featDoc = existingFeat ??
             TierDocument(
               id: featId,
-              title: featBp.title,
+              title: concreteFeatTitle,
               tier: TierType.feature,
               parentId: beatDoc.id,
             );
 
-        featDoc.title = featBp.title;
+        featDoc.title = concreteFeatTitle;
         featDoc.parentId = beatDoc.id;
         featDoc.estimatedDuration = '${featBp.activeDeltaHours}h';
         featDoc.sections['originVersion'] = originVer;

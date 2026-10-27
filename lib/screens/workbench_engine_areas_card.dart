@@ -146,102 +146,43 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           : (isUnity
               ? 'Inspector Window (Component Settings)'
               : 'Inspector Dock (Node Properties)');
-      final hasCameraSetup = rawCode.contains('CameraBoom') ||
-          rawCode.contains('FollowCamera') ||
-          rawCode.contains('CameraArm');
-      final hasWeaponSetup =
-          rawCode.contains('WeaponMesh') || rawCode.contains('MuzzlePoint');
-      if (hasCameraSetup) {
-        if (isUnreal) {
-          inspRows.addAll([
-            (
-              key: 'CameraBoom → Target Arm Length',
-              value: '400.0  ·  Do Collision Test = False',
-            ),
-            (
-              key: 'CameraBoom → Enable Camera Lag',
-              value: 'True  (Driven by $primaryTuningLabel)',
-            ),
-            (
-              key: 'HudCanvas → Space',
-              value: 'Screen  ·  Draw at Desired Size = True',
-            ),
-          ]);
-        } else if (isUnity) {
-          inspRows.addAll([
-            (key: 'HudCanvas → Render Mode', value: 'Screen Space - Overlay'),
-            (
-              key: 'CanvasScaler → UI Scale Mode',
-              value: 'Scale With Screen Size (1920 × 1080)',
-            ),
-            (
-              key: 'CameraSmoothing Binding',
-              value: primaryTuningLabel,
-            ),
-          ]);
-        } else {
-          inspRows.addAll([
-            (key: 'FollowCamera → Enabled', value: 'On (Checked)'),
-            (
-              key: 'FollowCamera → Position Smoothing',
-              value: 'Enabled  (Driven by $primaryTuningLabel)',
-            ),
-            (
-              key: 'HudCanvas → Layer',
-              value: '10 (Renders above world nodes)',
-            ),
-          ]);
+      final treeChildRegex = RegExp(
+        r'[├└]─\s*([A-Za-z0-9_]+)\s*(?:\(([^)]+)\))?',
+      );
+      for (final line in compBody.split('\n')) {
+        final match = treeChildRegex.firstMatch(line);
+        if (match != null) {
+          final nodeName = match.group(1)!.trim();
+          final nodeDesc = (match.group(2) ?? '').trim();
+          if (nodeName == 'DefaultSceneRoot') continue;
+          if (nodeDesc.isNotEmpty) {
+            final colonIdx = nodeDesc.indexOf(':');
+            if (colonIdx > 0 && colonIdx < nodeDesc.length - 1) {
+              final propType = nodeDesc.substring(0, colonIdx).trim();
+              final propVal = nodeDesc.substring(colonIdx + 1).trim();
+              inspRows.add((
+                key: '$nodeName → $propType',
+                value: propVal,
+              ));
+            } else {
+              inspRows.add((
+                key: '$nodeName → Type / Resource',
+                value: nodeDesc,
+              ));
+            }
+          }
         }
-      } else if (hasWeaponSetup) {
-        inspRows.addAll([
-          (
-            key: 'WeaponMesh → Collision',
-            value: 'NoCollision (Visual Socket Only)',
-          ),
-          (
-            key: 'InteractBox → Box Extent',
-            value: 'X = 50.0, Y = 50.0, Z = 20.0',
-          ),
-          (key: 'Tuning Binding', value: primaryTuningLabel),
-        ]);
-      } else {
-        if (isUnreal) {
-          inspRows.addAll([
-            (
-              key: 'VisualMesh → Static Mesh',
-              value: 'Shape_Plane / Shape_Cube',
-            ),
-            (
-              key: 'InteractBox → Box Extent',
-              value: 'X = 50.0, Y = 50.0, Z = 20.0',
-            ),
-            (
-              key: 'Collision Presets',
-              value: 'OverlapAllDynamic  (Generate Overlap Events = True)',
-            ),
-          ]);
-        } else if (isUnity) {
-          inspRows.addAll([
-            (
-              key: 'VisualMesh → Renderer',
-              value: 'MeshRenderer / SpriteRenderer',
-            ),
-            (
-              key: 'InteractTrigger → BoxCollider',
-              value: 'Is Trigger = True (Checked)',
-            ),
-            (key: 'Tuning Parameter', value: primaryTuningLabel),
-          ]);
-        } else {
-          inspRows.addAll([
-            (key: 'Visual → Size / Texture', value: '64 × 64 px'),
-            (
-              key: 'CollisionShape2D → Shape',
-              value: 'New RectangleShape2D (Extents: 32, 32)',
-            ),
-            (key: 'HitBox → Monitoring', value: 'On (Checked)'),
-          ]);
+      }
+      for (final t in tuningItems.take(2)) {
+        final parts = t.split(':');
+        final k = parts.first.trim();
+        final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
+        if (k.isNotEmpty) {
+          inspRows.add((key: 'Tuning · $k', value: v));
         }
+      }
+      if (inspRows.isEmpty) {
+        inspRows.add((key: 'Primary Tuning Binding', value: primaryTuningLabel));
       }
       if (isCppConstructorSubobjectsStep) {
         codeWhere = stepPath;

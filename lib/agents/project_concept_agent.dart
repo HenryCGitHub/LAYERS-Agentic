@@ -697,8 +697,8 @@ Return ONLY valid JSON:
     return null;
   }
 
-  /// Option 5: Extracts a complete 9-section `ProjectConceptBlueprint` from an unstructured
-  /// GDD, Notion note, or README document and marks it ready for `Step 10 · Full Review`.
+  /// Option 5: Extracts a complete 8-section `ProjectConceptBlueprint` from an unstructured
+  /// GDD, Notion note, or README document and marks it ready for `Step 09 · Full Concept Review`.
   /// Returns `null` if offline or if Gemini AI is unreachable.
   static Future<ProjectConceptBlueprint?> extractConceptFromGdd(
     String rawGdd, {
@@ -719,7 +719,7 @@ Return ONLY valid JSON:
 
     bp.isInterviewComplete = true;
     bp.lastUpdatedFields = const [
-      'Extracted Full 9-Section Concept from Pasted GDD / Notes',
+      'Extracted Full 8-Section Concept from Pasted GDD / Notes',
     ];
     return bp;
   }

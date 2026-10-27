@@ -2686,6 +2686,31 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           resolvedCustom.subSteps.first.verifyResult,
           'Confirm custom AI step verify check passes in Play mode.',
         );
+
+        // Round 3: Editing checkpoint tuningParams & edgeCases re-binds non-custom Subtask children & code formulas while preserving completion state
+        sampleTask.children[3].completed = true;
+        sampleCp.tuningParams = ['truckNitroSpeed: 42.0 m/s'];
+        sampleCp.edgeCases = ['[NITRO LOCK GUARD] Block nitro while braking'];
+        TaskHowToBlueprint.clearCache();
+        final resolvedAfterSpecEdit = TaskHowToBlueprint.resolve(
+          parentTask: sampleTask,
+          taskIndex: 0,
+          checkpointNode: sampleCp,
+          engineHint: 'Godot 4',
+        );
+        expect(
+          resolvedAfterSpecEdit.subSteps[3].codeFormula,
+          contains('truckNitroSpeed'),
+        );
+        expect(
+          sampleTask.children[3].codeSnippet,
+          contains('truckNitroSpeed'),
+        );
+        expect(
+          sampleTask.children[3].completed,
+          isTrue,
+          reason: 'Completed sub-step state must be preserved when tuning parameters update',
+        );
       },
     );
   });

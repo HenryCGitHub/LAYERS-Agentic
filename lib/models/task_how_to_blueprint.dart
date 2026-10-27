@@ -1619,22 +1619,26 @@ class TaskHowToBlueprint {
       final customVerify = child.verification?.trim() ?? '';
       final customPath = child.codeLanguage?.trim() ?? '';
 
+      if (!isCustomSnippet && hasDynamicSpec) {
+        child.text = spec.stepHeader;
+        child.specNotes = spec.instruction;
+        child.codeSnippet = spec.code;
+      }
+
       resolvedSubs.add(
         TaskHowToSubStep(
           subtask: child,
           stepNumberLabel: stepLabel,
           shortTitle: shortTitle,
           instruction: instruction,
-          verifyResult: (isCustomSnippet && customVerify.isNotEmpty)
+          verifyResult: customVerify.isNotEmpty
               ? customVerify
-              : ((!isCustomSnippet && hasDynamicSpec)
+              : (hasDynamicSpec
                   ? spec.verify
                   : 'Verify "$shortTitle" responds cleanly in the active viewport.'),
-          stepPath: (isCustomSnippet && customPath.isNotEmpty)
+          stepPath: customPath.isNotEmpty
               ? customPath
-              : ((!isCustomSnippet && hasDynamicSpec)
-                  ? spec.path
-                  : whereLocation),
+              : (hasDynamicSpec ? spec.path : whereLocation),
           codeFormula: code,
           explainConcept: (!isCustomSnippet && hasDynamicSpec)
               ? spec.explain

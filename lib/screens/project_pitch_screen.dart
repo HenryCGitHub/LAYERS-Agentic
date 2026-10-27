@@ -575,9 +575,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     int optIdx,
     String optionText,
   ) {
-    final bodyAfterColon = optionText.contains(':')
-        ? optionText.substring(optionText.indexOf(':') + 1).trim()
-        : optionText.trim();
+    final trimmedOption = optionText.trim();
+    final colonIdx = trimmedOption.indexOf(':');
+    final firstSepMatch = RegExp(r'[·|]').firstMatch(trimmedOption);
+    final hasLeadingTitlePrefix = colonIdx > 0 &&
+        (firstSepMatch == null || colonIdx < firstSepMatch.start);
+    final bodyAfterColon = hasLeadingTitlePrefix
+        ? trimmedOption.substring(colonIdx + 1).trim()
+        : trimmedOption;
 
     widget.workbench.updateConceptDraft((d) {
       switch (sectionIdx) {
@@ -588,7 +593,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           }
           break;
         case 1:
-          final specParts = optionText
+          final specParts = bodyAfterColon
               .split(RegExp(r'\s*[·|]\s*'))
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
@@ -603,7 +608,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           }
           break;
         case 2:
-          final techParts = optionText
+          final techParts = bodyAfterColon
               .split(RegExp(r'\s*[·|]\s*'))
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
@@ -1587,7 +1592,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   }
 
   /// Option 5: Opens a dialog to paste an existing GDD, Notion note, or README document,
-  /// extracts all 9 Concept sections, and jumps straight to `Step 10 · Full Review`.
+  /// extracts all 8 Concept sections, and jumps straight to `Step 09 · Full Concept Review`.
   void _showImportGddDialog(BuildContext context) {
     final gddController = TextEditingController();
     showDialog<void>(
@@ -1623,7 +1628,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Paste your unstructured GDD, Notion notes, or README below. The Agent will extract all 9 Concept sections (Goal, Game Spec, Tech Spec, Pillars, Trade-Offs, Core Loop, Out of Scope, Done When, Release Train) and jump straight to Step 10 · Full Review.',
+                  'Paste your unstructured GDD, Notion notes, or README below. The Agent will extract all 8 Concept sections (Goal, Game Spec, Tech Spec, Pillars, Trade-Offs, Core Loop, Out of Scope, Done When) and jump straight to Step 09 · Full Concept Review.',
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     height: 1.45,
@@ -1696,7 +1701,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               },
               icon: const Icon(Icons.auto_awesome_rounded, size: 14),
               label: Text(
-                'Extract 9-Section Blueprint & Jump to Review →',
+                'Extract 8-Section Blueprint & Jump to Review →',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -3470,13 +3475,14 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               ),
               const SizedBox(height: 5),
               Text(
-                v,
+                v.trim().isEmpty ? 'Click to set...' : v,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: textPrimary,
+                  fontWeight: v.trim().isEmpty ? FontWeight.w500 : FontWeight.w700,
+                  fontStyle: v.trim().isEmpty ? FontStyle.italic : FontStyle.normal,
+                  color: v.trim().isEmpty ? textMuted : textPrimary,
                 ),
               ),
             ],

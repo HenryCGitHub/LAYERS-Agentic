@@ -1106,9 +1106,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
   }
 
-  /// Fix 1: Flat Borderless Step Timeline rendered inside the Work Area (Full-Screen mode).
-  /// Unifies all Task Groups across the Feature's checkpoints into one sequential `01..N` list
-  /// along a continuous 1px vertical track line (zero stacked CP bars, zero boxes, zero accordions).
+  /// Framed Step Timeline rendered inside the Work Area (Full-Width mode).
+  /// Displays the active checkpoint's Task Groups and atomic Sub-Steps in sequential order.
   Widget _buildFlatFeatureStepTimeline({
     required TierDocument feat,
     required List<FeatureStateNode> states,
@@ -1117,7 +1116,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     required List<TaskHowToBlueprint> howToBlueprints,
     required int selectedTaskIdx,
     required int activeSubStepIdx,
-    required String featureCategory,
   }) {
     final engineHint = _engineHint;
     final unifiedTaskGroups = <({
@@ -1126,12 +1124,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       int tIdx,
       Subtask task,
       TaskHowToBlueprint bp,
-      int globalTaskIdx,
-      String cpCategory,
     })>[];
     int totalDoneSteps = 0;
     int totalStepsCount = 0;
-    int runningGlobalTaskIdx = 0;
 
     for (int tIdx = 0; tIdx < node.checklist.length; tIdx++) {
       final bp = tIdx < howToBlueprints.length
@@ -1151,8 +1146,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         tIdx: tIdx,
         task: node.checklist[tIdx],
         bp: bp,
-        globalTaskIdx: runningGlobalTaskIdx++,
-        cpCategory: featureCategory,
       ));
     }
 
@@ -1286,7 +1279,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       final bp = grp.bp;
                       final task = grp.task;
                       final globalNumLabel =
-                          (grp.globalTaskIdx + 1).toString().padLeft(2, '0');
+                          (tIdx + 1).toString().padLeft(2, '0');
                       final isFixTask = task.text.trim().startsWith('[FIX]');
                       final isTaskActive =
                           cpIdx == checkpointIndex && tIdx == selectedTaskIdx;
@@ -2540,6 +2533,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                Tooltip(
+                                  message: 'Edit Tuning Parameters & Guards',
+                                  child: InkWell(
+                                    key: ValueKey(
+                                      'halfscreen_edit_tuning_guards_btn_${node.id}',
+                                    ),
+                                    onTap: () =>
+                                        _showEditCheckpointTuningAndGuardsDialog(
+                                      feat,
+                                      states,
+                                      node,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 3,
+                                      ),
+                                      child: Icon(
+                                        Icons.tune_rounded,
+                                        size: 13.5,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
                                 stepDropdownTrigger,
                                 const SizedBox(width: 6),
                                 Text(
@@ -2607,6 +2627,61 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             ),
                           ],
                         ),
+                        if (states.length > 1)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6, bottom: 2),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                for (int cpIdx = 0;
+                                    cpIdx < states.length;
+                                    cpIdx++)
+                                  InkWell(
+                                    key: ValueKey(
+                                      'halfscreen_cp_${feat.id}_$cpIdx',
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: () {
+                                      setState(() {
+                                        _manualCheckpointFocusIndex = cpIdx;
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 2.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: cpIdx == index
+                                            ? accentCyan.withValues(alpha: 0.14)
+                                            : bgSurface,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: cpIdx == index
+                                              ? accentCyan.withValues(
+                                                  alpha: 0.55,
+                                                )
+                                              : borderSubtle,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}${states[cpIdx].isCompleted ? ' ✓' : ''}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: cpIdx == index
+                                              ? accentCyan
+                                              : (states[cpIdx].isCompleted
+                                                  ? accentEmerald
+                                                  : textSecondary),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         Container(
                           key: ValueKey('task_sheet_feature_goal_${node.id}'),
                           padding: const EdgeInsets.only(top: 2),
@@ -2646,7 +2721,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             howToBlueprints: howToBlueprints,
                             selectedTaskIdx: selectedTaskIdx,
                             activeSubStepIdx: activeSubStepIdx,
-                            featureCategory: 'core',
                           ),
                         ),
                         const SizedBox(width: 22),

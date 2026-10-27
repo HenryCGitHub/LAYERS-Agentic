@@ -808,9 +808,29 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     final parentTask = node.checklist[pIdx];
     if (sIdx < 0 || sIdx >= parentTask.children.length) return;
     final sub = parentTask.children[sIdx];
-    final titleCtrl = TextEditingController(text: sub.text);
-    final instrCtrl = TextEditingController(text: sub.specNotes);
-    final codeCtrl = TextEditingController(text: sub.codeSnippet);
+    final bp = TaskHowToBlueprint.resolve(
+      parentTask: parentTask,
+      taskIndex: pIdx,
+      checkpointNode: node,
+      engineHint: _engineHint,
+      unrealCppMode: _unrealCppMode,
+    );
+    final resolvedSub = sIdx < bp.subSteps.length ? bp.subSteps[sIdx] : null;
+    final titleCtrl = TextEditingController(
+      text: resolvedSub?.stepNumberLabel ?? sub.text,
+    );
+    final whereCtrl = TextEditingController(
+      text: resolvedSub?.stepPath ?? sub.codeLanguage ?? '',
+    );
+    final instrCtrl = TextEditingController(
+      text: resolvedSub?.instruction ?? sub.specNotes ?? '',
+    );
+    final codeCtrl = TextEditingController(
+      text: resolvedSub?.codeFormula ?? sub.codeSnippet ?? '',
+    );
+    final verifyCtrl = TextEditingController(
+      text: resolvedSub?.verifyResult ?? sub.verification ?? '',
+    );
 
     final action = await showDialog<String>(
       context: context,
@@ -854,6 +874,28 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
               ),
               const SizedBox(height: 10),
               TextField(
+                key: const ValueKey('edit_substep_where_input'),
+                controller: whereCtrl,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11.5,
+                  color: textPrimary,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Where in Engine (Menu / Panel / File Path)',
+                  labelStyle: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    color: textSecondary,
+                  ),
+                  filled: true,
+                  fillColor: bgRecessed,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: borderSubtle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
                 key: const ValueKey('edit_substep_instruction_input'),
                 controller: instrCtrl,
                 maxLines: 2,
@@ -883,6 +925,25 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                 ),
                 decoration: InputDecoration(
                   labelText: 'Code Formula / Snippet',
+                  labelStyle: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    color: textSecondary,
+                  ),
+                  filled: true,
+                  fillColor: bgRecessed,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: borderSubtle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const ValueKey('edit_substep_verify_input'),
+                controller: verifyCtrl,
+                style: GoogleFonts.inter(fontSize: 12, color: textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Done Check (Verify in Viewport)',
                   labelStyle: GoogleFonts.jetBrainsMono(
                     fontSize: 10.5,
                     color: textSecondary,
@@ -947,10 +1008,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         if (titleCtrl.text.trim().isNotEmpty) {
           sub.text = titleCtrl.text.trim();
         }
+        sub.codeLanguage = whereCtrl.text.trim();
         sub.specNotes = instrCtrl.text.trim();
         sub.codeSnippet = codeCtrl.text.trim();
+        sub.verification = verifyCtrl.text.trim();
         sub.codeTargetFile = 'custom_snippet';
       }
+      TaskHowToBlueprint.clearCache();
     });
     widget.workbench.updateFeatureStates(feat.id, states);
   }
@@ -1576,6 +1640,12 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .toList();
+      final tuningBullets = node.tuningParams.map((t) => '• $t').join('\n');
+      final edgeBullets = node.edgeCases.map((e) => '• $e').join('\n');
+      feat.sections['tuning'] = tuningBullets;
+      feat.sections['variables'] = tuningBullets;
+      feat.sections['edge_cases'] = edgeBullets;
+      TaskHowToBlueprint.clearCache();
       widget.workbench.updateFeatureStates(feat.id, states);
     }
   }
