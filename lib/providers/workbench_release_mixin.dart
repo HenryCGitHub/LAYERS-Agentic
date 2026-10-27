@@ -919,7 +919,7 @@ Return ONLY a JSON object with this schema:
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
-        preferredModel: _conversationModel,
+        preferredModel: _planningModel,
         thinkingLevel: _thinkingLevel,
         temperature: 0.25,
       );
@@ -1004,8 +1004,15 @@ Return ONLY a JSON object with this schema:
       // before syncing project metadata so selected_beat_id / selected_feature_id are persisted together.
       _selectFirstIncompleteFeatureInActiveRelease();
       _syncActiveProjectMetadata();
-      if (_selectedFeatureId != null && GeminiAgentClient.hasKey(_apiKey)) {
-        synthesizeFeatureHowToStepsWithAi(_selectedFeatureId!);
+      if (_selectedFeatureId != null &&
+          (GeminiAgentClient.hasKey(_apiKey) ||
+              GeminiAgentClient.testMockResponder != null)) {
+        final firstTitle =
+            documents[_selectedFeatureId!]?.title ?? 'first feature';
+        _agentProgressStep =
+            'Synthesizing engine steps for "$firstTitle" ($_planningModel)...';
+        notifyListeners();
+        await synthesizeFeatureHowToStepsWithAi(_selectedFeatureId!);
       }
     } finally {
       _isAgentBusy = false;
@@ -1018,8 +1025,8 @@ Return ONLY a JSON object with this schema:
       _synthesizingFeatureIds.contains(featureId);
 
   /// Synthesizes bespoke, engine-specific 3-Area How-To Sub-Steps (`Hierarchy` -> `Inspector` -> `Code` -> `Verify`)
-  /// for the active checkpoint of `featureId` using on-demand `_conversationModel` (`gemini-flash-latest`),
-  /// adapting directly to the project's exact variable names and previous checkpoints.
+  /// for the active checkpoint of `featureId` using `_planningModel` (`gemini-4-argon`),
+  /// reasoning through the project's cumulative asset state, exact variable names, and previous checkpoints.
   Future<void> synthesizeFeatureHowToStepsWithAi(
     String featureId, {
     bool forceRefresh = false,
@@ -1089,6 +1096,24 @@ Return ONLY a JSON object with this schema:
         );
       }
 
+      // Determine project-wide feature build order so the agent knows what assets already exist vs. must be created first
+      final allReleaseFeatures = <TierDocument>[
+        for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
+      ];
+      final featOrderIdx =
+          allReleaseFeatures.indexWhere((f) => f.id == featureId);
+      final isGreenfieldFirstFeature =
+          (featOrderIdx <= 0) && effectiveCpIndex == 0;
+      final precedingFeatureTitles = featOrderIdx > 0
+          ? allReleaseFeatures
+              .take(featOrderIdx)
+              .map((f) => '"${f.title}"')
+              .toList()
+          : const <String>[];
+      final projectBuildStateContext = isGreenfieldFirstFeature
+          ? 'Project Build State: FEATURE #1 OF THE ENTIRE PROJECT (Greenfield). No Character Blueprint, Pawn, or Input Mapping Context exists yet. You MUST create the playable character/foundation asset (e.g., BP_PlayerCharacter inheriting from ACharacter with CapsuleComponent, CameraComponent, and CharacterMovement) and possess it in the level before or alongside wiring input and physics.'
+          : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: ${precedingFeatureTitles.join(', ')}). Reuse and extend the existing player character (e.g., BP_PlayerCharacter and IMC_Default) for player-attached mechanics, or create this feature\'s dedicated Actor and connect it to the existing player character.';
+
       // Gather previous checkpoints & sibling features' exact variable names and guards
       final priorCheckpointsSummary = <String>[];
       for (int i = 0; i < effectiveCpIndex; i++) {
@@ -1111,6 +1136,15 @@ Return ONLY a JSON object with this schema:
         }
       }
 
+      final cleanEdgeCases = cpNode.edgeCases
+          .map(
+            (g) => g
+                .replaceAll(RegExp(r'^\s*(?:\[[^\]]+\]\s*)+'), '')
+                .trim(),
+          )
+          .where((g) => g.isNotEmpty)
+          .toList();
+
       final targetEngineMode = engineLabel == 'UNREAL 5'
           ? (unrealCppMode ? 'UNREAL 5 C++ (.h / .cpp)' : 'UNREAL 5 BLUEPRINTS')
           : (engineLabel == 'UNITY C#'
@@ -1120,18 +1154,18 @@ Return ONLY a JSON object with this schema:
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+$projectBuildStateContext
 Tasks:
 ${taskSummaries.join('\n')}
 Active Tuning Parameters (MUST use exact variable names): ${cpNode.tuningParams.join(', ')}
-Active Guards (MUST enforce in code): ${cpNode.edgeCases.join(', ')}
+Active Guards (MUST enforce in code without raw [TAG] brackets in prose): ${cleanEdgeCases.join(', ')}
 ${priorCheckpointsSummary.isNotEmpty ? 'Previous Checkpoints & Project Variable Context (reuse exact identifiers):\n${priorCheckpointsSummary.join('\n')}' : ''}
 
 CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
-- ONE CANONICAL ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" (e.g., a single Character/Pawn/Actor Blueprint, C# MonoBehaviour, or Godot Scene). ONLY Task 1 (taskIndex: 0) Step 1.1 creates the asset and attaches its core components; Tasks 2..${cpNode.checklist.length} MUST open and extend that exact same asset — NEVER create a second replacement Pawn, Character Blueprint, or duplicate script in Task 2+.
-- STRICT TASK-ROLE ALIGNMENT (NO BLEEDING OR SHIFTING): Each task's subSteps MUST strictly implement that specific task's title:
-  * If a task is Asset/Pawn/Character/Actor Setup: create the canonical asset, configure its components/hierarchy, and place/possess it in the level.
-  * If a task is Input Mapping / Controls: create/bind the input actions and wire input events inside the canonical asset from Task 1 (do NOT recreate the Pawn/Character here).
-  * If a task is Physics Tuning / Movement / Guard: tune the movement/physics parameters (${cpNode.tuningParams.join(', ')}) and enforce the guards (${cpNode.edgeCases.join(', ')}) on the canonical asset (do NOT put initial Input Mapping setup here).
+- ONE CANONICAL ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" (e.g., BP_PlayerCharacter / PlayerCharacter.cs / player_character.tscn for player movement/actions, or a single Actor/Scene for world mechanics). NEVER create a throwaway Actor (such as "BP_InputMappingBasic" or "BP_InputMappingMovement") just to replace it with BP_PlayerCharacter in the next task.
+- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF (NO BLEEDING OR SHIFTING): Each task's subSteps MUST strictly implement that specific task's title while building cumulatively on the preceding task:
+  * If Task 1 is Asset/Pawn/Character/Actor Setup: Step 1.1 creates the canonical asset (e.g., BP_PlayerCharacter inheriting from ACharacter with CapsuleComponent, CameraComponent, CharacterMovement), configures its base variables, and places/possesses it in the level. Then Task 2 creates/binds the Input Actions (IA_Move, IA_Sprint, IA_Slide) and IMC_Default inside that same asset and wires the core mechanic velocity/action logic. Then Task 3 stays inside that same asset to tune physics/capsule/friction (${cpNode.tuningParams.join(', ')}) and enforce the guards (${cleanEdgeCases.join(', ')}).
+  * If Task 1 is Input Mapping: Task 1 creates and verifies the Enhanced Input Action(s) (IA_...) and Input Mapping Context (IMC_Default) in /Game/Input (NEVER a throwaway Actor). Then Task 2 Step 2.1 creates/opens BP_PlayerCharacter (ACharacter with CapsuleComponent, CameraComponent, CharacterMovement), registers IMC_Default from Task 1 on BeginPlay, and wires Task 1's Input Action into the core velocity/physics logic. Then Task 3 extends that same BP_PlayerCharacter with the remaining physics/animation/guard steps.
 
 For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return 3 to 5 sequential sub-steps covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
 1. "title": "STEP X.Y · SHORT LITERAL STEP TITLE"
@@ -1165,8 +1199,8 @@ Return ONLY valid JSON:
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
-        preferredModel: _conversationModel,
-        thinkingLevel: 'LOW',
+        preferredModel: _planningModel,
+        thinkingLevel: _thinkingLevel,
         temperature: 0.25,
       );
       final rawTasks = json?['tasks'];
@@ -1182,15 +1216,20 @@ Return ONLY valid JSON:
           parsedTaskIndices.every(
             (idx) => idx >= 1 && idx <= cpNode.checklist.length,
           );
+      final useDirectPositionalMapping =
+          rawTasks.length == cpNode.checklist.length;
 
       bool mutated = false;
       for (int listIdx = 0; listIdx < rawTasks.length; listIdx++) {
         final rawTask = rawTasks[listIdx];
         if (rawTask is! Map) continue;
-        final rawIdx = int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
-        final tIdx = rawIdx < 0
+        final rawIdx =
+            int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
+        final tIdx = useDirectPositionalMapping
             ? listIdx
-            : (isOneBasedTaskIndexing ? rawIdx - 1 : rawIdx);
+            : (rawIdx < 0
+                ? listIdx
+                : (isOneBasedTaskIndexing ? rawIdx - 1 : rawIdx));
         if (tIdx < 0 || tIdx >= cpNode.checklist.length) continue;
         final parentTask = cpNode.checklist[tIdx];
         final taskNum = tIdx + 1;

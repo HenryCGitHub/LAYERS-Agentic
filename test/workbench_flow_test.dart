@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
+import 'package:layers_agentic/agents/release_planner_agent.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -2807,7 +2808,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           GeminiAgentClient.testMockResponder = prevResponder;
         }
 
-        expect(capturedModel, equals('gemini-flash-latest'));
+        expect(capturedModel, equals('gemini-4-argon'));
         expect(capturedPrompt, contains('UNREAL 5 C++'));
         expect(capturedPrompt, contains('Sibling Feature'));
 
@@ -3738,6 +3739,89 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(
           afterCp.checklist[2].children.first.text,
           equals('STEP 3.1 · TUNE VELOCITY, GRAVITY & COLLISION GUARD'),
+        );
+
+        // ── 3. Foundation-First Task Order & Zero Throwaway Actors ("Chamber Blast" & "Concrete Jungle Run") ──
+        final normalizedChamber =
+            ReleasePlannerAgent.normalizeFoundationFirstTasks(
+          const [
+            'Input Mapping (2h)',
+            'Velocity Logic (2h)',
+            'Friction Tuning (2h)',
+          ],
+          featureTitle: 'Sprinting Movement',
+          beatTitle: 'Core Movement',
+          isFirstFeatureOfRelease: true,
+        );
+        expect(normalizedChamber[0], equals('Character Setup (2h)'));
+        expect(normalizedChamber[1], equals('Input & Velocity Logic (2h)'));
+        expect(normalizedChamber[2], equals('Friction Tuning (2h)'));
+
+        final normalizedJungle =
+            ReleasePlannerAgent.normalizeFoundationFirstTasks(
+          const [
+            'Input Mapping (2h)',
+            'Physics Setup (2h)',
+            'Animation Blend (2h)',
+          ],
+          featureTitle: 'Player Sprint Slide',
+          beatTitle: 'Dash and Slide',
+          isFirstFeatureOfRelease: true,
+        );
+        expect(normalizedJungle[0], equals('Character Setup (2h)'));
+        expect(normalizedJungle[1], equals('Input & Physics Logic (2h)'));
+        expect(normalizedJungle[2], equals('Animation Blend (2h)'));
+
+        // Even if a saved project has Task 1 = "Input Mapping (2h)", TaskHowToBlueprint never creates
+        // a throwaway BP_InputMapping... Actor; Task 1 creates IA_Move & IMC_Default, Task 2 creates
+        // BP_PlayerCharacter, and Task 3 tunes BP_PlayerCharacter!
+        final slideCp = FeatureStateNode(
+          id: 'cp_slide',
+          name: 'Movement (v0.1)',
+          trigger: 'Press slide -> character slides',
+          order: 0,
+          tuningParams: const ['slideSpeed: 1200 cm/s', 'frictionDecay: 0.8'],
+          edgeCases: const ['[COOLDOWN] Prevent slide spam'],
+          checklist: [
+            Subtask(id: 's_1', text: 'Input Mapping (2h)'),
+            Subtask(id: 's_2', text: 'Physics Setup (2h)'),
+            Subtask(id: 's_3', text: 'Animation Blend (2h)'),
+          ],
+        );
+        TaskHowToBlueprint.clearCache();
+        final slideBp0 = TaskHowToBlueprint.resolve(
+          parentTask: slideCp.checklist[0],
+          taskIndex: 0,
+          checkpointNode: slideCp,
+          engineHint: 'Unreal Engine 5',
+        );
+        final slideBp1 = TaskHowToBlueprint.resolve(
+          parentTask: slideCp.checklist[1],
+          taskIndex: 1,
+          checkpointNode: slideCp,
+          engineHint: 'Unreal Engine 5',
+        );
+        final slideBp2 = TaskHowToBlueprint.resolve(
+          parentTask: slideCp.checklist[2],
+          taskIndex: 2,
+          checkpointNode: slideCp,
+          engineHint: 'Unreal Engine 5',
+        );
+        expect(
+          slideBp0.subSteps[0].shortTitle,
+          equals('Create IA_Move & IMC_Default'),
+        );
+        expect(
+          slideBp0.subSteps[0].shortTitle.contains('BP_InputMapping'),
+          isFalse,
+        );
+        expect(
+          slideBp1.subSteps[0].shortTitle,
+          equals('Create BP_PlayerCharacter'),
+        );
+        expect(
+          slideBp2.subSteps[0].codeFormula,
+          contains('BP_PlayerCharacter'),
         );
       },
     );

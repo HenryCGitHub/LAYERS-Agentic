@@ -463,6 +463,7 @@ class TaskHowToBlueprint {
       'base',
       'basic',
       'initial',
+      'input',
       'mapping',
       'tuning',
       'config',
@@ -472,6 +473,14 @@ class TaskHowToBlueprint {
       'properties',
       'actor',
       'node',
+      'velocity',
+      'friction',
+      'physics',
+      'blend',
+      'animation',
+      'camera',
+      'collision',
+      'capsule',
     };
     final seenLower = <String>{};
     final words = <String>[];
@@ -488,6 +497,17 @@ class TaskHowToBlueprint {
       }
     }
     final lowerClean = clean.toLowerCase();
+    final isPlayerMovementCorpus = !lowerClean.contains('locomotion') &&
+        !lowerClean.contains('wasd') &&
+        (lowerClean.contains('player') ||
+            lowerClean.contains('sprint') ||
+            lowerClean.contains('slide') ||
+            lowerClean.contains('dash') ||
+            lowerClean.contains('movement') ||
+            lowerClean.contains('character'));
+    if (isPlayerMovementCorpus) {
+      return (pascalName: 'PlayerCharacter', snakeName: 'player_character');
+    }
     if (words.length == 1 &&
         (lowerClean.contains('locomotion') ||
             lowerClean.contains('pawn') ||
@@ -497,7 +517,9 @@ class TaskHowToBlueprint {
     }
     final chosen = words.isNotEmpty
         ? words.take(3).toList()
-        : <String>['Feature', 'Node'];
+        : (lowerClean.contains('input') || lowerClean.contains('mapping')
+            ? <String>['Player', 'Character']
+            : <String>['Feature', 'Node']);
     final pascal = chosen
         .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
         .join();
@@ -768,6 +790,10 @@ class TaskHowToBlueprint {
                     lowerCategoryCorpus.contains('character') ||
                     lowerCategoryCorpus.contains('parkour') ||
                     lowerCategoryCorpus.contains('sprint') ||
+                    lowerCategoryCorpus.contains('slide') ||
+                    lowerCategoryCorpus.contains('dash') ||
+                    lowerCategoryCorpus.contains('movement') ||
+                    lowerCategoryCorpus.contains('traversal') ||
                     lowerCategoryCorpus.contains('first person') ||
                     lowerCategoryCorpus.contains('third person'))
                 ? 'character'
@@ -783,16 +809,37 @@ class TaskHowToBlueprint {
         ? effectiveEdgeCases[taskIndex % effectiveEdgeCases.length]
         : '[STATE GUARD] Prevent duplicate trigger while active';
     final lowerTaskTitle = cleanTitle.toLowerCase();
-    final isFoundationTask = taskIndex == 0;
+    final firstTaskText = checkpointNode.checklist.isNotEmpty
+        ? extractCleanTitle(checkpointNode.checklist.first.text).toLowerCase()
+        : '';
+    final isFirstTaskPureInput = (firstTaskText.contains('input') ||
+            firstTaskText.contains('mapping')) &&
+        !firstTaskText.contains('character') &&
+        !firstTaskText.contains('pawn') &&
+        !firstTaskText.contains('actor');
+    final isCurrentTaskPureInput = (lowerTaskTitle.contains('input') ||
+            lowerTaskTitle.contains('mapping')) &&
+        !lowerTaskTitle.contains('character') &&
+        !lowerTaskTitle.contains('pawn') &&
+        !lowerTaskTitle.contains('actor');
+    final isFoundationTask =
+        (taskIndex == 0 && !isCurrentTaskPureInput) ||
+        (taskIndex == 1 && isFirstTaskPureInput);
     final isInputMappingTask = !isFoundationTask &&
         (lowerTaskTitle.contains('input') ||
             lowerTaskTitle.contains('mapping'));
     final isPhysicsTuningTask = !isFoundationTask &&
         !isInputMappingTask &&
+        !lowerTaskTitle.contains('wasd') &&
         (lowerTaskTitle.contains('tuning') ||
             lowerTaskTitle.contains('gravity') ||
-            (lowerTaskTitle.contains('physics') &&
-                !lowerTaskTitle.contains('wasd')));
+            lowerTaskTitle.contains('friction') ||
+            lowerTaskTitle.contains('velocity') ||
+            lowerTaskTitle.contains('blend') ||
+            lowerTaskTitle.contains('animation') ||
+            lowerTaskTitle.contains('capsule') ||
+            lowerTaskTitle.contains('physics') ||
+            (effectiveCategory == 'character' && taskIndex >= 2));
     final isStateLogicTask = !isFoundationTask &&
         !isInputMappingTask &&
         !isPhysicsTuningTask &&

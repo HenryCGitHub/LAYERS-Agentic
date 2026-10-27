@@ -145,7 +145,10 @@ $phaseInstruction
 - PLAIN ACTION FEATURE TITLES (NO CODE SUFFIXES): Every Feature must name 1 observable gameplay action (`2–3` plain game-dev words, e.g. `"Truck Steering"`, `"Roof Turret Fire"`, `"Raider Ambush"`, `"Crate Pickup"`). NEVER use code-architecture nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
-- SINGULAR-FOCUSED, NON-OVERLAPPING TASKS ON ONE SHARED ASSET: Keep each entry in `tasks` a short 2–3 word singular-focused title plus duration tag following a logical build sequence on ONE shared asset (`Task 1`: Asset & Component Setup, e.g. `"Character Setup (2h)"` or `"Actor Setup (2h)"`; `Task 2`: Input & Core Action Wiring, e.g. `"Input Mapping (2h)"` or `"State Logic (2h)"`; `Task 3`: Physics Tuning & Guard, e.g. `"Physics Tuning (2h)"` or `"State Guard (1h)"`) — never create duplicate Pawn/Character setup tasks or repeat the Beat/Feature name inside a task title.
+- FOUNDATION-FIRST, CUMULATIVE TASKS ON ONE SHARED ASSET: Keep each entry in `tasks` a short 2–3 word singular-focused title plus duration tag following a strict Foundation-First build dependency sequence on ONE shared asset:
+  * `Task 1` (Foundation / Asset & Component Setup): Create or open the canonical playable asset (`"Character Setup (2h)"` for player movement/control features, or `"Actor Setup (2h)"` for world/combat mechanics), configure its components, and place/possess it in the level. NEVER start `Task 1` with `"Input Mapping"` before a Character/Pawn/Actor exists to attach it to.
+  * `Task 2` (Input & Core Mechanic Logic): Bind the Input Action (`IA_...`, `IMC_Default`) or trigger event and wire the core movement/velocity/state logic onto `Task 1`'s asset (e.g., `"Input & Velocity Logic (2h)"`, `"Input Mapping (2h)"`, or `"State Logic (2h)"`).
+  * `Task 3` (Physics Tuning, Feel & Guard): Layer physics curves, friction/capsule blends, and edge-case guards onto that same asset (e.g., `"Physics Tuning (2h)"`, `"Friction Tuning (2h)"`, or `"State Guard (1h)"`) — never create duplicate Pawn/Character setup tasks or repeat the Beat/Feature name inside a task title.
 - `lifecycle`: `"new"` for v0.1; for v0.2+, use `"stable"` (0h, empty checkpoints), `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"`.
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
@@ -223,6 +226,98 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       projectExclusions: projectExclusions,
       allCoreLoopItems: coreLoopItems,
     );
+  }
+
+  /// Ensures checkpoint tasks follow a strict Foundation-First progression (`01` Asset/Character Setup ->
+  /// `02` Input & Core Logic -> `03` Physics/Tuning/Guards) so a developer never starts with Input Mapping
+  /// before creating the Character/Actor it attaches to.
+  static List<String> normalizeFoundationFirstTasks(
+    List<String> rawTasks, {
+    required String featureTitle,
+    required String beatTitle,
+    bool isFirstFeatureOfRelease = false,
+  }) {
+    if (rawTasks.length < 2) return rawTasks;
+    final tasks = List<String>.from(rawTasks);
+    final durationRe = RegExp(r'\(\s*\d+(?:\.\d+)?\s*[hm]\s*\)\s*$');
+
+    bool isPureInputTask(String t) {
+      final l = t.toLowerCase();
+      return (l.contains('input') || l.contains('mapping') || l.contains('keybind')) &&
+          !l.contains('character') &&
+          !l.contains('pawn') &&
+          !l.contains('actor') &&
+          !l.contains('vehicle') &&
+          !l.contains('velocity') &&
+          !l.contains('physics');
+    }
+
+    bool isEntityFoundationTask(String t) {
+      final l = t.toLowerCase();
+      if (l.contains('character') ||
+          l.contains('pawn') ||
+          l.contains('actor') ||
+          l.contains('player') ||
+          l.contains('vehicle') ||
+          l.contains('controller') ||
+          l.contains('spawner') ||
+          l.contains('turret') ||
+          l.contains('weapon') ||
+          l.contains('hitbox')) {
+        return true;
+      }
+      return l.contains('setup') &&
+          !l.contains('input') &&
+          !l.contains('mapping') &&
+          !l.contains('physics') &&
+          !l.contains('velocity') &&
+          !l.contains('friction') &&
+          !l.contains('animation') &&
+          !l.contains('blend');
+    }
+
+    if (!isPureInputTask(tasks[0])) {
+      return tasks;
+    }
+
+    // 1. If a Character/Pawn/Actor setup task was placed at index 1 or 2, move it to index 0 (Task 1)
+    final entityTaskIdx = tasks.indexWhere(isEntityFoundationTask);
+    if (entityTaskIdx > 0) {
+      final foundationTask = tasks.removeAt(entityTaskIdx);
+      tasks.insert(0, foundationTask);
+      return tasks;
+    }
+
+    // 2. Otherwise, if Task 1 is "Input Mapping" and no Character/Actor setup task exists in the list,
+    // establish Foundation Setup as Task 1 and merge Input into Task 2 so Task 1 creates the entity first.
+    final corpus = '$featureTitle $beatTitle'.toLowerCase();
+    final isCharacterFeature = isFirstFeatureOfRelease ||
+        corpus.contains('player') ||
+        corpus.contains('character') ||
+        corpus.contains('pawn') ||
+        corpus.contains('sprint') ||
+        corpus.contains('slide') ||
+        corpus.contains('dash') ||
+        corpus.contains('move') ||
+        corpus.contains('locomotion') ||
+        corpus.contains('traversal') ||
+        corpus.contains('parkour') ||
+        corpus.contains('jump') ||
+        corpus.contains('run');
+    final task0Dur = durationRe.firstMatch(tasks[0])?.group(0)?.trim() ?? '(2h)';
+    final task1Dur = durationRe.firstMatch(tasks[1])?.group(0)?.trim() ?? '(2h)';
+    final task1Core = tasks[1]
+        .replaceFirst(durationRe, '')
+        .replaceFirst(RegExp(r'\bsetup\b', caseSensitive: false), 'Logic')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    tasks[0] =
+        '${isCharacterFeature ? "Character Setup" : "Actor Setup"} $task0Dur';
+    if (!task1Core.toLowerCase().contains('input')) {
+      tasks[1] = 'Input & $task1Core $task1Dur';
+    }
+    return tasks;
   }
 
   static ReleaseBlueprint? _parseDynamicReleaseBlueprint({
@@ -340,7 +435,12 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                 .trim();
             final cpVer =
                 (cMap['releaseVersion'] ?? versionTag).toString().trim();
-            final cpTasks = toStrList(cMap['tasks']);
+            final cpTasks = normalizeFoundationFirstTasks(
+              toStrList(cMap['tasks']),
+              featureTitle: fTitle,
+              beatTitle: bTitle,
+              isFirstFeatureOfRelease: bIdx == 0 && fIdx == 0 && cIdx == 0,
+            );
             checkpoints.add(
               ProposedCheckpointBlueprint(
                 title: cpTitle,
