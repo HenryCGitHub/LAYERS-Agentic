@@ -296,9 +296,17 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   }
 
   int _computeFeatureRemainingMinutes(TierDocument feat) {
+    if (feat.sections['lifecycle'] == FeatureLifecycleStatus.stable.name) {
+      return 0;
+    }
     final states = FeatureStateNode.getStatesForDocument(feat);
+    if (states.isEmpty) return 0;
+    final activeVer = widget.workbench.activeReleaseVersionTag;
+    final activeStates =
+        states.where((s) => s.releaseVersion == activeVer).toList();
+    final effectiveStates = activeStates.isNotEmpty ? activeStates : states;
     int rem = 0;
-    for (final cp in states) {
+    for (final cp in effectiveStates) {
       rem += _computeCheckpointRemainingMinutes(cp);
     }
     return rem;
@@ -704,13 +712,38 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             archivedFeats.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: Text(
-              'ARCHIVED TESTBEDS (${archivedFeats.length})',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: textMuted,
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'ARCHIVED TESTBEDS (${archivedFeats.length})',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  key: const ValueKey('return_from_archive_btn'),
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () => widget.workbench.setReleaseViewFilter('active'),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    child: Text(
+                      '← Active',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: accentEmerald,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           for (final arch in archivedFeats)
@@ -1629,15 +1662,32 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final isDone = progress >= 100;
     final nextFeat = widget.workbench.nextIncompleteFeature;
 
+    final activeVer = widget.workbench.activeReleaseVersionTag;
     int activeFocusIndex = -1;
+    // 1. Prioritize incomplete (or awaiting playtest) checkpoints belonging to the active release
     for (int i = 0; i < states.length; i++) {
       final s = states[i];
+      if (s.releaseVersion != activeVer) continue;
       final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
       if (activeFocusIndex == -1 && (!s.isCompleted || awaitingPlaytest)) {
         activeFocusIndex = i;
       }
     }
-
+    // 2. Otherwise prefer the last checkpoint belonging to the active release
+    if (activeFocusIndex == -1) {
+      activeFocusIndex =
+          states.lastIndexWhere((s) => s.releaseVersion == activeVer);
+    }
+    // 3. Fall back to any incomplete checkpoint or the last checkpoint
+    if (activeFocusIndex == -1) {
+      for (int i = 0; i < states.length; i++) {
+        final s = states[i];
+        final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
+        if (activeFocusIndex == -1 && (!s.isCompleted || awaitingPlaytest)) {
+          activeFocusIndex = i;
+        }
+      }
+    }
     if (activeFocusIndex == -1 && states.isNotEmpty) {
       activeFocusIndex = states.length - 1;
     }

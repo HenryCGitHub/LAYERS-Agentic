@@ -2659,6 +2659,42 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           courierProvider.releaseBlueprint?.releaseDocId,
           equals(preCancelRelId),
         );
+
+        // Round 7: ReleaseScope.fromDocument resolves sections['releaseScope'] and custom v0.1 titles
+        final customV01Doc = TierDocument(
+          id: 'rel_custom_v0_1',
+          title: 'v0.1: Neon Arena',
+          tier: TierType.release,
+          sections: {'releaseScope': ReleaseScope.prototype.name},
+        );
+        expect(
+          customV01Doc.releaseScope,
+          equals(ReleaseScope.featurePrototype),
+        );
+        final titleOnlyV01Doc = TierDocument(
+          id: 'rel_title_v0_1',
+          title: 'v0.1: Neon Arena',
+          tier: TierType.release,
+        );
+        expect(
+          titleOnlyV01Doc.releaseScope,
+          equals(ReleaseScope.featurePrototype),
+        );
+
+        // Round 7: Switching releaseViewFilter between 'archived' and 'active' auto-selects archived / active features
+        sampleFeat.sections['lifecycle'] =
+            FeatureLifecycleStatus.superseded.name;
+        courierProvider.setReleaseViewFilter('archived');
+        expect(courierProvider.releaseViewFilter, equals('archived'));
+        expect(courierProvider.selectedFeatureId, equals(sampleFeat.id));
+        courierProvider.setReleaseViewFilter('active');
+        expect(courierProvider.releaseViewFilter, equals('active'));
+        expect(
+          courierProvider.selectedFeatureId,
+          isNot(equals(sampleFeat.id)),
+        );
+        sampleFeat.sections['lifecycle'] =
+            FeatureLifecycleStatus.newFeature.name;
       },
     );
   });

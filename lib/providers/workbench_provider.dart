@@ -959,6 +959,23 @@ class WorkbenchProvider extends ChangeNotifier {
 
   void setReleaseViewFilter(String filter) {
     _releaseViewFilter = filter;
+    if (filter == 'archived') {
+      final archived = supersededFeatures;
+      if (archived.isNotEmpty &&
+          !archived.any((f) => f.id == _selectedFeatureId)) {
+        selectFeature(archived.first.id);
+        return;
+      }
+    } else {
+      final currentFeat =
+          _selectedFeatureId != null ? documents[_selectedFeatureId] : null;
+      if (currentFeat == null ||
+          currentFeat.sections['lifecycle'] ==
+              FeatureLifecycleStatus.superseded.name) {
+        _selectFirstIncompleteFeatureInActiveRelease();
+        _syncActiveProjectMetadata();
+      }
+    }
     notifyListeners();
   }
 
@@ -1104,6 +1121,7 @@ class WorkbenchProvider extends ChangeNotifier {
   /// Option 4: Builds a Post-Release Retrospective & Auto-Carryover Summary for the active Release.
   ReleaseRetrospectiveSummary buildActiveReleaseRetrospective() {
     final rel = activeRelease;
+    final activeVer = activeReleaseVersionTag;
     final beats = activeReleaseBeats;
     final allFeats = <TierDocument>[
       for (final b in beats) ...featuresForBeat(b.id),
@@ -1116,12 +1134,18 @@ class WorkbenchProvider extends ChangeNotifier {
     final hardened = <String>[];
 
     for (final f in allFeats) {
+      final isStable =
+          f.sections['lifecycle'] == FeatureLifecycleStatus.stable.name;
       final states = FeatureStateNode.getStatesForDocument(f);
-      totalCps += states.length;
+      final activeStates =
+          states.where((s) => s.releaseVersion == activeVer).toList();
+      final effectiveStates =
+          activeStates.isNotEmpty ? activeStates : states;
+      totalCps += effectiveStates.length;
       bool featHasIncomplete = false;
       bool featWasHardened = false;
-      for (final s in states) {
-        if (s.isCompleted) {
+      for (final s in effectiveStates) {
+        if (s.isCompleted || isStable) {
           verifiedCps++;
         } else {
           featHasIncomplete = true;
@@ -1140,7 +1164,7 @@ class WorkbenchProvider extends ChangeNotifier {
           }
         }
       }
-      if (featHasIncomplete) {
+      if (featHasIncomplete && !isStable) {
         carryover.add(f.title);
       }
       if (featWasHardened) {
@@ -2345,7 +2369,8 @@ Return ONLY a JSON object with this schema:
     if (feat == null) return;
     final engineLabel = _activeEngineLabel;
     final engineHint = _activeEngineHint;
-    final synthKey = '${featureId}_$engineLabel';
+    final activeVer = activeReleaseVersionTag;
+    final synthKey = '${featureId}_${activeVer}_$engineLabel';
     if (!forceRefresh &&
         (_aiSynthesizedFeatureSteps.contains(synthKey) ||
             _synthesizingFeatureIds.contains(featureId))) {
@@ -2354,8 +2379,12 @@ Return ONLY a JSON object with this schema:
 
     final states = FeatureStateNode.getStatesForDocument(feat);
     if (states.isEmpty) return;
-    final activeVer = activeReleaseVersionTag;
-    final cpIndex = states.indexWhere((s) => s.releaseVersion == activeVer);
+    int cpIndex = states.indexWhere(
+      (s) => s.releaseVersion == activeVer && !s.isCompleted,
+    );
+    if (cpIndex < 0) {
+      cpIndex = states.lastIndexWhere((s) => s.releaseVersion == activeVer);
+    }
     final cpNode = cpIndex >= 0 ? states[cpIndex] : states.first;
     if (cpNode.checklist.isEmpty) return;
 
@@ -2513,9 +2542,16 @@ Return ONLY valid JSON:
     if (feat == null) return;
     FeatureStateNode.saveStatesToDocument(feat, states);
     if (states.isNotEmpty) {
+      final activeVer = activeReleaseVersionTag;
       final activeCp = states.firstWhere(
-        (s) => !s.isCompleted,
-        orElse: () => states.first,
+        (s) => s.releaseVersion == activeVer && !s.isCompleted,
+        orElse: () => states.lastWhere(
+          (s) => s.releaseVersion == activeVer,
+          orElse: () => states.firstWhere(
+            (s) => !s.isCompleted,
+            orElse: () => states.last,
+          ),
+        ),
       );
       if (activeCp.tuningParams.isNotEmpty) {
         final formattedTuning =

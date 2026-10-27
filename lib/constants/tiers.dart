@@ -221,15 +221,15 @@ enum ReleaseScope {
 
   static ReleaseScope fromDocument(dynamic doc) {
     if (doc == null) return ReleaseScope.fullProduction;
-    final Map<String, dynamic> sections = doc.sections is Map<String, dynamic>
-        ? (doc.sections as Map<String, dynamic>)
-        : {};
+    final Map<dynamic, dynamic> sections =
+        doc.sections is Map ? (doc.sections as Map) : const {};
     final String title = doc.title is String ? (doc.title as String) : '';
 
-    // 1. Explicit milestonePass section takes top priority
-    final milestonePass = sections['milestonePass'];
-    if (milestonePass != null && milestonePass.toString().trim().isNotEmpty) {
-      final s = _matchEnum(milestonePass.toString());
+    // 1. Explicit releaseScope or milestonePass section takes top priority
+    final releaseScopeVal = sections['releaseScope'] ?? sections['milestonePass'];
+    if (releaseScopeVal != null &&
+        releaseScopeVal.toString().trim().isNotEmpty) {
+      final s = _matchEnum(releaseScopeVal.toString());
       if (s != null) return s;
     }
 
@@ -307,7 +307,8 @@ enum ReleaseScope {
     } else if (lowerTitle.contains('prototype') ||
         lowerTitle.contains('graybox') ||
         lowerTitle.contains('greybox') ||
-        lowerTitle.contains('r&d')) {
+        lowerTitle.contains('r&d') ||
+        (lowerTitle.contains('0.1') && !lowerTitle.contains('mvp'))) {
       return ReleaseScope.featurePrototype;
     } else if (lowerTitle.contains('vertical slice') ||
         lowerTitle.contains('demo') ||
@@ -316,8 +317,7 @@ enum ReleaseScope {
       return ReleaseScope.verticalSlice;
     } else if (lowerTitle.contains('mvp') ||
         lowerTitle.contains('alpha') ||
-        lowerTitle.contains('early access') ||
-        lowerTitle.contains('0.1')) {
+        lowerTitle.contains('early access')) {
       return ReleaseScope.mvp;
     }
     return ReleaseScope.fullProduction;
