@@ -101,12 +101,6 @@ class AppTheme {
       isDark ? textSecondary : textSecondaryLight;
   static Color textMutedFor(bool isDark) => isDark ? textMuted : textMutedLight;
 
-  // ── Tier Semantic Accents ─────────────────────────────────────────────────
-  static const Color tierProject = accentAmber;
-  static const Color tierRelease = accentCyan;
-  static const Color tierEpic = accentPurple;
-  static const Color tierFeature = accentOrange;
-
   // ── Standard Radius Scale ─────────────────────────────────────────────────
   static const double radiusXs = 4.0;   // Chips, small tags, micro badges
   static const double radiusSm = 6.0;   // Buttons, inputs, small cards
@@ -114,33 +108,10 @@ class AppTheme {
   static const double radiusLg = 12.0;  // Modals, workstation containers, toast
   static const double radiusPill = 999.0; // Status badges, pill counters
 
-  // ── Standard Button & Hit Target Heights ───────────────────────────────────
-  static const double hitTargetMinimum = 32.0;    // Fitts's Law minimum touch/click target
-  static const double buttonHeightToolbar = 28.0; // Header, toolbar, and card actions
-  static const double buttonHeightAction = 32.0;  // Standard interactive button
-  static const double buttonHeightDialog = 36.0;  // Modal dialog action buttons
-
-  // ── Unified Theme Transition ──────────────────────────────────────────────
-  static const Duration themeTransitionDuration = Duration(milliseconds: 300);
-  static const Curve themeTransitionCurve = Curves.easeInOut;
-
-  // ── Action Button Palette (Linear Strict System: Color Only for Buttons) ─
-  static const Color buttonAutoFill = Color(0xFF10B981); // Emerald Green
-  static const Color buttonAutoFillDarkText = Color(0xFF34D399);
-  static const Color buttonBreakdown = Color(0xFF8B5CF6); // Linear Purple
-  static const Color buttonBreakdownDarkText = Color(0xFFA78BFA);
-  static const Color buttonDelete = Color(0xFFEF4444); // Rose Red
-  static const Color buttonDeleteDarkText = Color(0xFFF87171);
-
   // ── Purposeful Semantic Accents (Clean Craft Scale) ───────────────────────
   static const Color accentAmber = Color(0xFFFCD34D); // Soft Gold (Dark)
   static const Color accentAmberLight = Color(0xFFA87E35); // Muted Ochre (Light)
   static Color accentAmberFor(bool isDark) => isDark ? accentAmber : accentAmberLight;
-
-  static const Color accentAmberDarkText = Color(0xFFFCD34D);
-  static const Color accentAmberLightText = Color(0xFFA87E35);
-  static const Color accentAmberSubtle = Color(0x1FFCD34D);
-  static const Color accentAmberBorder = Color(0x3DFCD34D);
 
   static const Color accentBlue = Color(0xFF60A5FA); // Soft Ice Blue (Dark)
   static const Color accentBlueLight = Color(0xFF436D99); // Muted Denim (Light)

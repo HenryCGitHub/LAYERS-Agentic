@@ -33,8 +33,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   static final RegExp _assetTokenRegex = RegExp(
     r'\b(?:BP_[A-Za-z0-9_]+|A[A-Z][A-Za-z0-9_]+Actor|[A-Za-z0-9_]+\.(?:uasset|tscn|gd|cs|h|cpp)|InteractBox|VisualMesh|DefaultSceneRoot|InteractTrigger|HitBox|CollisionShape2D|BoxCollider)\b',
   );
+  static final RegExp _treeChildRegex = RegExp(
+    r'[├└]─\s*([A-Za-z0-9_]+)\s*(?:\(([^)]+)\))?',
+  );
+  static final RegExp _leadingBracketTagRegex = RegExp(r'^\[[^\]]+\]\s*');
+  static String? _cachedSpecTokenKey;
+  static Map<String, String> _cachedBaseTokens = const {};
+  static RegExp? _cachedBaseTokenRegex;
 
-  final Set<String> _expandedDoneCheckpoints = {};
   final Set<String> _awaitingPlaytestVerification = {};
   int? _manualCheckpointFocusIndex;
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
@@ -308,7 +314,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
   Widget _buildLeftBeatFeatureRail(
     TierDocument rel, {
-    bool shrinkWrap = false,
     bool isOverlayDrawer = false,
   }) {
     final beats = widget.workbench.activeReleaseBeats;
@@ -323,7 +328,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: shrinkWrap ? MainAxisSize.min : MainAxisSize.max,
+      mainAxisSize: MainAxisSize.max,
       children: [
         Container(
           height: 44,
@@ -721,11 +726,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 final isBeatActive = beatFeats.any(
                   (f) => f.id == widget.workbench.selectedFeatureId,
                 );
-                int prevFeaturesBeforeBeat = 0;
-                for (int prevB = 0; prevB < bIdx; prevB++) {
-                  prevFeaturesBeforeBeat +=
-                      widget.workbench.featuresForBeat(beats[prevB].id).length;
-                }
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -820,8 +820,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                         activeVer: activeVer,
                         beatTitle: beat.title,
                         beatIndex: bIdx,
-                        featureIndexInBeat: fIdx,
-                        globalFeatureIndex: prevFeaturesBeforeBeat + fIdx,
                       ),
                   ],
                 );
@@ -868,17 +866,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       ],
     );
 
-    if (shrinkWrap) {
-      return Container(
-        decoration: BoxDecoration(
-          color: bgRecessed,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: borderSubtle),
-        ),
-        child: content,
-      );
-    }
-
     return Container(
       decoration: BoxDecoration(
         color: bgRecessed,
@@ -897,8 +884,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     required String activeVer,
     String? beatTitle,
     int beatIndex = 0,
-    int featureIndexInBeat = 0,
-    int globalFeatureIndex = 0,
   }) {
     final isSelected = widget.workbench.selectedFeatureId == feat.id;
     final progress = widget.workbench.getDocumentProgress(feat.id);
@@ -1625,7 +1610,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
   Widget _buildFeatureMainCanvas(
     TierDocument rel, {
-    bool shrinkWrap = false,
     bool isHalfScreenOverlayMode = false,
   }) {
     final feat = widget.workbench.selectedFeature;
@@ -1647,8 +1631,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     for (int i = 0; i < states.length; i++) {
       final s = states[i];
       final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
-      // Keep the active focus spotlight on a checkpoint that just finished its tasks
-      // until the user clicks "Verify Playtest & Advance"
       if (activeFocusIndex == -1 && (!s.isCompleted || awaitingPlaytest)) {
         activeFocusIndex = i;
       }
@@ -1663,7 +1645,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         ? _manualCheckpointFocusIndex!
         : activeFocusIndex;
 
-    Widget buildBody(double viewportHeight) {
+    Widget buildBody() {
       final activeFeatureContent = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1687,7 +1669,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 states,
                 i,
                 activeFocusIndex: effectiveFocusIndex,
-                viewportHeight: viewportHeight,
                 isHalfScreenOverlayMode: isHalfScreenOverlayMode,
               ),
         ],
@@ -1704,10 +1685,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       );
     }
 
-    if (shrinkWrap) {
-      return buildBody(680);
-    }
-
     return Container(
       color: bgBase,
       child: Column(
@@ -1721,7 +1698,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     constraints: BoxConstraints(
                       minWidth: viewportConstraints.maxWidth,
                     ),
-                    child: buildBody(viewportConstraints.maxHeight),
+                    child: buildBody(),
                   ),
                 );
               },
@@ -1939,7 +1916,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     _completeAllCheckpointTasks(node);
     setState(() {
       _awaitingPlaytestVerification.remove(node.id);
-      _expandedDoneCheckpoints.remove(node.id);
       final nextCpIdx = states.indexWhere((s) => !s.isCompleted);
       if (nextCpIdx != -1) {
         _manualCheckpointFocusIndex = nextCpIdx;
@@ -2026,7 +2002,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     List<FeatureStateNode> states,
     int index, {
     required int activeFocusIndex,
-    double viewportHeight = 680,
     bool isHalfScreenOverlayMode = false,
   }) {
     final node = states[index];
@@ -2266,7 +2241,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         : '';
     final primaryGuardLabel = edgeItems.isNotEmpty
         ? edgeItems[selectedTaskIdx % edgeItems.length]
-            .replaceFirst(RegExp(r'^\[[^\]]+\]\s*'), '')
+            .replaceFirst(_leadingBracketTagRegex, '')
         : '';
 
     final pinnedActiveStepWindow = (selectedParentTask != null &&
@@ -2521,6 +2496,31 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Tooltip(
+                                  message: 'Rename Feature',
+                                  child: InkWell(
+                                    key: ValueKey(
+                                      'halfscreen_rename_feature_btn_${feat.id}',
+                                    ),
+                                    onTap: () =>
+                                        _showRenameLiveFeatureDialog(feat),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 3,
+                                      ),
+                                      child: Text(
+                                        '✎',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Tooltip(
                                   message: 'Edit Tuning Parameters & Guards',
                                   child: InkWell(
                                     key: ValueKey(
@@ -2546,6 +2546,42 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                                     ),
                                   ),
                                 ),
+                                if (!node.isCompleted) ...[
+                                  const SizedBox(width: 2),
+                                  Tooltip(
+                                    message: 'Complete Feature',
+                                    child: InkWell(
+                                      key: ValueKey(
+                                        'fast_track_checkpoint_btn_${node.id}',
+                                      ),
+                                      onTap: () {
+                                        _completeAllCheckpointTasks(node);
+                                        _advanceToNextStep(
+                                          feat,
+                                          states,
+                                          node,
+                                          node.checklist.length - 1,
+                                          node.checklist.last.children.length - 1,
+                                        );
+                                      },
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 3,
+                                        ),
+                                        child: Text(
+                                          '✓ Done',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: accentEmerald,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(width: 4),
                                 stepDropdownTrigger,
                                 const SizedBox(width: 6),
@@ -3385,23 +3421,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                             key: ValueKey('howto_engine_badge_${node.id}'),
                             child: Text(selectedHowTo.engineLabel),
                           ),
-                          if (isHalfScreenOverlayMode && !node.isCompleted)
-                            InkWell(
-                              key: ValueKey(
-                                'fast_track_checkpoint_btn_${node.id}',
-                              ),
-                              onTap: () {
-                                _completeAllCheckpointTasks(node);
-                                _advanceToNextStep(
-                                  feat,
-                                  states,
-                                  node,
-                                  node.checklist.length - 1,
-                                  node.checklist.last.children.length - 1,
-                                );
-                              },
-                              child: const SizedBox(width: 2, height: 1),
-                            ),
                           if (isHalfScreenOverlayMode)
                             for (int sIdx = 0;
                                 sIdx < selectedHowTo.subSteps.length;

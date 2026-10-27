@@ -1640,12 +1640,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .toList();
-      final tuningBullets = node.tuningParams.map((t) => '• $t').join('\n');
-      final edgeBullets = node.edgeCases.map((e) => '• $e').join('\n');
-      feat.sections['tuning'] = tuningBullets;
-      feat.sections['variables'] = tuningBullets;
-      feat.sections['edge_cases'] = edgeBullets;
-      TaskHowToBlueprint.clearCache();
       widget.workbench.updateFeatureStates(feat.id, states);
     }
   }

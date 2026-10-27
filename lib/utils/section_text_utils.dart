@@ -164,6 +164,11 @@ class SectionTextUtils {
     return result.isNotEmpty ? result : [text];
   }
 
+  static final RegExp _doneWhenSplitRegex = RegExp(
+    r'Done When:\s*',
+    caseSensitive: false,
+  );
+
   /// Resolves the `Done When:` condition from a document's `sections`.
   static String resolveDoneWhen(Map<String, String> sections) {
     final raw = sections['scope'] ?? sections['pass'] ?? sections['doneWhen'];
@@ -173,7 +178,7 @@ class SectionTextUtils {
         return match.group(1)!.replaceAll(_bulletPrefixStripRegex, '').trim();
       }
       if (raw.toLowerCase().contains('done when:')) {
-        final after = raw.split(RegExp(r'Done When:\s*', caseSensitive: false))[1].trim();
+        final after = raw.split(_doneWhenSplitRegex)[1].trim();
         final firstLine = after
             .split('\n')
             .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');

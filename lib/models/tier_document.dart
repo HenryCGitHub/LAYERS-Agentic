@@ -369,14 +369,18 @@ class TierDocument {
 
   ReleaseScope get releaseScope => ReleaseScope.fromDocument(this);
 
+  static final RegExp _semverRegex = RegExp(
+    r'v?(\d+\.\d+(?:\.\d+)?)',
+    caseSensitive: false,
+  );
+
   /// Semantic version for Release documents (e.g. "v1.2.0" or "v0.1").
   String get releaseVersion {
     final v = sections['version']?.trim();
     if (v != null && v.isNotEmpty) {
       return v.startsWith('v') ? v : 'v$v';
     }
-    final match =
-        RegExp(r'v?(\d+\.\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(title);
+    final match = _semverRegex.firstMatch(title);
     if (match != null) {
       final matched = match.group(1)!;
       return 'v$matched';

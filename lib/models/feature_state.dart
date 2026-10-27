@@ -123,25 +123,32 @@ class FeatureStateNode {
     return 'Verify stage deliverables and checklist criteria in game viewport.';
   }
 
+  static final RegExp _stageBracketTagRegex = RegExp(
+    r'^\s*(\[(?:ROUGH PASS|BUILD PASS|FINAL PASS|ROUGH|BUILD|FINAL|PROTOTYPE|CORE|POLISH|TEST)\])\s*(.*)$',
+    caseSensitive: false,
+  );
+  static final RegExp _stagePrefixRegex = RegExp(
+    r'^\s*Stage\s*\d+\s*[:\-]\s*(.*)$',
+    caseSensitive: false,
+  );
+  static final RegExp _bareStageRegex = RegExp(
+    r'^\s*Stage\s*\d+\s*$',
+    caseSensitive: false,
+  );
+
   /// Clean descriptive title of this stage without the "Stage X:" or "[TAG]" prefix.
   String get cleanStageTitle {
     var trimmed = name.trim();
-    final tagMatch = RegExp(
-      r'^\s*(\[(?:ROUGH PASS|BUILD PASS|FINAL PASS|ROUGH|BUILD|FINAL|PROTOTYPE|CORE|POLISH|TEST)\])\s*(.*)$',
-      caseSensitive: false,
-    ).firstMatch(trimmed);
+    final tagMatch = _stageBracketTagRegex.firstMatch(trimmed);
     if (tagMatch != null && tagMatch.group(2)!.trim().isNotEmpty) {
       trimmed = tagMatch.group(2)!.trim();
     }
-    final match =
-        RegExp(r'^\s*Stage\s*\d+\s*[:\-]\s*(.*)$', caseSensitive: false)
-            .firstMatch(trimmed);
+    final match = _stagePrefixRegex.firstMatch(trimmed);
     if (match != null && match.group(1)!.trim().isNotEmpty) {
       return match.group(1)!.trim();
     }
     // If name is just "Stage 1", try to use trigger or fallback
-    if (RegExp(r'^\s*Stage\s*\d+\s*$', caseSensitive: false)
-        .hasMatch(trimmed)) {
+    if (_bareStageRegex.hasMatch(trimmed)) {
       if (trigger.isNotEmpty &&
           !trigger.toLowerCase().startsWith('playtest:') &&
           !trigger.toLowerCase().startsWith('feature') &&

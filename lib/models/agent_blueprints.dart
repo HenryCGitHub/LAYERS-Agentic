@@ -155,12 +155,54 @@ class ProjectConceptBlueprint {
     }
     // Auto-repair any legacy Beat 01 that copy-pasted raw "instead of..." user instructions
     if (coreLoopBeats.isNotEmpty &&
-        RegExp(r'^Core Focus:\s*instead of\b', caseSensitive: false)
-            .hasMatch(coreLoopBeats.first)) {
+        _legacyCoreFocusInsteadRegex.hasMatch(coreLoopBeats.first)) {
       coreLoopBeats[0] =
           'Primary Vehicle & Loadout Control: Spawn in the arena and test responsive steering, boost, and primary fire';
     }
   }
+
+  static final RegExp _legacyCoreFocusInsteadRegex = RegExp(
+    r'^Core Focus:\s*instead of\b',
+    caseSensitive: false,
+  );
+  static final RegExp _genericPillarLabelRegex = RegExp(
+    r'^(?:pillar|design\s+pillar|p)\s*[#·\-]?\s*\d*$',
+    caseSensitive: false,
+  );
+  static final RegExp _vehicalsTypoRegex = RegExp(
+    r'\bvehicals\b',
+    caseSensitive: false,
+  );
+  static final RegExp _vehicalTypoRegex = RegExp(
+    r'\bvehical\b',
+    caseSensitive: false,
+  );
+  static final RegExp _enemysTypoRegex = RegExp(
+    r'\benemys\b',
+    caseSensitive: false,
+  );
+  static final RegExp _keepSectionsQuotedSuffixRegex = RegExp(
+    r'"?\.?\s*Keep all other sections intact.*$',
+    caseSensitive: false,
+  );
+  static final RegExp _responsiveControlsSuffixRegex = RegExp(
+    r'"\s*with responsive controls and clear feedback\.?$',
+    caseSensitive: false,
+  );
+  static final RegExp _sectionWrapperPrefixRegex = RegExp(
+    r'^.*?\[Section\s+\d+\s+[^\]]+\]\s*(Update ONLY the [^\n]+?:\s*)?',
+    caseSensitive: false,
+  );
+  static final RegExp _keepSectionsPlainSuffixRegex = RegExp(
+    r'\.?\s*Keep all other sections intact.*$',
+    caseSensitive: false,
+  );
+  static final RegExp _rawInsteadPrototypeRegex = RegExp(
+    r'^Build a (.+?) prototype focused on ["\s]*instead of (?:a |an |the )?([a-zA-Z0-9\s-]+?)\s+(?:we\s+use|use|using|have|play\s+as)\s+([a-zA-Z0-9\s-]+?)\.?\s*["\s]*with responsive controls and clear feedback\.?$',
+    caseSensitive: false,
+  );
+  static final RegExp _longParenBlockRegex = RegExp(r'\([^()]{12,}\)');
+  static final RegExp _longParenStripRegex = RegExp(r'\s*\([^()]{12,}\)');
 
   /// Parses a Design Pillar string into a concrete `(title, body)` pair,
   /// synthesizing a descriptive 2-3 word name whenever the raw pillar lacks a `Title:` prefix
@@ -188,10 +230,7 @@ class ProjectConceptBlueprint {
     if (colonIdx > 0 && colonIdx < 48 && colonIdx < clean.length - 1) {
       final head = clean.substring(0, colonIdx).trim();
       final tail = clean.substring(colonIdx + 1).trim();
-      final isGenericPillarLabel = RegExp(
-        r'^(?:pillar|design\s+pillar|p)\s*[#·\-]?\s*\d*$',
-        caseSensitive: false,
-      ).hasMatch(head);
+      final isGenericPillarLabel = _genericPillarLabelRegex.hasMatch(head);
       if (head.isNotEmpty && tail.isNotEmpty && !isGenericPillarLabel) {
         return (title: head, body: tail);
       }
@@ -272,9 +311,9 @@ class ProjectConceptBlueprint {
   /// Normalizes common game-dev typos in conversational user input (e.g. "vehicals" -> "vehicles").
   static String normalizeCommonTypos(String input) {
     return input
-        .replaceAll(RegExp(r'\bvehicals\b', caseSensitive: false), 'vehicles')
-        .replaceAll(RegExp(r'\bvehical\b', caseSensitive: false), 'vehicle')
-        .replaceAll(RegExp(r'\benemys\b', caseSensitive: false), 'enemies');
+        .replaceAll(_vehicalsTypoRegex, 'vehicles')
+        .replaceAll(_vehicalTypoRegex, 'vehicle')
+        .replaceAll(_enemysTypoRegex, 'enemies');
   }
 
   /// Strips leaked `[Section 01 Goal]...` or `to apply this choice: "..."` prompt wrappers,
@@ -294,17 +333,11 @@ class ProjectConceptBlueprint {
       }
       // Strip trailing `. Keep all other sections intact...` and wrapper suffixes
       afterMarker = afterMarker.replaceFirst(
-        RegExp(
-          r'"?\.?\s*Keep all other sections intact.*$',
-          caseSensitive: false,
-        ),
+        _keepSectionsQuotedSuffixRegex,
         '',
       );
       afterMarker = afterMarker.replaceFirst(
-        RegExp(
-          r'"\s*with responsive controls and clear feedback\.?$',
-          caseSensitive: false,
-        ),
+        _responsiveControlsSuffixRegex,
         '',
       );
       if (afterMarker.endsWith('"') || afterMarker.endsWith("'")) {
@@ -316,26 +349,11 @@ class ProjectConceptBlueprint {
     }
 
     // Strip any remaining `[Section 01 Goal]` prefix or `focused on "[Section ..."` wrapper
-    clean = clean.replaceFirst(
-      RegExp(
-        r'^.*?\[Section\s+\d+\s+[^\]]+\]\s*(Update ONLY the [^\n]+?:\s*)?',
-        caseSensitive: false,
-      ),
-      '',
-    );
-    clean = clean.replaceFirst(
-      RegExp(
-        r'\.?\s*Keep all other sections intact.*$',
-        caseSensitive: false,
-      ),
-      '',
-    );
+    clean = clean.replaceFirst(_sectionWrapperPrefixRegex, '');
+    clean = clean.replaceFirst(_keepSectionsPlainSuffixRegex, '');
 
     // Repair raw "Build a <Title> prototype focused on instead of <X> we use <Y> with responsive controls..."
-    final rawInsteadMatch = RegExp(
-      r'^Build a (.+?) prototype focused on ["\s]*instead of (?:a |an |the )?([a-zA-Z0-9\s-]+?)\s+(?:we\s+use|use|using|have|play\s+as)\s+([a-zA-Z0-9\s-]+?)\.?\s*["\s]*with responsive controls and clear feedback\.?$',
-      caseSensitive: false,
-    ).firstMatch(clean);
+    final rawInsteadMatch = _rawInsteadPrototypeRegex.firstMatch(clean);
     if (rawInsteadMatch != null) {
       final rawTitle = rawInsteadMatch.group(1)!.trim();
       final oldSubject = rawInsteadMatch.group(2)!.trim();
@@ -353,9 +371,9 @@ class ProjectConceptBlueprint {
     }
 
     // Strip stacked parenthetical brain-dump notes if more than 1 parenthetical block appears
-    final parenMatches = RegExp(r'\([^()]{12,}\)').allMatches(clean).length;
+    final parenMatches = _longParenBlockRegex.allMatches(clean).length;
     if (parenMatches >= 2) {
-      clean = clean.replaceAll(RegExp(r'\s*\([^()]{12,}\)'), '').trim();
+      clean = clean.replaceAll(_longParenStripRegex, '').trim();
     }
 
     if (clean.isNotEmpty && !clean.endsWith('.')) {

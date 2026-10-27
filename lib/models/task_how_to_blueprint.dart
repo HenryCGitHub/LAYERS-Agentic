@@ -591,12 +591,11 @@ class TaskHowToBlueprint {
       'bResetInProgress',
       'reset_in_progress',
     };
-    final bracketPrefix = RegExp(r'^\[[^\]]+\]\s*');
     for (final rawGuard in edgeItems) {
       final trimmed = rawGuard.trim();
       if (trimmed.isNotEmpty) {
         tokens.add(trimmed);
-        final stripped = trimmed.replaceFirst(bracketPrefix, '').trim();
+        final stripped = trimmed.replaceFirst(_leadingBracketTagRegex, '').trim();
         if (stripped.length >= 6) {
           tokens.add(stripped);
         }
@@ -651,7 +650,27 @@ class TaskHowToBlueprint {
     final bpAsset = 'BP_$pascalAsset';
     final cppClass = 'A$pascalAsset';
 
-    final effectiveCategory = 'core';
+    final lowerCategoryCorpus =
+        '$cleanTitle ${checkpointNode.name}'.toLowerCase();
+    final effectiveCategory = (layerTag == 'UI / HUD' ||
+            lowerCategoryCorpus.contains('hud') ||
+            lowerCategoryCorpus.contains('ui ') ||
+            lowerCategoryCorpus.contains('menu') ||
+            lowerCategoryCorpus.contains('scoreboard') ||
+            lowerCategoryCorpus.contains('overlay'))
+        ? 'ui'
+        : (lowerCategoryCorpus.contains('weapon') ||
+                lowerCategoryCorpus.contains('gun') ||
+                lowerCategoryCorpus.contains('turret') ||
+                lowerCategoryCorpus.contains('shoot') ||
+                lowerCategoryCorpus.contains('fire') ||
+                lowerCategoryCorpus.contains('attack') ||
+                lowerCategoryCorpus.contains('combat') ||
+                lowerCategoryCorpus.contains('projectile') ||
+                lowerCategoryCorpus.contains('sword') ||
+                lowerCategoryCorpus.contains('melee'))
+            ? 'combat'
+            : 'core';
     final effectiveTuningParams = checkpointNode.tuningParams;
     final effectiveEdgeCases = checkpointNode.edgeCases;
 

@@ -1807,6 +1807,30 @@ void main() {
           primaryVarName: 'interactCooldown',
         );
         expect(spamGuard.shortTitle, 'Guard: Input Spam');
+
+        // Verify UI / HUD and Combat tasks resolve their specialized component hierarchies
+        final uiBp = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(
+            id: 't_ui',
+            text: 'Build HUD scoreboard overlay widget (2h)',
+          ),
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Godot 4.3 GDScript 2D',
+        );
+        expect(uiBp.subSteps[1].codeFormula, contains('HudCanvas'));
+
+        final combatBp = TaskHowToBlueprint.resolve(
+          parentTask: Subtask(
+            id: 't_combat',
+            text: 'Configure Weapon Projectile Spawner (2h)',
+          ),
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+        );
+        expect(combatBp.subSteps[1].codeFormula, contains('WeaponMesh'));
+        expect(combatBp.subSteps[1].codeFormula, contains('MuzzlePoint'));
       },
     );
 

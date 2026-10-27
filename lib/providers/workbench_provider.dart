@@ -22,8 +22,8 @@ enum WorkbenchStage {
 }
 
 /// Central state provider for LAYERS-Agentic.
-/// Manages the 4-tier document hierarchy and orchestrates the 3-stage
-/// Interview -> Plan Gate -> Execute workflow with Cloud Firestore + Local persistence.
+/// Manages the 4-tier document hierarchy and orchestrates the 2-stage
+/// Concept Blueprint -> Release Workbench workflow with Cloud Firestore + Local persistence.
 class WorkbenchProvider extends ChangeNotifier {
   final Map<String, TierDocument> documents = {};
 
@@ -831,13 +831,6 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String _thinkingLevel = 'LOW';
   String get thinkingLevel => _thinkingLevel;
-
-  /// Short label displayed in the top bar pill.
-  String get modelBadgeLabel {
-    final convShort = _conversationModel.replaceAll('gemini-', '');
-    final planShort = _planningModel.replaceAll('gemini-', '');
-    return '$convShort + $planShort · ${_thinkingLevel.toLowerCase()}';
-  }
 
   static const List<String> availableConversationModels = [
     'gemini-flash-latest',
@@ -1853,6 +1846,11 @@ Return ONLY a JSON object:
       _persistDocument(beatDoc);
     }
     documents.remove(featureId);
+    LocalVaultService.deleteDocument(featureId);
+    final user = _authService.currentUser;
+    if (user != null) {
+      _firestoreService.deleteDocument(uid: user.uid, docId: featureId);
+    }
 
     final bp = _releaseBlueprint;
     if (bp != null) {
@@ -2378,25 +2376,6 @@ Return ONLY valid JSON:
     }
   }
 
-  void selectBeat(String beatId) {
-    if (!documents.containsKey(beatId)) return;
-    _selectedBeatId = beatId;
-    final feats = featuresForBeat(beatId);
-    _selectedFeatureId = feats.isNotEmpty ? feats.first.id : null;
-    final proj = activeProject;
-    if (proj != null) {
-      proj.sections['selected_beat_id'] = beatId;
-      if (_selectedFeatureId != null) {
-        proj.sections['selected_feature_id'] = _selectedFeatureId!;
-      }
-      LocalVaultService.saveDocument(proj);
-    }
-    notifyListeners();
-    if (_selectedFeatureId != null && GeminiAgentClient.hasKey(_apiKey)) {
-      synthesizeFeatureHowToStepsWithAi(_selectedFeatureId!);
-    }
-  }
-
   void selectFeature(String featureId) {
     final feat = documents[featureId];
     if (feat == null) return;
@@ -2410,7 +2389,7 @@ Return ONLY valid JSON:
       if (_selectedBeatId != null) {
         proj.sections['selected_beat_id'] = _selectedBeatId!;
       }
-      LocalVaultService.saveDocument(proj);
+      _persistDocument(proj, debounce: true);
     }
     notifyListeners();
     if (GeminiAgentClient.hasKey(_apiKey)) {

@@ -146,11 +146,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           : (isUnity
               ? 'Inspector Window (Component Settings)'
               : 'Inspector Dock (Node Properties)');
-      final treeChildRegex = RegExp(
-        r'[├└]─\s*([A-Za-z0-9_]+)\s*(?:\(([^)]+)\))?',
-      );
       for (final line in compBody.split('\n')) {
-        final match = treeChildRegex.firstMatch(line);
+        final match = _ReleaseWorkbenchScreenState._treeChildRegex.firstMatch(line);
         if (match != null) {
           final nodeName = match.group(1)!.trim();
           final nodeDesc = (match.group(2) ?? '').trim();
@@ -698,40 +695,64 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       return TextSpan(text: '', style: baseStyle);
     }
 
-    final tokenKindByLiteral = <String, String>{};
-
-    // 1. Tuning variable identifiers & full tuning specs -> 'tune' (Violet)
-    for (final rawTune in tuningItems) {
-      final trimmed = rawTune.trim();
-      if (trimmed.isNotEmpty) {
-        tokenKindByLiteral[trimmed] = 'tune';
-        final varName = trimmed.split(':').first.trim();
-        if (varName.length >= 3) {
-          tokenKindByLiteral[varName] = 'tune';
+    final specKey = '${tuningItems.join('\u0001')}\u0002${edgeItems.join('\u0001')}';
+    if (specKey != _ReleaseWorkbenchScreenState._cachedSpecTokenKey) {
+      final baseMap = <String, String>{};
+      // 1. Tuning variable identifiers & full tuning specs -> 'tune' (Violet)
+      for (final rawTune in tuningItems) {
+        final trimmed = rawTune.trim();
+        if (trimmed.isNotEmpty) {
+          baseMap[trimmed] = 'tune';
+          final varName = trimmed.split(':').first.trim();
+          if (varName.length >= 3) {
+            baseMap[varName] = 'tune';
+          }
         }
+      }
+      // 2. Concrete guard variables, conditions & guard rules -> 'guard' (Amber)
+      for (final guardToken
+          in TaskHowToBlueprint.extractGuardHighlightTokens(edgeItems)) {
+        baseMap[guardToken] = 'guard';
+      }
+      _ReleaseWorkbenchScreenState._cachedSpecTokenKey = specKey;
+      _ReleaseWorkbenchScreenState._cachedBaseTokens = baseMap;
+      if (baseMap.isEmpty) {
+        _ReleaseWorkbenchScreenState._cachedBaseTokenRegex = null;
+      } else {
+        final sortedBase = baseMap.keys.toList()
+          ..sort((a, b) => b.length.compareTo(a.length));
+        _ReleaseWorkbenchScreenState._cachedBaseTokenRegex =
+            RegExp(sortedBase.map(RegExp.escape).join('|'));
       }
     }
 
-    // 2. Concrete guard variables, conditions & guard rules -> 'guard' (Amber)
-    for (final guardToken
-        in TaskHowToBlueprint.extractGuardHighlightTokens(edgeItems)) {
-      tokenKindByLiteral[guardToken] = 'guard';
-    }
+    final baseTokens = _ReleaseWorkbenchScreenState._cachedBaseTokens;
+    Map<String, String> tokenKindByLiteral = baseTokens;
+    RegExp? combinedRegex = _ReleaseWorkbenchScreenState._cachedBaseTokenRegex;
 
     // 3. Concrete asset & component names -> 'asset' (Cyan)
-    for (final m in _ReleaseWorkbenchScreenState._assetTokenRegex.allMatches(text)) {
-      final matchStr = m.group(0)!;
-      tokenKindByLiteral.putIfAbsent(matchStr, () => 'asset');
+    final assetMatches =
+        _ReleaseWorkbenchScreenState._assetTokenRegex.allMatches(text);
+    if (assetMatches.isNotEmpty) {
+      Map<String, String>? merged;
+      for (final m in assetMatches) {
+        final matchStr = m.group(0)!;
+        if (!tokenKindByLiteral.containsKey(matchStr)) {
+          merged ??= Map<String, String>.from(baseTokens);
+          merged[matchStr] = 'asset';
+        }
+      }
+      if (merged != null) {
+        tokenKindByLiteral = merged;
+        final sortedTokens = tokenKindByLiteral.keys.toList()
+          ..sort((a, b) => b.length.compareTo(a.length));
+        combinedRegex = RegExp(sortedTokens.map(RegExp.escape).join('|'));
+      }
     }
 
-    if (tokenKindByLiteral.isEmpty) {
+    if (tokenKindByLiteral.isEmpty || combinedRegex == null) {
       return TextSpan(text: text, style: baseStyle);
     }
-
-    final sortedTokens = tokenKindByLiteral.keys.toList()
-      ..sort((a, b) => b.length.compareTo(a.length));
-    final pattern = sortedTokens.map(RegExp.escape).join('|');
-    final combinedRegex = RegExp(pattern);
 
     final baseFontSize = baseStyle.fontSize ?? 14.0;
     final monoSize = isCodeBlock ? baseFontSize : baseFontSize * 0.93;

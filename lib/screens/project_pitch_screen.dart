@@ -141,7 +141,22 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     return KeyEventResult.handled;
   }
 
-  /// Active step index: `0`..`8` for sections `01`..`09`, and `9` for `10 · Full Review`.
+  static final RegExp _overSplitRegex = RegExp(
+    r'\s+over\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _prioritizePrefixRegex = RegExp(
+    r'^Prioritize\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static final RegExp _dotPipeSepRegex = RegExp(r'[·|]');
+  static final RegExp _dotPipeSplitRegex = RegExp(r'\s*[·|]\s*');
+  static final RegExp _goalClauseSplitRegex = RegExp(r',\s*and\s+|,\s+');
+  static final RegExp _nonWordStripRegex = RegExp(r'[^\w\s-]');
+
+  /// Active step index: `0`..`7` for sections `01`..`08`, and `8` for `09 · Full Concept Review`.
+  String? _lastTrackedProjectId;
   int _currentStep = 0;
   final Set<int> _visitedSteps = {0};
   final Map<int, int?> _selectedOptionBySection = {};
@@ -274,15 +289,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       }
     }
     if (clean.toLowerCase().contains(' over ')) {
-      final overParts = clean.split(RegExp(r'\s+over\s+', caseSensitive: false));
+      final overParts = clean.split(_overSplitRegex);
       if (overParts.length >= 2) {
         final winTitle = overParts.first
-            .replaceFirst(RegExp(r'^Prioritize\s+', caseSensitive: false), '')
+            .replaceFirst(_prioritizePrefixRegex, '')
             .trim();
         return (title: winTitle, description: clean);
       }
     }
-    final words = clean.split(RegExp(r'\s+'));
+    final words = clean.split(_whitespaceRegex);
     if (words.length > 4) {
       return (
         title: words.take(3).join(' '),
@@ -528,9 +543,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   .map((s) => s.trim())
                   .where((s) => s.isNotEmpty);
               for (final step in steps) {
-                final formatted = step.contains(':')
-                    ? step
-                    : _describeCoreLoopBeatStep(step);
+                final formatted = step.trim();
                 if (!combined.any((c) => c.toLowerCase().startsWith(
                     step.split(':').first.trim().toLowerCase()))) {
                   combined.add(formatted);
@@ -565,10 +578,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     });
   }
 
-  String _describeCoreLoopBeatStep(String rawStep) {
-    return rawStep.trim();
-  }
-
   void _applySectionOptionDeterministic(
     ProjectConceptBlueprint draft,
     int sectionIdx,
@@ -577,7 +586,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   ) {
     final trimmedOption = optionText.trim();
     final colonIdx = trimmedOption.indexOf(':');
-    final firstSepMatch = RegExp(r'[·|]').firstMatch(trimmedOption);
+    final firstSepMatch = _dotPipeSepRegex.firstMatch(trimmedOption);
     final hasLeadingTitlePrefix = colonIdx > 0 &&
         (firstSepMatch == null || colonIdx < firstSepMatch.start);
     final bodyAfterColon = hasLeadingTitlePrefix
@@ -594,7 +603,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           break;
         case 1:
           final specParts = bodyAfterColon
-              .split(RegExp(r'\s*[·|]\s*'))
+              .split(_dotPipeSplitRegex)
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
               .toList();
@@ -609,7 +618,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           break;
         case 2:
           final techParts = bodyAfterColon
-              .split(RegExp(r'\s*[·|]\s*'))
+              .split(_dotPipeSplitRegex)
               .map((s) => s.trim())
               .where((s) => s.isNotEmpty)
               .toList();
@@ -888,6 +897,21 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
 
   @override
   Widget build(BuildContext context) {
+    final currentProjectId = widget.workbench.activeProjectId;
+    if (currentProjectId != _lastTrackedProjectId) {
+      _lastTrackedProjectId = currentProjectId;
+      _currentStep = 0;
+      _visitedSteps
+        ..clear()
+        ..add(0);
+      _selectedOptionBySection.clear();
+      _selectedOptionsBySection.clear();
+      _initialSectionDefaults.clear();
+      _agentNotesBySection.clear();
+      _hoveredReviewSectionIdx = null;
+      _inlineEditingSectionIdx = null;
+    }
+
     final draft = widget.workbench.conceptDraft;
 
     // Step 1A: Before the first Spark is submitted, show the centered Spark launcher
@@ -2940,6 +2964,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   ),
         );
       case 7: // 08 Done When — Acceptance Callout Statement with Highlighted Playtest Metrics
+      default:
         return _buildCalloutStatement(
           draft.doneWhen,
           highlightMetrics: true,
@@ -2948,12 +2973,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
             initialText: draft.doneWhen,
             onSave: (val) => widget.workbench.updateConceptDraft((d) => d.doneWhen = val),
           ),
-        );
-      case 8: // 09 Prototype Release — Phase 1 Active Target + 3 Horizontal Locked Phase Cards
-      default:
-        return _buildReleaseTrainPipeline(
-          draft,
-          isReadOnlySummary: isReadOnlySummary,
         );
     }
   }
@@ -3154,7 +3173,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     if (whereIdx != -1) {
       final afterWhere = headline.substring(whereIdx + 'where you '.length).trim();
       final parts = afterWhere
-          .split(RegExp(r',\s*and\s+|,\s+'))
+          .split(_goalClauseSplitRegex)
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .toList();
@@ -3211,8 +3230,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       return 'Arena Run';
     }
     final words = clause
-        .replaceAll(RegExp(r'[^\w\s-]'), '')
-        .split(RegExp(r'\s+'))
+        .replaceAll(_nonWordStripRegex, '')
+        .split(_whitespaceRegex)
         .where((w) => w.isNotEmpty)
         .take(3)
         .toList();
@@ -3812,8 +3831,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     VoidCallback? onTap,
     VoidCallback? onDelete,
   }) {
-    final clean = rawRule.replaceFirst(RegExp(r'^Prioritize\s+', caseSensitive: false), '');
-    final parts = clean.split(RegExp(r'\s+over\s+', caseSensitive: false));
+    final clean = rawRule.replaceFirst(_prioritizePrefixRegex, '');
+    final parts = clean.split(_overSplitRegex);
     final winText = parts.isNotEmpty ? parts[0].trim() : clean;
     final loseText = parts.length > 1 ? parts.sublist(1).join(' over ').trim() : 'secondary complexity';
 
@@ -3989,10 +4008,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     );
   }
 
-  Widget _buildReleaseTrainPipeline(
-    ProjectConceptBlueprint draft, {
-    bool isReadOnlySummary = false,
-  }) {
+  Widget _buildReleaseTrainPipeline(ProjectConceptBlueprint draft) {
     final releases = draft.releaseTrainTitles;
 
     return Column(
@@ -4050,59 +4066,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               }),
             ),
           ),
-        if (!isReadOnlySummary) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(color: accentEmerald, width: 2),
-                bottom: BorderSide(color: borderSubtle),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 116,
-                  child: Text(
-                    'v0.2 → v0.3+ · AI',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: accentEmerald,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Progressive Agentic Releases Inside the Workbench',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Click "+ New Release (v0.2) ✦" in the Workbench at any time—the Agent recommends which existing features to Upgrade (UPGRADE), which New Features (NEW) to add, and what direction to take next.',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          height: 1.4,
-                          color: textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -4406,10 +4369,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                   color: borderSubtle,
                 ),
               ),
-              _buildReleaseTrainPipeline(
-                draft,
-                isReadOnlySummary: true,
-              ),
+              _buildReleaseTrainPipeline(draft),
             ],
           ),
         ],
