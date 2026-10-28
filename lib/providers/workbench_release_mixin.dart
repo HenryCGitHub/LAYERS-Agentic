@@ -167,7 +167,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       activeProject?.childrenIds ?? const <String>[],
     );
     _preModalReleaseBlueprint = _releaseBlueprint;
-    await advanceToNextRelease(transitionToGateStage: false);
+    await advanceToNextRelease(
+      transitionToGateStage: false,
+      agentReasonedProgressive: true,
+    );
     _currentStage = WorkbenchStage.releaseWorkbench;
     if (_releaseBlueprint == null ||
         _releaseBlueprint!.releaseDocId != _activeReleaseId) {
@@ -286,7 +289,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final priorBp = _releaseBlueprint;
     if (priorBp != null) {
       for (int bIdx = 0; bIdx < priorBp.beats.length; bIdx++) {
-        final deferredInBeat = priorBp.beats[bIdx].deferredFeatures.toList();
+        final seenTitles = <String>{};
+        final deferredInBeat = <ProposedFeatureBlueprint>[];
+        for (final df in priorBp.beats[bIdx].deferredFeatures) {
+          final normTitle = df.title.toLowerCase().trim();
+          if (normTitle.isNotEmpty && seenTitles.add(normTitle)) {
+            deferredInBeat.add(df);
+          }
+        }
         if (deferredInBeat.isNotEmpty) {
           deferredByBeatIndex[bIdx] = deferredInBeat;
         }
@@ -298,25 +308,13 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (relDoc == null) return;
     _syncCurrentPhaseFromRelease(relDoc);
 
-    // Immediately replace any prior release's blueprint with a clean baseline for targetRelId
-    // so the Progressive Release Interface never displays stale v0.4 headers/features while v0.5 is drafting.
-    if (!isFirstPrototypeRelease && existingBeats.isNotEmpty) {
-      final baselineBp =
-          ReleasePlannerAgent.buildImmediateProgressiveBaselineBlueprint(
-        projectDoc: proj,
-        releaseDoc: relDoc,
-        existingBeats: existingBeats,
-        existingFeaturesByBeat: existingFeaturesByBeat,
-        deferredByBeatIndex: deferredByBeatIndex,
-      );
-      if (baselineBp != null) {
-        _releaseBlueprint = baselineBp;
-      }
-    }
-
+    // Clear _releaseBlueprint while gemini-4-argon is synthesizing so the UI shows an honest
+    // Agent Architectural Synthesis state rather than a pre-baked or prior-release plan.
+    _releaseBlueprint = null;
+    final verTag = ReleasePlannerAgent.extractReleaseVersionTag(relDoc.title);
     _isAgentBusy = true;
     _agentProgressStep =
-        'Drafting Release Blueprint for ${relDoc.title} ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
+        'Synthesizing $verTag Release Architecture ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
@@ -331,6 +329,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         thinkingLevel: _thinkingLevel,
       );
       if (planned != null) {
+        if (planned.releaseTitle.isNotEmpty &&
+            planned.releaseTitle != relDoc.title) {
+          relDoc.title = planned.releaseTitle;
+          _persistDocument(relDoc);
+        }
         _releaseBlueprint = planned;
         _offlineErrorMessage = null;
         if (transitionToGateStage) {
@@ -338,6 +341,16 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
         _syncActiveProjectMetadata();
       } else {
+        if (!isFirstPrototypeRelease && existingBeats.isNotEmpty) {
+          _releaseBlueprint =
+              ReleasePlannerAgent.buildImmediateProgressiveBaselineBlueprint(
+            projectDoc: proj,
+            releaseDoc: relDoc,
+            existingBeats: existingBeats,
+            existingFeaturesByBeat: existingFeaturesByBeat,
+            deferredByBeatIndex: deferredByBeatIndex,
+          );
+        }
         _setOfflineState();
       }
     } finally {
@@ -540,6 +553,40 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     bp.explicitExclusions.removeWhere(
       (e) => e.toLowerCase().trim() == cleanEx.toLowerCase().trim(),
     );
+    // Also remove from Stage 1 project exclusions so future Agent turns never treat this promoted item as banned
+    final normShort = shortTitle.toLowerCase().trim();
+    if (_conceptDraft != null) {
+      _conceptDraft!.exclusions.removeWhere((e) {
+        final normE = e
+            .toLowerCase()
+            .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
+            .replaceFirst(RegExp(r'^no\s+'), '')
+            .trim();
+        return e.toLowerCase().trim() == cleanEx.toLowerCase().trim() ||
+            (normShort.isNotEmpty && normE.contains(normShort));
+      });
+    }
+    final proj = activeProject;
+    if (proj != null) {
+      final rawEx = proj.sections['exclusions'] ?? '';
+      final currentEx = rawEx
+          .split('\n')
+          .map((l) => l.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+      currentEx.removeWhere((e) {
+        final normE = e
+            .toLowerCase()
+            .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
+            .replaceFirst(RegExp(r'^no\s+'), '')
+            .trim();
+        return e.toLowerCase().trim() == cleanEx.toLowerCase().trim() ||
+            (normShort.isNotEmpty && normE.contains(normShort));
+      });
+      proj.sections['exclusions'] =
+          currentEx.map((e) => '• $e').join('\n');
+      _persistDocument(proj, debounce: true);
+    }
     return addCustomFeatureToProposedBeat(
       targetBeat.id,
       shortTitle.isNotEmpty ? shortTitle : cleanEx,
@@ -2238,7 +2285,10 @@ Return ONLY valid JSON:
   /// - Phase 1 (Prototype) complete -> Phase 2 (MVP Track: 1 MVP Release per Core Loop Beat)
   /// - Phase 2 (MVP Track) complete -> Phase 3 (Vertical Slice: 1 Polished Gold Standard Level)
   /// - Phase 3 (Vertical Slice) complete -> Phase 4 (Full Production: World & Content Expansion)
-  Future<void> advanceToNextRelease({bool transitionToGateStage = true}) async {
+  Future<void> advanceToNextRelease({
+    bool transitionToGateStage = true,
+    bool agentReasonedProgressive = false,
+  }) async {
     final proj = activeProject;
     if (proj == null) return;
     final releases = projectReleases;
@@ -2294,6 +2344,33 @@ Return ONLY valid JSON:
           'prototypePart': '2',
           'scope':
               'Goal: Complete the remaining Core Loop Epics for the ${proj.title} prototype.\n\nIn Scope:\n• Remaining Core Loop Epics from ${proj.title}\n\nDone When: Full prototype core loop connects end-to-end.',
+        },
+      );
+      documents[newRelId] = newRelDoc;
+      _persistDocument(newRelDoc);
+      proj.childrenIds.add(newRelId);
+      _syncActiveProjectMetadata();
+      await openGateAndRecordRetro(newRelId);
+      return;
+    }
+
+    if (agentReasonedProgressive) {
+      _currentPhase = ProductionPhase.mvp;
+      final newIndex = proj.childrenIds.length + 1;
+      final newRelId = proj.id == 'proj_main'
+          ? 'rel_v0_$newIndex'
+          : '${proj.id}_rel_v0_$newIndex';
+      final newRelDoc = TierDocument(
+        id: newRelId,
+        title: 'v0.$newIndex: Progressive Release',
+        tier: TierType.release,
+        parentId: proj.id,
+        sections: {
+          'releaseScope': ReleaseScope.mvp.name,
+          'phase': ProductionPhase.mvp.name,
+          'agentReasoned': 'true',
+          'scope':
+              'Goal: Synthesize the highest-impact v0.$newIndex features and upgrades for ${proj.title}.\n\nIn Scope:\n• Agent-recommended v0.$newIndex features and upgrades\n\nDone When: All v0.$newIndex features pass playtest verification.',
         },
       );
       documents[newRelId] = newRelDoc;

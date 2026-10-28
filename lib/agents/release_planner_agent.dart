@@ -44,13 +44,16 @@ class ReleasePlannerAgent {
     final versionTag = extractReleaseVersionTag(releaseDoc.title);
     final releasePhase = releaseDoc.sections['phase'] ?? '';
     final prototypePart = releaseDoc.sections['prototypePart'] ?? '';
+    final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
     final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
     final mvpEpicMatch = _mvpEpicNumRegex.firstMatch(releaseDoc.title);
-    final int? targetMvpEpicIndex = rawTargetEpicIdx != null
-        ? int.tryParse(rawTargetEpicIdx)
-        : (mvpEpicMatch != null
-            ? (int.tryParse(mvpEpicMatch.group(1)!) ?? 1) - 1
-            : null);
+    final int? targetMvpEpicIndex = isAgentReasoned
+        ? null
+        : (rawTargetEpicIdx != null
+            ? int.tryParse(rawTargetEpicIdx)
+            : (mvpEpicMatch != null
+                ? (int.tryParse(mvpEpicMatch.group(1)!) ?? 1) - 1
+                : null));
 
     final isSubsequentRelease = existingBeats.isNotEmpty ||
         completedReleases.isNotEmpty ||
@@ -74,6 +77,15 @@ class ReleasePlannerAgent {
             isSubsequentRelease)) {
       phaseInstruction =
           '- PHASE 1 SPLIT PROTOTYPE (PART 2 OF 2 — FULL CORE LOOP): Keep all existing `v0.1` Beats & Features `"lifecycle": "stable"` (0h, empty checkpoints) and add the remaining Stage 1 Core Loop Beats as `"lifecycle": "new"` so the complete greybox loop connects end-to-end.';
+    } else if (isAgentReasoned ||
+        (releasePhase == ProductionPhase.mvp.name &&
+            targetMvpEpicIndex == null)) {
+      phaseInstruction =
+          '- AGENT-REASONED PROGRESSIVE RELEASE ($versionTag): You are the Lead Game Architect deciding what "${projectDoc.title}" needs most in $versionTag based on what was already built and verified in the Existing Live Game Tree, the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n'
+          '  1. Choose a specific, descriptive `"releaseTitle"` for $versionTag (formatted as `"$versionTag: <2-5 Word Release Focus>"`, e.g., `"$versionTag: Automated Room Transition & Threat Variety"`). NEVER use generic titles like `"MVP Epic 3"`.\n'
+          '  2. Across ANY of the existing Core Loop Beats, select the 2–4 highest-impact Features to either upgrade (`"lifecycle": "upgrade"` with a new $versionTag delta checkpoint and +4h..+6h) or introduce as brand-new mechanics (`"lifecycle": "new"` with a $versionTag checkpoint). You are NOT restricted to a single Beat—pick the exact cross-Beat upgrades and new features that best advance the playable loop right now!\n'
+          '  3. Mark all other existing Features that do NOT need changes in $versionTag as `"lifecycle": "stable"` (`"estimatedHours": 0`, `"checkpoints": []`) so they remain hidden and locked at 100%.\n'
+          '  4. Strictly enforce the Project Exclusions: NEVER include or promote any feature that violates an Exclusion, even if it was previously queued or requested.';
     } else if (releasePhase == ProductionPhase.mvp.name ||
         targetMvpEpicIndex != null) {
       final epicNum = (targetMvpEpicIndex ?? 0) + 1;
@@ -90,6 +102,26 @@ class ReleasePlannerAgent {
     } else {
       phaseInstruction =
           '- Map each Stage 1 Beat (`BEAT-01..BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) 1-to-1 to a Beat entry in `beats`.';
+    }
+
+    bool conflictsWithExclusions(String featureTitle) {
+      final cleanFeat = featureTitle
+          .toLowerCase()
+          .replaceFirst(RegExp(r'^no\s+'), '')
+          .trim();
+      if (cleanFeat.isEmpty) return false;
+      for (final ex in projectExclusions) {
+        final cleanEx = ex
+            .toLowerCase()
+            .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
+            .replaceFirst(RegExp(r'^no\s+'), '')
+            .trim();
+        if (cleanEx.isNotEmpty &&
+            (cleanEx.contains(cleanFeat) || cleanFeat.contains(cleanEx))) {
+          return true;
+        }
+      }
+      return false;
     }
 
     final existingTreeSummary = StringBuffer();
@@ -124,6 +156,7 @@ class ReleasePlannerAgent {
         final queuedDeferred =
             deferredByBeatIndex[bIdx] ?? const <ProposedFeatureBlueprint>[];
         for (final df in queuedDeferred) {
+          if (conflictsWithExclusions(df.title)) continue;
           existingTreeSummary.writeln(
             '  * QUEUED FROM PRIOR RELEASE FOR $versionTag: "${df.title}" (${df.estimatedHours}h) — ${df.goal}',
           );
@@ -169,6 +202,7 @@ $phaseInstruction
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
 {
+  "releaseTitle": "$versionTag: Concrete 2-5 Word Release Focus",
   "agentReasoning": "2-3 concrete sentences explaining what was proven in prior releases, what gap in ${projectDoc.title}'s loop or pillars matters most now, and why these $versionTag features are recommended next.",
   "goal": "Build... goal of ${releaseDoc.title}",
   "doneWhen": "Concrete playtest completion condition",
@@ -537,15 +571,28 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           if (f.included && f.lifecycle != FeatureLifecycleStatus.stable)
             f.title,
     ];
+    final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
+    final rawRelTitle = (json['releaseTitle'] ?? '').toString().trim();
+    String effectiveReleaseTitle = releaseDoc.title;
+    if (rawRelTitle.isNotEmpty) {
+      effectiveReleaseTitle = rawRelTitle.startsWith('$versionTag:')
+          ? rawRelTitle
+          : '$versionTag: ${rawRelTitle.replaceFirst(RegExp(r'^v\d+\.\d+\s*[:\-–—]?\s*', caseSensitive: false), '')}';
+      releaseDoc.title = effectiveReleaseTitle;
+    } else if (isAgentReasoned && activeFeatureNames.isNotEmpty) {
+      effectiveReleaseTitle =
+          '$versionTag: ${activeFeatureNames.take(2).join(' & ')}';
+      releaseDoc.title = effectiveReleaseTitle;
+    }
     final effectiveReasoning = rawReasoning.isNotEmpty
         ? rawReasoning
         : (activeFeatureNames.isNotEmpty
             ? 'Based on your verified build state and Stage 1 Design Pillars, $versionTag focuses on ${activeFeatureNames.take(3).join(', ')} so the next playable loop milestone connects cleanly.'
-            : 'Synthesized $versionTag release plan for ${releaseDoc.title}.');
+            : 'Synthesized $versionTag release plan for $effectiveReleaseTitle.');
 
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
-      releaseTitle: releaseDoc.title,
+      releaseTitle: effectiveReleaseTitle,
       releaseVersionTag: versionTag,
       preset: preset,
       goal: (json['goal'] ?? '').toString().trim(),
@@ -812,9 +859,29 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           }
         }
       }
+      final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
       final deferredList = deferredByBeatIndex[bIdx];
-      if (deferredList != null && deferredList.isNotEmpty) {
+      if (!isAgentReasoned && deferredList != null && deferredList.isNotEmpty) {
+        final combinedExclusions = <String>{
+          ...projectExclusions,
+          ...parsed.explicitExclusions,
+        };
         for (final defFeat in deferredList) {
+          final cleanDef = defFeat.title
+              .toLowerCase()
+              .replaceFirst(RegExp(r'^no\s+'), '')
+              .trim();
+          final isExcluded = combinedExclusions.any((ex) {
+            final cleanEx = ex
+                .toLowerCase()
+                .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
+                .replaceFirst(RegExp(r'^no\s+'), '')
+                .trim();
+            return cleanEx.isNotEmpty &&
+                cleanDef.isNotEmpty &&
+                (cleanEx.contains(cleanDef) || cleanDef.contains(cleanEx));
+          });
+          if (isExcluded) continue;
           final alreadyPresent = llmBeat.features.any(
             (f) =>
                 f.id == defFeat.id ||

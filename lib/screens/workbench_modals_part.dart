@@ -189,7 +189,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                     Text(
                       bp?.releaseTitle.isNotEmpty == true
                           ? bp!.releaseTitle
-                          : 'Recommended Scope for $nextVer',
+                          : (widget.workbench.isAgentBusy
+                              ? 'Architecting $nextVer Release Scope...'
+                              : 'Recommended Scope for $nextVer'),
                       style: AppTheme.displayFont(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -201,26 +203,28 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: bgRecessed,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: borderSubtle),
-                      ),
-                      child: Text(
-                        '${bp?.totalIncludedHours ?? 0}h in $nextVer · ${upgradeCount + newCount} Active Features',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: accentEmerald,
+                    if (bp != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: borderSubtle),
+                        ),
+                        child: Text(
+                          '${bp.totalIncludedHours}h in $nextVer · ${upgradeCount + newCount} Active Features',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: accentEmerald,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
+                      const SizedBox(width: 10),
+                    ],
                     TextButton(
                       onPressed: () =>
                           _closeProgressiveReleasePlanner(confirmed: false),
@@ -276,7 +280,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                     children: [
                       if (widget.workbench.isAgentBusy) ...[
                         Container(
-                          padding: const EdgeInsets.all(14),
+                          padding: const EdgeInsets.all(16),
                           margin: const EdgeInsets.only(bottom: 16),
                           decoration: BoxDecoration(
                             color: bgSurface,
@@ -285,35 +289,52 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               color: accentCyan.withValues(alpha: 0.45),
                             ),
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: accentCyan,
-                                ),
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: accentCyan,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      widget.workbench.agentProgressStep ??
+                                          '✦ Agent is analyzing your completed $prevVer build state and synthesizing $nextVer...',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: accentCyan,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  widget.workbench.agentProgressStep ??
-                                      '✦ Agent is analyzing your completed $prevVer build state and synthesizing $nextVer...',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: accentCyan,
+                              if (bp == null) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Inspecting your completed $prevVer features, verified checkpoints, live tuning variables, playtest fixes, and Stage 1 Design Pillars to determine which features to upgrade or introduce in $nextVer...',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    height: 1.45,
+                                    color: textSecondary,
                                   ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                         ),
                       ],
 
-                      // Section 1: Proactive Agent Architectural Recommendation (gemini-4-argon)
-                      Container(
+                      if (bp != null) ...[
+                        // Section 1: Proactive Agent Architectural Recommendation (gemini-4-argon)
+                        Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: bgSurface,
@@ -348,8 +369,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              (bp?.lastAgentReply != null &&
-                                      bp!.lastAgentReply!.trim().isNotEmpty)
+                              (bp.lastAgentReply != null &&
+                                      bp.lastAgentReply!.trim().isNotEmpty)
                                   ? bp.lastAgentReply!.trim()
                                   : 'Based on your completed $prevVer features and Stage 1 Design Pillars, $nextVer focuses on the active deliverables below.',
                               style: GoogleFonts.inter(
@@ -359,7 +380,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 color: textPrimary,
                               ),
                             ),
-                            if (bp != null && bp.goal.trim().isNotEmpty) ...[
+                            if (bp.goal.trim().isNotEmpty) ...[
                               const SizedBox(height: 10),
                               Container(
                                 padding: const EdgeInsets.all(10),
@@ -552,9 +573,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                         ),
                       ),
 
-                      if (bp != null) ...[
-                        const SizedBox(height: 22),
-                        Row(
+                      const SizedBox(height: 22),
+                      Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Flexible(
