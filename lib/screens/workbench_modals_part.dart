@@ -960,7 +960,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             color: borderSubtle,
                                           ),
                                         ],
-                                        if (nextRows.isNotEmpty)
+                                        if (nextRows.isNotEmpty ||
+                                            bp.beats.isNotEmpty)
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 12,
@@ -1258,120 +1259,184 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                               ),
                                                             )
                                                           else
-                                                            Row(
+                                                            Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .stretch,
                                                               children: [
-                                                                Expanded(
-                                                                  child:
-                                                                      TextField(
-                                                                    controller:
-                                                                        _progressiveNewFeatCtrl,
-                                                                    autofocus:
-                                                                        true,
-                                                                    style: GoogleFonts
-                                                                        .inter(
-                                                                      fontSize:
-                                                                          12,
-                                                                      color:
-                                                                          textPrimary,
+                                                                if (bp.beats
+                                                                        .length >
+                                                                    1)
+                                                                  Padding(
+                                                                    padding:
+                                                                        const EdgeInsets.only(
+                                                                      bottom: 6,
                                                                     ),
-                                                                    decoration:
-                                                                        InputDecoration(
-                                                                      hintText:
-                                                                          'New $nextVer feature title...',
-                                                                      hintStyle:
-                                                                          GoogleFonts.inter(
-                                                                        fontSize:
-                                                                            11.5,
-                                                                        color:
-                                                                            textMuted,
-                                                                      ),
-                                                                      filled:
-                                                                          true,
-                                                                      fillColor:
-                                                                          bgSurface,
-                                                                      isDense:
-                                                                          true,
-                                                                      contentPadding:
-                                                                          const EdgeInsets.symmetric(
-                                                                        horizontal:
-                                                                            10,
-                                                                        vertical:
-                                                                            7,
-                                                                      ),
-                                                                      border:
-                                                                          OutlineInputBorder(
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              5,
-                                                                            ),
-                                                                        borderSide:
-                                                                            BorderSide(
+                                                                    child: Wrap(
+                                                                      spacing:
+                                                                          6,
+                                                                      runSpacing:
+                                                                          4,
+                                                                      children: [
+                                                                        for (int bIdx =
+                                                                                0;
+                                                                            bIdx <
+                                                                                bp.beats.length;
+                                                                            bIdx++)
+                                                                          Builder(
+                                                                            builder:
+                                                                                (context) {
+                                                                              final b = bp.beats[bIdx];
+                                                                              final isSelBeat = _addingFeatureToBeatId == b.id;
+                                                                              final code = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                                                                              return InkWell(
+                                                                                key: ValueKey('progressive_add_feat_target_epic_${b.id}'),
+                                                                                borderRadius: BorderRadius.circular(4),
+                                                                                onTap: () {
+                                                                                  _rebuild(() {
+                                                                                    _addingFeatureToBeatId = b.id;
+                                                                                  });
+                                                                                },
+                                                                                child: Container(
+                                                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                                                  decoration: BoxDecoration(
+                                                                                    color: isSelBeat ? accentCyan.withValues(alpha: 0.16) : bgSurface,
+                                                                                    borderRadius: BorderRadius.circular(4),
+                                                                                    border: Border.all(
+                                                                                      color: isSelBeat ? accentCyan.withValues(alpha: 0.55) : borderSubtle,
+                                                                                    ),
+                                                                                  ),
+                                                                                  child: Text(
+                                                                                    '$code · ${b.title}',
+                                                                                    style: GoogleFonts.jetBrainsMono(
+                                                                                      fontSize: 9.5,
+                                                                                      fontWeight: isSelBeat ? FontWeight.w800 : FontWeight.w600,
+                                                                                      color: isSelBeat ? accentCyan : textMuted,
+                                                                                    ),
+                                                                                  ),
+                                                                                ),
+                                                                              );
+                                                                            },
+                                                                          ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                Row(
+                                                                  children: [
+                                                                    Expanded(
+                                                                      child:
+                                                                          TextField(
+                                                                        controller:
+                                                                            _progressiveNewFeatCtrl,
+                                                                        autofocus:
+                                                                            true,
+                                                                        style: GoogleFonts
+                                                                            .inter(
+                                                                          fontSize:
+                                                                              12,
                                                                           color:
-                                                                              borderSubtle,
+                                                                              textPrimary,
+                                                                        ),
+                                                                        decoration:
+                                                                            InputDecoration(
+                                                                          hintText:
+                                                                              'New $nextVer feature title...',
+                                                                          hintStyle:
+                                                                              GoogleFonts.inter(
+                                                                            fontSize:
+                                                                                11.5,
+                                                                            color:
+                                                                                textMuted,
+                                                                          ),
+                                                                          filled:
+                                                                              true,
+                                                                          fillColor:
+                                                                              bgSurface,
+                                                                          isDense:
+                                                                              true,
+                                                                          contentPadding:
+                                                                              const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                10,
+                                                                            vertical:
+                                                                                7,
+                                                                          ),
+                                                                          border:
+                                                                              OutlineInputBorder(
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(
+                                                                                  5,
+                                                                                ),
+                                                                            borderSide:
+                                                                                BorderSide(
+                                                                              color:
+                                                                                  borderSubtle,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        onSubmitted:
+                                                                            (val) {
+                                                                          if (val
+                                                                              .trim()
+                                                                              .isEmpty) {
+                                                                            return;
+                                                                          }
+                                                                          widget
+                                                                              .workbench
+                                                                              .addCustomFeatureToProposedBeat(
+                                                                            _addingFeatureToBeatId!,
+                                                                            val.trim(),
+                                                                          );
+                                                                          _rebuild(
+                                                                            () {
+                                                                              _addingFeatureToBeatId =
+                                                                                  null;
+                                                                            },
+                                                                          );
+                                                                        },
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 6,
+                                                                    ),
+                                                                    TextButton(
+                                                                      onPressed:
+                                                                          () {
+                                                                        final val =
+                                                                            _progressiveNewFeatCtrl
+                                                                                .text
+                                                                                .trim();
+                                                                        if (val
+                                                                            .isNotEmpty) {
+                                                                          widget
+                                                                              .workbench
+                                                                              .addCustomFeatureToProposedBeat(
+                                                                            _addingFeatureToBeatId!,
+                                                                            val,
+                                                                          );
+                                                                        }
+                                                                        _rebuild(
+                                                                          () {
+                                                                            _addingFeatureToBeatId =
+                                                                                null;
+                                                                          },
+                                                                        );
+                                                                      },
+                                                                      child: Text(
+                                                                        'Add',
+                                                                        style: GoogleFonts
+                                                                            .jetBrainsMono(
+                                                                          fontSize:
+                                                                              10.5,
+                                                                          fontWeight:
+                                                                              FontWeight
+                                                                                  .w700,
+                                                                          color:
+                                                                              accentCyan,
                                                                         ),
                                                                       ),
                                                                     ),
-                                                                    onSubmitted:
-                                                                        (val) {
-                                                                      if (val
-                                                                          .trim()
-                                                                          .isEmpty) {
-                                                                        return;
-                                                                      }
-                                                                      widget
-                                                                          .workbench
-                                                                          .addCustomFeatureToProposedBeat(
-                                                                        _addingFeatureToBeatId!,
-                                                                        val.trim(),
-                                                                      );
-                                                                      _rebuild(
-                                                                        () {
-                                                                          _addingFeatureToBeatId =
-                                                                              null;
-                                                                        },
-                                                                      );
-                                                                    },
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(
-                                                                  width: 6,
-                                                                ),
-                                                                TextButton(
-                                                                  onPressed:
-                                                                      () {
-                                                                    final val =
-                                                                        _progressiveNewFeatCtrl
-                                                                            .text
-                                                                            .trim();
-                                                                    if (val
-                                                                        .isNotEmpty) {
-                                                                      widget
-                                                                          .workbench
-                                                                          .addCustomFeatureToProposedBeat(
-                                                                        _addingFeatureToBeatId!,
-                                                                        val,
-                                                                      );
-                                                                    }
-                                                                    _rebuild(
-                                                                      () {
-                                                                        _addingFeatureToBeatId =
-                                                                            null;
-                                                                      },
-                                                                    );
-                                                                  },
-                                                                  child: Text(
-                                                                    'Add',
-                                                                    style: GoogleFonts
-                                                                        .jetBrainsMono(
-                                                                      fontSize:
-                                                                          10.5,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w700,
-                                                                      color:
-                                                                          accentCyan,
-                                                                    ),
-                                                                  ),
+                                                                  ],
                                                                 ),
                                                               ],
                                                             ),
@@ -1455,6 +1520,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                         .isAgentBusy
                                                     ? null
                                                     : () async {
+                                                        final prevIdx =
+                                                            _selectedProgressiveTrackIndex;
                                                         _rebuild(() {
                                                           _selectedProgressiveTrackIndex =
                                                               oIdx;
@@ -1463,6 +1530,11 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                           await submitDirective(
                                                             'Re-architect $nextVer around this strategic option: $rawOpt',
                                                           );
+                                                        } else if (prevIdx !=
+                                                            0) {
+                                                          widget.workbench
+                                                              .restoreInitialProgressiveDraftBlueprint();
+                                                          _rebuild(() {});
                                                         }
                                                       },
                                                 child: Container(

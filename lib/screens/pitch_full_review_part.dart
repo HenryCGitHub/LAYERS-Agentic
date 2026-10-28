@@ -389,11 +389,15 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     bool showRebuildSecondary = true,
   }) {
     final hasBuiltRelease = widget.workbench.activeReleaseBeats.isNotEmpty;
+    final builtReleaseCount = widget.workbench.projectReleases
+        .where((r) => r.childrenIds.isNotEmpty)
+        .length;
+    final canRebuildInitialV01 = showRebuildSecondary && builtReleaseCount <= 1;
     if (hasBuiltRelease) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (showRebuildSecondary) ...[
+          if (canRebuildInitialV01) ...[
             Tooltip(
               message: 'Regenerate v0.1 Workbench from scratch',
               child: OutlinedButton(
@@ -402,7 +406,10 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                     : null,
                 onPressed: widget.workbench.isAgentBusy
                     ? null
-                    : () => widget.workbench.approveConceptAndBuildRelease(),
+                    : () => widget.workbench.approveConceptAndBuildRelease(
+                          releaseId:
+                              widget.workbench.projectReleases.firstOrNull?.id,
+                        ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: accentAmber,
                   backgroundColor: bgRecessed,

@@ -225,6 +225,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               targetId != rel.id) {
                             _showProgressiveNextReleaseModal(context);
                           } else {
+                            _rebuild(() {
+                              _manualCheckpointFocusIndex = null;
+                            });
                             widget.workbench.selectActiveRelease(targetId);
                           }
                         } else {
@@ -778,9 +781,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             builder: (context) {
               final releaseHasActiveFeats = beats.any(
                 (b) => widget.workbench.featuresForBeat(b.id).any(
-                      (f) =>
-                          f.sections['lifecycle'] !=
-                          FeatureLifecycleStatus.stable.name,
+                      (f) => widget.workbench.isFeatureActiveInRelease(f),
                     ),
               );
               return Column(
@@ -795,9 +796,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         final beatFeats = releaseHasActiveFeats
                             ? allBeatFeats
                                 .where(
-                                  (f) =>
-                                      f.sections['lifecycle'] !=
-                                      FeatureLifecycleStatus.stable.name,
+                                  (f) => widget.workbench
+                                      .isFeatureActiveInRelease(f),
                                 )
                                 .toList()
                             : allBeatFeats;
@@ -962,9 +962,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             builder: (context) {
               final releaseHasActiveFeats = beats.any(
                 (b) => widget.workbench.featuresForBeat(b.id).any(
-                      (f) =>
-                          f.sections['lifecycle'] !=
-                          FeatureLifecycleStatus.stable.name,
+                      (f) => widget.workbench.isFeatureActiveInRelease(f),
                     ),
               );
               int totalActiveFeats = 0;
@@ -972,8 +970,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               for (final b in beats) {
                 for (final f in widget.workbench.featuresForBeat(b.id)) {
                   if (releaseHasActiveFeats &&
-                      f.sections['lifecycle'] ==
-                          FeatureLifecycleStatus.stable.name) {
+                      !widget.workbench.isFeatureActiveInRelease(f)) {
                     continue;
                   }
                   totalActiveFeats++;

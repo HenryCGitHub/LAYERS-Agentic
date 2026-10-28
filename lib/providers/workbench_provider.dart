@@ -140,6 +140,7 @@ class WorkbenchProvider extends ChangeNotifier {
 
   Set<String>? _preModalReleaseIds;
   ReleaseBlueprint? _preModalReleaseBlueprint;
+  String? _initialProgressiveTrack0BlueprintJson;
 
   final Set<String> _aiSynthesizedFeatureSteps = <String>{};
   final Set<String> _synthesizingFeatureIds = <String>{};
@@ -568,13 +569,43 @@ class WorkbenchProvider extends ChangeNotifier {
     return relDoc.releaseScope.label;
   }
 
+  /// Returns true if [feat] is an active deliverable (`newFeature` or `upgrade`) in [releaseVersionTag]
+  /// (defaults to [activeReleaseVersionTag]), rather than stabilized in a prior release or added in a future release.
+  bool isFeatureActiveInRelease(
+    TierDocument feat, [
+    String? releaseVersionTag,
+  ]) {
+    final lc = feat.sections['lifecycle'] ?? '';
+    if (lc == FeatureLifecycleStatus.superseded.name) {
+      return false;
+    }
+    final targetVer = (releaseVersionTag ?? activeReleaseVersionTag).trim();
+    final featActiveVer = feat.sections['activeReleaseVersion']?.trim();
+    if (lc == FeatureLifecycleStatus.stable.name) {
+      if (featActiveVer == targetVer ||
+          (featActiveVer == null && projectReleases.length <= 1)) {
+        return false;
+      }
+    }
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    if (states.isNotEmpty) {
+      final hasCheckpointInTarget =
+          states.any((s) => s.releaseVersion == targetVer);
+      if (hasCheckpointInTarget) return true;
+      if (states.any((s) => s.releaseVersion.trim().isNotEmpty)) {
+        return false;
+      }
+    }
+    return lc != FeatureLifecycleStatus.stable.name;
+  }
+
   /// Rollup progress (0-100) for any document in the hierarchy, scoped to the active release's delta checkpoints.
   int getDocumentProgress(String docId) {
     final doc = documents[docId];
     if (doc == null) return 0;
 
     if (doc.tier == TierType.feature) {
-      if (doc.sections['lifecycle'] == FeatureLifecycleStatus.stable.name) {
+      if (!isFeatureActiveInRelease(doc)) {
         return 100;
       }
       final states = FeatureStateNode.getStatesForDocument(doc);
@@ -619,9 +650,7 @@ class WorkbenchProvider extends ChangeNotifier {
       }
       final activeBeatIds = doc.childrenIds.where((beatId) {
         final feats = featuresForBeat(beatId);
-        return feats.any(
-          (f) => f.sections['lifecycle'] != FeatureLifecycleStatus.stable.name,
-        );
+        return feats.any((f) => isFeatureActiveInRelease(f));
       }).toList();
       final targetBeatIds =
           activeBeatIds.isNotEmpty ? activeBeatIds : doc.childrenIds;
@@ -639,8 +668,7 @@ class WorkbenchProvider extends ChangeNotifier {
     if (doc.tier == TierType.epic) {
       final activeFeatIds = doc.childrenIds.where((featId) {
         final f = documents[featId];
-        return f != null &&
-            f.sections['lifecycle'] != FeatureLifecycleStatus.stable.name;
+        return f != null && isFeatureActiveInRelease(f);
       }).toList();
       final targetFeatIds =
           activeFeatIds.isNotEmpty ? activeFeatIds : doc.childrenIds;

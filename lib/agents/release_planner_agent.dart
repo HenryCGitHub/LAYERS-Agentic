@@ -1361,6 +1361,7 @@ class ReleaseExecutorAgent {
           existingFeat.parentId = beatDoc.id;
           existingFeat.sections['lifecycle'] =
               FeatureLifecycleStatus.stable.name;
+          existingFeat.sections['activeReleaseVersion'] = versionTag;
           existingFeat.sections['lastVerifiedVersion'] =
               existingFeat.sections['originVersion'] ?? 'v0.1';
           final stableStates =

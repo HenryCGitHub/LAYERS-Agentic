@@ -326,7 +326,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   }
 
   int _computeFeatureRemainingMinutes(TierDocument feat) {
-    if (feat.sections['lifecycle'] == FeatureLifecycleStatus.stable.name) {
+    if (!widget.workbench.isFeatureActiveInRelease(feat)) {
       return 0;
     }
     final states = FeatureStateNode.getStatesForDocument(feat);

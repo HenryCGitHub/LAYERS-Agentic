@@ -4090,5 +4090,88 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    test(
+      'Pass 3 Multi-Release Integrity: Release-Scoped Feature Visibility (v0.1 <-> v0.2), Reload Checkpoint Preservation & Progressive Option 0 Restore',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('Neon Mech Arena');
+        await provider.approveConceptAndBuildRelease();
+
+        final v01RelId = provider.activeReleaseId!;
+        final v01Beats = provider.activeReleaseBeats;
+        expect(v01Beats, isNotEmpty);
+        final firstBeat = v01Beats.first;
+        final v01Feats = provider.featuresForBeat(firstBeat.id);
+        expect(v01Feats, isNotEmpty);
+        final featA = v01Feats.first;
+
+        // Prepare v0.2 Progressive Release Draft and test Option 0 snapshot restoration
+        final draftBp = await provider.prepareProgressiveNextReleaseDraft();
+        expect(draftBp, isNotNull);
+        final initialGoal = draftBp!.goal;
+        draftBp.goal = 'Mutated Option 1 Strategic Goal';
+        provider.restoreInitialProgressiveDraftBlueprint();
+        expect(provider.releaseBlueprint!.goal, equals(initialGoal));
+
+        // Add a brand-new v0.2 feature to Beat 1, keep featA as UPGRADE (or STABLE), and build v0.2
+        provider.addCustomFeatureToProposedBeat(
+          firstBeat.id,
+          'Overheat Vent Shield',
+        );
+        await provider.approveAndExecuteReleasePlan();
+
+        final v02RelId = provider.activeReleaseId!;
+        expect(v02RelId, isNot(equals(v01RelId)));
+
+        final allBeatFeatsAfterV02 = provider.featuresForBeat(firstBeat.id);
+        final newV02Feat = allBeatFeatsAfterV02.firstWhere(
+          (f) => f.title == 'Overheat Vent Shield',
+        );
+
+        // Ensure featA has both v0.1 and v0.2 checkpoints (or mark a second v0.1 feature stable in v0.2)
+        final featAStates = FeatureStateNode.getStatesForDocument(featA);
+        if (featAStates.length < 2) {
+          featA.sections['lifecycle'] = FeatureLifecycleStatus.upgrade.name;
+          featA.sections['activeReleaseVersion'] = 'v0.2';
+          featAStates.add(
+            FeatureStateNode(
+              id: '${featA.id}_v0.2_cp_2',
+              name: 'Checkpoint 2: ${featA.title} Upgrade (v0.2)',
+              trigger: 'Playtest v0.2 upgrade',
+              order: 1,
+              checklist: [
+                Subtask(id: 'u_1', text: 'Upgrade tuning (2h)', completed: false),
+              ],
+              parameters: const {'releaseVersion': 'v0.2'},
+            ),
+          );
+          provider.updateFeatureStates(featA.id, featAStates);
+        }
+
+        // In v0.2: newV02Feat is active; in v0.1: newV02Feat was not yet created so it is inactive!
+        expect(provider.isFeatureActiveInRelease(newV02Feat, 'v0.2'), isTrue);
+        expect(provider.isFeatureActiveInRelease(newV02Feat, 'v0.1'), isFalse);
+        expect(provider.isFeatureActiveInRelease(featA, 'v0.1'), isTrue);
+        expect(provider.isFeatureActiveInRelease(featA, 'v0.2'), isTrue);
+
+        // Switch back to v0.1 and trigger project state reload/switch: v0.2 checkpoint on featA MUST NOT be wiped!
+        await provider.selectActiveRelease(v01RelId);
+        expect(provider.activeReleaseVersionTag, equals('v0.1'));
+        expect(provider.isFeatureActiveInRelease(newV02Feat), isFalse);
+        expect(provider.isFeatureActiveInRelease(featA), isTrue);
+
+        final activeProjId = provider.activeProjectId!;
+        provider.switchProject(activeProjId);
+        final statesAfterReloadOnV01 =
+            FeatureStateNode.getStatesForDocument(provider.documents[featA.id]!);
+        expect(
+          statesAfterReloadOnV01.any((s) => s.releaseVersion == 'v0.2'),
+          isTrue,
+          reason:
+              'Reloading project state while viewing v0.1 must never wipe v0.2+ checkpoints',
+        );
+      },
+    );
   });
 }

@@ -9,13 +9,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     TierDocument? firstActiveBeat;
     TierDocument? firstActiveFeat;
 
-    // 1st Pass: Prioritize incomplete features with active-release work (`upgrade` or `newFeature`)
+    // 1st Pass: Prioritize incomplete features active in the current release (`newFeature` or `upgrade`)
     for (final b in beats) {
       for (final f in featuresForBeat(b.id)) {
-        final lc = f.sections['lifecycle'] ?? '';
-        final isActiveLifecycle = lc == FeatureLifecycleStatus.upgrade.name ||
-            lc == FeatureLifecycleStatus.newFeature.name;
-        if (isActiveLifecycle && getDocumentProgress(f.id) < 100) {
+        if (isFeatureActiveInRelease(f) && getDocumentProgress(f.id) < 100) {
           firstActiveBeat = b;
           firstActiveFeat = f;
           break;
@@ -24,7 +21,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       if (firstActiveFeat != null) break;
     }
 
-    // 2nd Pass: Fall back to any incomplete feature
+    // 2nd Pass: Any feature active in the current release (even if 100% complete)
+    if (firstActiveFeat == null) {
+      for (final b in beats) {
+        for (final f in featuresForBeat(b.id)) {
+          if (isFeatureActiveInRelease(f)) {
+            firstActiveBeat = b;
+            firstActiveFeat = f;
+            break;
+          }
+        }
+        if (firstActiveFeat != null) break;
+      }
+    }
+
+    // 3rd Pass: Fall back to any incomplete feature
     if (firstActiveFeat == null) {
       for (final b in beats) {
         for (final f in featuresForBeat(b.id)) {
@@ -259,6 +270,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       releaseId: relDoc.id,
       transitionToGateStage: false,
     );
+    if (_releaseBlueprint != null) {
+      _initialProgressiveTrack0BlueprintJson =
+          jsonEncode(_releaseBlueprint!.toJson());
+    }
   }
 
   /// Prunes any leftover unbuilt draft releases (once the project has at least one built release)
@@ -571,11 +586,33 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       notifyListeners();
       return null;
     }
+    _initialProgressiveTrack0BlueprintJson =
+        jsonEncode(_releaseBlueprint!.toJson());
     if (agentDirective != null && agentDirective.trim().isNotEmpty) {
       await sendReleasePlanChatMessage(agentDirective.trim());
     }
     notifyListeners();
     return _releaseBlueprint;
+  }
+
+  /// Restores the initial Option 0 (`(Recommended)`) draft `ReleaseBlueprint` when the user clicks
+  /// back onto Option 0 after exploring Option 1 or Option 2 in the Progressive Release Co-Pilot.
+  void restoreInitialProgressiveDraftBlueprint() {
+    final raw = _initialProgressiveTrack0BlueprintJson;
+    if (raw == null || raw.trim().isEmpty) return;
+    try {
+      final restored = ReleaseBlueprint.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+      _releaseBlueprint = restored;
+      final relDoc = activeRelease;
+      if (relDoc != null && relDoc.id == restored.releaseDocId) {
+        relDoc.sections['release_blueprint_json'] = raw;
+        _persistDocument(relDoc);
+      }
+      _syncActiveProjectMetadata();
+      notifyListeners();
+    } catch (_) {}
   }
 
   /// Restores the active release, blueprint, and production phase if the user cancels (or fails offline in)
@@ -1636,9 +1673,7 @@ Return ONLY a JSON object with this schema:
         final activeFeatureIds = <String>[
           for (final b in activeReleaseBeats)
             for (final f in featuresForBeat(b.id))
-              if (f.sections['lifecycle'] !=
-                  FeatureLifecycleStatus.stable.name)
-                f.id,
+              if (isFeatureActiveInRelease(f)) f.id,
         ];
         if (activeFeatureIds.isNotEmpty) {
           final primaryFeatId = (_selectedFeatureId != null &&
@@ -1681,7 +1716,13 @@ Return ONLY a JSON object with this schema:
   Future<void> _prefetchRemainingFeatureStepsInBackground(
     List<String> featureIds,
   ) async {
+    final startProjectId = _activeProjectId;
+    final startReleaseId = _activeReleaseId;
     for (final fId in featureIds) {
+      if (_activeProjectId != startProjectId ||
+          _activeReleaseId != startReleaseId) {
+        break;
+      }
       if (!documents.containsKey(fId)) continue;
       await synthesizeFeatureHowToStepsWithAi(fId);
     }
@@ -2543,7 +2584,11 @@ Return ONLY valid JSON:
     notifyListeners();
     if (GeminiAgentClient.hasKey(_apiKey)) {
       final states = FeatureStateNode.getStatesForDocument(feat);
-      final activeCp = states.isNotEmpty ? states.last : null;
+      final activeVer = activeReleaseVersionTag;
+      final activeCp = states.isNotEmpty
+          ? (states.where((s) => s.releaseVersion == activeVer).lastOrNull ??
+              states.last)
+          : null;
       final alreadySynthesized = activeCp != null &&
           activeCp.checklist.isNotEmpty &&
           activeCp.checklist.every(

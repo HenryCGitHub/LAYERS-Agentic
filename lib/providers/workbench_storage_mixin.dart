@@ -758,14 +758,16 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         }
       }
 
-      // Self-heal any v0.1 features that suffered from the duplicate-checkpoint 50% completion bug
-      final isInitialV01 = activeReleaseVersionTag == 'v0.1' &&
+      // Self-heal any single-release v0.1 features that suffered from the duplicate-checkpoint 50% completion bug
+      final isInitialV01 = proj.childrenIds.length <= 1 &&
+          activeReleaseVersionTag == 'v0.1' &&
           (activeRelease?.sections['prototypePart'] ?? '') != '2';
       if (isInitialV01) {
         for (final b in beats) {
           for (final f in featuresForBeat(b.id)) {
             final states = FeatureStateNode.getStatesForDocument(f);
-            if (states.length >= 2) {
+            if (states.length >= 2 &&
+                states.every((s) => s.releaseVersion == 'v0.1')) {
               final cleanNode = !states.last.isCompleted
                   ? states.last
                   : states.first;

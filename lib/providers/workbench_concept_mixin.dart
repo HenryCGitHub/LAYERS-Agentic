@@ -433,15 +433,26 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   /// into an already-built Stage 2 Release (`activeRelease.childrenIds.isNotEmpty`) without wiping
   /// existing `v0.1+` Feature checkpoints or completed subtask progress.
   void syncConceptChangesToBuiltWorkbench(ProjectConceptBlueprint draft) {
-    final rel = activeRelease;
+    final releases = projectReleases;
+    final rel = releases.firstOrNull ?? activeRelease;
     if (rel == null || rel.childrenIds.isEmpty) return;
+    final builtReleaseCount =
+        releases.where((r) => r.childrenIds.isNotEmpty).length;
+    final isSingleV01Release = builtReleaseCount <= 1;
 
-    // 1. Sync Release Scope (`01 Goal`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`)
+    // 1. Sync v0.1 Release Scope (`01 Goal`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`)
     rel.sections['scope'] =
         'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
     _persistDocument(rel);
 
-    final bp = _releaseBlueprint;
+    final bp = (_releaseBlueprint != null &&
+            _releaseBlueprint!.releaseDocId == rel.id)
+        ? _releaseBlueprint
+        : null;
+    if (_releaseBlueprint != null) {
+      _releaseBlueprint!.explicitExclusions =
+          List<String>.from(draft.exclusions);
+    }
     if (bp != null) {
       if (draft.goal.trim().isNotEmpty) {
         bp.goal = draft.goal.trim();
@@ -449,10 +460,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       if (draft.doneWhen.trim().isNotEmpty) {
         bp.doneWhen = draft.doneWhen.trim();
       }
-      bp.explicitExclusions = List<String>.from(draft.exclusions);
+      rel.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+      _persistDocument(rel);
     }
 
-    if (draft.coreLoopBeats.isEmpty) return;
+    // Once v0.2+ releases are built, keep v0.2+ Epics and Release Scope intact rather than reconstructing them from Stage 1's v0.1 Core Loop
+    if (!isSingleV01Release || draft.coreLoopBeats.isEmpty) return;
 
     final existingBeats = <TierDocument>[
       for (final bid in rel.childrenIds)
@@ -686,25 +699,43 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
     }
 
-    // Archive any removed Stage 1 Beats (without deleting historical feature progress)
+    // Archive any removed Stage 1 Beats on single-release v0.1 projects (without deleting historical feature progress).
+    // If v0.2+ releases already exist, preserve any v0.2+ Epics rather than superseding them.
     if (newReleaseBeatIds.isNotEmpty) {
       for (final oldBeat in existingBeats) {
         if (!claimedBeatIds.contains(oldBeat.id)) {
-          for (final fid in oldBeat.childrenIds) {
-            final fDoc = documents[fid];
-            if (fDoc != null) {
-              fDoc.sections['lifecycle'] =
-                  FeatureLifecycleStatus.superseded.name;
-              _persistDocument(fDoc);
+          if (isSingleV01Release) {
+            for (final fid in oldBeat.childrenIds) {
+              final fDoc = documents[fid];
+              if (fDoc != null) {
+                fDoc.sections['lifecycle'] =
+                    FeatureLifecycleStatus.superseded.name;
+                _persistDocument(fDoc);
+              }
             }
+          } else if (!newReleaseBeatIds.contains(oldBeat.id)) {
+            newReleaseBeatIds.add(oldBeat.id);
           }
         }
       }
       rel.childrenIds = newReleaseBeatIds;
-      _persistDocument(rel);
+      if (!isSingleV01Release) {
+        for (final otherRel in releases) {
+          if (otherRel.id != rel.id && otherRel.childrenIds.isNotEmpty) {
+            for (final bId in newReleaseBeatIds) {
+              if (!otherRel.childrenIds.contains(bId)) {
+                otherRel.childrenIds.add(bId);
+              }
+            }
+            _persistDocument(otherRel);
+          }
+        }
+      }
       if (bp != null && newBlueprintBeats.isNotEmpty) {
         bp.beats = newBlueprintBeats;
+        rel.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
       }
+      _persistDocument(rel);
       if (_selectedBeatId == null ||
           !newReleaseBeatIds.contains(_selectedBeatId)) {
         _selectFirstIncompleteFeatureInActiveRelease();
