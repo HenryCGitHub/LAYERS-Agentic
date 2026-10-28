@@ -756,6 +756,8 @@ class ReleaseBlueprint {
   List<AgentQuestion> questions;
   List<ProposedBeatBlueprint> beats;
   List<String> explicitExclusions;
+  List<String> builtSoFar;
+  List<String> missingGaps;
   String? lastAgentReply;
 
   ReleaseBlueprint({
@@ -768,6 +770,8 @@ class ReleaseBlueprint {
     required this.questions,
     required this.beats,
     this.explicitExclusions = const [],
+    this.builtSoFar = const [],
+    this.missingGaps = const [],
     this.lastAgentReply,
   });
 
@@ -813,6 +817,8 @@ class ReleaseBlueprint {
         'questions': questions.map((q) => q.toJson()).toList(),
         'beats': beats.map((b) => b.toJson()).toList(),
         'explicitExclusions': explicitExclusions,
+        'builtSoFar': builtSoFar,
+        'missingGaps': missingGaps,
         if (lastAgentReply != null) 'lastAgentReply': lastAgentReply,
       };
 
@@ -838,6 +844,14 @@ class ReleaseBlueprint {
               .toList() ??
           <ProposedBeatBlueprint>[],
       explicitExclusions: (json['explicitExclusions'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const <String>[],
+      builtSoFar: (json['builtSoFar'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const <String>[],
+      missingGaps: (json['missingGaps'] as List?)
               ?.map((e) => e.toString())
               .toList() ??
           const <String>[],

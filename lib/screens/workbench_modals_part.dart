@@ -333,166 +333,985 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       ],
 
                       if (bp != null) ...[
-                        // Section 1: Proactive Agent Architectural Recommendation (gemini-4-argon)
-                        Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: bgSurface,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: accentCyan.withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.psychology_rounded,
-                                  size: 16,
-                                  color: accentCyan,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    '✦ AGENT ARCHITECTURAL RECOMMENDATION FOR ${nextVer.toUpperCase()} (GEMINI-4-ARGON)',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.6,
-                                      color: accentCyan,
+                        // Section 1: Greyscale-First Vertical Agent Diagnostic Card (gemini-4-argon)
+                        Builder(
+                          builder: (context) {
+                            // 1. Resolve "Built So Far" chips
+                            final builtChips = <String>[
+                              for (final item in bp.builtSoFar)
+                                if (item.trim().isNotEmpty) item.trim(),
+                            ];
+                            if (builtChips.isEmpty) {
+                              for (final b in bp.beats) {
+                                for (final f in b.features) {
+                                  if (f.isStable &&
+                                      f.title.trim().isNotEmpty &&
+                                      !builtChips.contains(f.title.trim())) {
+                                    builtChips.add(f.title.trim());
+                                  }
+                                }
+                              }
+                            }
+                            if (builtChips.isEmpty &&
+                                bp.lastAgentReply != null &&
+                                bp.lastAgentReply!.trim().isNotEmpty) {
+                              final firstSentence = bp.lastAgentReply!
+                                  .split(RegExp(r'\.\s+'))
+                                  .first
+                                  .replaceFirst(
+                                    RegExp(
+                                      r'^Prior releases established\s+',
+                                      caseSensitive: false,
                                     ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              (bp.lastAgentReply != null &&
-                                      bp.lastAgentReply!.trim().isNotEmpty)
-                                  ? bp.lastAgentReply!.trim()
-                                  : 'Based on your completed $prevVer features and Stage 1 Design Pillars, $nextVer focuses on the active deliverables below.',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                height: 1.45,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimary,
+                                    '',
+                                  )
+                                  .trim();
+                              for (final part in firstSentence.split(
+                                RegExp(r',\s*(?:and\s+)?|\s+and\s+'),
+                              )) {
+                                final cleanPart = part
+                                    .replaceAll(RegExp(r'\.$'), '')
+                                    .trim();
+                                if (cleanPart.isNotEmpty &&
+                                    cleanPart.length <= 48) {
+                                  builtChips.add(cleanPart);
+                                }
+                              }
+                            }
+
+                            // 2. Resolve "Lacking Now" rows (with optional E0X tag)
+                            final rawGaps = <String>[
+                              for (final g in bp.missingGaps)
+                                if (g.trim().isNotEmpty) g.trim(),
+                            ];
+                            if (rawGaps.isEmpty &&
+                                bp.lastAgentReply != null &&
+                                bp.lastAgentReply!.trim().isNotEmpty) {
+                              final sentences = bp.lastAgentReply!
+                                  .split(RegExp(r'(?<=\.)\s+'));
+                              for (final s in sentences) {
+                                final lower = s.toLowerCase();
+                                if (lower.contains('however') ||
+                                    lower.contains('lacks') ||
+                                    lower.contains('missing')) {
+                                  final cleaned = s
+                                      .replaceFirst(
+                                        RegExp(
+                                          r'^However,\s*',
+                                          caseSensitive: false,
+                                        ),
+                                        '',
+                                      )
+                                      .replaceAll(RegExp(r'\.$'), '')
+                                      .trim();
+                                  for (final clause in cleaned.split(
+                                    RegExp(
+                                      r',\s*(?=(?:Beat|Epic|E0)\s*\d+)|,\s+and\s+(?=(?:Beat|Epic|E0)\s*\d+)',
+                                      caseSensitive: false,
+                                    ),
+                                  )) {
+                                    final c = clause.trim();
+                                    if (c.isNotEmpty) rawGaps.add(c);
+                                  }
+                                }
+                              }
+                            }
+                            if (rawGaps.isEmpty) {
+                              for (int bIdx = 0;
+                                  bIdx < bp.beats.length;
+                                  bIdx++) {
+                                final b = bp.beats[bIdx];
+                                final activeFeats = b.includedFeatures
+                                    .where((f) => !f.isStable)
+                                    .toList();
+                                if (activeFeats.isNotEmpty) {
+                                  final eCode =
+                                      'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                                  rawGaps.add(
+                                    '$eCode ${b.title}: Needs ${activeFeats.map((f) => f.title).join(' & ')}',
+                                  );
+                                }
+                              }
+                            }
+
+                            // 3. Collect "Next in v0.X" active feature rows
+                            final nextRows = <({
+                              String epicCode,
+                              ProposedFeatureBlueprint feat,
+                            })>[];
+                            for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+                              final b = bp.beats[bIdx];
+                              final eCode =
+                                  'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                              for (final f in b.includedFeatures) {
+                                if (!f.isStable && !f.isSuperseded) {
+                                  nextRows.add((epicCode: eCode, feat: f));
+                                }
+                              }
+                            }
+
+                            final heroGoal = bp.goal.trim().isNotEmpty
+                                ? bp.goal.trim()
+                                : ((bp.lastAgentReply != null &&
+                                        bp.lastAgentReply!.trim().isNotEmpty)
+                                    ? bp.lastAgentReply!.trim()
+                                    : 'Advance $nextVer with the active features and upgrades below.');
+
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: bgSurface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: borderSubtle),
                               ),
-                            ),
-                            if (bp.goal.trim().isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: bgRecessed,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: borderSubtle),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Goal: ${bp.goal.trim()}',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        color: textSecondary,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // 1. Unboxed Hero Header (Goal & Done When)
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 7,
+                                              height: 7,
+                                              decoration: BoxDecoration(
+                                                color: accentCyan,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                'AGENT ARCHITECTURAL RECOMMENDATION · ${nextVer.toUpperCase()} (${widget.workbench.activePhaseBadgeLabel})',
+                                                overflow: TextOverflow.ellipsis,
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 0.6,
+                                                  color: textSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    if (bp.doneWhen.trim().isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Done When: ${bp.doneWhen.trim()}',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          color: accentEmerald,
-                                          fontWeight: FontWeight.w600,
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: bgRecessed,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border:
+                                              Border.all(color: borderSubtle),
+                                        ),
+                                        child: Text(
+                                          '${upgradeCount + newCount} Active Changes · ${bp.totalIncludedHours}h',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: textPrimary,
+                                          ),
                                         ),
                                       ),
                                     ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 12),
-                            Text(
-                              dynamicQuestion?.question ??
-                                  'AI-Synthesized Strategic Focus for $nextVer (Click an alternative to re-architect $nextVer):',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (int oIdx = 0;
-                                    oIdx < dynamicOptions.length;
-                                    oIdx++)
-                                  Builder(
-                                    builder: (context) {
-                                      final opt = dynamicOptions[oIdx];
-                                      final isSelected =
-                                          _selectedProgressiveTrackIndex == oIdx;
-                                      return InkWell(
-                                        key: ValueKey(
-                                          'progressive_preset_chip_$oIdx',
-                                        ),
-                                        borderRadius: BorderRadius.circular(6),
-                                        onTap: widget.workbench.isAgentBusy
-                                            ? null
-                                            : () async {
-                                                _rebuild(() {
-                                                  _selectedProgressiveTrackIndex =
-                                                      oIdx;
-                                                });
-                                                if (oIdx > 0) {
-                                                  await submitDirective(
-                                                    'Re-architect $nextVer around this strategic option: $opt',
-                                                  );
-                                                }
-                                              },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 7,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? accentCyan.withValues(
-                                                    alpha: 0.12,
-                                                  )
-                                                : bgRecessed,
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? accentCyan
-                                                  : borderSubtle,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            opt,
-                                            style: GoogleFonts.inter(
-                                              fontSize: 11.5,
-                                              fontWeight: isSelected
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w500,
-                                              color: isSelected
-                                                  ? accentCyan
-                                                  : textSecondary,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
                                   ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    heroGoal,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      height: 1.4,
+                                      fontWeight: FontWeight.w700,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                  if (bp.doneWhen.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '✓ DONE WHEN → ',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: accentEmerald,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            bp.doneWhen.trim(),
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              height: 1.35,
+                                              color: textSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                  const SizedBox(height: 14),
+
+                                  // 2. Unified Vertical Diagnostic Ledger (Built -> Lacking Now -> Next in v0.X)
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: bgRecessed,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: borderSubtle),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        if (builtChips.isNotEmpty) ...[
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                SizedBox(
+                                                  width: 126,
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 2,
+                                                        ),
+                                                    child: RichText(
+                                                      text: TextSpan(
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: textMuted,
+                                                        ),
+                                                        children: [
+                                                          TextSpan(
+                                                            text: '✓ ',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  accentEmerald,
+                                                            ),
+                                                          ),
+                                                          TextSpan(
+                                                            text:
+                                                                'BUILT (≤$prevVer)',
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Wrap(
+                                                    spacing: 6,
+                                                    runSpacing: 6,
+                                                    children: [
+                                                      for (final chip
+                                                          in builtChips.take(8))
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 3,
+                                                              ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: bgSurface,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  4,
+                                                                ),
+                                                            border: Border.all(
+                                                              color:
+                                                                  borderSubtle,
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            '✓ $chip',
+                                                            style: GoogleFonts
+                                                                .inter(
+                                                              fontSize: 11.5,
+                                                              color:
+                                                                  textSecondary,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Divider(
+                                            height: 1,
+                                            thickness: 1,
+                                            color: borderSubtle,
+                                          ),
+                                        ],
+                                        if (rawGaps.isNotEmpty) ...[
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                SizedBox(
+                                                  width: 126,
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 2,
+                                                        ),
+                                                    child: RichText(
+                                                      text: TextSpan(
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: textMuted,
+                                                        ),
+                                                        children: [
+                                                          TextSpan(
+                                                            text: '⚠ ',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  accentAmber,
+                                                            ),
+                                                          ),
+                                                          const TextSpan(
+                                                            text: 'LACKING NOW',
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      for (int gIdx = 0;
+                                                          gIdx <
+                                                              rawGaps
+                                                                  .take(5)
+                                                                  .length;
+                                                          gIdx++)
+                                                        Builder(
+                                                          builder: (context) {
+                                                            var gapText =
+                                                                rawGaps[gIdx];
+                                                            String? epicTag;
+                                                            final beatMatch =
+                                                                RegExp(
+                                                              r'^(?:Beat|Epic)\s*(\d+)\s*(?:\(([^)]+)\))?\s*[:\-–—]?\s*(.+)$',
+                                                              caseSensitive:
+                                                                  false,
+                                                            ).firstMatch(
+                                                              gapText,
+                                                            );
+                                                            final eCodeMatch =
+                                                                RegExp(
+                                                              r'^(E\d+)\s*[:\-–—]?\s*(.+)$',
+                                                              caseSensitive:
+                                                                  false,
+                                                            ).firstMatch(
+                                                              gapText,
+                                                            );
+                                                            if (beatMatch !=
+                                                                null) {
+                                                              final num = int
+                                                                      .tryParse(
+                                                                        beatMatch
+                                                                            .group(
+                                                                              1,
+                                                                            )!,
+                                                                      ) ??
+                                                                  1;
+                                                              epicTag =
+                                                                  'E${num.toString().padLeft(2, '0')}';
+                                                              final beatName =
+                                                                  beatMatch
+                                                                      .group(2)
+                                                                      ?.trim();
+                                                              final rest =
+                                                                  beatMatch
+                                                                      .group(3)!
+                                                                      .trim();
+                                                              gapText =
+                                                                  (beatName !=
+                                                                              null &&
+                                                                          beatName
+                                                                              .isNotEmpty)
+                                                                      ? '$beatName — $rest'
+                                                                      : rest;
+                                                            } else if (eCodeMatch !=
+                                                                null) {
+                                                              epicTag =
+                                                                  eCodeMatch
+                                                                      .group(1)!
+                                                                      .toUpperCase();
+                                                              gapText =
+                                                                  eCodeMatch
+                                                                      .group(2)!
+                                                                      .trim();
+                                                            }
+                                                            return Padding(
+                                                              padding: EdgeInsets.only(
+                                                                bottom: gIdx +
+                                                                            1 <
+                                                                        rawGaps
+                                                                            .take(
+                                                                              5,
+                                                                            )
+                                                                            .length
+                                                                    ? 6
+                                                                    : 0,
+                                                              ),
+                                                              child: Row(
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .start,
+                                                                children: [
+                                                                  if (epicTag !=
+                                                                      null) ...[
+                                                                    Container(
+                                                                      padding: const EdgeInsets.symmetric(
+                                                                        horizontal:
+                                                                            5,
+                                                                        vertical:
+                                                                            1.5,
+                                                                      ),
+                                                                      decoration:
+                                                                          BoxDecoration(
+                                                                        color:
+                                                                            bgSurface,
+                                                                        borderRadius:
+                                                                            BorderRadius.circular(
+                                                                              3,
+                                                                            ),
+                                                                        border: Border.all(
+                                                                          color:
+                                                                              borderSubtle,
+                                                                        ),
+                                                                      ),
+                                                                      child:
+                                                                          Text(
+                                                                        epicTag,
+                                                                        style: GoogleFonts
+                                                                            .jetBrainsMono(
+                                                                          fontSize:
+                                                                              9.5,
+                                                                          fontWeight:
+                                                                              FontWeight.w700,
+                                                                          color:
+                                                                              textMuted,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 7,
+                                                                    ),
+                                                                  ] else ...[
+                                                                    Text(
+                                                                      '• ',
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            11,
+                                                                        color:
+                                                                            textMuted,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                  Expanded(
+                                                                    child: Text(
+                                                                      gapText,
+                                                                      style: GoogleFonts
+                                                                          .inter(
+                                                                        fontSize:
+                                                                            12,
+                                                                        height:
+                                                                            1.35,
+                                                                        color:
+                                                                            textPrimary,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            );
+                                                          },
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Divider(
+                                            height: 1,
+                                            thickness: 1,
+                                            color: borderSubtle,
+                                          ),
+                                        ],
+                                        if (nextRows.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                SizedBox(
+                                                  width: 126,
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 5,
+                                                        ),
+                                                    child: RichText(
+                                                      text: TextSpan(
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: textPrimary,
+                                                        ),
+                                                        children: [
+                                                          TextSpan(
+                                                            text: '✦ ',
+                                                            style: TextStyle(
+                                                              color: accentCyan,
+                                                            ),
+                                                          ),
+                                                          TextSpan(
+                                                            text:
+                                                                'NEXT IN ${nextVer.toUpperCase()}',
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .stretch,
+                                                    children: [
+                                                      for (int nIdx = 0;
+                                                          nIdx <
+                                                              nextRows.length;
+                                                          nIdx++)
+                                                        Builder(
+                                                          builder: (context) {
+                                                            final row =
+                                                                nextRows[nIdx];
+                                                            final f = row.feat;
+                                                            final isUpg = f
+                                                                    .lifecycle ==
+                                                                FeatureLifecycleStatus
+                                                                    .upgrade;
+                                                            final badgeColor =
+                                                                isUpg
+                                                                    ? accentAmber
+                                                                    : accentEmerald;
+                                                            final cleanGoal = f
+                                                                .goal
+                                                                .trim()
+                                                                .replaceAll(
+                                                                  RegExp(
+                                                                    r'\.$',
+                                                                  ),
+                                                                  '',
+                                                                );
+                                                            return Container(
+                                                              margin: EdgeInsets.only(
+                                                                bottom: nIdx +
+                                                                            1 <
+                                                                        nextRows
+                                                                            .length
+                                                                    ? 6
+                                                                    : 0,
+                                                              ),
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        10,
+                                                                    vertical: 6,
+                                                                  ),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color:
+                                                                    bgSurface,
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      5,
+                                                                    ),
+                                                                border:
+                                                                    Border.all(
+                                                                  color:
+                                                                      borderSubtle,
+                                                                ),
+                                                              ),
+                                                              child: Row(
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .spaceBetween,
+                                                                children: [
+                                                                  Expanded(
+                                                                    child: Row(
+                                                                      children: [
+                                                                        Container(
+                                                                          padding: const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                5,
+                                                                            vertical:
+                                                                                1.5,
+                                                                          ),
+                                                                          decoration:
+                                                                              BoxDecoration(
+                                                                            color: badgeColor.withValues(
+                                                                              alpha: 0.14,
+                                                                            ),
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(
+                                                                                  3,
+                                                                                ),
+                                                                            border: Border.all(
+                                                                              color: badgeColor.withValues(
+                                                                                alpha: 0.35,
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                          child:
+                                                                              Text(
+                                                                            isUpg
+                                                                                ? '↻ UPGRADE'
+                                                                                : '+ NEW',
+                                                                            style: GoogleFonts.jetBrainsMono(
+                                                                              fontSize: 9,
+                                                                              fontWeight: FontWeight.w800,
+                                                                              color: badgeColor,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              8,
+                                                                        ),
+                                                                        Flexible(
+                                                                          child:
+                                                                              RichText(
+                                                                            maxLines:
+                                                                                1,
+                                                                            overflow:
+                                                                                TextOverflow.ellipsis,
+                                                                            text: TextSpan(
+                                                                              style: GoogleFonts.inter(
+                                                                                fontSize: 12,
+                                                                                color: textPrimary,
+                                                                              ),
+                                                                              children: [
+                                                                                TextSpan(
+                                                                                  text: f.title,
+                                                                                  style: const TextStyle(
+                                                                                    fontWeight: FontWeight.w700,
+                                                                                  ),
+                                                                                ),
+                                                                                if (cleanGoal.isNotEmpty)
+                                                                                  TextSpan(
+                                                                                    text: ' — $cleanGoal',
+                                                                                    style: TextStyle(
+                                                                                      color: textSecondary,
+                                                                                    ),
+                                                                                  ),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 10,
+                                                                  ),
+                                                                  Text(
+                                                                    '${row.epicCode} · ${f.estimatedHours}h',
+                                                                    style: GoogleFonts
+                                                                        .jetBrainsMono(
+                                                                      fontSize:
+                                                                          10,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w600,
+                                                                      color:
+                                                                          textMuted,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            );
+                                                          },
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // 3. Vertical Radio-Style Strategic Direction Selector
+                                  Text(
+                                    (dynamicQuestion?.question ??
+                                            'STRATEGIC DIRECTION (SELECT TO RE-ARCHITECT ${nextVer.toUpperCase()})')
+                                        .toUpperCase(),
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.4,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      for (int oIdx = 0;
+                                          oIdx < dynamicOptions.length;
+                                          oIdx++)
+                                        Builder(
+                                          builder: (context) {
+                                            final rawOpt = dynamicOptions[oIdx];
+                                            final isSelected =
+                                                _selectedProgressiveTrackIndex ==
+                                                oIdx;
+                                            final isRec = rawOpt
+                                                .toLowerCase()
+                                                .startsWith('(recommended)');
+                                            final stripped = rawOpt
+                                                .replaceFirst(
+                                                  RegExp(
+                                                    r'^\(recommended\)\s*',
+                                                    caseSensitive: false,
+                                                  ),
+                                                  '',
+                                                )
+                                                .trim();
+                                            final colonIdx =
+                                                stripped.indexOf(':');
+                                            final optTitle = colonIdx > 0
+                                                ? stripped
+                                                    .substring(0, colonIdx)
+                                                    .trim()
+                                                : stripped;
+                                            final optDesc = colonIdx > 0
+                                                ? stripped
+                                                    .substring(colonIdx + 1)
+                                                    .trim()
+                                                : '';
+                                            return Padding(
+                                              padding: EdgeInsets.only(
+                                                bottom: oIdx + 1 <
+                                                        dynamicOptions.length
+                                                    ? 6
+                                                    : 0,
+                                              ),
+                                              child: InkWell(
+                                                key: ValueKey(
+                                                  'progressive_preset_chip_$oIdx',
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(7),
+                                                onTap: widget
+                                                        .workbench
+                                                        .isAgentBusy
+                                                    ? null
+                                                    : () async {
+                                                        _rebuild(() {
+                                                          _selectedProgressiveTrackIndex =
+                                                              oIdx;
+                                                        });
+                                                        if (oIdx > 0) {
+                                                          await submitDirective(
+                                                            'Re-architect $nextVer around this strategic option: $rawOpt',
+                                                          );
+                                                        }
+                                                      },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 9,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: isSelected
+                                                        ? bgRecessed
+                                                        : Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          7,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: isSelected
+                                                          ? accentCyan
+                                                              .withValues(
+                                                                alpha: 0.65,
+                                                              )
+                                                          : borderSubtle,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                              top: 1,
+                                                            ),
+                                                        child: Text(
+                                                          isSelected
+                                                              ? '●'
+                                                              : '○',
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            color: isSelected
+                                                                ? accentCyan
+                                                                : textMuted,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            Row(
+                                                              children: [
+                                                                Flexible(
+                                                                  child: Text(
+                                                                    optTitle,
+                                                                    style: GoogleFonts
+                                                                        .inter(
+                                                                      fontSize:
+                                                                          12,
+                                                                      fontWeight: isSelected
+                                                                          ? FontWeight.w700
+                                                                          : FontWeight.w600,
+                                                                      color: isSelected
+                                                                          ? textPrimary
+                                                                          : textSecondary,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                if (isRec) ...[
+                                                                  const SizedBox(
+                                                                    width: 8,
+                                                                  ),
+                                                                  Container(
+                                                                    padding: const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          6,
+                                                                      vertical:
+                                                                          1.5,
+                                                                    ),
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: accentCyan.withValues(
+                                                                        alpha:
+                                                                            0.14,
+                                                                      ),
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                            4,
+                                                                          ),
+                                                                    ),
+                                                                    child: Text(
+                                                                      'Recommended',
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            9,
+                                                                        fontWeight:
+                                                                            FontWeight.w700,
+                                                                        color:
+                                                                            accentCyan,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ],
+                                                            ),
+                                                            if (optDesc
+                                                                .isNotEmpty) ...[
+                                                              const SizedBox(
+                                                                height: 2,
+                                                              ),
+                                                              Text(
+                                                                optDesc,
+                                                                style: GoogleFonts
+                                                                    .inter(
+                                                                  fontSize: 11.5,
+                                                                  height: 1.35,
+                                                                  color:
+                                                                      textMuted,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
                             Row(
                               children: [
                                 Expanded(
@@ -571,9 +1390,11 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             ),
                           ],
                         ),
-                      ),
+                      );
+                    },
+                  ),
 
-                      const SizedBox(height: 22),
+                  const SizedBox(height: 22),
                       Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [

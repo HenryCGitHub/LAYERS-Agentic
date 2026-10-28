@@ -189,7 +189,10 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
-- ARCHITECTURAL REASONING ("agentReasoning"): Think through what the developer has already verified in the Existing Live Game Tree versus the Stage 1 Design Pillars, Core Loop Beats, and Out-of-Scope Backlog. Write 2-3 concrete sentences in `"agentReasoning"` explaining what playable gap in "${projectDoc.title}" is highest priority right now and why you selected these specific $versionTag features/upgrades next.
+- ARCHITECTURAL DIAGNOSTIC ("builtSoFar" & "missingGaps"):
+  * `"builtSoFar"`: List 2–4 concise 2–5 word phrases summarizing the core mechanics already built and verified in prior releases (e.g., `["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"]`).
+  * `"missingGaps"`: List 2–4 concise 1-line statements naming the exact playable gaps in the current build prefixed with the Beat tag (e.g., `["E01: No incoming enemy projectiles to dodge while air-strafing", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no multi-room chain or boss"]`).
+  * `"agentReasoning"`: 1–2 concise summary sentences tying the gaps to $versionTag's focus.
 - BESPOKE GAME-SPECIFIC STRATEGIC OPTIONS ("questions"): In `questions[0]`, ask 1 architectural priority question for $versionTag with 3 concrete options tailored specifically to "${projectDoc.title}"'s actual mechanics (Option 1 prefixed with `(Recommended)` matching your primary plan; Options 2 and 3 offering distinct, game-specific alternative angles for $versionTag).
 - IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics and Features by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Enemies, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later in the loop.
 - Break each active Beat into the focused Playable Features (`"included": true`) needed for ${releaseDoc.title} to be genuinely playable on screen (do NOT generate pre-unchecked `"included": false` filler features).
@@ -207,7 +210,9 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
 {
   "releasePhase": "mvp",
   "releaseTitle": "$versionTag: Concrete Release Focus",
-  "agentReasoning": "2-3 concrete sentences explaining what was proven in prior releases, what gap in ${projectDoc.title}'s loop or pillars matters most now, and why these $versionTag features are recommended next.",
+  "builtSoFar": ["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"],
+  "missingGaps": ["E01: No incoming enemy fire to dodge", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no boss room"],
+  "agentReasoning": "1-2 concise sentences explaining why these $versionTag features are recommended next.",
   "goal": "Build... goal of ${releaseDoc.title}",
   "doneWhen": "Concrete playtest completion condition",
   "explicitExclusions": ["Excluded mechanic", "..."],
@@ -564,6 +569,20 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             .where((e) => e.isNotEmpty)
             .toList()
         : fallbackExclusions;
+    final rawBuiltSoFar = json['builtSoFar'];
+    final builtSoFar = rawBuiltSoFar is List
+        ? rawBuiltSoFar
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final rawMissingGaps = json['missingGaps'];
+    final missingGaps = rawMissingGaps is List
+        ? rawMissingGaps
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList()
+        : const <String>[];
 
     final rawReasoning =
         (json['agentReasoning'] ?? json['lastAgentReply'] ?? '')
@@ -627,6 +646,8 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       questions: questions,
       beats: beats,
       explicitExclusions: exclusions,
+      builtSoFar: builtSoFar,
+      missingGaps: missingGaps,
       lastAgentReply: effectiveReasoning,
     );
   }

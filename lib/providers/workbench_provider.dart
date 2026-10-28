@@ -377,6 +377,139 @@ class WorkbenchProvider extends ChangeNotifier {
     return releaseVersionTagFor(rel);
   }
 
+  /// Resolves the canonical `ProductionPhase` (`prototype`, `mvp`, `verticalSlice`, `fullProduction`) for a Release document.
+  ProductionPhase releasePhaseFor(TierDocument relDoc) {
+    final rawPhase = (relDoc.sections['phase'] ?? '').trim();
+    if (rawPhase == ProductionPhase.fullProduction.name ||
+        relDoc.releaseScope == ReleaseScope.fullProduction) {
+      return ProductionPhase.fullProduction;
+    }
+    if (rawPhase == ProductionPhase.verticalSlice.name ||
+        relDoc.releaseScope == ReleaseScope.verticalSlice) {
+      return ProductionPhase.verticalSlice;
+    }
+    if (rawPhase == ProductionPhase.mvp.name ||
+        relDoc.releaseScope == ReleaseScope.mvp) {
+      return ProductionPhase.mvp;
+    }
+    return ProductionPhase.prototype;
+  }
+
+  /// Short uppercase phase badge (`PROTO`, `MVP`, `SLICE`, `PROD`) for compact header pills.
+  String releasePhaseShortBadge(TierDocument relDoc) {
+    switch (releasePhaseFor(relDoc)) {
+      case ProductionPhase.prototype:
+        return 'PROTO';
+      case ProductionPhase.mvp:
+        return 'MVP';
+      case ProductionPhase.verticalSlice:
+        return 'SLICE';
+      case ProductionPhase.fullProduction:
+        return 'PROD';
+    }
+  }
+
+  /// Resolves a clean, descriptive human-readable name for a Release in the Release Selector Dropdown and Header Pill.
+  /// Strips version/scope boilerplate and, if the stored title is generic (e.g. `"Prototype"`, `"MVP Epic 1"`),
+  /// synthesizes a 2–4 word focus name from the actual Features built or upgraded in that release.
+  String releaseDisplayName(TierDocument relDoc) {
+    var clean = relDoc.title.trim();
+    clean = clean
+        .replaceFirst(
+          RegExp(r'^v\d+\.\d+(?:\.\d+)?\s*[:\-–—]?\s*', caseSensitive: false),
+          '',
+        )
+        .trim();
+    clean = clean
+        .replaceFirst(
+          RegExp(
+            r'\s*[\-–—]\s*(?:Feature\s+Prototype|Prototype|MVP|Vertical\s+Slice|Full\s+Production)\s*$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+
+    final mvpParenMatch = RegExp(
+      r'^MVP\s+Epic\s*\d+\s*\(([^)]+)\)$',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    if (mvpParenMatch != null) {
+      clean = mvpParenMatch.group(1)!.trim();
+    }
+
+    final protoPartMatch = RegExp(
+      r'^Prototype\s*[\-–—]\s*Part\s*\d+\s*:\s*(.+)$',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    if (protoPartMatch != null) {
+      clean = protoPartMatch.group(1)!.trim();
+    }
+
+    final lower = clean.toLowerCase();
+    final projTitleLower = (activeProject?.title ?? '').toLowerCase().trim();
+    final isGeneric = clean.isEmpty ||
+        lower == 'prototype' ||
+        lower == 'feature prototype' ||
+        lower == 'prototype (part 1)' ||
+        lower == 'prototype (part 2)' ||
+        lower == 'progressive release' ||
+        lower == 'mvp' ||
+        lower == 'vertical slice' ||
+        lower == 'full production' ||
+        lower == 'core loop' ||
+        (projTitleLower.isNotEmpty && lower == '$projTitleLower core loop') ||
+        RegExp(r'^mvp\s+epic\s*\d+$', caseSensitive: false).hasMatch(clean);
+
+    if (!isGeneric) {
+      return clean;
+    }
+
+    final rVer = releaseVersionTagFor(relDoc).toLowerCase();
+    final versionFeatTitles = <String>[];
+    for (final beatId in relDoc.childrenIds) {
+      for (final feat in featuresForBeat(beatId)) {
+        final states = FeatureStateNode.getStatesForDocument(feat);
+        final touchedInRel = states.any(
+          (s) => s.releaseVersion.toLowerCase() == rVer,
+        );
+        if (touchedInRel && !versionFeatTitles.contains(feat.title)) {
+          versionFeatTitles.add(feat.title);
+        }
+      }
+    }
+    if (versionFeatTitles.isNotEmpty) {
+      return versionFeatTitles.take(2).join(' & ');
+    }
+
+    if (_releaseBlueprint != null &&
+        _releaseBlueprint!.releaseDocId == relDoc.id) {
+      final bpTitles = <String>[
+        for (final b in _releaseBlueprint!.beats)
+          for (final f in b.features)
+            if (f.included && f.lifecycle != FeatureLifecycleStatus.stable)
+              f.title,
+      ];
+      if (bpTitles.isNotEmpty) {
+        return bpTitles.take(2).join(' & ');
+      }
+    }
+
+    final fallbackFeatTitles = <String>[];
+    for (final beatId in relDoc.childrenIds) {
+      for (final feat in featuresForBeat(beatId)) {
+        if (!fallbackFeatTitles.contains(feat.title)) {
+          fallbackFeatTitles.add(feat.title);
+        }
+      }
+    }
+    if (fallbackFeatTitles.isNotEmpty) {
+      return fallbackFeatTitles.take(2).join(' & ');
+    }
+
+    return clean.isNotEmpty ? clean : releaseConciseLabel(relDoc);
+  }
+
   /// Concise milestone subtitle for the Stage 3 Release Dropdown and header pill.
   String releaseConciseLabel(TierDocument relDoc) {
     final protoPart = relDoc.sections['prototypePart'] ?? '';

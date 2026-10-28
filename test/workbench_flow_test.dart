@@ -1495,8 +1495,8 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.textContaining('v0.1 proved core movement and arena entry'),
-          findsOneWidget,
+          find.textContaining('DONE WHEN'),
+          findsWidgets,
         );
         expect(
           find.byKey(const ValueKey('progressive_preset_chip_0')),
@@ -1722,6 +1722,42 @@ void main() {
         await provider.selectActiveRelease(v1RelId);
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
         expect(provider.activeRelease!.id, v1RelId);
+
+        // Verify phase classification and descriptive release display names for dropdown grouping
+        final allRels = provider.projectReleases;
+        expect(allRels.length, 3);
+        expect(provider.releasePhaseFor(allRels[0]), ProductionPhase.prototype);
+        expect(provider.releasePhaseShortBadge(allRels[0]), 'PROTO');
+        expect(
+          provider.releaseDisplayName(allRels[0]),
+          isNot(equals('Prototype')),
+        );
+        expect(
+          provider.releaseDisplayName(allRels[1]),
+          'Room Clearance & Threat Variety',
+        );
+
+        // Verify ReleaseBlueprint builtSoFar & missingGaps round-trip serialization
+        final diagBp = ReleaseBlueprint(
+          releaseDocId: 'rel_diag',
+          releaseTitle: 'v0.3: Economy & Crafting Loop',
+          releaseVersionTag: 'v0.3',
+          preset: ReleaseScope.mvp,
+          goal: 'Wire ore drops into crafting bench.',
+          doneWhen: 'Player crafts 1 item from looted ore.',
+          builtSoFar: const ['Twin-Stick Aiming', 'Shotgun Firing & Reload'],
+          missingGaps: const ['E03 · Loot Drops & Pickup (0 features)'],
+          questions: const [],
+          beats: const [],
+        );
+        final roundTripBp = ReleaseBlueprint.fromJson(diagBp.toJson());
+        expect(roundTripBp.builtSoFar, [
+          'Twin-Stick Aiming',
+          'Shotgun Firing & Reload',
+        ]);
+        expect(roundTripBp.missingGaps, [
+          'E03 · Loot Drops & Pickup (0 features)',
+        ]);
       },
     );
 

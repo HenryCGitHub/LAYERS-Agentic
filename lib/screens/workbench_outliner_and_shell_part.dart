@@ -238,131 +238,247 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             : releases;
                         final isRelComplete =
                             widget.workbench.isActiveReleaseComplete;
-                        return [
+
+                        final byPhase = <ProductionPhase, List<TierDocument>>{
+                          for (final p in ProductionPhase.values) p: <TierDocument>[],
+                        };
+                        for (final r in displayReleases) {
+                          final p = widget.workbench.releasePhaseFor(r);
+                          byPhase[p]!.add(r);
+                        }
+
+                        String phaseGroupHeader(ProductionPhase p) {
+                          switch (p) {
+                            case ProductionPhase.prototype:
+                              return '01 · PROTOTYPE (GREYBOX LOOP)';
+                            case ProductionPhase.mvp:
+                              return '02 · MVP (FUNCTIONAL DEPTH)';
+                            case ProductionPhase.verticalSlice:
+                              return '03 · VERTICAL SLICE (POLISH PASS)';
+                            case ProductionPhase.fullProduction:
+                              return '04 · FULL PRODUCTION (V1.0 CONTENT)';
+                          }
+                        }
+
+                        final menuItems = <PopupMenuEntry<String>>[
                           PopupMenuItem<String>(
                             enabled: false,
-                            height: 24,
-                            child: Text(
-                              'RELEASES · SWITCH OR PLAN',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.0,
-                                color: textMuted,
-                              ),
+                            height: 26,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'RELEASES · BY PHASE',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.9,
+                                    color: textMuted,
+                                  ),
+                                ),
+                                Text(
+                                  '${displayReleases.length} Shipped',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentEmerald.withValues(alpha: 0.85),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          for (int rIdx = 0;
-                              rIdx < displayReleases.length;
-                              rIdx++)
+                        ];
+
+                        for (final phase in ProductionPhase.values) {
+                          final groupRels = byPhase[phase]!;
+                          final hasActiveInGroup =
+                              groupRels.any((r) => r.id == rel.id);
+                          if (groupRels.isEmpty) {
+                            menuItems.add(
+                              PopupMenuItem<String>(
+                                enabled: false,
+                                height: 22,
+                                child: Text(
+                                  '${phaseGroupHeader(phase)} — UPCOMING',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textMuted.withValues(alpha: 0.55),
+                                  ),
+                                ),
+                              ),
+                            );
+                            continue;
+                          }
+
+                          final doneInGroup = groupRels
+                              .where(
+                                (r) =>
+                                    widget.workbench.getDocumentProgress(r.id) >=
+                                    100,
+                              )
+                              .length;
+                          menuItems.add(
                             PopupMenuItem<String>(
-                              value: 'rel:${displayReleases[rIdx].id}',
-                              child: Builder(
-                                builder: (context) {
-                                  final r = displayReleases[rIdx];
-                                  final isCurrent = r.id == rel.id;
-                                  final rVer =
-                                      widget.workbench.releaseVersionTagFor(r);
-                                  final rScopeLabel =
-                                      widget.workbench.releaseConciseLabel(r);
-                                  final rProg = widget.workbench
-                                      .getDocumentProgress(r.id);
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isCurrent
-                                          ? accentCyan.withValues(alpha: 0.08)
-                                          : Colors.transparent,
-                                      border: Border(
-                                        left: BorderSide(
-                                          color: isCurrent
-                                              ? accentCyan
-                                              : Colors.transparent,
-                                          width: 3,
-                                        ),
+                              enabled: false,
+                              height: 24,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      phaseGroupHeader(phase),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 9.5,
+                                        fontWeight: hasActiveInGroup
+                                            ? FontWeight.w800
+                                            : FontWeight.w700,
+                                        color: hasActiveInGroup
+                                            ? textPrimary
+                                            : textMuted,
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Flexible(
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                isCurrent ? '● ' : '✓ ',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: isCurrent
-                                                      ? accentCyan
-                                                      : accentEmerald,
-                                                ),
-                                              ),
-                                              Text(
-                                                '$rVer ',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11.5,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: isCurrent
-                                                      ? accentCyan
-                                                      : textPrimary,
-                                                ),
-                                              ),
-                                              Flexible(
-                                                child: Text(
-                                                  rScopeLabel,
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 11.5,
-                                                    fontWeight: isCurrent
-                                                        ? FontWeight.w700
-                                                        : FontWeight.w500,
-                                                    color: isCurrent
-                                                        ? textPrimary
-                                                        : textSecondary,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        if (isCurrent)
-                                          Text(
-                                            '$relProgress% · $releaseRemHoursStr left',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: accentEmerald,
-                                            ),
-                                          )
-                                        else
-                                          Text(
-                                            '$rProg%',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: rProg >= 100
-                                                  ? accentEmerald
-                                                  : textMuted,
-                                            ),
-                                          ),
-                                      ],
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    hasActiveInGroup
+                                        ? 'ACTIVE'
+                                        : '$doneInGroup / ${groupRels.length}',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: hasActiveInGroup
+                                          ? accentCyan
+                                          : accentEmerald.withValues(alpha: 0.8),
                                     ),
-                                  );
-                                },
+                                  ),
+                                ],
                               ),
                             ),
-                          if (archivedFeats.isNotEmpty) ...[
-                            const PopupMenuDivider(),
+                          );
+
+                          for (final r in groupRels) {
+                            final isCurrent = r.id == rel.id;
+                            final rVer =
+                                widget.workbench.releaseVersionTagFor(r);
+                            final rDisplayName =
+                                widget.workbench.releaseDisplayName(r);
+                            final rProg =
+                                widget.workbench.getDocumentProgress(r.id);
+                            menuItems.add(
+                              PopupMenuItem<String>(
+                                value: 'rel:${r.id}',
+                                height: 36,
+                                child: Container(
+                                  margin: const EdgeInsets.only(left: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isCurrent
+                                        ? bgRecessed
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: isCurrent
+                                        ? Border.all(
+                                            color: accentCyan.withValues(
+                                              alpha: 0.65,
+                                            ),
+                                          )
+                                        : Border(
+                                            left: BorderSide(
+                                              color: hasActiveInGroup
+                                                  ? accentCyan.withValues(
+                                                      alpha: 0.35,
+                                                    )
+                                                  : borderSubtle,
+                                              width: 2,
+                                            ),
+                                          ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              isCurrent ? '● ' : '✓ ',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: isCurrent
+                                                    ? accentCyan
+                                                    : accentEmerald.withValues(
+                                                        alpha: 0.85,
+                                                      ),
+                                              ),
+                                            ),
+                                            Text(
+                                              '$rVer ',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 11,
+                                                fontWeight: isCurrent
+                                                    ? FontWeight.w800
+                                                    : FontWeight.w700,
+                                                color: isCurrent
+                                                    ? accentCyan
+                                                    : textSecondary,
+                                              ),
+                                            ),
+                                            Flexible(
+                                              child: Text(
+                                                rDisplayName,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  fontWeight: isCurrent
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                                  color: isCurrent
+                                                      ? textPrimary
+                                                      : textMuted,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      if (isCurrent)
+                                        Text(
+                                          '$relProgress% · $releaseRemHoursStr left',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: accentEmerald,
+                                          ),
+                                        )
+                                      else
+                                        Text(
+                                          '$rProg%',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                        }
+
+                        if (archivedFeats.isNotEmpty) {
+                          menuItems.add(const PopupMenuDivider());
+                          menuItems.add(
                             PopupMenuItem<String>(
                               value: 'archived',
                               child: Text(
@@ -373,86 +489,133 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                 ),
                               ),
                             ),
-                          ],
-                          const PopupMenuDivider(),
-                          PopupMenuItem<String>(
-                            enabled: false,
-                            height: 24,
-                            child: Text(
-                              'PROGRESSIVE AI RELEASES',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.0,
-                                color: textMuted,
-                              ),
-                            ),
-                          ),
+                          );
+                        }
+
+                        menuItems.add(const PopupMenuDivider());
+                        menuItems.add(
                           PopupMenuItem<String>(
                             value: '__progressive_release__',
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    isRelComplete
-                                        ? '+ Plan Next Release (${widget.workbench.nextProgressiveVersionLabel})'
-                                        : '🔒 Complete $activeVer ($relProgress%) to unlock ${widget.workbench.nextProgressiveVersionLabel}',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isRelComplete
+                                    ? accentEmerald.withValues(alpha: 0.12)
+                                    : bgRecessed,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isRelComplete
+                                      ? accentEmerald.withValues(alpha: 0.45)
+                                      : borderSubtle,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      isRelComplete
+                                          ? '+ Plan Next Release (${widget.workbench.nextProgressiveVersionLabel})'
+                                          : '🔒 Complete $activeVer ($relProgress%) to unlock ${widget.workbench.nextProgressiveVersionLabel}',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: isRelComplete
+                                            ? accentEmerald
+                                            : textMuted,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    isRelComplete ? 'AI Co-Pilot ✦' : 'LOCKED',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
                                       fontWeight: FontWeight.w700,
                                       color: isRelComplete
                                           ? accentEmerald
-                                          : textMuted,
+                                          : accentAmber,
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  isRelComplete ? 'AI Co-Pilot ✦' : 'LOCKED',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: isRelComplete
-                                        ? accentEmerald
-                                        : accentAmber,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ];
+                        );
+
+                        return menuItems;
                       },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 2,
                           vertical: 3,
                         ),
-                        child: RichText(
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          text: TextSpan(
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: '$activeVer ',
+                        child: LayoutBuilder(
+                          builder: (context, pillConstraints) {
+                            final showPhaseChip =
+                                pillConstraints.maxWidth >= 130;
+                            final richLabel = RichText(
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              text: TextSpan(
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: accentCyan,
+                                  fontWeight: FontWeight.w700,
+                                  color: textPrimary,
                                 ),
+                                children: [
+                                  TextSpan(
+                                    text: '$activeVer ',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: accentCyan,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        '${widget.workbench.releaseDisplayName(rel)} ▾',
+                                  ),
+                                ],
                               ),
-                              TextSpan(
-                                text:
-                                    '${widget.workbench.releaseConciseLabel(rel)} ▾',
-                              ),
-                            ],
-                          ),
+                            );
+                            if (!showPhaseChip) {
+                              return richLabel;
+                            }
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: bgSurface,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: borderSubtle),
+                                  ),
+                                  child: Text(
+                                    widget.workbench.releasePhaseShortBadge(
+                                      rel,
+                                    ),
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(child: richLabel),
+                              ],
+                            );
+                          },
                         ),
                       ),
                     ),
