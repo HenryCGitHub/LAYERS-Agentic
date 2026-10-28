@@ -80,7 +80,7 @@ class WorkbenchShell extends StatelessWidget {
     final allFeats = [for (final f in allFeatDocs) f.id];
     final nonStableFeatIds = [
       for (final f in allFeatDocs)
-        if (f.sections['lifecycle'] != 'stable') f.id,
+        if (workbench.isFeatureActiveInRelease(f)) f.id,
     ];
     final targetBadgeFeatIds =
         nonStableFeatIds.isNotEmpty ? nonStableFeatIds : allFeats;

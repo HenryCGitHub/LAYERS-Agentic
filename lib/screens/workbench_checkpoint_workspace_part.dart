@@ -219,6 +219,45 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     }
   }
 
+  void _browseToNextStep(
+    List<FeatureStateNode> states,
+    int checkpointIndex,
+    FeatureStateNode node,
+    List<TaskHowToBlueprint> howToBlueprints,
+    int pIdx,
+    int sIdx,
+  ) {
+    if (pIdx < 0 || pIdx >= node.checklist.length) return;
+    final currentBp =
+        pIdx < howToBlueprints.length ? howToBlueprints[pIdx] : null;
+    final subStepCount =
+        currentBp?.subSteps.length ?? node.checklist[pIdx].children.length;
+    if (sIdx + 1 < subStepCount) {
+      _rebuild(() {
+        _selectedTaskIndexByCheckpoint[node.id] = pIdx;
+        _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx + 1;
+      });
+      return;
+    }
+    if (pIdx + 1 < node.checklist.length) {
+      final nextTaskIdx = pIdx + 1;
+      _rebuild(() {
+        _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
+        _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
+      });
+      return;
+    }
+    if (checkpointIndex + 1 < states.length) {
+      final nextCpIdx = checkpointIndex + 1;
+      final nextCp = states[nextCpIdx];
+      _rebuild(() {
+        _manualCheckpointFocusIndex = nextCpIdx;
+        _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
+        _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
+      });
+    }
+  }
+
   Widget _buildCheckpointCard(
     TierDocument feat,
     List<FeatureStateNode> states,
@@ -272,6 +311,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
     final canGoToPreviousStep =
         index > 0 || selectedTaskIdx > 0 || activeSubStepIdx > 0;
+    final canGoToNextStep = index + 1 < states.length ||
+        selectedTaskIdx + 1 < node.checklist.length ||
+        (selectedHowTo != null &&
+            activeSubStepIdx + 1 < selectedHowTo.subSteps.length);
 
     final areAllOtherCheckpointsDone = states.every(
       (s) => s.id == node.id || s.isCompleted,
@@ -956,13 +999,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                   ),
                                 ),
                                 InkWell(
-                                  onTap: () => _advanceToNextStep(
-                                    feat,
-                                    states,
-                                    node,
-                                    selectedTaskIdx,
-                                    activeSubStepIdx,
-                                  ),
+                                  onTap: canGoToNextStep
+                                      ? () => _browseToNextStep(
+                                            states,
+                                            index,
+                                            node,
+                                            howToBlueprints,
+                                            selectedTaskIdx,
+                                            activeSubStepIdx,
+                                          )
+                                      : null,
                                   borderRadius: BorderRadius.circular(3),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
@@ -974,7 +1020,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
-                                        color: textSecondary,
+                                        color: canGoToNextStep
+                                            ? textSecondary
+                                            : textMuted.withValues(alpha: 0.4),
                                       ),
                                     ),
                                   ),
@@ -1161,7 +1209,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     else
                                       Flexible(
                                         child: Text(
-                                          'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}',
+                                          'TASK ${selectedHowTo.numLabel}/${howToBlueprints.length.toString().padLeft(2, '0')} · ${selectedHowTo.shortTaskTitle.toUpperCase()}',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.jetBrainsMono(
@@ -1388,13 +1436,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             ),
                                           ),
                                           InkWell(
-                                            onTap: () => _advanceToNextStep(
-                                              feat,
-                                              states,
-                                              node,
-                                              selectedTaskIdx,
-                                              activeSubStepIdx,
-                                            ),
+                                            onTap: canGoToNextStep
+                                                ? () => _browseToNextStep(
+                                                      states,
+                                                      index,
+                                                      node,
+                                                      howToBlueprints,
+                                                      selectedTaskIdx,
+                                                      activeSubStepIdx,
+                                                    )
+                                                : null,
                                             borderRadius:
                                                 BorderRadius.circular(3),
                                             child: Padding(
@@ -1409,7 +1460,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 10.5,
                                                   fontWeight: FontWeight.w600,
-                                                  color: textSecondary,
+                                                  color: canGoToNextStep
+                                                      ? textSecondary
+                                                      : textMuted.withValues(
+                                                          alpha: 0.4,
+                                                        ),
                                                 ),
                                               ),
                                             ),
@@ -1608,20 +1663,12 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                   children: [
                                                     Expanded(
                                                       child: Text(
-                                                        [
-                                                          activeSubStep.stepPath
-                                                                  .isNotEmpty
-                                                              ? activeSubStep
-                                                                  .stepPath
-                                                              : selectedHowTo
-                                                                  .whereLocation,
-                                                          if (primaryTuningLabel
-                                                              .isNotEmpty)
-                                                            primaryTuningLabel,
-                                                          if (primaryGuardLabel
-                                                              .isNotEmpty)
-                                                            'Guard: $primaryGuardLabel',
-                                                        ].join('  ·  '),
+                                                        activeSubStep.stepPath
+                                                                .isNotEmpty
+                                                            ? activeSubStep
+                                                                .stepPath
+                                                            : selectedHowTo
+                                                                .whereLocation,
                                                         maxLines: 1,
                                                         overflow: TextOverflow
                                                             .ellipsis,
@@ -1965,80 +2012,88 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             ),
                                           ),
                                         ),
-                                        InkWell(
+                                        PopupMenuButton<String>(
                                           key: ValueKey(
-                                            'inline_step_copilot_edit_btn_${node.id}',
+                                            'inline_step_tools_menu_btn_${node.id}',
                                           ),
-                                          onTap: () =>
+                                          tooltip: 'Step Tools',
+                                          color: bgSurfaceHover,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            side:
+                                                BorderSide(color: borderBright),
+                                          ),
+                                          onSelected: (action) {
+                                            if (action == 'edit') {
                                               _promptEditHowToSubStepDialog(
-                                            feat,
-                                            states,
-                                            node,
-                                            selectedTaskIdx,
-                                            activeSubStepIdx,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                              vertical: 2,
-                                            ),
-                                            child: Text(
-                                              '✎ Edit',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w600,
-                                                color: textMuted,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        InkWell(
-                                          key: ValueKey(
-                                            'inline_step_copilot_copy_all_btn_${node.id}',
-                                          ),
-                                          onTap: () =>
-                                              _copyAllTaskCode(selectedHowTo),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                              vertical: 2,
-                                            ),
-                                            child: Text(
-                                              '⧉ Copy All',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w600,
-                                                color: textMuted,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        InkWell(
-                                          key: ValueKey(
-                                            'sync_feature_from_code_btn_${node.id}',
-                                          ),
-                                          onTap: () =>
+                                                feat,
+                                                states,
+                                                node,
+                                                selectedTaskIdx,
+                                                activeSubStepIdx,
+                                              );
+                                            } else if (action == 'copy_all') {
+                                              _copyAllTaskCode(selectedHowTo);
+                                            } else if (action == 'sync_code') {
                                               _showSyncFeatureFromCodeDialog(
-                                            feat,
-                                            node,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
+                                                feat,
+                                                node,
+                                              );
+                                            }
+                                          },
+                                          itemBuilder: (ctx) => [
+                                            PopupMenuItem<String>(
+                                              value: 'edit',
+                                              height: 34,
+                                              child: Text(
+                                                '✎ Edit Step',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textPrimary,
+                                                ),
+                                              ),
+                                            ),
+                                            PopupMenuItem<String>(
+                                              value: 'copy_all',
+                                              height: 34,
+                                              child: Text(
+                                                '⧉ Copy All Task Code',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textPrimary,
+                                                ),
+                                              ),
+                                            ),
+                                            PopupMenuItem<String>(
+                                              value: 'sync_code',
+                                              height: 34,
+                                              child: Text(
+                                                '⇄ Sync Code',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: accentEmerald,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                           child: Padding(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 4,
                                               vertical: 2,
                                             ),
                                             child: Text(
-                                              '⇄ Sync Code',
+                                              '⋯ Tools',
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 10.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: accentEmerald,
+                                                fontWeight: FontWeight.w600,
+                                                color: textSecondary,
                                               ),
                                             ),
                                           ),
@@ -2156,6 +2211,36 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               'copy_all_task_code_btn_${node.id}_$selectedTaskIdx',
                             ),
                             onTap: () => _copyAllTaskCode(selectedHowTo),
+                            child: const SizedBox(width: 4, height: 1),
+                          ),
+                          InkWell(
+                            key: ValueKey(
+                              'inline_step_copilot_edit_btn_${node.id}',
+                            ),
+                            onTap: () => _promptEditHowToSubStepDialog(
+                              feat,
+                              states,
+                              node,
+                              selectedTaskIdx,
+                              activeSubStepIdx,
+                            ),
+                            child: const SizedBox(width: 4, height: 1),
+                          ),
+                          InkWell(
+                            key: ValueKey(
+                              'inline_step_copilot_copy_all_btn_${node.id}',
+                            ),
+                            onTap: () => _copyAllTaskCode(selectedHowTo),
+                            child: const SizedBox(width: 4, height: 1),
+                          ),
+                          InkWell(
+                            key: ValueKey(
+                              'sync_feature_from_code_btn_${node.id}',
+                            ),
+                            onTap: () => _showSyncFeatureFromCodeDialog(
+                              feat,
+                              node,
+                            ),
                             child: const SizedBox(width: 4, height: 1),
                           ),
                           InkWell(

@@ -9,42 +9,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          padding: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: borderSubtle)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'INITIAL RELEASE TARGET (v0.1)',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: textPrimary,
-                ),
-              ),
-              Text(
-                'ACTIVE TARGET · v0.1',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  color: accentCyan,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Approving this Concept builds v0.1 in the Workbench. Future releases (v0.2+) are never queued ahead of time—once v0.1 is 100% complete, the Progressive Release Planner unlocks to help you decide what to upgrade and add next.',
-          style: GoogleFonts.inter(
-            fontSize: 12.5,
-            color: textSecondary,
-          ),
-        ),
-        const SizedBox(height: 10),
         if (_activeInlineEditKey == 'release_train_0')
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -88,55 +52,47 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
         key: ValueKey('stage1_release_train_card_$index'),
         onTap: onTap,
         child: Container(
-          padding: EdgeInsets.fromLTRB(isFirst ? 14 : 8, 12, 8, 12),
+          padding: EdgeInsets.fromLTRB(isFirst ? 14 : 8, 10, 8, 10),
           decoration: BoxDecoration(
             border: Border(
               left: isFirst
                   ? BorderSide(color: accentAmber, width: 3)
                   : BorderSide.none,
+              top: BorderSide(color: borderSubtle),
               bottom: BorderSide(color: borderSubtle),
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    verTag,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: isFirst
-                          ? accentAmber
-                          : textSecondary.withValues(alpha: 0.85),
-                    ),
-                  ),
-                  Text(
-                    isFirst ? 'READY TO PLAN →' : 'QUEUED',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
-                      color: isFirst ? accentAmber : textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
               Text(
-                fullTitle,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: isFirst ? textPrimary : textSecondary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Scope: ${draft.coreLoopBeats.length} Core Loop Beats · ${draft.gameSpec.length} Game Specs · ${draft.designPillars.length} Design Pillars',
+                verTag,
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: isFirst
+                      ? accentAmber
+                      : textSecondary.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  fullTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: isFirst ? textPrimary : textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${draft.coreLoopBeats.length} Beats · ${draft.gameSpec.length} Specs · ✎',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
                   color: textSecondary.withValues(alpha: 0.85),
                 ),
               ),
