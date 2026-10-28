@@ -81,10 +81,13 @@ class ReleasePlannerAgent {
         (releasePhase == ProductionPhase.mvp.name &&
             targetMvpEpicIndex == null)) {
       phaseInstruction =
-          '- AGENT-REASONED PROGRESSIVE RELEASE ($versionTag): You are the Lead Game Architect deciding what "${projectDoc.title}" needs most in $versionTag based on what was already built and verified in the Existing Live Game Tree, the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n'
-          '  1. Choose a specific, descriptive `"releaseTitle"` for $versionTag (formatted as `"$versionTag: <2-5 Word Release Focus>"`, e.g., `"$versionTag: Automated Room Transition & Threat Variety"`). NEVER use generic titles like `"MVP Epic 3"`.\n'
-          '  2. Across ANY of the existing Core Loop Beats, select the 2–4 highest-impact Features to either upgrade (`"lifecycle": "upgrade"` with a new $versionTag delta checkpoint and +4h..+6h) or introduce as brand-new mechanics (`"lifecycle": "new"` with a $versionTag checkpoint). You are NOT restricted to a single Beat—pick the exact cross-Beat upgrades and new features that best advance the playable loop right now!\n'
-          '  3. Mark all other existing Features that do NOT need changes in $versionTag as `"lifecycle": "stable"` (`"estimatedHours": 0`, `"checkpoints": []`) so they remain hidden and locked at 100%.\n'
+          '- AGENT-REASONED PROGRESSIVE RELEASE ($versionTag): You are the Lead Game Architect deciding what "${projectDoc.title}" needs next in $versionTag by evaluating the Existing Live Game Tree against the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n'
+          '  1. Choose `"releasePhase"` (`"mvp"`, `"verticalSlice"`, or `"fullProduction"`) and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete Release Focus>"`):\n'
+          '     * Choose `"mvp"` while any Stage 1 Core Loop Beat is still missing functional mechanics or existing features still need functional depth/interaction to fulfill the Core Loop and Design Pillars.\n'
+          '     * Choose `"verticalSlice"` once all Stage 1 Core Loop Beats are functionally playable end-to-end and the game is ready for a cohesive Polish Pass (final art/material swap, SFX/VFX, camera/hit-stop feel, HUD readability, and state/frame guards).\n'
+          '     * Choose `"fullProduction"` once the Vertical Slice polish pass has already been verified and the focus shifts to scaling content/encounter variety and promoting deferred Out-of-Scope backlog systems.\n'
+          '  2. Decide which existing Features need an `"upgrade"` vs. which remain `"stable"`, and what `"new"` Features to introduce across ANY of the Core Loop Beats—with zero artificial count limits: include whatever set of `"upgrade"` and `"new"` Features across whichever Beats are required to make $versionTag a complete, cohesive playable milestone.\n'
+          '  3. DELTA-ONLY JSON OUTPUT (DO NOT REPEAT STABLE FEATURES): In `beats`, output ONLY the Beats and Features receiving active work in $versionTag (`"lifecycle": "upgrade"` or `"lifecycle": "new"`). Use the exact Beat `id` (e.g. `"beat_1"`) and Feature `id`/`title` from the Existing Live Game Tree when upgrading. Do NOT output untouched `"stable"` features in JSON—all omitted existing Beats and Features are automatically preserved as `STABLE ✓` (`0h`).\n'
           '  4. Strictly enforce the Project Exclusions: NEVER include or promote any feature that violates an Exclusion, even if it was previously queued or requested.';
     } else if (releasePhase == ProductionPhase.mvp.name ||
         targetMvpEpicIndex != null) {
@@ -198,11 +201,12 @@ $phaseInstruction
   * `Task 1` (Foundation / Asset & Component Setup): Create or open the canonical playable asset (`"Character Setup (2h)"` for player movement/control features, or `"Actor Setup (2h)"` for world/combat mechanics), configure its components, and place/possess it in the level. NEVER start `Task 1` with `"Input Mapping"` before a Character/Pawn/Actor exists to attach it to.
   * `Task 2` (Input & Core Mechanic Logic): Bind the Input Action (`IA_...`, `IMC_Default`) or trigger event and wire the core movement/velocity/state logic onto `Task 1`'s asset (e.g., `"Input & Velocity Logic (2h)"`, `"Input Mapping (2h)"`, or `"State Logic (2h)"`).
   * `Task 3` (Physics Tuning, Feel & Guard): Layer physics curves, friction/capsule blends, and edge-case guards onto that same asset (e.g., `"Physics Tuning (2h)"`, `"Friction Tuning (2h)"`, or `"State Guard (1h)"`) — never create duplicate Pawn/Character setup tasks or repeat the Beat/Feature name inside a task title.
-- `lifecycle`: `"new"` for v0.1; for v0.2+, use `"stable"` (0h, empty checkpoints), `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"`.
+- `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
 {
-  "releaseTitle": "$versionTag: Concrete 2-5 Word Release Focus",
+  "releasePhase": "mvp",
+  "releaseTitle": "$versionTag: Concrete Release Focus",
   "agentReasoning": "2-3 concrete sentences explaining what was proven in prior releases, what gap in ${projectDoc.title}'s loop or pillars matters most now, and why these $versionTag features are recommended next.",
   "goal": "Build... goal of ${releaseDoc.title}",
   "doneWhen": "Concrete playtest completion condition",
@@ -572,6 +576,29 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             f.title,
     ];
     final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
+    var effectivePreset = preset;
+    if (isAgentReasoned) {
+      final rawPhase =
+          (json['releasePhase'] ?? json['phase'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+      if (rawPhase.contains('vertical') ||
+          rawPhase.contains('slice') ||
+          rawPhase.contains('polish')) {
+        releaseDoc.sections['phase'] = ProductionPhase.verticalSlice.name;
+        releaseDoc.sections['releaseScope'] = ReleaseScope.verticalSlice.name;
+        effectivePreset = ReleaseScope.verticalSlice;
+      } else if (rawPhase.contains('full') || rawPhase.contains('production')) {
+        releaseDoc.sections['phase'] = ProductionPhase.fullProduction.name;
+        releaseDoc.sections['releaseScope'] = ReleaseScope.fullProduction.name;
+        effectivePreset = ReleaseScope.fullProduction;
+      } else if (rawPhase.contains('mvp')) {
+        releaseDoc.sections['phase'] = ProductionPhase.mvp.name;
+        releaseDoc.sections['releaseScope'] = ReleaseScope.mvp.name;
+        effectivePreset = ReleaseScope.mvp;
+      }
+    }
     final rawRelTitle = (json['releaseTitle'] ?? '').toString().trim();
     String effectiveReleaseTitle = releaseDoc.title;
     if (rawRelTitle.isNotEmpty) {
@@ -594,7 +621,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       releaseDocId: releaseDoc.id,
       releaseTitle: effectiveReleaseTitle,
       releaseVersionTag: versionTag,
-      preset: preset,
+      preset: effectivePreset,
       goal: (json['goal'] ?? '').toString().trim(),
       doneWhen: (json['doneWhen'] ?? '').toString().trim(),
       questions: questions,
@@ -782,85 +809,103 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
 
     if (existingBeats.isEmpty) return parsed;
 
-    // Ensure all existing Beats are represented in parsed.beats so no prior Epic is lost in v0.2+
+    final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
+    final matchedLlmBeatByExistingId = <String, ProposedBeatBlueprint>{};
+    final unmatchedNewLlmBeats = <ProposedBeatBlueprint>[];
+
+    for (int bIdx = 0; bIdx < parsed.beats.length; bIdx++) {
+      final llmBeat = parsed.beats[bIdx];
+      final cleanLlmTitle = llmBeat.title.toLowerCase().trim();
+      TierDocument? matchedBeatDoc;
+
+      // 1. Exact ID or exact title match
+      for (final eb in existingBeats) {
+        if (matchedLlmBeatByExistingId.containsKey(eb.id)) continue;
+        if (eb.id == llmBeat.id ||
+            eb.title.toLowerCase().trim() == cleanLlmTitle) {
+          matchedBeatDoc = eb;
+          break;
+        }
+      }
+      // 2. Substring title match
+      if (matchedBeatDoc == null && cleanLlmTitle.isNotEmpty) {
+        for (final eb in existingBeats) {
+          if (matchedLlmBeatByExistingId.containsKey(eb.id)) continue;
+          final cleanEbTitle = eb.title.toLowerCase().trim();
+          if (cleanEbTitle.contains(cleanLlmTitle) ||
+              cleanLlmTitle.contains(cleanEbTitle)) {
+            matchedBeatDoc = eb;
+            break;
+          }
+        }
+      }
+      // 3. Positional fallback only when all existing beats were returned in full
+      if (matchedBeatDoc == null &&
+          parsed.beats.length == existingBeats.length &&
+          bIdx < existingBeats.length &&
+          !matchedLlmBeatByExistingId.containsKey(existingBeats[bIdx].id)) {
+        matchedBeatDoc = existingBeats[bIdx];
+      }
+
+      if (matchedBeatDoc != null) {
+        matchedLlmBeatByExistingId[matchedBeatDoc.id] = llmBeat;
+      } else {
+        unmatchedNewLlmBeats.add(llmBeat);
+      }
+    }
+
+    final reconciledBeats = <ProposedBeatBlueprint>[];
     for (int ebIdx = 0; ebIdx < existingBeats.length; ebIdx++) {
       final eb = existingBeats[ebIdx];
-      final alreadyHasBeat = parsed.beats.any(
-        (b) =>
-            b.id == eb.id ||
-            b.title.toLowerCase().trim() == eb.title.toLowerCase().trim(),
-      );
-      if (!alreadyHasBeat && ebIdx >= parsed.beats.length) {
-        parsed.beats.add(
+      final existingFeats =
+          existingFeaturesByBeat[eb.id] ?? const <TierDocument>[];
+      final llmBeat = matchedLlmBeatByExistingId[eb.id] ??
           ProposedBeatBlueprint(
             id: eb.id,
             title: eb.title,
             goal: SectionTextUtils.resolveGoal(eb.sections),
             doneWhen: SectionTextUtils.resolveDoneWhen(eb.sections),
             features: <ProposedFeatureBlueprint>[],
-          ),
-        );
-      }
-    }
+          );
 
-    // Bind existing Beat/Feature Vault IDs where titles or IDs match, and carry forward omitted prior features as STABLE ✓
-    for (int bIdx = 0; bIdx < parsed.beats.length; bIdx++) {
-      final llmBeat = parsed.beats[bIdx];
-      TierDocument? matchedBeatDoc;
-      for (final eb in existingBeats) {
-        if (eb.id == llmBeat.id ||
-            eb.title.toLowerCase().trim() ==
-                llmBeat.title.toLowerCase().trim()) {
-          matchedBeatDoc = eb;
-          break;
-        }
-      }
-      if (matchedBeatDoc == null && bIdx < existingBeats.length) {
-        matchedBeatDoc = existingBeats[bIdx];
-      }
-      if (matchedBeatDoc != null) {
-        llmBeat.id = matchedBeatDoc.id;
-        final existingFeats =
-            existingFeaturesByBeat[matchedBeatDoc.id] ?? const <TierDocument>[];
-        final matchedExistingIds = <String>{};
-        for (int fIdx = 0; fIdx < llmBeat.features.length; fIdx++) {
-          final lf = llmBeat.features[fIdx];
-          for (final ef in existingFeats) {
-            if (ef.id == lf.id ||
-                ef.title.toLowerCase().trim() ==
-                    lf.title.toLowerCase().trim()) {
-              lf.id = ef.id;
-              lf.originVersion = ef.sections['originVersion'] ?? 'v0.1';
-              matchedExistingIds.add(ef.id);
-              break;
-            }
-          }
-        }
-        // Carry forward any prior feature omitted by the LLM as STABLE ✓ (0h) so it is never dropped
+      llmBeat.id = eb.id;
+      final matchedExistingIds = <String>{};
+      for (int fIdx = 0; fIdx < llmBeat.features.length; fIdx++) {
+        final lf = llmBeat.features[fIdx];
         for (final ef in existingFeats) {
-          if (!matchedExistingIds.contains(ef.id)) {
-            llmBeat.features.add(
-              ProposedFeatureBlueprint(
-                id: ef.id,
-                title: ef.title,
-                goal: SectionTextUtils.resolveGoal(ef.sections),
-                doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
-                estimatedHours: 0,
-                included: true,
-                lifecycle: FeatureLifecycleStatus.stable,
-                originVersion: ef.sections['originVersion'] ?? 'v0.1',
-                inScope: SectionTextUtils.resolveInScope(ef.sections),
-                outOfScope: const [],
-                tuningParams: const [],
-                edgeCases: const [],
-                checkpoints: const [],
-              ),
-            );
+          if (ef.id == lf.id ||
+              ef.title.toLowerCase().trim() == lf.title.toLowerCase().trim()) {
+            lf.id = ef.id;
+            lf.originVersion = ef.sections['originVersion'] ?? 'v0.1';
+            matchedExistingIds.add(ef.id);
+            break;
           }
         }
       }
-      final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
-      final deferredList = deferredByBeatIndex[bIdx];
+      // Carry forward any prior feature omitted by the LLM as STABLE ✓ (0h) so it is never dropped
+      for (final ef in existingFeats) {
+        if (!matchedExistingIds.contains(ef.id)) {
+          llmBeat.features.add(
+            ProposedFeatureBlueprint(
+              id: ef.id,
+              title: ef.title,
+              goal: SectionTextUtils.resolveGoal(ef.sections),
+              doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
+              estimatedHours: 0,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.stable,
+              originVersion: ef.sections['originVersion'] ?? 'v0.1',
+              inScope: SectionTextUtils.resolveInScope(ef.sections),
+              outOfScope: const [],
+              tuningParams: const [],
+              edgeCases: const [],
+              checkpoints: const [],
+            ),
+          );
+        }
+      }
+
+      final deferredList = deferredByBeatIndex[ebIdx];
       if (!isAgentReasoned && deferredList != null && deferredList.isNotEmpty) {
         final combinedExclusions = <String>{
           ...projectExclusions,
@@ -896,7 +941,12 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           }
         }
       }
+
+      reconciledBeats.add(llmBeat);
     }
+
+    reconciledBeats.addAll(unmatchedNewLlmBeats);
+    parsed.beats = reconciledBeats;
 
     return parsed;
   }

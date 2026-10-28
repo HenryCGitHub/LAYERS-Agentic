@@ -1663,6 +1663,61 @@ void main() {
         await provider.approveAndExecuteReleasePlan();
         expect(provider.nextProgressiveVersionLabel, 'v0.4');
 
+        // Verify delta-only JSON output (where LLM returns only Beat 3) reconciles into canonical E01..E0N order
+        final liveBeats = provider.activeReleaseBeats;
+        final existingFeatsMap = <String, List<TierDocument>>{
+          for (final b in liveBeats) b.id: provider.featuresForBeat(b.id),
+        };
+        final deltaOnlyBp = ReleaseBlueprint(
+          releaseDocId: provider.activeRelease!.id,
+          releaseTitle: 'v0.4: Delta Subset Test',
+          releaseVersionTag: 'v0.4',
+          preset: ReleaseScope.mvp,
+          goal: 'Verify delta beat reconciliation.',
+          doneWhen: 'Canonical order preserved.',
+          questions: const [],
+          beats: [
+            ProposedBeatBlueprint(
+              id: liveBeats[2].id,
+              title: liveBeats[2].title,
+              goal: 'Beat 3 goal',
+              doneWhen: 'Beat 3 done',
+              features: [
+                ProposedFeatureBlueprint(
+                  id: 'feat_new_delta_3',
+                  title: 'Hazard Trap',
+                  goal: 'Add hazard trap.',
+                  doneWhen: 'Hazard trap triggers.',
+                  estimatedHours: 4,
+                  included: true,
+                  lifecycle: FeatureLifecycleStatus.newFeature,
+                  originVersion: 'v0.4',
+                ),
+              ],
+            ),
+          ],
+        );
+        final reconciled =
+            ReleasePlannerAgent.reconcileReleaseBlueprintWithPhaseRules(
+          parsed: deltaOnlyBp,
+          releaseDoc: provider.activeRelease!,
+          preset: ReleaseScope.mvp,
+          versionTag: 'v0.4',
+          existingBeats: liveBeats,
+          existingFeaturesByBeat: existingFeatsMap,
+          deferredByBeatIndex: const {},
+          projectExclusions: const [],
+          allCoreLoopItems: provider.conceptDraft!.coreLoopBeats,
+        );
+        expect(reconciled.beats.length, liveBeats.length);
+        expect(reconciled.beats[0].id, liveBeats[0].id);
+        expect(reconciled.beats[1].id, liveBeats[1].id);
+        expect(reconciled.beats[2].id, liveBeats[2].id);
+        expect(
+          reconciled.beats[2].features.any((f) => f.title == 'Hazard Trap'),
+          isTrue,
+        );
+
         // Selecting an already-built release (v0.1) in the Stage 3 dropdown switches in-place without kicking back to Stage 2
         await provider.selectActiveRelease(v1RelId);
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);

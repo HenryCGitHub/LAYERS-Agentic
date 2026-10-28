@@ -597,6 +597,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           relDoc.title = planned.releaseTitle;
         }
         relDoc.sections['versionTag'] = verTag;
+        _syncCurrentPhaseFromRelease(relDoc);
         _persistDocument(relDoc);
         _releaseBlueprint = planned;
         _offlineErrorMessage = null;
