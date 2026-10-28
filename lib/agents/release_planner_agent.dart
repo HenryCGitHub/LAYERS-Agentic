@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
@@ -890,23 +891,54 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           );
 
       llmBeat.id = eb.id;
-      final matchedExistingIds = <String>{};
+      final matchedByExistingId = <String, ProposedFeatureBlueprint>{};
+      final unmatchedNewFeats = <ProposedFeatureBlueprint>[];
+      final cleanVer = versionTag.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+
       for (int fIdx = 0; fIdx < llmBeat.features.length; fIdx++) {
         final lf = llmBeat.features[fIdx];
+        final normLfTitle = lf.title.toLowerCase().trim();
+        TierDocument? matchedEf;
         for (final ef in existingFeats) {
-          if (ef.id == lf.id ||
-              ef.title.toLowerCase().trim() == lf.title.toLowerCase().trim()) {
-            lf.id = ef.id;
-            lf.originVersion = ef.sections['originVersion'] ?? 'v0.1';
-            matchedExistingIds.add(ef.id);
+          if (matchedByExistingId.containsKey(ef.id)) continue;
+          final normEfTitle = ef.title.toLowerCase().trim();
+          final titleMatches =
+              normEfTitle.isNotEmpty && normEfTitle == normLfTitle;
+          final idMatchesNonNew =
+              lf.lifecycle != FeatureLifecycleStatus.newFeature &&
+              ef.id == lf.id;
+          if (titleMatches || idMatchesNonNew) {
+            matchedEf = ef;
             break;
           }
         }
+        if (matchedEf != null) {
+          lf.id = matchedEf.id;
+          lf.originVersion = matchedEf.sections['originVersion'] ?? 'v0.1';
+          matchedByExistingId[matchedEf.id] = lf;
+        } else {
+          final existingIdCollision = existingFeats.any((e) => e.id == lf.id) ||
+              lf.id.startsWith('feat_1_') ||
+              lf.id.startsWith('feat_2_') ||
+              lf.id.startsWith('feat_3_') ||
+              lf.id.startsWith('feat_4_') ||
+              lf.id.startsWith('feat_5_');
+          if (existingIdCollision || lf.id.trim().isEmpty) {
+            lf.id =
+                'feat_${eb.id}_${cleanVer}_new_${unmatchedNewFeats.length + 1}';
+          }
+          unmatchedNewFeats.add(lf);
+        }
       }
-      // Carry forward any prior feature omitted by the LLM as STABLE ✓ (0h) so it is never dropped
+
+      // Preserve canonical existing feature order first (UPGRADE or STABLE ✓), followed by genuinely NEW features
+      final orderedFeatures = <ProposedFeatureBlueprint>[];
       for (final ef in existingFeats) {
-        if (!matchedExistingIds.contains(ef.id)) {
-          llmBeat.features.add(
+        final matchedLf = matchedByExistingId[ef.id];
+        if (matchedLf != null) {
+          orderedFeatures.add(matchedLf);
+        } else {
+          orderedFeatures.add(
             ProposedFeatureBlueprint(
               id: ef.id,
               title: ef.title,
@@ -925,6 +957,8 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           );
         }
       }
+      orderedFeatures.addAll(unmatchedNewFeats);
+      llmBeat.features = orderedFeatures;
 
       final deferredList = deferredByBeatIndex[ebIdx];
       if (!isAgentReasoned && deferredList != null && deferredList.isNotEmpty) {
@@ -1230,6 +1264,7 @@ class ReleaseExecutorAgent {
         }
       }
 
+      final allocatedFeatIds = <String>{};
       for (int fIdx = 0; fIdx < includedFeats.length; fIdx++) {
         final featBp = includedFeats[fIdx];
         onProgress?.call(
@@ -1256,16 +1291,51 @@ class ReleaseExecutorAgent {
           beatGoal: beatBp.goal,
           beatIndex: bIdx,
         );
-        final existingById = projectScopedDocs[featBp.id];
-        final existingFeat = (existingById != null &&
-                (existingById.parentId == null ||
-                    existingById.parentId == beatDoc.id))
-            ? existingById
-            : (existingFeaturesByBeatAndTitle[
-                    '${beatDoc.id}::${concreteFeatTitle.toLowerCase().trim()}'] ??
-                existingFeaturesByBeatAndTitle[
-                    '${beatDoc.id}::${featBp.title.toLowerCase().trim()}']);
-        final featId = existingFeat?.id ?? 'feat_${beatId}_${fIdx + 1}';
+        final normConcreteTitle = concreteFeatTitle.toLowerCase().trim();
+        final normRawTitle = featBp.title.toLowerCase().trim();
+        final candidateById = projectScopedDocs[featBp.id];
+        final canMatchById = candidateById != null &&
+            !allocatedFeatIds.contains(candidateById.id) &&
+            (candidateById.parentId == null ||
+                candidateById.parentId == beatDoc.id) &&
+            (featBp.lifecycle != FeatureLifecycleStatus.newFeature ||
+                candidateById.title.toLowerCase().trim() == normConcreteTitle ||
+                candidateById.title.toLowerCase().trim() == normRawTitle);
+        final candidateByTitle =
+            existingFeaturesByBeatAndTitle['${beatDoc.id}::$normConcreteTitle'] ??
+                existingFeaturesByBeatAndTitle['${beatDoc.id}::$normRawTitle'];
+        final existingFeat = canMatchById
+            ? candidateById
+            : (candidateByTitle != null &&
+                    !allocatedFeatIds.contains(candidateByTitle.id)
+                ? candidateByTitle
+                : null);
+
+        String featId;
+        if (existingFeat != null) {
+          featId = existingFeat.id;
+        } else {
+          final defaultId = 'feat_${beatId}_${fIdx + 1}';
+          if (!existingDocuments.containsKey(defaultId) &&
+              !projectScopedDocs.containsKey(defaultId) &&
+              !allocatedFeatIds.contains(defaultId)) {
+            featId = defaultId;
+          } else {
+            final cleanVer =
+                versionTag.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+            int seq = fIdx + 1;
+            String candidateId = 'feat_${beatId}_${cleanVer}_$seq';
+            while (existingDocuments.containsKey(candidateId) ||
+                projectScopedDocs.containsKey(candidateId) ||
+                allocatedFeatIds.contains(candidateId)) {
+              seq++;
+              candidateId = 'feat_${beatId}_${cleanVer}_$seq';
+            }
+            featId = candidateId;
+          }
+        }
+        allocatedFeatIds.add(featId);
+        featBp.id = featId;
 
         if (!isInitialPrototypeRelease &&
             featBp.lifecycle == FeatureLifecycleStatus.stable &&
@@ -1288,7 +1358,9 @@ class ReleaseExecutorAgent {
             }
             FeatureStateNode.saveStatesToDocument(existingFeat, stableStates);
           }
-          beatDoc.childrenIds.add(existingFeat.id);
+          if (!beatDoc.childrenIds.contains(existingFeat.id)) {
+            beatDoc.childrenIds.add(existingFeat.id);
+          }
           createdOrUpdatedDocs.add(existingFeat);
           continue;
         }
@@ -1449,7 +1521,9 @@ class ReleaseExecutorAgent {
         }
 
         FeatureStateNode.saveStatesToDocument(featDoc, stateNodes);
-        beatDoc.childrenIds.add(featDoc.id);
+        if (!beatDoc.childrenIds.contains(featDoc.id)) {
+          beatDoc.childrenIds.add(featDoc.id);
+        }
         createdOrUpdatedDocs.add(featDoc);
       }
     }
@@ -1469,6 +1543,8 @@ class ReleaseExecutorAgent {
     releaseDoc.title = blueprint.releaseTitle;
     releaseDoc.sections['releaseScope'] = blueprint.preset.name;
     releaseDoc.sections['versionTag'] = versionTag;
+    releaseDoc.sections['release_blueprint_json'] =
+        jsonEncode(blueprint.toJson());
     releaseDoc.estimatedDuration = '${blueprint.totalIncludedHours}h';
     releaseDoc.sections['scope'] = 'Goal: $effectiveGoal\n\n'
         'In Scope:\n$inScopeBeats\n\n'

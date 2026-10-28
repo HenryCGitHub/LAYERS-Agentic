@@ -495,6 +495,19 @@ class WorkbenchProvider extends ChangeNotifier {
       }
     }
 
+    final savedBp = releaseBlueprintFor(relDoc.id);
+    if (savedBp != null) {
+      final savedTitles = <String>[
+        for (final b in savedBp.beats)
+          for (final f in b.features)
+            if (f.included && f.lifecycle != FeatureLifecycleStatus.stable)
+              f.title,
+      ];
+      if (savedTitles.isNotEmpty) {
+        return savedTitles.take(2).join(' & ');
+      }
+    }
+
     final fallbackFeatTitles = <String>[];
     for (final beatId in relDoc.childrenIds) {
       for (final feat in featuresForBeat(beatId)) {
@@ -508,6 +521,26 @@ class WorkbenchProvider extends ChangeNotifier {
     }
 
     return clean.isNotEmpty ? clean : releaseConciseLabel(relDoc);
+  }
+
+  /// Retrieves the persisted `ReleaseBlueprint` for any Release (`v0.1`, `v0.2`, ...)
+  /// so previous release plans are never lost when advancing to later releases.
+  ReleaseBlueprint? releaseBlueprintFor(String releaseId) {
+    if (_releaseBlueprint != null &&
+        _releaseBlueprint!.releaseDocId == releaseId) {
+      return _releaseBlueprint;
+    }
+    final relDoc = documents[releaseId];
+    if (relDoc == null) return null;
+    final raw = relDoc.sections['release_blueprint_json'];
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      return ReleaseBlueprint.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Concise milestone subtitle for the Stage 3 Release Dropdown and header pill.
@@ -677,20 +710,30 @@ class WorkbenchProvider extends ChangeNotifier {
             .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
             .toList();
         if (rel != null) {
+          final isAgentReasoned = rel.sections['agentReasoned'] == 'true';
           final explicitIdx =
               int.tryParse(rel.sections['targetEpicIndex'] ?? '');
           final explicitTotal =
               int.tryParse(rel.sections['mvpEpicTotal'] ?? '');
-          final idx = explicitIdx ?? mvpRels.indexWhere((r) => r.id == rel.id);
-          final total = explicitTotal ??
-              (activeReleaseBeats.isNotEmpty
-                  ? activeReleaseBeats.length
-                  : mvpRels.length);
-          if (idx >= 0 && total > 0) {
-            return 'PHASE 2 · MVP EPIC ${idx + 1} OF $total';
+          if (explicitIdx != null) {
+            final total = explicitTotal ??
+                (activeReleaseBeats.isNotEmpty
+                    ? activeReleaseBeats.length
+                    : mvpRels.length);
+            if (explicitIdx >= 0 && total > 0) {
+              return 'PHASE 2 · MVP EPIC ${explicitIdx + 1} OF $total';
+            }
+          } else if (!isAgentReasoned) {
+            final idx = mvpRels.indexWhere((r) => r.id == rel.id);
+            final total = activeReleaseBeats.isNotEmpty
+                ? activeReleaseBeats.length
+                : mvpRels.length;
+            if (idx >= 0 && total > 0) {
+              return 'PHASE 2 · MVP EPIC ${idx + 1} OF $total';
+            }
           }
         }
-        return 'PHASE 2 · MVP TRACK';
+        return 'PHASE 2 · MVP';
       case ProductionPhase.verticalSlice:
         return 'PHASE 3 · VERTICAL SLICE';
       case ProductionPhase.fullProduction:

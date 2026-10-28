@@ -118,6 +118,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _syncCurrentPhaseFromRelease(targetRel);
     if (targetRel.childrenIds.isNotEmpty) {
       _activeReleaseId = releaseId;
+      final savedBp = releaseBlueprintFor(releaseId);
+      if (savedBp != null) {
+        _releaseBlueprint = savedBp;
+      }
       _releaseViewFilter = 'active';
       _currentStage = WorkbenchStage.releaseWorkbench;
       _selectFirstIncompleteFeatureInActiveRelease();
@@ -277,6 +281,19 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           id: expectedId,
           sections: Map<String, String>.from(relDoc.sections),
         );
+        final rawArchivedBp = movedDoc.sections['release_blueprint_json'];
+        if (rawArchivedBp != null && rawArchivedBp.trim().isNotEmpty) {
+          try {
+            final archivedMap = Map<String, dynamic>.from(
+              jsonDecode(rawArchivedBp) as Map,
+            );
+            archivedMap['releaseDocId'] = expectedId;
+            archivedMap['releaseVersionTag'] = expectedVer;
+            archivedMap['releaseTitle'] = movedDoc.title;
+            movedDoc.sections['release_blueprint_json'] =
+                jsonEncode(archivedMap);
+          } catch (_) {}
+        }
         documents.remove(oldRelId);
         LocalVaultService.deleteDocument(oldRelId);
         if (user != null) {
@@ -310,6 +327,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
             questions: _releaseBlueprint!.questions,
             beats: _releaseBlueprint!.beats,
             explicitExclusions: _releaseBlueprint!.explicitExclusions,
+            builtSoFar: _releaseBlueprint!.builtSoFar,
+            missingGaps: _releaseBlueprint!.missingGaps,
             lastAgentReply: _releaseBlueprint!.lastAgentReply,
           );
         }
@@ -321,12 +340,45 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
         anyChanged = true;
       } else if (docChanged) {
+        final rawArchivedBp = relDoc.sections['release_blueprint_json'];
+        if (rawArchivedBp != null && rawArchivedBp.trim().isNotEmpty) {
+          try {
+            final archivedMap = Map<String, dynamic>.from(
+              jsonDecode(rawArchivedBp) as Map,
+            );
+            archivedMap['releaseVersionTag'] = expectedVer;
+            archivedMap['releaseTitle'] = relDoc.title;
+            relDoc.sections['release_blueprint_json'] =
+                jsonEncode(archivedMap);
+          } catch (_) {}
+        }
         if (_releaseBlueprint != null &&
             _releaseBlueprint!.releaseDocId == oldRelId) {
           _releaseBlueprint!.releaseVersionTag = expectedVer;
           _releaseBlueprint!.releaseTitle = relDoc.title;
         }
         _persistDocument(relDoc);
+        anyChanged = true;
+      }
+    }
+
+    // 3b. Deduplicate beatDoc.childrenIds across all Epics of the project so duplicate feature cards never appear
+    final projectBeatIdsForDedup = <String>{
+      for (final relId in proj.childrenIds)
+        ...?documents[relId]?.childrenIds,
+    };
+    for (final bId in projectBeatIdsForDedup) {
+      final beatDoc = documents[bId];
+      if (beatDoc == null || beatDoc.childrenIds.length <= 1) continue;
+      final dedupedFeatIds = <String>[];
+      for (final fid in beatDoc.childrenIds) {
+        if (!dedupedFeatIds.contains(fid) && documents.containsKey(fid)) {
+          dedupedFeatIds.add(fid);
+        }
+      }
+      if (dedupedFeatIds.length != beatDoc.childrenIds.length) {
+        beatDoc.childrenIds = dedupedFeatIds;
+        _persistDocument(beatDoc);
         anyChanged = true;
       }
     }
@@ -546,10 +598,16 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     }
 
     // Capture any features deferred (unchecked) in the prior Release Plan Gate
-    // so they automatically carry over into the next release's Beat!
+    // so they automatically carry over into the next release's Beat, and archive the prior ReleaseBlueprint on its own Release doc!
     final deferredByBeatIndex = <int, List<ProposedFeatureBlueprint>>{};
     final priorBp = _releaseBlueprint;
     if (priorBp != null) {
+      final priorRelDoc = documents[priorBp.releaseDocId];
+      if (priorRelDoc != null) {
+        priorRelDoc.sections['release_blueprint_json'] =
+            jsonEncode(priorBp.toJson());
+        _persistDocument(priorRelDoc);
+      }
       for (int bIdx = 0; bIdx < priorBp.beats.length; bIdx++) {
         final seenTitles = <String>{};
         final deferredInBeat = <ProposedFeatureBlueprint>[];
@@ -597,6 +655,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           relDoc.title = planned.releaseTitle;
         }
         relDoc.sections['versionTag'] = verTag;
+        relDoc.sections['release_blueprint_json'] =
+            jsonEncode(planned.toJson());
         _syncCurrentPhaseFromRelease(relDoc);
         _persistDocument(relDoc);
         _releaseBlueprint = planned;

@@ -1723,6 +1723,12 @@ void main() {
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
         expect(provider.activeRelease!.id, v1RelId);
 
+        // Verify per-release ReleaseBlueprint persistence and restoration when switching releases
+        final savedV1Bp = provider.releaseBlueprintFor(v1RelId);
+        expect(savedV1Bp, isNotNull);
+        expect(savedV1Bp!.releaseDocId, v1RelId);
+        expect(provider.releaseBlueprint!.releaseDocId, v1RelId);
+
         // Verify phase classification and descriptive release display names for dropdown grouping
         final allRels = provider.projectReleases;
         expect(allRels.length, 3);
@@ -1735,6 +1741,65 @@ void main() {
         expect(
           provider.releaseDisplayName(allRels[1]),
           'Room Clearance & Threat Variety',
+        );
+
+        // Verify that executing a v0.4 blueprint with a + NEW feature placed before an existing STABLE feature never collides feature IDs or duplicates beatDoc.childrenIds
+        final firstEpic = liveBeats.first;
+        final existingFeatIdsBefore = List<String>.from(firstEpic.childrenIds);
+        expect(
+          existingFeatIdsBefore.toSet().length,
+          existingFeatIdsBefore.length,
+        );
+        final v4Reconciled = ReleasePlannerAgent
+            .reconcileReleaseBlueprintWithPhaseRules(
+              parsed: ReleaseBlueprint(
+                releaseDocId: 'rel_v0_4',
+                releaseTitle: 'v0.4: Boss & Projectile Pass',
+                releaseVersionTag: 'v0.4',
+                preset: ReleaseScope.mvp,
+                goal: 'Add enemy projectile fire without overwriting v0.1 cards.',
+                doneWhen: 'Boss fires projectiles and v0.1 cards remain intact.',
+                questions: const [],
+                beats: [
+                  ProposedBeatBlueprint(
+                    id: firstEpic.id,
+                    title: firstEpic.title,
+                    goal: 'Expand first epic with a new feature at index 0.',
+                    doneWhen: 'Both existing and new features exist distinctly.',
+                    features: [
+                      ProposedFeatureBlueprint(
+                        id: 'feat_1',
+                        title: 'Enemy Projectile Fire',
+                        goal: 'Spawn aimed projectiles from ranged enemies.',
+                        doneWhen: 'Projectiles travel and deal damage on hit.',
+                        estimatedHours: 6,
+                        included: true,
+                        lifecycle: FeatureLifecycleStatus.newFeature,
+                        originVersion: 'v0.4',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              releaseDoc: provider.activeRelease!,
+              preset: ReleaseScope.mvp,
+              versionTag: 'v0.4',
+              existingBeats: liveBeats,
+              existingFeaturesByBeat: existingFeatsMap,
+              deferredByBeatIndex: const {},
+              projectExclusions: const [],
+              allCoreLoopItems: provider.conceptDraft!.coreLoopBeats,
+            );
+        // Existing features stay first, followed by the + NEW feature with a non-colliding ID
+        final reconciledBeat = v4Reconciled.beats.first;
+        expect(
+          reconciledBeat.features.any(
+            (f) =>
+                f.title == 'Enemy Projectile Fire' &&
+                f.lifecycle == FeatureLifecycleStatus.newFeature &&
+                !existingFeatIdsBefore.contains(f.id),
+          ),
+          isTrue,
         );
 
         // Verify ReleaseBlueprint builtSoFar & missingGaps round-trip serialization

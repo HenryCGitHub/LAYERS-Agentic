@@ -655,6 +655,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _releaseBlueprint = ReleaseBlueprint.fromJson(
           jsonDecode(rawRelBp) as Map<String, dynamic>,
         );
+        final ownerRel = documents[_releaseBlueprint!.releaseDocId];
+        if (ownerRel != null &&
+            (ownerRel.sections['release_blueprint_json'] == null ||
+                ownerRel.sections['release_blueprint_json']!.isEmpty)) {
+          ownerRel.sections['release_blueprint_json'] = rawRelBp;
+        }
       } catch (e) {
         debugPrint('Restore release_blueprint_json error: $e');
       }
@@ -672,6 +678,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       _activeReleaseId = null;
     }
     repackProjectReleasesSequentially(proj, pruneAllUnbuilt: true);
+    if (_activeReleaseId != null) {
+      final activeRelBp = releaseBlueprintFor(_activeReleaseId!);
+      if (activeRelBp != null) {
+        _releaseBlueprint = activeRelBp;
+      }
+    }
 
     final beats = activeReleaseBeats;
     if (beats.isNotEmpty) {
@@ -876,8 +888,14 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           jsonEncode(_conceptDraft!.toJson());
     }
     if (_releaseBlueprint != null) {
-      proj.sections['release_blueprint_json'] =
-          jsonEncode(_releaseBlueprint!.toJson());
+      final bpJson = jsonEncode(_releaseBlueprint!.toJson());
+      proj.sections['release_blueprint_json'] = bpJson;
+      final relDoc = documents[_releaseBlueprint!.releaseDocId];
+      if (relDoc != null &&
+          relDoc.sections['release_blueprint_json'] != bpJson) {
+        relDoc.sections['release_blueprint_json'] = bpJson;
+        _persistDocument(relDoc, debounce: true);
+      }
     }
     _persistDocument(proj);
     _persistSettings();
