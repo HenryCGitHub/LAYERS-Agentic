@@ -191,8 +191,164 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     } catch (_) {}
   }
 
-  /// Infers the natural next `ProductionPhase` (`prototype` -> `mvp` -> `verticalSlice` -> `fullProduction`)
-  /// based on the live game tree so agent-reasoned progressive releases never get stuck in MVP forever.
+  /// Evaluates how many Core Loop Epics (`activeReleaseBeats`) and `v0.1` Prototype Features
+  /// have received functional `MVP` coverage across built `ProductionPhase.mvp` releases.
+  ({
+    int coveredBeats,
+    int totalBeats,
+    int upgradedProtoFeatures,
+    int totalProtoFeatures,
+    List<String> uncoveredBeatTitles,
+    List<String> unupgradedProtoFeatureTitles,
+    bool isComplete,
+  }) mvpBeatCoverage() {
+    final builtReleases =
+        projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
+    final mvpVerTags = <String>{
+      for (final r in builtReleases)
+        if (releasePhaseFor(r) == ProductionPhase.mvp)
+          releaseVersionTagFor(r).toLowerCase(),
+    };
+    final beats = activeReleaseBeats;
+    int coveredBeats = 0;
+    int totalProtoFeatures = 0;
+    int upgradedProtoFeatures = 0;
+    final uncoveredBeatTitles = <String>[];
+    final unupgradedProtoFeatureTitles = <String>[];
+
+    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+      final b = beats[bIdx];
+      final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+      final feats = featuresForBeat(b.id)
+          .where(
+            (f) =>
+                f.sections['lifecycle'] !=
+                FeatureLifecycleStatus.superseded.name,
+          )
+          .toList();
+      bool beatCoveredInMvp = false;
+      for (final f in feats) {
+        final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
+        final states = FeatureStateNode.getStatesForDocument(f);
+        final hasMvpCheckpoint = mvpVerTags.contains(originVer) ||
+            states.any((s) => mvpVerTags.contains(s.releaseVersion.toLowerCase()));
+        if (hasMvpCheckpoint) {
+          beatCoveredInMvp = true;
+        }
+        if (originVer == 'v0.1') {
+          totalProtoFeatures++;
+          final upgradedPostV01 = states.any(
+            (s) => s.releaseVersion.toLowerCase() != 'v0.1',
+          );
+          if (upgradedPostV01 || hasMvpCheckpoint) {
+            upgradedProtoFeatures++;
+          } else {
+            unupgradedProtoFeatureTitles.add('$eTag · ${f.title}');
+          }
+        }
+      }
+      if (beatCoveredInMvp) {
+        coveredBeats++;
+      } else {
+        uncoveredBeatTitles.add('$eTag · ${b.title}');
+      }
+    }
+
+    final totalBeats = beats.length;
+    final protoThreshold =
+        totalProtoFeatures > 0 ? (totalProtoFeatures * 0.75).ceil() : 0;
+    final isComplete = totalBeats > 0 &&
+        coveredBeats >= totalBeats &&
+        upgradedProtoFeatures >= protoThreshold;
+
+    return (
+      coveredBeats: coveredBeats,
+      totalBeats: totalBeats,
+      upgradedProtoFeatures: upgradedProtoFeatures,
+      totalProtoFeatures: totalProtoFeatures,
+      uncoveredBeatTitles: uncoveredBeatTitles,
+      unupgradedProtoFeatureTitles: unupgradedProtoFeatureTitles,
+      isComplete: isComplete,
+    );
+  }
+
+  /// Evaluates how many Core Loop Epics (`activeReleaseBeats`) and live Features have received
+  /// `Vertical Slice` polish coverage across built `ProductionPhase.verticalSlice` releases.
+  ({
+    int polishedBeats,
+    int totalBeats,
+    int polishedFeatures,
+    int totalFeatures,
+    List<String> unpolishedBeatTitles,
+    List<String> unpolishedFeatureTitles,
+    bool isComplete,
+  }) verticalSliceBeatCoverage() {
+    final builtReleases =
+        projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
+    final vsVerTags = <String>{
+      for (final r in builtReleases)
+        if (releasePhaseFor(r) == ProductionPhase.verticalSlice)
+          releaseVersionTagFor(r).toLowerCase(),
+    };
+    final beats = activeReleaseBeats;
+    int polishedBeats = 0;
+    int totalFeatures = 0;
+    int polishedFeatures = 0;
+    final unpolishedBeatTitles = <String>[];
+    final unpolishedFeatureTitles = <String>[];
+
+    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+      final b = beats[bIdx];
+      final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+      final feats = featuresForBeat(b.id)
+          .where(
+            (f) =>
+                f.sections['lifecycle'] !=
+                FeatureLifecycleStatus.superseded.name,
+          )
+          .toList();
+      bool beatPolishedInVs = false;
+      for (final f in feats) {
+        totalFeatures++;
+        final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
+        final states = FeatureStateNode.getStatesForDocument(f);
+        final hasVsCheckpoint = vsVerTags.contains(originVer) ||
+            states.any((s) => vsVerTags.contains(s.releaseVersion.toLowerCase()));
+        if (hasVsCheckpoint) {
+          beatPolishedInVs = true;
+          polishedFeatures++;
+        } else {
+          unpolishedFeatureTitles.add('$eTag · ${f.title}');
+        }
+      }
+      if (beatPolishedInVs) {
+        polishedBeats++;
+      } else {
+        unpolishedBeatTitles.add('$eTag · ${b.title}');
+      }
+    }
+
+    final totalBeats = beats.length;
+    final featureThreshold =
+        totalFeatures > 0 ? (totalFeatures * 0.75).ceil() : 0;
+    final isComplete = totalBeats > 0 &&
+        polishedBeats >= totalBeats &&
+        (polishedFeatures >= featureThreshold || polishedBeats >= totalBeats);
+
+    return (
+      polishedBeats: polishedBeats,
+      totalBeats: totalBeats,
+      polishedFeatures: polishedFeatures,
+      totalFeatures: totalFeatures,
+      unpolishedBeatTitles: unpolishedBeatTitles,
+      unpolishedFeatureTitles: unpolishedFeatureTitles,
+      isComplete: isComplete,
+    );
+  }
+
+  /// Infers the natural next `ProductionPhase` (`prototype` -> multi-release `mvp` -> multi-release `verticalSlice` -> `fullProduction`)
+  /// based on the live game tree's Epic & Feature coverage so progressive releases complete all MVP Epics and
+  /// all Vertical Slice polish passes before graduating to `v1.0` Full Production.
   ProductionPhase inferNextProgressivePhase() {
     final releases = projectReleases;
     final builtReleases =
@@ -201,20 +357,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       return ProductionPhase.prototype;
     }
     if (builtReleases.any(
-          (r) => releasePhaseFor(r) == ProductionPhase.fullProduction,
-        ) ||
-        builtReleases.any(
-          (r) => releasePhaseFor(r) == ProductionPhase.verticalSlice,
-        )) {
+      (r) => releasePhaseFor(r) == ProductionPhase.fullProduction,
+    )) {
       return ProductionPhase.fullProduction;
     }
-    final hasBuiltMvp = builtReleases.any(
-      (r) => releasePhaseFor(r) == ProductionPhase.mvp,
-    );
-    final beats = activeReleaseBeats;
-    final allBeatsPopulated = beats.isNotEmpty &&
-        beats.every((b) => featuresForBeat(b.id).isNotEmpty);
-    if (hasBuiltMvp && allBeatsPopulated) {
+    final vsCov = verticalSliceBeatCoverage();
+    if (vsCov.isComplete) {
+      return ProductionPhase.fullProduction;
+    }
+    if (builtReleases.any(
+      (r) => releasePhaseFor(r) == ProductionPhase.verticalSlice,
+    )) {
+      return ProductionPhase.verticalSlice;
+    }
+    final mvpCov = mvpBeatCoverage();
+    if (mvpCov.isComplete) {
       return ProductionPhase.verticalSlice;
     }
     return ProductionPhase.mvp;
@@ -558,10 +715,19 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     return (index: nextIndex, id: candidateId);
   }
 
-  /// Next progressive version tag (`v0.2`, `v0.3`, etc.) based on the sequential count of built releases.
+  /// Next progressive version tag (`v0.2`, `v0.3`, ..., or `v1.0`, `v1.1` in Full Production).
   String get nextProgressiveVersionLabel {
     final releases = projectReleases;
-    final builtCount = releases.where((r) => r.childrenIds.isNotEmpty).length;
+    final builtReleases =
+        releases.where((r) => r.childrenIds.isNotEmpty).toList();
+    if (builtReleases.isNotEmpty &&
+        inferNextProgressivePhase() == ProductionPhase.fullProduction) {
+      final existingFullProdCount = builtReleases
+          .where((r) => releasePhaseFor(r) == ProductionPhase.fullProduction)
+          .length;
+      return 'v1.$existingFullProdCount';
+    }
+    final builtCount = builtReleases.length;
     final baseCount = builtCount > 0 ? builtCount : releases.length;
     return 'v0.${baseCount + 1}';
   }
@@ -764,9 +930,13 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     notifyListeners();
 
     try {
+      final completedPriorReleases = projectReleases
+          .where((r) => r.id != targetRelId && r.childrenIds.isNotEmpty)
+          .toList();
       final planned = await ReleasePlannerAgent.planRelease(
         projectDoc: proj,
         releaseDoc: relDoc,
+        completedReleases: completedPriorReleases,
         existingBeats: existingBeats,
         existingFeaturesByBeat: existingFeaturesByBeat,
         deferredByBeatIndex: deferredByBeatIndex,

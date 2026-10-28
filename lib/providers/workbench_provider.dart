@@ -553,12 +553,29 @@ class WorkbenchProvider extends ChangeNotifier {
     if (phase == ProductionPhase.mvp.name) {
       final match = _mvpEpicLabelRegex.firstMatch(relDoc.title);
       if (match != null) return match.group(0)!.trim();
-      final idx =
-          (int.tryParse(relDoc.sections['targetEpicIndex'] ?? '') ?? 0) + 1;
-      return 'MVP Epic $idx';
+      final explicitEpicIdx =
+          int.tryParse(relDoc.sections['targetEpicIndex'] ?? '');
+      if (explicitEpicIdx != null) {
+        return 'MVP Epic ${explicitEpicIdx + 1}';
+      }
+      final mvpRels = projectReleases
+          .where((r) => releasePhaseFor(r) == ProductionPhase.mvp)
+          .toList();
+      final passIdx = mvpRels.indexWhere((r) => r.id == relDoc.id);
+      if (passIdx >= 0 && mvpRels.length > 1) {
+        return 'MVP (Pass ${passIdx + 1})';
+      }
+      return 'MVP';
     }
     if (phase == ProductionPhase.verticalSlice.name ||
         relDoc.releaseScope == ReleaseScope.verticalSlice) {
+      final vsRels = projectReleases
+          .where((r) => releasePhaseFor(r) == ProductionPhase.verticalSlice)
+          .toList();
+      final passIdx = vsRels.indexWhere((r) => r.id == relDoc.id);
+      if (passIdx >= 0 && vsRels.length > 1) {
+        return 'Vertical Slice (Pass ${passIdx + 1})';
+      }
       return 'Vertical Slice';
     }
     if (phase == ProductionPhase.fullProduction.name ||

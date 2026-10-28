@@ -272,6 +272,67 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               );
                             },
                           ),
+                        Builder(
+                          builder: (context) {
+                            final activePhase = widget.workbench.currentPhase;
+                            if (activePhase == ProductionPhase.mvp) {
+                              final cov = widget.workbench.mvpBeatCoverage();
+                              return Container(
+                                key: const ValueKey(
+                                  'progressive_phase_coverage_badge',
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: accentAmber.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: accentAmber.withValues(alpha: 0.45),
+                                  ),
+                                ),
+                                child: Text(
+                                  'MVP COVERAGE: ${cov.coveredBeats}/${cov.totalBeats} EPICS',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: accentAmber,
+                                  ),
+                                ),
+                              );
+                            } else if (activePhase ==
+                                ProductionPhase.verticalSlice) {
+                              final cov =
+                                  widget.workbench.verticalSliceBeatCoverage();
+                              return Container(
+                                key: const ValueKey(
+                                  'progressive_phase_coverage_badge',
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: accentCyan.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: accentCyan.withValues(alpha: 0.45),
+                                  ),
+                                ),
+                                child: Text(
+                                  'SLICE COVERAGE: ${cov.polishedBeats}/${cov.totalBeats} EPICS',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: accentCyan,
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
                       ],
                     ),
                   ],

@@ -72,9 +72,75 @@ class ReleasePlannerAgent {
     final String schemaPhaseHint =
         releasePhase.isNotEmpty ? releasePhase : 'mvp';
     final bool isPhaseLocked =
-        releaseDoc.sections['phaseLockedByUser'] == 'true' ||
-        releasePhase == ProductionPhase.verticalSlice.name ||
-        releasePhase == ProductionPhase.fullProduction.name;
+        releaseDoc.sections['phaseLockedByUser'] == 'true';
+
+    final mvpVerTags = <String>{
+      for (final r in completedReleases)
+        if ((r.sections['phase'] ?? '') == ProductionPhase.mvp.name ||
+            r.releaseScope == ReleaseScope.mvp)
+          extractReleaseVersionTag(
+            r.sections['versionTag']?.isNotEmpty == true
+                ? r.sections['versionTag']!
+                : r.title,
+          ).toLowerCase(),
+    };
+    final vsVerTags = <String>{
+      for (final r in completedReleases)
+        if ((r.sections['phase'] ?? '') == ProductionPhase.verticalSlice.name ||
+            r.releaseScope == ReleaseScope.verticalSlice)
+          extractReleaseVersionTag(
+            r.sections['versionTag']?.isNotEmpty == true
+                ? r.sections['versionTag']!
+                : r.title,
+          ).toLowerCase(),
+    };
+
+    final uncoveredMvpBeats = <String>[];
+    final unupgradedProtoFeatures = <String>[];
+    final unpolishedVsBeats = <String>[];
+    final unpolishedVsFeatures = <String>[];
+
+    for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
+      final b = existingBeats[bIdx];
+      final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+      final feats = (existingFeaturesByBeat[b.id] ?? const <TierDocument>[])
+          .where(
+            (f) =>
+                f.sections['lifecycle'] !=
+                FeatureLifecycleStatus.superseded.name,
+          )
+          .toList();
+      bool beatHasMvp = false;
+      bool beatHasVs = false;
+      for (final f in feats) {
+        final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
+        final states = FeatureStateNode.getStatesForDocument(f);
+        final hasMvpCp = mvpVerTags.contains(originVer) ||
+            states.any((s) => mvpVerTags.contains(s.releaseVersion.toLowerCase()));
+        final hasVsCp = vsVerTags.contains(originVer) ||
+            states.any((s) => vsVerTags.contains(s.releaseVersion.toLowerCase()));
+        if (hasMvpCp) beatHasMvp = true;
+        if (hasVsCp) {
+          beatHasVs = true;
+        } else {
+          unpolishedVsFeatures.add('$eTag "${f.title}"');
+        }
+        if (originVer == 'v0.1') {
+          final upgradedPostV01 = states.any(
+            (s) => s.releaseVersion.toLowerCase() != 'v0.1',
+          );
+          if (!upgradedPostV01 && !hasMvpCp) {
+            unupgradedProtoFeatures.add('$eTag "${f.title}"');
+          }
+        }
+      }
+      if (!beatHasMvp) {
+        uncoveredMvpBeats.add('$eTag "${b.title}"');
+      }
+      if (!beatHasVs) {
+        unpolishedVsBeats.add('$eTag "${b.title}"');
+      }
+    }
 
     final String phaseInstruction;
     if (prototypePart == '1' && !isSubsequentRelease) {
@@ -89,15 +155,24 @@ class ReleasePlannerAgent {
     } else if (isAgentReasoned ||
         (releasePhase == ProductionPhase.mvp.name &&
             targetMvpEpicIndex == null)) {
+      final mvpCoverageHint = (uncoveredMvpBeats.isNotEmpty ||
+              unupgradedProtoFeatures.isNotEmpty)
+          ? '\n     * Still-Greybox v0.1 Epics needing MVP coverage: ${uncoveredMvpBeats.isNotEmpty ? uncoveredMvpBeats.join(', ') : 'All Epics touched once'}\n'
+              '     * Still-Greybox v0.1 Features awaiting MVP upgrade: ${unupgradedProtoFeatures.isNotEmpty ? unupgradedProtoFeatures.join(', ') : 'None'}\n'
+              '     * Prioritize upgrading the next cohesive batch of these still-greybox v0.1 Epics & Features (and adding any missing functional mechanics for them) rather than re-upgrading features that already received an MVP pass.'
+          : '';
+      final vsCoverageHint = (unpolishedVsBeats.isNotEmpty ||
+              unpolishedVsFeatures.isNotEmpty)
+          ? '\n     * Unpolished Epics needing Vertical Slice pass: ${unpolishedVsBeats.isNotEmpty ? unpolishedVsBeats.join(', ') : 'All Epics touched once'}\n'
+              '     * Features awaiting Vertical Slice polish: ${unpolishedVsFeatures.take(8).join(', ')}\n'
+              '     * Prioritize bringing the next cohesive batch of these unpolished Epics & Features up to Gold Standard polish rather than re-polishing already-polished features.'
+          : '';
       final phaseTargetDirective = releasePhase ==
               ProductionPhase.verticalSlice.name
-          ? '  1. TARGET PHASE IS `"verticalSlice"` (GOLD STANDARD POLISH PASS): Set `"releasePhase": "verticalSlice"` and a descriptive `"releaseTitle"` (`"$versionTag: <Polish & Feel Focus>"`). Focus upgrades on visual/material polish, SFX/VFX & camera/hit-stop feel cues, HUD readability, and state/frame guards across the proven Core Loop Beats.'
+          ? '  1. TARGET PHASE IS `"verticalSlice"` (MULTI-RELEASE VERTICAL SLICE POLISH TRACK): Set `"releasePhase": "verticalSlice"` and a descriptive `"releaseTitle"` (`"$versionTag: <Polish & Feel Focus>"`). Focus upgrades on visual/material polish, SFX/VFX & camera/hit-stop feel cues, HUD readability, and state/frame guards across unpolished Core Loop Beats.$vsCoverageHint'
           : (releasePhase == ProductionPhase.fullProduction.name
               ? '  1. TARGET PHASE IS `"fullProduction"` (CONTENT & BACKLOG EXPANSION): Set `"releasePhase": "fullProduction"` and a descriptive `"releaseTitle"` (`"$versionTag: <Content & Expansion Focus>"`). Scale content/encounter variety and promote deferred backlog systems while honoring active exclusions.'
-              : '  1. Choose `"releasePhase"` (`"mvp"`, `"verticalSlice"`, or `"fullProduction"`) and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete Release Focus>"`):\n'
-                  '     * Choose `"mvp"` while any Stage 1 Core Loop Beat is still missing functional mechanics or existing features still need functional depth/interaction to fulfill the Core Loop and Design Pillars.\n'
-                  '     * Choose `"verticalSlice"` once all Stage 1 Core Loop Beats are functionally playable end-to-end and the game is ready for a cohesive Polish Pass (final art/material swap, SFX/VFX, camera/hit-stop feel, HUD readability, and state/frame guards).\n'
-                  '     * Choose `"fullProduction"` once the Vertical Slice polish pass has already been verified and the focus shifts to scaling content/encounter variety and promoting deferred Out-of-Scope backlog systems.');
+              : '  1. TARGET PHASE IS `"mvp"` (MULTI-RELEASE MVP TRACK): Set `"releasePhase": "mvp"` and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete MVP Focus>"`). Bring the next cohesive group of greybox prototype mechanics up to functional MVP depth across the Core Loop and Design Pillars.$mvpCoverageHint');
       phaseInstruction =
           '- AGENT-REASONED PROGRESSIVE RELEASE ($versionTag): You are the Lead Game Architect deciding what "${projectDoc.title}" needs next in $versionTag by evaluating the Existing Live Game Tree against the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n'
           '$phaseTargetDirective\n'
@@ -611,8 +686,15 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     ];
     final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
     var effectivePreset = preset;
-    if (isAgentReasoned && releaseDoc.sections['phaseLockedByUser'] != 'true') {
-      final currentDocPhase = releaseDoc.sections['phase'] ?? '';
+    final currentDocPhase = (releaseDoc.sections['phase'] ?? '').trim();
+    if (currentDocPhase == ProductionPhase.fullProduction.name) {
+      effectivePreset = ReleaseScope.fullProduction;
+    } else if (currentDocPhase == ProductionPhase.verticalSlice.name) {
+      effectivePreset = ReleaseScope.verticalSlice;
+    } else if (currentDocPhase == ProductionPhase.mvp.name) {
+      effectivePreset = ReleaseScope.mvp;
+    } else if (isAgentReasoned &&
+        releaseDoc.sections['phaseLockedByUser'] != 'true') {
       final rawPhase =
           (json['releasePhase'] ?? json['phase'] ?? '')
               .toString()
@@ -622,16 +704,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         releaseDoc.sections['phase'] = ProductionPhase.fullProduction.name;
         releaseDoc.sections['releaseScope'] = ReleaseScope.fullProduction.name;
         effectivePreset = ReleaseScope.fullProduction;
-      } else if ((rawPhase.contains('vertical') ||
-              rawPhase.contains('slice') ||
-              rawPhase.contains('polish')) &&
-          currentDocPhase != ProductionPhase.fullProduction.name) {
+      } else if (rawPhase.contains('vertical') ||
+          rawPhase.contains('slice') ||
+          rawPhase.contains('polish')) {
         releaseDoc.sections['phase'] = ProductionPhase.verticalSlice.name;
         releaseDoc.sections['releaseScope'] = ReleaseScope.verticalSlice.name;
         effectivePreset = ReleaseScope.verticalSlice;
-      } else if (rawPhase.contains('mvp') &&
-          currentDocPhase != ProductionPhase.verticalSlice.name &&
-          currentDocPhase != ProductionPhase.fullProduction.name) {
+      } else if (rawPhase.contains('mvp')) {
         releaseDoc.sections['phase'] = ProductionPhase.mvp.name;
         releaseDoc.sections['releaseScope'] = ReleaseScope.mvp.name;
         effectivePreset = ReleaseScope.mvp;
@@ -698,6 +777,21 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       splitSingleSentence: false,
     );
 
+    int defaultMvpBeatIdx = 0;
+    if (targetMvpEpicIndex == null) {
+      for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
+        final feats =
+            existingFeaturesByBeat[existingBeats[bIdx].id] ?? const <TierDocument>[];
+        final anyStillV01Only = feats.any(
+          (f) => FeatureStateNode.getStatesForDocument(f).length <= 1,
+        );
+        if (anyStillV01Only) {
+          defaultMvpBeatIdx = bIdx;
+          break;
+        }
+      }
+    }
+
     final beats = <ProposedBeatBlueprint>[];
     for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
       final eb = existingBeats[bIdx];
@@ -708,7 +802,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           : (releasePhase == ProductionPhase.verticalSlice.name ||
                   releasePhase == ProductionPhase.fullProduction.name
               ? true
-              : bIdx == 0);
+              : bIdx == defaultMvpBeatIdx);
 
       final proposedFeats = <ProposedFeatureBlueprint>[];
       for (int fIdx = 0; fIdx < existingFeats.length; fIdx++) {

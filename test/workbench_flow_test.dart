@@ -1742,14 +1742,44 @@ void main() {
           provider.releaseDisplayName(allRels[1]),
           'Room Clearance & Threat Variety',
         );
-        // Once all Core Loop Epics are populated and at least 1 MVP release is built, v0.3 advances to Vertical Slice, and the next inferred phase is Full Production
+        // Because v0.2 only upgraded Beat 1 out of 7 Beats, v0.3 stays in MVP (Pass 2) rather than prematurely jumping to Vertical Slice!
         expect(
           provider.releasePhaseFor(allRels[2]),
-          ProductionPhase.verticalSlice,
+          ProductionPhase.mvp,
+        );
+        expect(
+          provider.releaseConciseLabel(allRels[2]),
+          'MVP (Pass 2)',
         );
         expect(
           provider.inferNextProgressivePhase(),
-          ProductionPhase.fullProduction,
+          ProductionPhase.mvp,
+        );
+
+        // Once all Core Loop Epics receive MVP coverage, inferNextProgressivePhase() advances to Vertical Slice,
+        // stays in Vertical Slice across partial passes, and only graduates to Full Production once all Epics are polished!
+        for (final beat in liveBeats) {
+          for (final feat in provider.featuresForBeat(beat.id)) {
+            final st = FeatureStateNode.getStatesForDocument(feat);
+            if (!st.any((s) => s.releaseVersion == 'v0.2' || s.releaseVersion == 'v0.3')) {
+              st.add(
+                FeatureStateNode(
+                  id: '${feat.id}_v0.3_mvp',
+                  name: 'Checkpoint 2: ${feat.title} MVP',
+                  trigger: 'Playtest MVP',
+                  order: st.length,
+                  checklist: [Subtask(id: 'm1', text: 'MVP Task (2h)', completed: true)],
+                  parameters: const {'releaseVersion': 'v0.3'},
+                ),
+              );
+              provider.updateFeatureStates(feat.id, st);
+            }
+          }
+        }
+        expect(provider.mvpBeatCoverage().isComplete, isTrue);
+        expect(
+          provider.inferNextProgressivePhase(),
+          ProductionPhase.verticalSlice,
         );
 
         // Verify that executing a v0.4 blueprint with a + NEW feature placed before an existing STABLE feature never collides feature IDs or duplicates beatDoc.childrenIds
