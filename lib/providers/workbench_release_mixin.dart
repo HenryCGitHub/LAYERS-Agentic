@@ -150,11 +150,72 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     }
   }
 
-  /// Next progressive version tag (`v0.2`, `v0.3`, etc.) based on how many releases have been built.
+  static final RegExp _minorVerRegex = RegExp(
+    r'v0\.(\d+)',
+    caseSensitive: false,
+  );
+  static final RegExp _relIdSuffixRegex = RegExp(r'rel_v0_(\d+)$');
+
+  int _extractReleaseMinorIndex(TierDocument rel) {
+    int maxFound = 0;
+    final idMatch = _relIdSuffixRegex.firstMatch(rel.id);
+    if (idMatch != null) {
+      maxFound = int.tryParse(idMatch.group(1)!) ?? 0;
+    }
+    final verTag = releaseVersionTagFor(rel);
+    final verMatch = _minorVerRegex.firstMatch(verTag);
+    if (verMatch != null) {
+      final v = int.tryParse(verMatch.group(1)!) ?? 0;
+      if (v > maxFound) maxFound = v;
+    }
+    final titleMatch = _minorVerRegex.firstMatch(rel.title);
+    if (titleMatch != null) {
+      final t = int.tryParse(titleMatch.group(1)!) ?? 0;
+      if (t > maxFound) maxFound = t;
+    }
+    return maxFound;
+  }
+
+  /// Computes the next strictly-increasing progressive minor version number (`2` for `v0.2`, `7` for `v0.7`, etc.),
+  /// inspecting both `projectReleases` and `activeRelease` so gaps or pruned unbuilt drafts never cause a version to repeat.
+  int _nextProgressiveMinorIndex({bool onlyBuilt = false}) {
+    final proj = activeProject;
+    final releases = projectReleases;
+    int maxIdx = onlyBuilt
+        ? releases.where((r) => r.childrenIds.isNotEmpty).length
+        : (proj?.childrenIds.length ?? releases.length);
+    for (final r in releases) {
+      if (onlyBuilt && r.childrenIds.isEmpty && r.id != _activeReleaseId) {
+        continue;
+      }
+      final idx = _extractReleaseMinorIndex(r);
+      if (idx > maxIdx) maxIdx = idx;
+    }
+    final active = activeRelease;
+    if (active != null && (!onlyBuilt || active.childrenIds.isNotEmpty)) {
+      final activeIdx = _extractReleaseMinorIndex(active);
+      if (activeIdx > maxIdx) maxIdx = activeIdx;
+    }
+    return maxIdx + 1;
+  }
+
+  ({int index, String id}) _allocateNextReleaseIdAndIndex(TierDocument proj) {
+    var nextIndex = _nextProgressiveMinorIndex();
+    String candidateId = proj.id == 'proj_main'
+        ? 'rel_v0_$nextIndex'
+        : '${proj.id}_rel_v0_$nextIndex';
+    while (documents.containsKey(candidateId)) {
+      nextIndex++;
+      candidateId = proj.id == 'proj_main'
+          ? 'rel_v0_$nextIndex'
+          : '${proj.id}_rel_v0_$nextIndex';
+    }
+    return (index: nextIndex, id: candidateId);
+  }
+
+  /// Next progressive version tag (`v0.2`, `v0.3`, etc.) based on the highest built release version.
   String get nextProgressiveVersionLabel {
-    final builtCount =
-        projectReleases.where((r) => r.childrenIds.isNotEmpty).length;
-    return 'v0.${builtCount + 1}';
+    return 'v0.${_nextProgressiveMinorIndex(onlyBuilt: true)}';
   }
 
   /// Prepares the next Progressive Release (`v0.2`, `v0.3+`) blueprint in-memory while keeping
@@ -249,7 +310,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (releaseId != null) {
       _activeReleaseId = releaseId;
     }
-    if (_conceptDraft != null) {
+    final existingProj = activeProject;
+    if (_conceptDraft != null &&
+        (existingProj == null || existingProj.childrenIds.isEmpty)) {
       _commitConceptToVault(_conceptDraft!, syncBuiltWorkbench: false);
     }
 
@@ -311,7 +374,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     // Clear _releaseBlueprint while gemini-4-argon is synthesizing so the UI shows an honest
     // Agent Architectural Synthesis state rather than a pre-baked or prior-release plan.
     _releaseBlueprint = null;
-    final verTag = ReleasePlannerAgent.extractReleaseVersionTag(relDoc.title);
+    final verTag = releaseVersionTagFor(relDoc);
+    relDoc.sections['versionTag'] = verTag;
     _isAgentBusy = true;
     _agentProgressStep =
         'Synthesizing $verTag Release Architecture ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
@@ -332,8 +396,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         if (planned.releaseTitle.isNotEmpty &&
             planned.releaseTitle != relDoc.title) {
           relDoc.title = planned.releaseTitle;
-          _persistDocument(relDoc);
         }
+        relDoc.sections['versionTag'] = verTag;
+        _persistDocument(relDoc);
         _releaseBlueprint = planned;
         _offlineErrorMessage = null;
         if (transitionToGateStage) {
@@ -2310,27 +2375,30 @@ Return ONLY valid JSON:
     final nextIdx = currentIdx + 1;
     if (currentIdx >= 0 && nextIdx < releases.length) {
       final nextRel = releases[nextIdx];
-      final phaseStr = nextRel.sections['phase'];
-      if (phaseStr != null && phaseStr.isNotEmpty) {
-        for (final p in ProductionPhase.values) {
-          if (p.name == phaseStr) {
-            _currentPhase = p;
-            break;
+      // When planning a progressive release from the Co-Pilot, only reuse a queued release if it is still unbuilt.
+      if (!agentReasonedProgressive || nextRel.childrenIds.isEmpty) {
+        final phaseStr = nextRel.sections['phase'];
+        if (phaseStr != null && phaseStr.isNotEmpty) {
+          for (final p in ProductionPhase.values) {
+            if (p.name == phaseStr) {
+              _currentPhase = p;
+              break;
+            }
           }
         }
+        await openGateAndRecordRetro(nextRel.id);
+        return;
       }
-      await openGateAndRecordRetro(nextRel.id);
-      return;
     }
 
     // Current Phase has no more queued releases — create ONLY 1 single next Release on demand!
     final currentRel = activeRelease ?? releases.last;
+    final allocated = _allocateNextReleaseIdAndIndex(proj);
+    final newIndex = allocated.index;
+    final newRelId = allocated.id;
+
     if (_currentPhase == ProductionPhase.prototype &&
         currentRel.sections['prototypePart'] == '1') {
-      final newIndex = proj.childrenIds.length + 1;
-      final newRelId = proj.id == 'proj_main'
-          ? 'rel_v0_$newIndex'
-          : '${proj.id}_rel_v0_$newIndex';
       final part2Title = currentRel.sections['splitPrototypePart2Title'] ??
           'v0.$newIndex: Prototype — Part 2: Progression & Loop Reset';
       final newRelDoc = TierDocument(
@@ -2339,6 +2407,7 @@ Return ONLY valid JSON:
         tier: TierType.release,
         parentId: proj.id,
         sections: {
+          'versionTag': 'v0.$newIndex',
           'releaseScope': ReleaseScope.prototype.name,
           'phase': ProductionPhase.prototype.name,
           'prototypePart': '2',
@@ -2356,16 +2425,13 @@ Return ONLY valid JSON:
 
     if (agentReasonedProgressive) {
       _currentPhase = ProductionPhase.mvp;
-      final newIndex = proj.childrenIds.length + 1;
-      final newRelId = proj.id == 'proj_main'
-          ? 'rel_v0_$newIndex'
-          : '${proj.id}_rel_v0_$newIndex';
       final newRelDoc = TierDocument(
         id: newRelId,
         title: 'v0.$newIndex: Progressive Release',
         tier: TierType.release,
         parentId: proj.id,
         sections: {
+          'versionTag': 'v0.$newIndex',
           'releaseScope': ReleaseScope.mvp.name,
           'phase': ProductionPhase.mvp.name,
           'agentReasoned': 'true',
@@ -2407,10 +2473,6 @@ Return ONLY valid JSON:
             existingMvpCount < beatNames.length)) {
       _currentPhase = ProductionPhase.mvp;
       final i = existingMvpCount;
-      final newIndex = proj.childrenIds.length + 1;
-      final newRelId = proj.id == 'proj_main'
-          ? 'rel_v0_$newIndex'
-          : '${proj.id}_rel_v0_$newIndex';
       final beatLabel = beatNames[i];
       final newRelDoc = TierDocument(
         id: newRelId,
@@ -2418,6 +2480,7 @@ Return ONLY valid JSON:
         tier: TierType.release,
         parentId: proj.id,
         sections: {
+          'versionTag': 'v0.$newIndex',
           'releaseScope': ReleaseScope.mvp.name,
           'phase': ProductionPhase.mvp.name,
           'targetEpicIndex': '$i',
@@ -2434,10 +2497,6 @@ Return ONLY valid JSON:
       return;
     } else if (_currentPhase == ProductionPhase.mvp) {
       _currentPhase = ProductionPhase.verticalSlice;
-      final newIndex = proj.childrenIds.length + 1;
-      final newRelId = proj.id == 'proj_main'
-          ? 'rel_v0_$newIndex'
-          : '${proj.id}_rel_v0_$newIndex';
       final newRelDoc = TierDocument(
         id: newRelId,
         title:
@@ -2445,6 +2504,7 @@ Return ONLY valid JSON:
         tier: TierType.release,
         parentId: proj.id,
         sections: {
+          'versionTag': 'v0.$newIndex',
           'releaseScope': ReleaseScope.verticalSlice.name,
           'phase': ProductionPhase.verticalSlice.name,
           'scope':
@@ -2465,10 +2525,6 @@ Return ONLY valid JSON:
         .where((r) => r.sections['phase'] == ProductionPhase.fullProduction.name)
         .length;
     final fullProdPass = existingFullProdCount + 1;
-    final newIndex = proj.childrenIds.length + 1;
-    final newRelId = proj.id == 'proj_main'
-        ? 'rel_v0_$newIndex'
-        : '${proj.id}_rel_v0_$newIndex';
     final fullProdVersion = 'v1.${fullProdPass - 1}';
     final fullProdTitle = fullProdPass == 1
         ? '$fullProdVersion: Full Production — Content, Levels & Deferred Systems - Full Production'
@@ -2479,6 +2535,7 @@ Return ONLY valid JSON:
       tier: TierType.release,
       parentId: proj.id,
       sections: {
+        'versionTag': fullProdVersion,
         'releaseScope': ReleaseScope.fullProduction.name,
         'phase': ProductionPhase.fullProduction.name,
         'fullProductionPass': '$fullProdPass',

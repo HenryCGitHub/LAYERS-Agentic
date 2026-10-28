@@ -1642,6 +1642,18 @@ void main() {
         final evolvedFeat = provider.documents[v1FirstFeat.id]!;
         expect(evolvedFeat.sections['lifecycle'], 'upgrade');
 
+        // Regression: Even when activeRelease is v0.6 while proj.childrenIds has fewer entries (e.g. 2),
+        // prepareProgressiveNextReleaseDraft advances strictly to v0.7 -> v0.8 without repeating v0.6!
+        provider.activeRelease!.title = 'v0.6: Room Clearance & Threat Variety';
+        provider.activeRelease!.sections['versionTag'] = 'v0.6';
+        expect(provider.nextProgressiveVersionLabel, 'v0.7');
+        final v7Bp = await provider.prepareProgressiveNextReleaseDraft();
+        expect(v7Bp, isNotNull);
+        expect(v7Bp!.releaseVersionTag, 'v0.7');
+        expect(provider.activeReleaseVersionTag, 'v0.7');
+        await provider.approveAndExecuteReleasePlan();
+        expect(provider.nextProgressiveVersionLabel, 'v0.8');
+
         // Selecting an already-built release (v0.1) in the Stage 3 dropdown switches in-place without kicking back to Stage 2
         await provider.selectActiveRelease(v1RelId);
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
