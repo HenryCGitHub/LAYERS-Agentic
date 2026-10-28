@@ -353,6 +353,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     documents[projId] = projDoc;
     _activeProjectId = projId;
     _activeReleaseId ??= releaseIds.isNotEmpty ? releaseIds.first : null;
+    repackProjectReleasesSequentially(
+      projDoc,
+      keepReleaseId: _activeReleaseId,
+    );
     if (syncBuiltWorkbench) {
       syncConceptChangesToBuiltWorkbench(draft);
     }

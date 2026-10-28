@@ -671,6 +671,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     } else {
       _activeReleaseId = null;
     }
+    repackProjectReleasesSequentially(proj, pruneAllUnbuilt: true);
 
     final beats = activeReleaseBeats;
     if (beats.isNotEmpty) {

@@ -154,68 +154,261 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     r'v0\.(\d+)',
     caseSensitive: false,
   );
-  static final RegExp _relIdSuffixRegex = RegExp(r'rel_v0_(\d+)$');
 
-  int _extractReleaseMinorIndex(TierDocument rel) {
-    int maxFound = 0;
-    final idMatch = _relIdSuffixRegex.firstMatch(rel.id);
-    if (idMatch != null) {
-      maxFound = int.tryParse(idMatch.group(1)!) ?? 0;
-    }
-    final verTag = releaseVersionTagFor(rel);
-    final verMatch = _minorVerRegex.firstMatch(verTag);
-    if (verMatch != null) {
-      final v = int.tryParse(verMatch.group(1)!) ?? 0;
-      if (v > maxFound) maxFound = v;
-    }
-    final titleMatch = _minorVerRegex.firstMatch(rel.title);
-    if (titleMatch != null) {
-      final t = int.tryParse(titleMatch.group(1)!) ?? 0;
-      if (t > maxFound) maxFound = t;
-    }
-    return maxFound;
-  }
+  /// Prunes any leftover unbuilt draft releases (once the project has at least one built release)
+  /// and sequentially re-packs all `v0.X` releases (`v0.1`, `v0.2`, ..., `v0.N`) so skipped
+  /// version gaps never occur.
+  void repackProjectReleasesSequentially(
+    TierDocument proj, {
+    bool pruneAllUnbuilt = false,
+    String? keepReleaseId,
+  }) {
+    final user = _authService.currentUser;
 
-  /// Computes the next strictly-increasing progressive minor version number (`2` for `v0.2`, `7` for `v0.7`, etc.),
-  /// inspecting both `projectReleases` and `activeRelease` so gaps or pruned unbuilt drafts never cause a version to repeat.
-  int _nextProgressiveMinorIndex({bool onlyBuilt = false}) {
-    final proj = activeProject;
-    final releases = projectReleases;
-    int maxIdx = onlyBuilt
-        ? releases.where((r) => r.childrenIds.isNotEmpty).length
-        : (proj?.childrenIds.length ?? releases.length);
-    for (final r in releases) {
-      if (onlyBuilt && r.childrenIds.isEmpty && r.id != _activeReleaseId) {
-        continue;
+    // 1. Deduplicate proj.childrenIds while keeping only existing release docs
+    final deduped = <String>[];
+    for (final id in proj.childrenIds) {
+      if (!deduped.contains(id) && documents.containsKey(id)) {
+        deduped.add(id);
       }
-      final idx = _extractReleaseMinorIndex(r);
-      if (idx > maxIdx) maxIdx = idx;
     }
-    final active = activeRelease;
-    if (active != null && (!onlyBuilt || active.childrenIds.isNotEmpty)) {
-      final activeIdx = _extractReleaseMinorIndex(active);
-      if (activeIdx > maxIdx) maxIdx = activeIdx;
+    proj.childrenIds = deduped;
+
+    // 2. If at least one built release exists, prune unbuilt draft releases
+    final hasBuiltRelease = proj.childrenIds.any(
+      (id) => documents[id]?.childrenIds.isNotEmpty ?? false,
+    );
+    if (hasBuiltRelease) {
+      final toRemove = <String>[];
+      for (final id in proj.childrenIds) {
+        final relDoc = documents[id];
+        if (relDoc == null) continue;
+        if (relDoc.childrenIds.isEmpty) {
+          final shouldKeep = !pruneAllUnbuilt && id == keepReleaseId;
+          if (!shouldKeep) {
+            toRemove.add(id);
+          }
+        }
+      }
+      for (final id in toRemove) {
+        proj.childrenIds.remove(id);
+        documents.remove(id);
+        LocalVaultService.deleteDocument(id);
+        if (user != null) {
+          _firestoreService.deleteDocument(uid: user.uid, docId: id);
+        }
+      }
     }
-    return maxIdx + 1;
+
+    // Remove any orphaned TierType.release documents belonging to this project
+    final activeSet = proj.childrenIds.toSet();
+    final orphanRelIds = documents.values
+        .where(
+          (d) =>
+              d.tier == TierType.release &&
+              d.parentId == proj.id &&
+              !activeSet.contains(d.id),
+        )
+        .map((d) => d.id)
+        .toList();
+    for (final orphanId in orphanRelIds) {
+      documents.remove(orphanId);
+      LocalVaultService.deleteDocument(orphanId);
+      if (user != null) {
+        _firestoreService.deleteDocument(uid: user.uid, docId: orphanId);
+      }
+    }
+
+    // 3. Re-pack remaining v0.X releases sequentially (1..N)
+    final versionRemap = <String, String>{};
+    bool anyChanged = false;
+
+    for (int i = 0; i < proj.childrenIds.length; i++) {
+      final seqNum = i + 1;
+      final oldRelId = proj.childrenIds[i];
+      final relDoc = documents[oldRelId];
+      if (relDoc == null) continue;
+
+      final currentVerTag = releaseVersionTagFor(relDoc);
+      final isFullProdV1 =
+          relDoc.sections['phase'] == ProductionPhase.fullProduction.name ||
+          relDoc.releaseScope == ReleaseScope.fullProduction ||
+          currentVerTag.toLowerCase().startsWith('v1.');
+      if (isFullProdV1) continue;
+
+      final expectedVer = 'v0.$seqNum';
+      final expectedId = proj.id == 'proj_main'
+          ? 'rel_v0_$seqNum'
+          : '${proj.id}_rel_v0_$seqNum';
+
+      bool docChanged = false;
+      if (currentVerTag != expectedVer &&
+          currentVerTag.toLowerCase().startsWith('v0.')) {
+        versionRemap[currentVerTag] = expectedVer;
+        docChanged = true;
+      }
+      if (relDoc.sections['versionTag'] != expectedVer) {
+        relDoc.sections['versionTag'] = expectedVer;
+        docChanged = true;
+      }
+      if (_minorVerRegex.hasMatch(relDoc.title)) {
+        final updatedTitle = relDoc.title.replaceAll(
+          _minorVerRegex,
+          expectedVer,
+        );
+        if (updatedTitle != relDoc.title) {
+          relDoc.title = updatedTitle;
+          docChanged = true;
+        }
+      }
+      final rawScope = relDoc.sections['scope'];
+      if (rawScope != null && _minorVerRegex.hasMatch(rawScope)) {
+        final updatedScope = rawScope.replaceAll(_minorVerRegex, expectedVer);
+        if (updatedScope != rawScope) {
+          relDoc.sections['scope'] = updatedScope;
+          docChanged = true;
+        }
+      }
+
+      if (oldRelId != expectedId &&
+          (!documents.containsKey(expectedId) ||
+              !proj.childrenIds.contains(expectedId))) {
+        final movedDoc = relDoc.copyWith(
+          id: expectedId,
+          sections: Map<String, String>.from(relDoc.sections),
+        );
+        documents.remove(oldRelId);
+        LocalVaultService.deleteDocument(oldRelId);
+        if (user != null) {
+          _firestoreService.deleteDocument(uid: user.uid, docId: oldRelId);
+        }
+        documents[expectedId] = movedDoc;
+        _persistDocument(movedDoc);
+        proj.childrenIds[i] = expectedId;
+
+        if (_activeReleaseId == oldRelId) {
+          _activeReleaseId = expectedId;
+        }
+        if (proj.sections['active_release_id'] == oldRelId) {
+          proj.sections['active_release_id'] = expectedId;
+        }
+        if (_releaseBlueprint != null &&
+            _releaseBlueprint!.releaseDocId == oldRelId) {
+          _releaseBlueprint = ReleaseBlueprint(
+            releaseDocId: expectedId,
+            releaseTitle: movedDoc.title,
+            releaseVersionTag: expectedVer,
+            preset: _releaseBlueprint!.preset,
+            goal: _releaseBlueprint!.goal.replaceAll(
+              _minorVerRegex,
+              expectedVer,
+            ),
+            doneWhen: _releaseBlueprint!.doneWhen.replaceAll(
+              _minorVerRegex,
+              expectedVer,
+            ),
+            questions: _releaseBlueprint!.questions,
+            beats: _releaseBlueprint!.beats,
+            explicitExclusions: _releaseBlueprint!.explicitExclusions,
+            lastAgentReply: _releaseBlueprint!.lastAgentReply,
+          );
+        }
+        for (final doc in documents.values) {
+          if (doc.parentId == oldRelId) {
+            doc.parentId = expectedId;
+            _persistDocument(doc);
+          }
+        }
+        anyChanged = true;
+      } else if (docChanged) {
+        if (_releaseBlueprint != null &&
+            _releaseBlueprint!.releaseDocId == oldRelId) {
+          _releaseBlueprint!.releaseVersionTag = expectedVer;
+          _releaseBlueprint!.releaseTitle = relDoc.title;
+        }
+        _persistDocument(relDoc);
+        anyChanged = true;
+      }
+    }
+
+    // 4. Remap any FeatureStateNode checkpoint releaseVersion tags and blueprint items
+    if (versionRemap.isNotEmpty) {
+      final projectBeatIds = <String>{
+        for (final relId in proj.childrenIds)
+          ...?documents[relId]?.childrenIds,
+      };
+      for (final doc in documents.values) {
+        if (doc.tier == TierType.feature &&
+            doc.parentId != null &&
+            projectBeatIds.contains(doc.parentId)) {
+          final states = FeatureStateNode.getStatesForDocument(doc);
+          bool featStatesChanged = false;
+          for (final s in states) {
+            final mappedVer = versionRemap[s.releaseVersion];
+            if (mappedVer != null) {
+              s.parameters['releaseVersion'] = mappedVer;
+              featStatesChanged = true;
+            }
+          }
+          if (featStatesChanged) {
+            FeatureStateNode.saveStatesToDocument(doc, states);
+            _persistDocument(doc);
+          }
+        }
+      }
+      if (_releaseBlueprint != null) {
+        for (final beat in _releaseBlueprint!.beats) {
+          for (final feat in beat.features) {
+            final mappedOrigin = versionRemap[feat.originVersion];
+            if (mappedOrigin != null) {
+              feat.originVersion = mappedOrigin;
+            }
+            feat.checkpoints = [
+              for (final cp in feat.checkpoints)
+                versionRemap.containsKey(cp.releaseVersion)
+                    ? ProposedCheckpointBlueprint(
+                        title: cp.title,
+                        playtestCriteria: cp.playtestCriteria,
+                        tasks: cp.tasks,
+                        coveredScope: cp.coveredScope,
+                        tuningParams: cp.tuningParams,
+                        edgeCases: cp.edgeCases,
+                        releaseVersion: versionRemap[cp.releaseVersion]!,
+                      )
+                    : cp,
+            ];
+          }
+        }
+      }
+    }
+
+    if (proj.childrenIds.isNotEmpty &&
+        (_activeReleaseId == null ||
+            !proj.childrenIds.contains(_activeReleaseId))) {
+      _activeReleaseId = proj.childrenIds.last;
+      anyChanged = true;
+    }
+
+    if (anyChanged || versionRemap.isNotEmpty) {
+      _persistDocument(proj);
+    }
   }
 
   ({int index, String id}) _allocateNextReleaseIdAndIndex(TierDocument proj) {
-    var nextIndex = _nextProgressiveMinorIndex();
-    String candidateId = proj.id == 'proj_main'
+    repackProjectReleasesSequentially(proj, pruneAllUnbuilt: true);
+    final nextIndex = proj.childrenIds.length + 1;
+    final candidateId = proj.id == 'proj_main'
         ? 'rel_v0_$nextIndex'
         : '${proj.id}_rel_v0_$nextIndex';
-    while (documents.containsKey(candidateId)) {
-      nextIndex++;
-      candidateId = proj.id == 'proj_main'
-          ? 'rel_v0_$nextIndex'
-          : '${proj.id}_rel_v0_$nextIndex';
-    }
     return (index: nextIndex, id: candidateId);
   }
 
-  /// Next progressive version tag (`v0.2`, `v0.3`, etc.) based on the highest built release version.
+  /// Next progressive version tag (`v0.2`, `v0.3`, etc.) based on the sequential count of built releases.
   String get nextProgressiveVersionLabel {
-    return 'v0.${_nextProgressiveMinorIndex(onlyBuilt: true)}';
+    final releases = projectReleases;
+    final builtCount = releases.where((r) => r.childrenIds.isNotEmpty).length;
+    final baseCount = builtCount > 0 ? builtCount : releases.length;
+    return 'v0.${baseCount + 1}';
   }
 
   /// Prepares the next Progressive Release (`v0.2`, `v0.3+`) blueprint in-memory while keeping
@@ -278,6 +471,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _preModalReleaseBlueprint = null;
     if (previousReleaseId != null && documents.containsKey(previousReleaseId)) {
       _activeReleaseId = previousReleaseId;
+    }
+    if (proj != null) {
+      repackProjectReleasesSequentially(
+        proj,
+        keepReleaseId: _activeReleaseId,
+      );
     }
     _currentPhase = previousPhase;
     _syncActiveProjectMetadata();
@@ -2356,6 +2555,7 @@ Return ONLY valid JSON:
   }) async {
     final proj = activeProject;
     if (proj == null) return;
+    repackProjectReleasesSequentially(proj, pruneAllUnbuilt: true);
     final releases = projectReleases;
     if (releases.isEmpty) return;
 
