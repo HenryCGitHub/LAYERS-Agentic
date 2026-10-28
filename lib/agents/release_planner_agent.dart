@@ -69,24 +69,38 @@ class ReleasePlannerAgent {
     final pillarsText = projectDoc.sections['design_pillars'] ?? '';
     final tradeOffsText = projectDoc.sections['trade_offs'] ?? '';
 
+    final String schemaPhaseHint =
+        releasePhase.isNotEmpty ? releasePhase : 'mvp';
+    final bool isPhaseLocked =
+        releaseDoc.sections['phaseLockedByUser'] == 'true' ||
+        releasePhase == ProductionPhase.verticalSlice.name ||
+        releasePhase == ProductionPhase.fullProduction.name;
+
     final String phaseInstruction;
     if (prototypePart == '1' && !isSubsequentRelease) {
       phaseInstruction =
           '- PHASE 1 SPLIT PROTOTYPE (PART 1 OF 2 — CONTROLS & PRIMARY MECHANICS): Only plan the first ${(coreLoopItems.length / 2).ceil()} Core Loop Beats in `v0.1` so the developer can prove primary controls and core mechanics first (the remaining Beats are reserved for `v0.2` Prototype Part 2).';
     } else if (prototypePart == '2' ||
         (releasePhase == ProductionPhase.prototype.name &&
-            isSubsequentRelease)) {
+            isSubsequentRelease &&
+            !isPhaseLocked)) {
       phaseInstruction =
           '- PHASE 1 SPLIT PROTOTYPE (PART 2 OF 2 — FULL CORE LOOP): Keep all existing `v0.1` Beats & Features `"lifecycle": "stable"` (0h, empty checkpoints) and add the remaining Stage 1 Core Loop Beats as `"lifecycle": "new"` so the complete greybox loop connects end-to-end.';
     } else if (isAgentReasoned ||
         (releasePhase == ProductionPhase.mvp.name &&
             targetMvpEpicIndex == null)) {
+      final phaseTargetDirective = releasePhase ==
+              ProductionPhase.verticalSlice.name
+          ? '  1. TARGET PHASE IS `"verticalSlice"` (GOLD STANDARD POLISH PASS): Set `"releasePhase": "verticalSlice"` and a descriptive `"releaseTitle"` (`"$versionTag: <Polish & Feel Focus>"`). Focus upgrades on visual/material polish, SFX/VFX & camera/hit-stop feel cues, HUD readability, and state/frame guards across the proven Core Loop Beats.'
+          : (releasePhase == ProductionPhase.fullProduction.name
+              ? '  1. TARGET PHASE IS `"fullProduction"` (CONTENT & BACKLOG EXPANSION): Set `"releasePhase": "fullProduction"` and a descriptive `"releaseTitle"` (`"$versionTag: <Content & Expansion Focus>"`). Scale content/encounter variety and promote deferred backlog systems while honoring active exclusions.'
+              : '  1. Choose `"releasePhase"` (`"mvp"`, `"verticalSlice"`, or `"fullProduction"`) and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete Release Focus>"`):\n'
+                  '     * Choose `"mvp"` while any Stage 1 Core Loop Beat is still missing functional mechanics or existing features still need functional depth/interaction to fulfill the Core Loop and Design Pillars.\n'
+                  '     * Choose `"verticalSlice"` once all Stage 1 Core Loop Beats are functionally playable end-to-end and the game is ready for a cohesive Polish Pass (final art/material swap, SFX/VFX, camera/hit-stop feel, HUD readability, and state/frame guards).\n'
+                  '     * Choose `"fullProduction"` once the Vertical Slice polish pass has already been verified and the focus shifts to scaling content/encounter variety and promoting deferred Out-of-Scope backlog systems.');
       phaseInstruction =
           '- AGENT-REASONED PROGRESSIVE RELEASE ($versionTag): You are the Lead Game Architect deciding what "${projectDoc.title}" needs next in $versionTag by evaluating the Existing Live Game Tree against the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n'
-          '  1. Choose `"releasePhase"` (`"mvp"`, `"verticalSlice"`, or `"fullProduction"`) and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete Release Focus>"`):\n'
-          '     * Choose `"mvp"` while any Stage 1 Core Loop Beat is still missing functional mechanics or existing features still need functional depth/interaction to fulfill the Core Loop and Design Pillars.\n'
-          '     * Choose `"verticalSlice"` once all Stage 1 Core Loop Beats are functionally playable end-to-end and the game is ready for a cohesive Polish Pass (final art/material swap, SFX/VFX, camera/hit-stop feel, HUD readability, and state/frame guards).\n'
-          '     * Choose `"fullProduction"` once the Vertical Slice polish pass has already been verified and the focus shifts to scaling content/encounter variety and promoting deferred Out-of-Scope backlog systems.\n'
+          '$phaseTargetDirective\n'
           '  2. Decide which existing Features need an `"upgrade"` vs. which remain `"stable"`, and what `"new"` Features to introduce across ANY of the Core Loop Beats—with zero artificial count limits: include whatever set of `"upgrade"` and `"new"` Features across whichever Beats are required to make $versionTag a complete, cohesive playable milestone.\n'
           '  3. DELTA-ONLY JSON OUTPUT (DO NOT REPEAT STABLE FEATURES): In `beats`, output ONLY the Beats and Features receiving active work in $versionTag (`"lifecycle": "upgrade"` or `"lifecycle": "new"`). Use the exact Beat `id` (e.g. `"beat_1"`) and Feature `id`/`title` from the Existing Live Game Tree when upgrading. Do NOT output untouched `"stable"` features in JSON—all omitted existing Beats and Features are automatically preserved as `STABLE ✓` (`0h`).\n'
           '  4. Strictly enforce the Project Exclusions: NEVER include or promote any feature that violates an Exclusion, even if it was previously queued or requested.';
@@ -209,7 +223,7 @@ $phaseInstruction
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
 {
-  "releasePhase": "mvp",
+  "releasePhase": "$schemaPhaseHint",
   "releaseTitle": "$versionTag: Concrete Release Focus",
   "builtSoFar": ["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"],
   "missingGaps": ["E01: No incoming enemy fire to dodge", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no boss room"],
@@ -597,23 +611,27 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     ];
     final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
     var effectivePreset = preset;
-    if (isAgentReasoned) {
+    if (isAgentReasoned && releaseDoc.sections['phaseLockedByUser'] != 'true') {
+      final currentDocPhase = releaseDoc.sections['phase'] ?? '';
       final rawPhase =
           (json['releasePhase'] ?? json['phase'] ?? '')
               .toString()
               .trim()
               .toLowerCase();
-      if (rawPhase.contains('vertical') ||
-          rawPhase.contains('slice') ||
-          rawPhase.contains('polish')) {
-        releaseDoc.sections['phase'] = ProductionPhase.verticalSlice.name;
-        releaseDoc.sections['releaseScope'] = ReleaseScope.verticalSlice.name;
-        effectivePreset = ReleaseScope.verticalSlice;
-      } else if (rawPhase.contains('full') || rawPhase.contains('production')) {
+      if (rawPhase.contains('full') || rawPhase.contains('production')) {
         releaseDoc.sections['phase'] = ProductionPhase.fullProduction.name;
         releaseDoc.sections['releaseScope'] = ReleaseScope.fullProduction.name;
         effectivePreset = ReleaseScope.fullProduction;
-      } else if (rawPhase.contains('mvp')) {
+      } else if ((rawPhase.contains('vertical') ||
+              rawPhase.contains('slice') ||
+              rawPhase.contains('polish')) &&
+          currentDocPhase != ProductionPhase.fullProduction.name) {
+        releaseDoc.sections['phase'] = ProductionPhase.verticalSlice.name;
+        releaseDoc.sections['releaseScope'] = ReleaseScope.verticalSlice.name;
+        effectivePreset = ReleaseScope.verticalSlice;
+      } else if (rawPhase.contains('mvp') &&
+          currentDocPhase != ProductionPhase.verticalSlice.name &&
+          currentDocPhase != ProductionPhase.fullProduction.name) {
         releaseDoc.sections['phase'] = ProductionPhase.mvp.name;
         releaseDoc.sections['releaseScope'] = ReleaseScope.mvp.name;
         effectivePreset = ReleaseScope.mvp;

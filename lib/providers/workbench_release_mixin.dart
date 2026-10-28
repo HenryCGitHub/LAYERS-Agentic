@@ -233,6 +233,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     relDoc.sections['phase'] = targetPhase.name;
     relDoc.sections['releaseScope'] = targetScope.name;
     relDoc.sections['agentReasoned'] = 'true';
+    relDoc.sections['phaseLockedByUser'] = 'true';
     if (targetPhase == ProductionPhase.fullProduction) {
       final existingFullProdCount = projectReleases
           .where(

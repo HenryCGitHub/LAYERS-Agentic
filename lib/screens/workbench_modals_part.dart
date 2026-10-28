@@ -1992,129 +1992,212 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  void _showSavedReleasePlanDialog(BuildContext context, TierDocument rel) {
-    final verTag = widget.workbench.releaseVersionTagFor(rel);
-    final displayName = widget.workbench.releaseDisplayName(rel);
-    final phaseBadge = widget.workbench.releasePhaseShortBadge(rel);
-    final savedBp = widget.workbench.releaseBlueprintFor(rel.id);
-
-    final goalText = (savedBp != null && savedBp.goal.trim().isNotEmpty)
-        ? savedBp.goal.trim()
-        : (rel.sections['scope']
-                ?.split('\n')
-                .first
-                .replaceFirst(RegExp(r'^Goal:\s*', caseSensitive: false), '')
-                .trim() ??
-            'Build and playtest $displayName.');
-    final doneWhenText = (savedBp != null && savedBp.doneWhen.trim().isNotEmpty)
-        ? savedBp.doneWhen.trim()
-        : 'All $verTag features pass playtest verification.';
-
-    final builtChips = <String>[
-      if (savedBp != null)
-        for (final item in savedBp.builtSoFar)
-          if (item.trim().isNotEmpty) item.trim(),
-    ];
-    final lackingChips = <String>[
-      if (savedBp != null)
-        for (final g in savedBp.missingGaps)
-          if (g.trim().isNotEmpty) g.trim(),
-    ];
-
-    final scopeRows = <({String epicBadge, String title, String goal, String badge})>[];
-    if (savedBp != null) {
-      for (int bIdx = 0; bIdx < savedBp.beats.length; bIdx++) {
-        final b = savedBp.beats[bIdx];
-        final eBadge = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
-        for (final f in b.features) {
-          if (!f.included || f.lifecycle == FeatureLifecycleStatus.stable) {
-            continue;
-          }
-          scopeRows.add((
-            epicBadge: eBadge,
-            title: _formatOutlineFeatureDisplayTitle(
-              f.title,
-              b.title,
-              beatIndex: bIdx,
-            ),
-            goal: f.goal.trim(),
-            badge: f.lifecycle == FeatureLifecycleStatus.newFeature
-                ? '+ NEW · +${f.activeDeltaHours}h'
-                : '↻ UPGRADE · +${f.activeDeltaHours}h',
-          ));
-        }
-      }
-    }
-    if (scopeRows.isEmpty) {
-      final beats = widget.workbench.activeReleaseBeats;
-      for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-        final b = beats[bIdx];
-        final eBadge = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
-        for (final f in widget.workbench.featuresForBeat(b.id)) {
-          final states = FeatureStateNode.getStatesForDocument(f);
-          final inVer = states.any(
-            (s) => s.releaseVersion.toLowerCase() == verTag.toLowerCase(),
-          );
-          if (!inVer && verTag != 'v0.1') continue;
-          scopeRows.add((
-            epicBadge: eBadge,
-            title: _formatOutlineFeatureDisplayTitle(
-              f.title,
-              b.title,
-              beatIndex: bIdx,
-            ),
-            goal: (f.sections['scope'] ?? '')
-                .split('\n')
-                .first
-                .replaceFirst(RegExp(r'^Goal:\s*', caseSensitive: false), '')
-                .trim(),
-            badge: (f.sections['originVersion'] ?? 'v0.1') == verTag
-                ? '+ NEW'
-                : '↻ UPGRADE',
-          ));
-        }
-      }
-    }
+  void _showSavedReleasePlanDialog(BuildContext context, TierDocument initialRel) {
+    final allReleases = widget.workbench.projectReleases;
+    final builtReleases =
+        allReleases.where((r) => r.childrenIds.isNotEmpty).toList();
+    final selectableReleases =
+        builtReleases.isNotEmpty ? builtReleases : allReleases;
+    TierDocument selectedRel = initialRel;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: bgSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: borderBright),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: bgRecessed,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: borderSubtle),
-              ),
-              child: Text(
-                '$phaseBadge · $verTag',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  color: accentCyan,
-                ),
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final rel = selectedRel;
+          final verTag = widget.workbench.releaseVersionTagFor(rel);
+          final displayName = widget.workbench.releaseDisplayName(rel);
+          final phaseBadge = widget.workbench.releasePhaseShortBadge(rel);
+          final savedBp = widget.workbench.releaseBlueprintFor(rel.id);
+
+          final goalText = (savedBp != null && savedBp.goal.trim().isNotEmpty)
+              ? savedBp.goal.trim()
+              : (rel.sections['scope']
+                      ?.split('\n')
+                      .first
+                      .replaceFirst(
+                        RegExp(r'^Goal:\s*', caseSensitive: false),
+                        '',
+                      )
+                      .trim() ??
+                  'Build and playtest $displayName.');
+          final doneWhenText =
+              (savedBp != null && savedBp.doneWhen.trim().isNotEmpty)
+                  ? savedBp.doneWhen.trim()
+                  : 'All $verTag features pass playtest verification.';
+
+          final builtChips = <String>[
+            if (savedBp != null)
+              for (final item in savedBp.builtSoFar)
+                if (item.trim().isNotEmpty) item.trim(),
+          ];
+          final lackingChips = <String>[
+            if (savedBp != null)
+              for (final g in savedBp.missingGaps)
+                if (g.trim().isNotEmpty) g.trim(),
+          ];
+
+          final scopeRows =
+              <({String epicBadge, String title, String goal, String badge})>[];
+          if (savedBp != null) {
+            for (int bIdx = 0; bIdx < savedBp.beats.length; bIdx++) {
+              final b = savedBp.beats[bIdx];
+              final eBadge = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+              for (final f in b.features) {
+                if (!f.included ||
+                    f.lifecycle == FeatureLifecycleStatus.stable) {
+                  continue;
+                }
+                scopeRows.add((
+                  epicBadge: eBadge,
+                  title: _formatOutlineFeatureDisplayTitle(
+                    f.title,
+                    b.title,
+                    beatIndex: bIdx,
+                  ),
+                  goal: f.goal.trim(),
+                  badge: f.lifecycle == FeatureLifecycleStatus.newFeature
+                      ? '+ NEW · +${f.activeDeltaHours}h'
+                      : '↻ UPGRADE · +${f.activeDeltaHours}h',
+                ));
+              }
+            }
+          }
+          if (scopeRows.isEmpty) {
+            final beats = widget.workbench.activeReleaseBeats;
+            for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+              final b = beats[bIdx];
+              final eBadge = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+              for (final f in widget.workbench.featuresForBeat(b.id)) {
+                final states = FeatureStateNode.getStatesForDocument(f);
+                final inVer = states.any(
+                  (s) =>
+                      s.releaseVersion.toLowerCase() == verTag.toLowerCase(),
+                );
+                if (!inVer && verTag != 'v0.1') continue;
+                scopeRows.add((
+                  epicBadge: eBadge,
+                  title: _formatOutlineFeatureDisplayTitle(
+                    f.title,
+                    b.title,
+                    beatIndex: bIdx,
+                  ),
+                  goal: (f.sections['scope'] ?? '')
+                      .split('\n')
+                      .first
+                      .replaceFirst(
+                        RegExp(r'^Goal:\s*', caseSensitive: false),
+                        '',
+                      )
+                      .trim(),
+                  badge: (f.sections['originVersion'] ?? 'v0.1') == verTag
+                      ? '+ NEW'
+                      : '↻ UPGRADE',
+                ));
+              }
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: bgSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: borderBright),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '$verTag Release Plan — $displayName',
-                style: GoogleFonts.inter(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: textPrimary,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: bgRecessed,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: borderSubtle),
+                      ),
+                      child: Text(
+                        '$phaseBadge · $verTag',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: accentCyan,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '$verTag Release Plan — $displayName',
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+                if (selectableReleases.length > 1) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final r in selectableReleases)
+                        Builder(
+                          builder: (context) {
+                            final rVer =
+                                widget.workbench.releaseVersionTagFor(r);
+                            final rPhase =
+                                widget.workbench.releasePhaseShortBadge(r);
+                            final isSel = r.id == rel.id;
+                            return InkWell(
+                              key: ValueKey('saved_plan_tab_${r.id}'),
+                              borderRadius: BorderRadius.circular(5),
+                              onTap: () {
+                                setModalState(() {
+                                  selectedRel = r;
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSel
+                                      ? accentCyan.withValues(alpha: 0.14)
+                                      : bgRecessed,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: isSel
+                                        ? accentCyan.withValues(alpha: 0.55)
+                                        : borderSubtle,
+                                  ),
+                                ),
+                                child: Text(
+                                  '$rVer · $rPhase',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: isSel
+                                        ? FontWeight.w800
+                                        : FontWeight.w600,
+                                    color: isSel ? accentCyan : textSecondary,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680, maxHeight: 540),
           child: SingleChildScrollView(
@@ -2307,7 +2390,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
             ),
           ),
         ],
-      ),
-    );
+      );
+    },
+  ),
+);
   }
 }

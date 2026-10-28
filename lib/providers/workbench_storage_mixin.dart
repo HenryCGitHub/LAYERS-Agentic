@@ -233,6 +233,45 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     notifyListeners();
   }
 
+  String _remapSerializedReleaseBlueprintJson(
+    String rawJson,
+    String Function(String id) remapId,
+  ) {
+    if (rawJson.trim().isEmpty) return rawJson;
+    try {
+      final bpMap = Map<String, dynamic>.from(jsonDecode(rawJson) as Map);
+      final oldRelDocId = bpMap['releaseDocId']?.toString();
+      if (oldRelDocId != null && oldRelDocId.isNotEmpty) {
+        bpMap['releaseDocId'] = remapId(oldRelDocId);
+      }
+      final rawBeats = bpMap['beats'];
+      if (rawBeats is List) {
+        for (final bItem in rawBeats) {
+          if (bItem is Map) {
+            final bId = bItem['id']?.toString();
+            if (bId != null && bId.isNotEmpty) {
+              bItem['id'] = remapId(bId);
+            }
+            final rawFeats = bItem['features'];
+            if (rawFeats is List) {
+              for (final fItem in rawFeats) {
+                if (fItem is Map) {
+                  final fId = fItem['id']?.toString();
+                  if (fId != null && fId.isNotEmpty) {
+                    fItem['id'] = remapId(fId);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return jsonEncode(bpMap);
+    } catch (_) {
+      return rawJson;
+    }
+  }
+
   /// Deep-clones an existing project across all 4 tiers (Project -> Release -> Beat -> Feature)
   /// including all Checkpoints and How-To Sub-Steps, persists to LocalStorage & Firestore, and switches to the copy.
   String? duplicateProject(String projectId) {
@@ -256,6 +295,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
     final newReleaseIds = <String>[];
     String? mappedActiveReleaseId;
+    final mappedRelIds = <String, String>{};
     final mappedBeatIds = <String, String>{};
     final mappedFeatIds = <String, String>{};
 
@@ -264,6 +304,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       final oldRel = documents[oldRelId];
       if (oldRel == null) continue;
       final newRelId = '${newId}_rel_${rIdx + 1}';
+      mappedRelIds[oldRelId] = newRelId;
       if (copiedSections['active_release_id'] == oldRelId) {
         mappedActiveReleaseId = newRelId;
       }
@@ -350,6 +391,25 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       );
       documents[newSupId] = clonedSup;
       _persistDocument(clonedSup);
+    }
+
+    String remapClonedId(String id) =>
+        mappedRelIds[id] ?? mappedBeatIds[id] ?? mappedFeatIds[id] ?? id;
+
+    for (final newRelId in newReleaseIds) {
+      final relDoc = documents[newRelId];
+      if (relDoc == null) continue;
+      final rawRelBp = relDoc.sections['release_blueprint_json'];
+      if (rawRelBp != null && rawRelBp.isNotEmpty) {
+        relDoc.sections['release_blueprint_json'] =
+            _remapSerializedReleaseBlueprintJson(rawRelBp, remapClonedId);
+        _persistDocument(relDoc);
+      }
+    }
+    final rawProjRelBp = copiedSections['release_blueprint_json'];
+    if (rawProjRelBp != null && rawProjRelBp.isNotEmpty) {
+      copiedSections['release_blueprint_json'] =
+          _remapSerializedReleaseBlueprintJson(rawProjRelBp, remapClonedId);
     }
 
     if (newReleaseIds.isNotEmpty) {
@@ -492,14 +552,14 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         if (d.tier == TierType.project) {
           if (hasCollision && !importedTitle.endsWith(' (Imported)')) {
             importedTitle = '$importedTitle (Imported)';
-            final rawConcept = newSections['concept_draft_json'];
+            final rawConcept = newSections['concept_blueprint_json'];
             if (rawConcept != null && rawConcept.isNotEmpty) {
               try {
                 final cMap = Map<String, dynamic>.from(
                   jsonDecode(rawConcept) as Map,
                 );
                 cMap['title'] = importedTitle;
-                newSections['concept_draft_json'] = jsonEncode(cMap);
+                newSections['concept_blueprint_json'] = jsonEncode(cMap);
               } catch (_) {}
             }
           }
@@ -515,36 +575,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           if (oldSelFeat != null && idMap.containsKey(oldSelFeat)) {
             newSections['selected_feature_id'] = idMap[oldSelFeat]!;
           }
+        }
+        if (d.tier == TierType.project || d.tier == TierType.release) {
           final rawRelBp = newSections['release_blueprint_json'];
           if (rawRelBp != null && rawRelBp.isNotEmpty) {
-            try {
-              final bpMap = Map<String, dynamic>.from(
-                jsonDecode(rawRelBp) as Map,
-              );
-              final oldRelDocId = bpMap['releaseDocId']?.toString();
-              if (oldRelDocId != null) {
-                bpMap['releaseDocId'] = remapId(oldRelDocId);
-              }
-              final rawBeats = bpMap['beats'];
-              if (rawBeats is List) {
-                for (final bItem in rawBeats) {
-                  if (bItem is Map) {
-                    final bId = bItem['id']?.toString();
-                    if (bId != null) bItem['id'] = remapId(bId);
-                    final rawFeats = bItem['features'];
-                    if (rawFeats is List) {
-                      for (final fItem in rawFeats) {
-                        if (fItem is Map) {
-                          final fId = fItem['id']?.toString();
-                          if (fId != null) fItem['id'] = remapId(fId);
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              newSections['release_blueprint_json'] = jsonEncode(bpMap);
-            } catch (_) {}
+            newSections['release_blueprint_json'] =
+                _remapSerializedReleaseBlueprintJson(rawRelBp, remapId);
           }
         }
 
