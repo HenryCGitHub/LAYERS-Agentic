@@ -577,150 +577,209 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           ),
           for (final arch in archivedFeats)
             _buildFeatureRailItem(arch, activeVer: activeVer),
-        ] else
-          for (int bIdx = 0; bIdx < beats.length; bIdx++) ...[
-            Builder(
-              builder: (context) {
-                final beat = beats[bIdx];
-                final beatFeats = widget.workbench.featuresForBeat(beat.id);
-                final doneBeatCount = beatFeats
-                    .where((f) => widget.workbench.getDocumentProgress(f.id) >= 100)
-                    .length;
-                final allBeatDone = beatFeats.isNotEmpty && doneBeatCount == beatFeats.length;
-                final isBeatActive = beatFeats.any(
-                  (f) => f.id == widget.workbench.selectedFeatureId,
-                );
+        ] else ...[
+          Builder(
+            builder: (context) {
+              final releaseHasActiveFeats = beats.any(
+                (b) => widget.workbench.featuresForBeat(b.id).any(
+                      (f) =>
+                          f.sections['lifecycle'] !=
+                          FeatureLifecycleStatus.stable.name,
+                    ),
+              );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int bIdx = 0; bIdx < beats.length; bIdx++)
+                    Builder(
+                      builder: (context) {
+                        final beat = beats[bIdx];
+                        final allBeatFeats =
+                            widget.workbench.featuresForBeat(beat.id);
+                        final beatFeats = releaseHasActiveFeats
+                            ? allBeatFeats
+                                .where(
+                                  (f) =>
+                                      f.sections['lifecycle'] !=
+                                      FeatureLifecycleStatus.stable.name,
+                                )
+                                .toList()
+                            : allBeatFeats;
+                        if (beatFeats.isEmpty &&
+                            _activeStage2InlineEditKey !=
+                                'add_feat_${beat.id}') {
+                          return const SizedBox.shrink();
+                        }
+                        final doneBeatCount = beatFeats
+                            .where(
+                              (f) =>
+                                  widget.workbench.getDocumentProgress(f.id) >=
+                                  100,
+                            )
+                            .length;
+                        final allBeatDone = beatFeats.isNotEmpty &&
+                            doneBeatCount == beatFeats.length;
+                        final isBeatActive = beatFeats.any(
+                          (f) => f.id == widget.workbench.selectedFeatureId,
+                        );
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: InkWell(
-                        key: ValueKey('rail_beat_${beat.id}'),
-                        borderRadius: BorderRadius.circular(4),
-                        onTap: () {
-                          if (beatFeats.isEmpty) return;
-                          final targetFeat = beatFeats.firstWhere(
-                            (f) => widget.workbench.getDocumentProgress(f.id) < 100,
-                            orElse: () => beatFeats.first,
-                          );
-                          _rebuild(() {
-                            _manualCheckpointFocusIndex = null;
-                          });
-                          widget.workbench.selectFeature(targetFeat.id);
-                        },
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: Text(
-                                'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
-                                maxLines: 2,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.8,
-                                  height: 1.25,
-                                  color: allBeatDone
-                                      ? accentEmerald.withValues(alpha: 0.75)
-                                      : (isBeatActive ? textSecondary : textMuted),
-                                  decoration: allBeatDone
-                                      ? TextDecoration.lineThrough
-                                      : TextDecoration.none,
+                            Container(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                              child: InkWell(
+                                key: ValueKey('rail_beat_${beat.id}'),
+                                borderRadius: BorderRadius.circular(4),
+                                onTap: () {
+                                  if (beatFeats.isEmpty) return;
+                                  final targetFeat = beatFeats.firstWhere(
+                                    (f) =>
+                                        widget.workbench
+                                            .getDocumentProgress(f.id) <
+                                        100,
+                                    orElse: () => beatFeats.first,
+                                  );
+                                  _rebuild(() {
+                                    _manualCheckpointFocusIndex = null;
+                                  });
+                                  widget.workbench
+                                      .selectFeature(targetFeat.id);
+                                },
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
+                                        maxLines: 2,
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.8,
+                                          height: 1.25,
+                                          color: allBeatDone
+                                              ? accentEmerald.withValues(
+                                                  alpha: 0.75,
+                                                )
+                                              : (isBeatActive
+                                                  ? textSecondary
+                                                  : textMuted),
+                                          decoration: allBeatDone
+                                              ? TextDecoration.lineThrough
+                                              : TextDecoration.none,
+                                        ),
+                                      ),
+                                    ),
+                                    if (beatFeats.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '$doneBeatCount/${beatFeats.length}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: allBeatDone
+                                              ? accentEmerald
+                                              : textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(width: 6),
+                                    InkWell(
+                                      key: ValueKey(
+                                        'rail_add_feat_to_beat_${beat.id}',
+                                      ),
+                                      onTap: () => _startStage2InlineEdit(
+                                        'add_feat_${beat.id}',
+                                        '',
+                                      ),
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 3,
+                                          vertical: 1,
+                                        ),
+                                        child: Text(
+                                          '+',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: accentCyan,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                              if (beatFeats.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                Builder(
-                                  builder: (context) {
-                                    final allBeatStable = beatFeats.every(
-                                      (f) => f.sections['lifecycle'] == 'stable',
-                                    );
-                                    return Text(
-                                      allBeatStable
-                                          ? 'STABLE ✓'
-                                          : '$doneBeatCount/${beatFeats.length}',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: allBeatDone || allBeatStable
-                                            ? accentEmerald
-                                            : textMuted,
-                                      ),
+                            if (_activeStage2InlineEditKey ==
+                                'add_feat_${beat.id}')
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(14, 2, 14, 6),
+                                child: _buildStage2InlineEditor(
+                                  editKey: 'add_feat_${beat.id}',
+                                  inputKey: const ValueKey(
+                                    'workbench_add_live_feature_input',
+                                  ),
+                                  saveBtnKey: const ValueKey(
+                                    'confirm_workbench_add_live_feature_btn',
+                                  ),
+                                  hintText:
+                                      'New feature (e.g. Shield Parry)...',
+                                  onSave: (val) {
+                                    _rebuild(() {
+                                      _manualCheckpointFocusIndex = null;
+                                    });
+                                    widget.workbench.addLiveFeatureToBeat(
+                                      beat.id,
+                                      val,
                                     );
                                   },
                                 ),
-                              ],
-                              const SizedBox(width: 6),
-                              InkWell(
-                                key: ValueKey('rail_add_feat_to_beat_${beat.id}'),
-                                onTap: () => _startStage2InlineEdit(
-                                  'add_feat_${beat.id}',
-                                  '',
-                                ),
-                                borderRadius: BorderRadius.circular(3),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 3,
-                                    vertical: 1,
-                                  ),
-                                  child: Text(
-                                    '+',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: accentCyan,
-                                    ),
-                                  ),
-                                ),
                               ),
-                            ],
-                        ),
-                      ),
+                            for (int fIdx = 0;
+                                fIdx < beatFeats.length;
+                                fIdx++)
+                              _buildFeatureRailItem(
+                                beatFeats[fIdx],
+                                activeVer: activeVer,
+                                beatTitle: beat.title,
+                                beatIndex: bIdx,
+                              ),
+                          ],
+                        );
+                      },
                     ),
-                    if (_activeStage2InlineEditKey == 'add_feat_${beat.id}')
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
-                        child: _buildStage2InlineEditor(
-                          editKey: 'add_feat_${beat.id}',
-                          inputKey: const ValueKey(
-                            'workbench_add_live_feature_input',
-                          ),
-                          saveBtnKey: const ValueKey(
-                            'confirm_workbench_add_live_feature_btn',
-                          ),
-                          hintText: 'New feature (e.g. Shield Parry)...',
-                          onSave: (val) {
-                            _rebuild(() {
-                              _manualCheckpointFocusIndex = null;
-                            });
-                            widget.workbench.addLiveFeatureToBeat(beat.id, val);
-                          },
-                        ),
-                      ),
-                    for (int fIdx = 0; fIdx < beatFeats.length; fIdx++)
-                      _buildFeatureRailItem(
-                        beatFeats[fIdx],
-                        activeVer: activeVer,
-                        beatTitle: beat.title,
-                        beatIndex: bIdx,
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
+                ],
+              );
+            },
+          ),
+        ],
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
           child: Builder(
             builder: (context) {
+              final releaseHasActiveFeats = beats.any(
+                (b) => widget.workbench.featuresForBeat(b.id).any(
+                      (f) =>
+                          f.sections['lifecycle'] !=
+                          FeatureLifecycleStatus.stable.name,
+                    ),
+              );
               int totalActiveFeats = 0;
               int verifiedFeats = 0;
               for (final b in beats) {
                 for (final f in widget.workbench.featuresForBeat(b.id)) {
+                  if (releaseHasActiveFeats &&
+                      f.sections['lifecycle'] ==
+                          FeatureLifecycleStatus.stable.name) {
+                    continue;
+                  }
                   totalActiveFeats++;
                   if (widget.workbench.getDocumentProgress(f.id) >= 100) {
                     verifiedFeats++;

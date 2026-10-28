@@ -53,10 +53,20 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
       _rebuild(() {
         _isProgressiveModalOpen = false;
         _addingFeatureToBeatId = null;
+        if (confirmed) {
+          _manualCheckpointFocusIndex = null;
+          _selectedTaskIndexByCheckpoint.clear();
+          _selectedSubStepIndexByTask.clear();
+        }
       });
     } else {
       _isProgressiveModalOpen = false;
       _addingFeatureToBeatId = null;
+      if (confirmed) {
+        _manualCheckpointFocusIndex = null;
+        _selectedTaskIndexByCheckpoint.clear();
+        _selectedSubStepIndexByTask.clear();
+      }
     }
 
     if (confirmed) {
@@ -68,7 +78,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
 
   Widget _buildProgressiveReleasePlannerCanvas(BuildContext context) {
     final bp = widget.workbench.releaseBlueprint;
-    final activeBeats = widget.workbench.activeReleaseBeats;
     final nextVer =
         bp?.releaseVersionTag ?? widget.workbench.nextProgressiveVersionLabel;
     final prevRelDoc = _progressivePrevReleaseId != null
@@ -78,59 +87,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         ? widget.workbench.releaseVersionTagFor(prevRelDoc)
         : 'v0.1';
 
-    final b1Title = activeBeats.isNotEmpty
-        ? _formatOutlineBeatDisplayTitle(activeBeats[0].title)
-        : 'Core Controls';
-    final b2Title = activeBeats.length > 1
-        ? _formatOutlineBeatDisplayTitle(activeBeats[1].title)
-        : b1Title;
-    final b3Title = activeBeats.length > 2
-        ? _formatOutlineBeatDisplayTitle(activeBeats[2].title)
-        : b2Title;
-
-    final aiDirectionPresets = <({
-      String label,
-      String badge,
-      String desc,
-      String prompt,
-    })>[
-      (
-        label: '⚡ Deepen $b1Title & Core Feel',
-        badge: '↻ UPGRADE FOCUS',
-        desc:
-            'Upgrade primary controls & core mechanics with deeper state transitions and game-feel polish while keeping later Epics STABLE ✓.',
-        prompt:
-            'Upgrade $b1Title in Beat 1 with deeper mechanics & responsiveness',
-      ),
-      (
-        label: '🎯 Expand $b2Title & Encounters',
-        badge: '+ NEW + ↻ UPGRADE',
-        desc:
-            'Keep core controls STABLE ✓, upgrade encounter pacing, and add a new reactive hazard or target variant.',
-        prompt:
-            'Add a new playable challenge mechanic to Beat 2 ($b2Title)',
-      ),
-      (
-        label: '📈 Promote Backlog & $b3Title',
-        badge: '+ PROMOTE BACKLOG',
-        desc:
-            'Promote deferred Out-of-Scope systems into playable $nextVer scope and expand run-to-run progression.',
-        prompt:
-            'Add progression & reward choices to Beat 3 ($b3Title)',
-      ),
-      (
-        label: '✨ Playtest Hardening & Balance Pass',
-        badge: '↻ HARDEN & TUNE',
-        desc:
-            'Harden every Epic\'s primary feature with stricter edge-case guards, HUD clarity, and tuning curves.',
-        prompt:
-            'Add visual/audio feedback cues and HUD polish across Beat 2 ($b2Title)',
-      ),
-    ];
-
     int upgradeCount = 0;
     int newCount = 0;
-    int stableCount = 0;
     if (bp != null) {
       for (final b in bp.beats) {
         for (final f in b.features) {
@@ -139,12 +97,21 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
           } else if (f.lifecycle == FeatureLifecycleStatus.newFeature &&
               f.included) {
             newCount++;
-          } else if (f.lifecycle == FeatureLifecycleStatus.stable) {
-            stableCount++;
           }
         }
       }
     }
+
+    final dynamicQuestion =
+        (bp != null && bp.questions.isNotEmpty) ? bp.questions.first : null;
+    final dynamicOptions = dynamicQuestion != null &&
+            dynamicQuestion.options.isNotEmpty
+        ? dynamicQuestion.options
+        : <String>[
+            '(Recommended) Keep Agent\'s Recommended $nextVer Scope',
+            'Focus $nextVer on Core Mechanic Depth & Game Feel',
+            'Promote 1 Deferred Backlog Feature into $nextVer',
+          ];
 
     Future<void> submitDirective(String promptText) async {
       final cleanPrompt = promptText.trim();
@@ -186,7 +153,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                         ),
                         const SizedBox(width: 7),
                         Text(
-                          'PROGRESSIVE RELEASE CO-PILOT · PLAN ${nextVer.toUpperCase()}',
+                          'PROGRESSIVE RELEASE CO-PILOT · ${nextVer.toUpperCase()}',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w800,
@@ -220,7 +187,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'What Should We Work On Next in $nextVer?',
+                      bp?.releaseTitle.isNotEmpty == true
+                          ? bp!.releaseTitle
+                          : 'Recommended Scope for $nextVer',
                       style: AppTheme.displayFont(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -243,7 +212,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                         border: Border.all(color: borderSubtle),
                       ),
                       child: Text(
-                        '${bp?.totalIncludedHours ?? 0}h delta · $upgradeCount Upgrade · $newCount New · $stableCount Stable',
+                        '${bp?.totalIncludedHours ?? 0}h in $nextVer · ${upgradeCount + newCount} Active Features',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
@@ -282,7 +251,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 confirmed: true,
                               ),
                       child: Text(
-                        'Build $nextVer in Workbench →',
+                        'Approve & Build $nextVer →',
                         style: GoogleFonts.inter(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w800,
@@ -330,7 +299,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               Expanded(
                                 child: Text(
                                   widget.workbench.agentProgressStep ??
-                                      '✦ Agent is analyzing your completed $prevVer tree and drafting $nextVer recommendations...',
+                                      '✦ Agent is analyzing your completed $prevVer build state and synthesizing $nextVer...',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
@@ -343,305 +312,245 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                         ),
                       ],
 
-                      // Section 1: 4 AI Strategic Focus Tracks
-                      Text(
-                        '✦ 1. CHOOSE NEXT-RELEASE FOCUS TRACK (AI RECOMMENDATIONS)',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.7,
-                          color: accentCyan,
+                      // Section 1: Proactive Agent Architectural Recommendation (gemini-4-argon)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: bgSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: accentCyan.withValues(alpha: 0.4),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Select a focus track below to automatically configure which $prevVer features to Upgrade (↻), which to keep Stable (✓), and what New mechanics (+) to introduce in $nextVer:',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          color: textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      LayoutBuilder(
-                        builder: (context, gridConstraints) {
-                          final isTwoCol = gridConstraints.maxWidth >= 620;
-                          final cardWidth = isTwoCol
-                              ? (gridConstraints.maxWidth - 12) / 2
-                              : gridConstraints.maxWidth;
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              for (int pIdx = 0;
-                                  pIdx < aiDirectionPresets.length;
-                                  pIdx++)
-                                SizedBox(
-                                  width: cardWidth,
-                                  child: Builder(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.psychology_rounded,
+                                  size: 16,
+                                  color: accentCyan,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '✦ AGENT ARCHITECTURAL RECOMMENDATION FOR ${nextVer.toUpperCase()} (GEMINI-4-ARGON)',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.6,
+                                      color: accentCyan,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              (bp?.lastAgentReply != null &&
+                                      bp!.lastAgentReply!.trim().isNotEmpty)
+                                  ? bp.lastAgentReply!.trim()
+                                  : 'Based on your completed $prevVer features and Stage 1 Design Pillars, $nextVer focuses on the active deliverables below.',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                height: 1.45,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimary,
+                              ),
+                            ),
+                            if (bp != null && bp.goal.trim().isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: bgRecessed,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: borderSubtle),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Goal: ${bp.goal.trim()}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                    if (bp.doneWhen.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Done When: ${bp.doneWhen.trim()}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: accentEmerald,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            Text(
+                              dynamicQuestion?.question ??
+                                  'AI-Synthesized Strategic Focus for $nextVer (Click an alternative to re-architect $nextVer):',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (int oIdx = 0;
+                                    oIdx < dynamicOptions.length;
+                                    oIdx++)
+                                  Builder(
                                     builder: (context) {
-                                      final preset = aiDirectionPresets[pIdx];
+                                      final opt = dynamicOptions[oIdx];
                                       final isSelected =
-                                          _selectedProgressiveTrackIndex ==
-                                              pIdx;
+                                          _selectedProgressiveTrackIndex == oIdx;
                                       return InkWell(
                                         key: ValueKey(
-                                          'progressive_preset_chip_$pIdx',
+                                          'progressive_preset_chip_$oIdx',
                                         ),
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(6),
                                         onTap: widget.workbench.isAgentBusy
                                             ? null
                                             : () async {
                                                 _rebuild(() {
                                                   _selectedProgressiveTrackIndex =
-                                                      pIdx;
+                                                      oIdx;
                                                 });
-                                                await widget.workbench
-                                                    .applyProgressiveFocusTrack(
-                                                  pIdx,
-                                                  agentDirective: preset.prompt,
-                                                );
-                                                if (mounted) _rebuild(() {});
+                                                if (oIdx > 0) {
+                                                  await submitDirective(
+                                                    'Re-architect $nextVer around this strategic option: $opt',
+                                                  );
+                                                }
                                               },
                                         child: Container(
-                                          padding: const EdgeInsets.all(14),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 7,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: isSelected
                                                 ? accentCyan.withValues(
-                                                    alpha: 0.08,
+                                                    alpha: 0.12,
                                                   )
-                                                : bgSurface,
+                                                : bgRecessed,
                                             borderRadius:
-                                                BorderRadius.circular(8),
+                                                BorderRadius.circular(6),
                                             border: Border.all(
                                               color: isSelected
                                                   ? accentCyan
                                                   : borderSubtle,
-                                              width: isSelected ? 1.5 : 1.0,
                                             ),
                                           ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  Flexible(
-                                                    child: Text(
-                                                      preset.label,
-                                                      style: GoogleFonts.inter(
-                                                        fontSize: 13,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: isSelected
-                                                            ? accentCyan
-                                                            : textPrimary,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 2,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: bgRecessed,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        4,
-                                                      ),
-                                                      border: Border.all(
-                                                        color: borderSubtle,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      preset.badge,
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        color: isSelected
-                                                            ? accentCyan
-                                                            : textSecondary,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                preset.desc,
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 11.5,
-                                                  height: 1.35,
-                                                  color: textSecondary,
-                                                ),
-                                              ),
-                                            ],
+                                          child: Text(
+                                            opt,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11.5,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                              color: isSelected
+                                                  ? accentCyan
+                                                  : textSecondary,
+                                            ),
                                           ),
                                         ),
                                       );
                                     },
                                   ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Custom Agent Co-Design Input Bar
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              key: const ValueKey(
-                                'progressive_release_prompt_input',
-                              ),
-                              controller: _progressiveDirectiveCtrl,
-                              style: GoogleFonts.inter(
-                                fontSize: 12.5,
-                                color: textPrimary,
-                              ),
-                              decoration: InputDecoration(
-                                hintText:
-                                    'Or tell the Agent what to focus on in $nextVer (e.g., "Keep $b1Title stable and add a boss wave to $b2Title")...',
-                                hintStyle: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: textMuted,
-                                ),
-                                filled: true,
-                                fillColor: bgSurface,
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 11,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                  borderSide: BorderSide(color: borderSubtle),
-                                ),
-                              ),
-                              onSubmitted: (val) async {
-                                if (val.trim().isEmpty) return;
-                                _progressiveDirectiveCtrl.clear();
-                                await submitDirective(val);
-                              },
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          OutlinedButton(
-                            key: const ValueKey(
-                              'progressive_release_ask_agent_btn',
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: accentCyan,
-                              backgroundColor: bgSurface,
-                              side: BorderSide(
-                                color: accentCyan.withValues(alpha: 0.5),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
-                              ),
-                            ),
-                            onPressed: widget.workbench.isAgentBusy
-                                ? null
-                                : () async {
-                                    final text =
-                                        _progressiveDirectiveCtrl.text.trim();
-                                    if (text.isEmpty) return;
-                                    _progressiveDirectiveCtrl.clear();
-                                    await submitDirective(text);
-                                  },
-                            child: Text(
-                              'Ask Agent ✦',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      if (bp != null && bp.explicitExclusions.isNotEmpty) ...[
-                        const SizedBox(height: 18),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: borderSubtle),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'PROMOTE FROM OUT-OF-SCOPE BACKLOG (${bp.explicitExclusions.length} AVAILABLE)',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.6,
-                                  color: accentAmber,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (int eIdx = 0;
-                                      eIdx < bp.explicitExclusions.length;
-                                      eIdx++)
-                                    InkWell(
-                                      key: ValueKey(
-                                        'promote_exclusion_chip_$eIdx',
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    key: const ValueKey(
+                                      'progressive_release_prompt_input',
+                                    ),
+                                    controller: _progressiveDirectiveCtrl,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: textPrimary,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Want to adjust the Agent\'s $nextVer recommendation? Tell the Agent what to swap or add...',
+                                      hintStyle: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        color: textMuted,
                                       ),
-                                      borderRadius: BorderRadius.circular(5),
-                                      onTap: () {
-                                        widget.workbench
-                                            .promoteExclusionToNextRelease(
-                                          bp.explicitExclusions[eIdx],
-                                        );
-                                        _rebuild(() {});
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 9,
-                                          vertical: 5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: bgRecessed,
-                                          borderRadius:
-                                              BorderRadius.circular(5),
-                                          border: Border.all(
-                                            color: accentAmber.withValues(
-                                              alpha: 0.45,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '+ Promote: ${bp.explicitExclusions[eIdx]}',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: accentAmber,
-                                          ),
-                                        ),
+                                      filled: true,
+                                      fillColor: bgRecessed,
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 11,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide:
+                                            BorderSide(color: borderSubtle),
                                       ),
                                     ),
-                                ],
-                              ),
-                            ],
-                          ),
+                                    onSubmitted: (val) async {
+                                      if (val.trim().isEmpty) return;
+                                      _progressiveDirectiveCtrl.clear();
+                                      await submitDirective(val);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  key: const ValueKey(
+                                    'progressive_release_ask_agent_btn',
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: accentCyan,
+                                    backgroundColor: bgRecessed,
+                                    side: BorderSide(
+                                      color: accentCyan.withValues(alpha: 0.5),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  onPressed: widget.workbench.isAgentBusy
+                                      ? null
+                                      : () async {
+                                          final text = _progressiveDirectiveCtrl
+                                              .text
+                                              .trim();
+                                          if (text.isEmpty) return;
+                                          _progressiveDirectiveCtrl.clear();
+                                          await submitDirective(text);
+                                        },
+                                  child: Text(
+                                    'Ask Agent ✦',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
 
                       if (bp != null) ...[
                         const SizedBox(height: 22),
@@ -650,7 +559,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                           children: [
                             Flexible(
                               child: Text(
-                                '✦ 2. EPIC-BY-EPIC LIVE TREE PICKER (CLICK TO TOGGLE ↻ UPGRADE / ✓ STABLE / + NEW)',
+                                '✦ RECOMMENDED ${nextVer.toUpperCase()} ACTIVE SCOPE (ONLY WHAT YOU WILL BUILD IN ${nextVer.toUpperCase()})',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.jetBrainsMono(
@@ -662,16 +571,12 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Flexible(
-                              child: Text(
-                                'Goal: ${bp.goal}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.right,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  color: textSecondary,
-                                ),
+                            Text(
+                              'Completed $prevVer features are hidden',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: accentEmerald,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
@@ -681,6 +586,17 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                           Builder(
                             builder: (context) {
                               final beat = bp.beats[bIdx];
+                              final activeFeatsInBeat = beat.features
+                                  .where(
+                                    (f) =>
+                                        f.lifecycle !=
+                                        FeatureLifecycleStatus.stable,
+                                  )
+                                  .toList();
+                              if (activeFeatsInBeat.isEmpty &&
+                                  _addingFeatureToBeatId != beat.id) {
+                                return const SizedBox.shrink();
+                              }
                               final beatTitle =
                                   _formatOutlineBeatDisplayTitle(beat.title);
                               return Container(
@@ -747,16 +663,11 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         Row(
                                           children: [
                                             Text(
-                                              beat.totalIncludedHours > 0
-                                                  ? '+${beat.totalIncludedHours}h in $nextVer'
-                                                  : 'STABLE ✓ (0h)',
+                                              '+${beat.totalIncludedHours}h in $nextVer',
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w700,
-                                                color:
-                                                    beat.totalIncludedHours > 0
-                                                        ? accentAmber
-                                                        : accentEmerald,
+                                                color: accentAmber,
                                               ),
                                             ),
                                             const SizedBox(width: 10),
@@ -898,7 +809,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                       ),
                                     ],
                                     const SizedBox(height: 8),
-                                    for (final feat in beat.features)
+                                    for (final feat in activeFeatsInBeat)
                                       Builder(
                                         builder: (context) {
                                           final isNew = feat.lifecycle ==
@@ -972,19 +883,14 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                 .add_box_rounded
                                                             : Icons
                                                                 .check_box_outline_blank_rounded)
-                                                        : (isUpgrade
-                                                            ? Icons
-                                                                .autorenew_rounded
-                                                            : Icons
-                                                                .check_circle_outline_rounded),
+                                                        : Icons
+                                                            .autorenew_rounded,
                                                     size: 16,
                                                     color: isNew
                                                         ? (feat.included
                                                             ? accentEmerald
                                                             : textMuted)
-                                                        : (isUpgrade
-                                                            ? accentAmber
-                                                            : accentEmerald),
+                                                        : accentAmber,
                                                   ),
                                                   const SizedBox(width: 8),
                                                   Expanded(
@@ -1013,9 +919,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                           Text(
                                                             isUpgrade
                                                                 ? 'Upgrade in $nextVer: ${feat.checkpoints.isNotEmpty ? feat.checkpoints.first.title : feat.goal.trim()}'
-                                                                : (isNew
-                                                                    ? 'New in $nextVer: ${feat.goal.trim()}'
-                                                                    : 'Verified in ${feat.originVersion} · Click to Upgrade in $nextVer'),
+                                                                : 'New in $nextVer: ${feat.goal.trim()}',
                                                             maxLines: 1,
                                                             overflow:
                                                                 TextOverflow
@@ -1051,9 +955,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                           ? (feat.included
                                                               ? '+ NEW · +${feat.activeDeltaHours}h'
                                                               : 'DEFERRED · 0h')
-                                                          : (isUpgrade
-                                                              ? '↻ UPGRADE · +${feat.activeDeltaHours}h'
-                                                              : '✓ STABLE · 0h'),
+                                                          : '↻ UPGRADE · +${feat.activeDeltaHours}h',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
                                                         fontSize: 9.5,
@@ -1063,9 +965,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                             ? (feat.included
                                                                 ? accentEmerald
                                                                 : textMuted)
-                                                            : (isUpgrade
-                                                                ? accentAmber
-                                                                : accentEmerald),
+                                                            : accentAmber,
                                                       ),
                                                     ),
                                                   ),
@@ -1079,6 +979,77 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 ),
                               );
                             },
+                          ),
+                        ],
+                        if (bp.explicitExclusions.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: bgSurface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: borderSubtle),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'DEFERRED BACKLOG (${bp.explicitExclusions.length}) — CLICK TO PROMOTE INTO ${nextVer.toUpperCase()}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (int eIdx = 0;
+                                        eIdx < bp.explicitExclusions.length;
+                                        eIdx++)
+                                      InkWell(
+                                        key: ValueKey(
+                                          'promote_exclusion_chip_$eIdx',
+                                        ),
+                                        borderRadius: BorderRadius.circular(5),
+                                        onTap: () {
+                                          widget.workbench
+                                              .promoteExclusionToNextRelease(
+                                            bp.explicitExclusions[eIdx],
+                                          );
+                                          _rebuild(() {});
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 9,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: bgRecessed,
+                                            borderRadius:
+                                                BorderRadius.circular(5),
+                                            border: Border.all(
+                                              color: accentAmber.withValues(
+                                                alpha: 0.45,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '+ Promote: ${bp.explicitExclusions[eIdx]}',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: accentAmber,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ],

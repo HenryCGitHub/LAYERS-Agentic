@@ -95,7 +95,7 @@ class ReleasePlannerAgent {
     final existingTreeSummary = StringBuffer();
     if (existingBeats.isNotEmpty) {
       existingTreeSummary
-          .writeln('Existing Live Game Tree (from prior release):');
+          .writeln('Existing Live Game Tree (completed in prior releases):');
       for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
         final b = existingBeats[bIdx];
         existingTreeSummary.writeln('- Beat "${b.title}" (${b.id}):');
@@ -103,8 +103,22 @@ class ReleasePlannerAgent {
         for (final f in feats) {
           final states = FeatureStateNode.getStatesForDocument(f);
           final originVer = f.sections['originVersion'] ?? 'v0.1';
+          final cpSummaries = <String>[];
+          final allTuning = <String>{};
+          final allFixesAndGuards = <String>{};
+          for (final s in states) {
+            final taskNames =
+                s.checklist.map((t) => t.text).take(4).join(', ');
+            cpSummaries.add('${s.releaseVersion} "${s.cleanStageTitle}" [$taskNames]');
+            allTuning.addAll(s.tuningParams);
+            for (final g in s.edgeCases) {
+              allFixesAndGuards.add(g);
+            }
+          }
           existingTreeSummary.writeln(
-            '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints verified]',
+            '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints verified: ${cpSummaries.join(' -> ')}]'
+            '${allTuning.isNotEmpty ? ' | Live Variables: ${allTuning.take(5).join(', ')}' : ''}'
+            '${allFixesAndGuards.isNotEmpty ? ' | Playtest Guards: ${allFixesAndGuards.take(3).join('; ')}' : ''}',
           );
         }
         final queuedDeferred =
@@ -139,6 +153,8 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
+- ARCHITECTURAL REASONING ("agentReasoning"): Think through what the developer has already verified in the Existing Live Game Tree versus the Stage 1 Design Pillars, Core Loop Beats, and Out-of-Scope Backlog. Write 2-3 concrete sentences in `"agentReasoning"` explaining what playable gap in "${projectDoc.title}" is highest priority right now and why you selected these specific $versionTag features/upgrades next.
+- BESPOKE GAME-SPECIFIC STRATEGIC OPTIONS ("questions"): In `questions[0]`, ask 1 architectural priority question for $versionTag with 3 concrete options tailored specifically to "${projectDoc.title}"'s actual mechanics (Option 1 prefixed with `(Recommended)` matching your primary plan; Options 2 and 3 offering distinct, game-specific alternative angles for $versionTag).
 - IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics and Features by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Enemies, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later in the loop.
 - Break each active Beat into the focused Playable Features (`"included": true`) needed for ${releaseDoc.title} to be genuinely playable on screen (do NOT generate pre-unchecked `"included": false` filler features).
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, and ensure the final Beat covers both the reward/upgrade payoff and continuing or resetting into the next run/route so the prototype loop never dead-ends.
@@ -153,14 +169,15 @@ $phaseInstruction
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
 {
+  "agentReasoning": "2-3 concrete sentences explaining what was proven in prior releases, what gap in ${projectDoc.title}'s loop or pillars matters most now, and why these $versionTag features are recommended next.",
   "goal": "Build... goal of ${releaseDoc.title}",
   "doneWhen": "Concrete playtest completion condition",
   "explicitExclusions": ["Excluded mechanic", "..."],
   "questions": [
     {
       "id": "rel_q_1",
-      "question": "Release priority question?",
-      "options": ["(Recommended) Title: 1-sentence description", "Title 2: ...", "Title 3: ..."]
+      "question": "How should we focus $versionTag for ${projectDoc.title}?",
+      "options": ["(Recommended) Specific Focus A: 1-sentence game-specific description", "Specific Focus B: ...", "Specific Focus C: ..."]
     }
   ],
   "beats": [
@@ -433,8 +450,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             final cpCriteria = (cMap['playtestCriteria'] ?? fDone)
                 .toString()
                 .trim();
-            final cpVer =
-                (cMap['releaseVersion'] ?? versionTag).toString().trim();
+            final cpVer = versionTag;
             final cpTasks = normalizeFoundationFirstTasks(
               toStrList(cMap['tasks']),
               featureTitle: fTitle,
@@ -511,6 +527,22 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             .toList()
         : fallbackExclusions;
 
+    final rawReasoning =
+        (json['agentReasoning'] ?? json['lastAgentReply'] ?? '')
+            .toString()
+            .trim();
+    final activeFeatureNames = <String>[
+      for (final b in beats)
+        for (final f in b.features)
+          if (f.included && f.lifecycle != FeatureLifecycleStatus.stable)
+            f.title,
+    ];
+    final effectiveReasoning = rawReasoning.isNotEmpty
+        ? rawReasoning
+        : (activeFeatureNames.isNotEmpty
+            ? 'Based on your verified build state and Stage 1 Design Pillars, $versionTag focuses on ${activeFeatureNames.take(3).join(', ')} so the next playable loop milestone connects cleanly.'
+            : 'Synthesized $versionTag release plan for ${releaseDoc.title}.');
+
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
       releaseTitle: releaseDoc.title,
@@ -521,6 +553,146 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       questions: questions,
       beats: beats,
       explicitExclusions: exclusions,
+      lastAgentReply: effectiveReasoning,
+    );
+  }
+
+  /// Builds an immediate, phase-accurate `ReleaseBlueprint` for `releaseDoc` (`v0.2+`)
+  /// from the existing Vault tree before the async `gemini-4-argon` HTTP call completes
+  /// (and as a safety net if the network request times out), ensuring `_releaseBlueprint`
+  /// never retains a stale prior release (`v0.4`) while planning `v0.5`.
+  static ReleaseBlueprint? buildImmediateProgressiveBaselineBlueprint({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    required List<TierDocument> existingBeats,
+    required Map<String, List<TierDocument>> existingFeaturesByBeat,
+    required Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex,
+  }) {
+    if (existingBeats.isEmpty) return null;
+    final preset = releaseDoc.releaseScope;
+    final versionTag = extractReleaseVersionTag(releaseDoc.title);
+    final releasePhase = releaseDoc.sections['phase'] ?? '';
+    final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
+    final mvpEpicMatch = _mvpEpicNumRegex.firstMatch(releaseDoc.title);
+    final int? targetMvpEpicIndex = rawTargetEpicIdx != null
+        ? int.tryParse(rawTargetEpicIdx)
+        : (mvpEpicMatch != null
+            ? (int.tryParse(mvpEpicMatch.group(1)!) ?? 1) - 1
+            : null);
+    final projectExclusions = SectionTextUtils.resolveExclusions(
+      projectDoc.sections,
+      splitSingleSentence: false,
+    );
+
+    final beats = <ProposedBeatBlueprint>[];
+    for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
+      final eb = existingBeats[bIdx];
+      final existingFeats =
+          existingFeaturesByBeat[eb.id] ?? const <TierDocument>[];
+      final isTargetEpic = targetMvpEpicIndex != null
+          ? bIdx == targetMvpEpicIndex
+          : (releasePhase == ProductionPhase.verticalSlice.name ||
+                  releasePhase == ProductionPhase.fullProduction.name
+              ? true
+              : bIdx == 0);
+
+      final proposedFeats = <ProposedFeatureBlueprint>[];
+      for (int fIdx = 0; fIdx < existingFeats.length; fIdx++) {
+        final ef = existingFeats[fIdx];
+        final shouldUpgrade = isTargetEpic &&
+            (targetMvpEpicIndex != null || fIdx == 0);
+        if (shouldUpgrade) {
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: ef.id,
+              title: ef.title,
+              goal:
+                  'Upgrade ${ef.title} for $versionTag (${releaseDoc.title}).',
+              doneWhen:
+                  'Playtester verifies the $versionTag ${ef.title} upgrade in the level.',
+              estimatedHours: 4,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.upgrade,
+              originVersion: ef.sections['originVersion'] ?? 'v0.1',
+              inScope: SectionTextUtils.resolveInScope(ef.sections),
+              outOfScope: const [],
+              tuningParams: const ['responseMultiplier: 1.25x'],
+              edgeCases: const ['[STATE GUARD] Verify clean transition in playtest'],
+              checkpoints: [
+                ProposedCheckpointBlueprint(
+                  title: '${ef.title} ($versionTag Upgrade)',
+                  playtestCriteria:
+                      'Trigger ${ef.title} -> verify $versionTag upgrade behavior',
+                  releaseVersion: versionTag,
+                  tasks: const [
+                    'Actor Setup (2h)',
+                    'State Logic (1h)',
+                    'State Guard (1h)',
+                  ],
+                ),
+              ],
+            ),
+          );
+        } else {
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: ef.id,
+              title: ef.title,
+              goal: SectionTextUtils.resolveGoal(ef.sections),
+              doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
+              estimatedHours: 0,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.stable,
+              originVersion: ef.sections['originVersion'] ?? 'v0.1',
+              inScope: SectionTextUtils.resolveInScope(ef.sections),
+              outOfScope: const [],
+              tuningParams: const [],
+              edgeCases: const [],
+              checkpoints: const [],
+            ),
+          );
+        }
+      }
+
+      final deferredList = deferredByBeatIndex[bIdx];
+      if (deferredList != null) {
+        for (final defFeat in deferredList) {
+          defFeat.included = true;
+          defFeat.lifecycle = FeatureLifecycleStatus.newFeature;
+          defFeat.originVersion = versionTag;
+          proposedFeats.add(defFeat);
+        }
+      }
+
+      beats.add(
+        ProposedBeatBlueprint(
+          id: eb.id,
+          title: eb.title,
+          goal: SectionTextUtils.resolveGoal(eb.sections),
+          doneWhen: SectionTextUtils.resolveDoneWhen(eb.sections),
+          features: proposedFeats,
+        ),
+      );
+    }
+
+    final relGoal = SectionTextUtils.resolveGoal(releaseDoc.sections);
+    final relDone = SectionTextUtils.resolveDoneWhen(releaseDoc.sections);
+    return ReleaseBlueprint(
+      releaseDocId: releaseDoc.id,
+      releaseTitle: releaseDoc.title,
+      releaseVersionTag: versionTag,
+      preset: preset,
+      goal: relGoal.isNotEmpty
+          ? relGoal
+          : 'Build and verify $versionTag (${releaseDoc.title}).',
+      doneWhen: relDone.isNotEmpty
+          ? relDone
+          : 'All $versionTag active features pass playtest verification.',
+      questions: const [],
+      beats: beats,
+      explicitExclusions: projectExclusions,
+      lastAgentReply:
+          'Analyzing your completed release tree, tuning variables, and Stage 1 Design Pillars to recommend the highest-impact $versionTag scope...',
     );
   }
 
@@ -1072,22 +1244,51 @@ class ReleaseExecutorAgent {
         final stateNodes = <FeatureStateNode>[
           ...existingStates,
         ];
-        final existingCpTitles = existingStates
+        final existingSameVerCpTitles = existingStates
+            .where((s) => s.releaseVersion == versionTag)
             .map((s) => s.cleanStageTitle.toLowerCase().trim())
             .toSet();
 
-        for (int cIdx = 0; cIdx < featBp.checkpoints.length; cIdx++) {
-          final cpBp = featBp.checkpoints[cIdx];
-          if (existingCpTitles.contains(cpBp.title.toLowerCase().trim())) {
+        final effectiveCheckpoints = featBp.checkpoints.isNotEmpty
+            ? featBp.checkpoints
+            : <ProposedCheckpointBlueprint>[
+                ProposedCheckpointBlueprint(
+                  title: '$concreteFeatTitle ($versionTag)',
+                  playtestCriteria: featBp.doneWhen.isNotEmpty
+                      ? featBp.doneWhen
+                      : 'Trigger $concreteFeatTitle -> verify $versionTag behavior in playtest',
+                  releaseVersion: versionTag,
+                  tasks: const [
+                    'Actor Setup (2h)',
+                    'State Logic (1h)',
+                    'State Guard (1h)',
+                  ],
+                  coveredScope: featBp.inScope,
+                  tuningParams: featBp.tuningParams,
+                  edgeCases: featBp.edgeCases,
+                ),
+              ];
+
+        for (int cIdx = 0; cIdx < effectiveCheckpoints.length; cIdx++) {
+          final cpBp = effectiveCheckpoints[cIdx];
+          if (existingSameVerCpTitles
+              .contains(cpBp.title.toLowerCase().trim())) {
             continue;
           }
           final nextOrder = stateNodes.length;
           final cpNumber = nextOrder + 1;
+          final effectiveTasks = cpBp.tasks.isNotEmpty
+              ? cpBp.tasks
+              : const [
+                  'Actor Setup (2h)',
+                  'State Logic (1h)',
+                  'State Guard (1h)',
+                ];
           final checklist = <Subtask>[
-            for (int tIdx = 0; tIdx < cpBp.tasks.length; tIdx++)
+            for (int tIdx = 0; tIdx < effectiveTasks.length; tIdx++)
               Subtask(
                 id: '${featId}_${versionTag}_cp${cpNumber}_t${tIdx + 1}',
-                text: cpBp.tasks[tIdx],
+                text: effectiveTasks[tIdx],
                 completed: false,
               ),
           ];
@@ -1103,9 +1304,7 @@ class ReleaseExecutorAgent {
               tuningParams: List<String>.from(cpBp.tuningParams),
               edgeCases: List<String>.from(cpBp.edgeCases),
               parameters: {
-                'releaseVersion': cpBp.releaseVersion.isNotEmpty
-                    ? cpBp.releaseVersion
-                    : versionTag,
+                'releaseVersion': versionTag,
               },
             ),
           );

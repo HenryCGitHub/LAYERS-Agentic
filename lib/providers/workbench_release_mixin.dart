@@ -298,6 +298,22 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (relDoc == null) return;
     _syncCurrentPhaseFromRelease(relDoc);
 
+    // Immediately replace any prior release's blueprint with a clean baseline for targetRelId
+    // so the Progressive Release Interface never displays stale v0.4 headers/features while v0.5 is drafting.
+    if (!isFirstPrototypeRelease && existingBeats.isNotEmpty) {
+      final baselineBp =
+          ReleasePlannerAgent.buildImmediateProgressiveBaselineBlueprint(
+        projectDoc: proj,
+        releaseDoc: relDoc,
+        existingBeats: existingBeats,
+        existingFeaturesByBeat: existingFeaturesByBeat,
+        deferredByBeatIndex: deferredByBeatIndex,
+      );
+      if (baselineBp != null) {
+        _releaseBlueprint = baselineBp;
+      }
+    }
+
     _isAgentBusy = true;
     _agentProgressStep =
         'Drafting Release Blueprint for ${relDoc.title} ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
@@ -529,144 +545,6 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       shortTitle.isNotEmpty ? shortTitle : cleanEx,
       customGoal: 'Promote "$shortTitle" into playable ${bp.releaseVersionTag} scope.',
     );
-  }
-
-  /// Applies one of the 4 AI Focus Tracks to the Progressive Release draft (`_releaseBlueprint`).
-  Future<void> applyProgressiveFocusTrack(
-    int trackIndex, {
-    String? agentDirective,
-  }) async {
-    final bp = _releaseBlueprint;
-    if (bp == null || bp.beats.isEmpty) return;
-    final verTag = bp.releaseVersionTag;
-
-    void ensureUpgradeState(ProposedFeatureBlueprint f, String suffix) {
-      f.lifecycle = FeatureLifecycleStatus.upgrade;
-      f.included = true;
-      if (f.estimatedHours <= 0) f.estimatedHours = 4;
-      if (f.checkpoints.isEmpty) {
-        f.checkpoints = [
-          ProposedCheckpointBlueprint(
-            title: '${f.title} $suffix',
-            playtestCriteria: 'Verify ${f.title} $suffix in playtest',
-            tasks: const [
-              'Component & State Upgrade (2h)',
-              'Logic & Feel Extension (1h)',
-              'State & Bounds Guard (1h)',
-            ],
-            coveredScope: f.inScope.isNotEmpty
-                ? List<String>.from(f.inScope)
-                : ['${f.title} $suffix'],
-            tuningParams: List<String>.from(f.tuningParams),
-            edgeCases: List<String>.from(f.edgeCases),
-            releaseVersion: verTag,
-          ),
-        ];
-      }
-    }
-
-    if (trackIndex == 0) {
-      // Track 0: Deepen Core Mechanics & Game Feel (Upgrade E01 & E02 primary features, keep later Epics stable)
-      bp.goal =
-          'Deepen core player mechanics, movement responsiveness, and action feel for $verTag.';
-      for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
-        final beat = bp.beats[bIdx];
-        for (int fIdx = 0; fIdx < beat.features.length; fIdx++) {
-          final f = beat.features[fIdx];
-          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
-            f.included = false;
-          } else if (bIdx < 2 && fIdx == 0) {
-            ensureUpgradeState(f, '$verTag Feel & Combo Upgrade');
-          } else {
-            f.lifecycle = FeatureLifecycleStatus.stable;
-            f.estimatedHours = 0;
-            f.included = true;
-          }
-        }
-      }
-    } else if (trackIndex == 1) {
-      // Track 1: Expand Encounter, Hazard & Target Variety
-      bp.goal =
-          'Expand encounter variety, reactive hazards, and target archetypes in $verTag.';
-      final targetBeatIdx = bp.beats.length > 1 ? 1 : 0;
-      for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
-        final beat = bp.beats[bIdx];
-        for (int fIdx = 0; fIdx < beat.features.length; fIdx++) {
-          final f = beat.features[fIdx];
-          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
-            f.included = true;
-          } else if (bIdx == targetBeatIdx && fIdx == 0) {
-            ensureUpgradeState(f, '$verTag Encounter Escalation');
-          } else {
-            f.lifecycle = FeatureLifecycleStatus.stable;
-            f.estimatedHours = 0;
-            f.included = true;
-          }
-        }
-      }
-      final hasNewFeat = bp.beats.any(
-        (b) => b.features.any(
-          (f) => f.lifecycle == FeatureLifecycleStatus.newFeature && f.included,
-        ),
-      );
-      if (!hasNewFeat) {
-        addCustomFeatureToProposedBeat(
-          bp.beats[targetBeatIdx].id,
-          'Elite Hazard Variant',
-          customGoal:
-              'Add a reactive hazard or enemy variant to pressure the player in ${bp.beats[targetBeatIdx].title}.',
-        );
-      }
-    } else if (trackIndex == 2) {
-      // Track 2: Promote Backlog & Meta-Progression
-      bp.goal =
-          'Promote deferred Out-of-Scope systems and meta-progression rewards into $verTag.';
-      for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
-        final beat = bp.beats[bIdx];
-        for (final f in beat.features) {
-          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
-            f.included = true;
-          } else if (bIdx == bp.beats.length - 1 &&
-              f == beat.features.first) {
-            ensureUpgradeState(f, '$verTag Progression & Reward Loop');
-          } else {
-            f.lifecycle = FeatureLifecycleStatus.stable;
-            f.estimatedHours = 0;
-            f.included = true;
-          }
-        }
-      }
-      if (bp.explicitExclusions.isNotEmpty) {
-        promoteExclusionToNextRelease(bp.explicitExclusions.first);
-      }
-    } else if (trackIndex == 3) {
-      // Track 3: Playtest Hardening & Edge-Case Polish
-      bp.goal =
-          'Harden existing mechanics with stricter edge-case guards, HUD clarity, and balance tuning in $verTag.';
-      for (final beat in bp.beats) {
-        for (int fIdx = 0; fIdx < beat.features.length; fIdx++) {
-          final f = beat.features[fIdx];
-          if (f.lifecycle == FeatureLifecycleStatus.newFeature) {
-            f.included = false;
-          } else if (fIdx == 0) {
-            ensureUpgradeState(f, '$verTag Playtest Hardening');
-          } else {
-            f.lifecycle = FeatureLifecycleStatus.stable;
-            f.estimatedHours = 0;
-            f.included = true;
-          }
-        }
-      }
-    }
-
-    _syncActiveProjectMetadata();
-    notifyListeners();
-
-    if (agentDirective != null &&
-        agentDirective.trim().isNotEmpty &&
-        GeminiAgentClient.hasKey(_apiKey)) {
-      await sendReleasePlanChatMessage(agentDirective.trim());
-    }
   }
 
   /// Adds a new Playable Feature directly into an active Epic (`beatId`) inside `2. Workbench`

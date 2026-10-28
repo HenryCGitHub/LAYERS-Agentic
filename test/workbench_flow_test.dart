@@ -800,6 +800,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
     }
 
     return {
+      'agentReasoning':
+          'v0.1 proved core movement and arena entry. Next, we should deepen traversal momentum and combat readability so the core loop rewards skill.',
       'goal': 'Build playable release loop.',
       'doneWhen': 'Playtester completes loop 3 times in a row.',
       'explicitExclusions': [
@@ -1489,8 +1491,24 @@ void main() {
           findsOneWidget,
         );
         expect(
+          find.textContaining('AGENT ARCHITECTURAL RECOMMENDATION'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('v0.1 proved core movement and arena entry'),
+          findsOneWidget,
+        );
+        expect(
           find.byKey(const ValueKey('progressive_preset_chip_0')),
           findsOneWidget,
+        );
+        // Verify STABLE ✓ prior-release features (like Grapple Momentum Release) are hidden from the active v0.2 scope view
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('progressive_next_release_modal')),
+            matching: find.text('Grapple Momentum Release'),
+          ),
+          findsNothing,
         );
         // Verify interactive tree toggles inside the Progressive Release Interface:
         // - Toggling an existing feature switches between UPGRADE (+4h) and STABLE (0h)
