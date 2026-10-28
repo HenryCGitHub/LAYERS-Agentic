@@ -198,6 +198,82 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                         color: textPrimary,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'TARGET PHASE:',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.7,
+                            color: textMuted,
+                          ),
+                        ),
+                        for (final phase in ProductionPhase.values)
+                          Builder(
+                            builder: (context) {
+                              final isSelected =
+                                  widget.workbench.currentPhase == phase;
+                              final shortLabel =
+                                  phase == ProductionPhase.prototype
+                                      ? '01 · Prototype'
+                                      : (phase == ProductionPhase.mvp
+                                          ? '02 · MVP'
+                                          : (phase ==
+                                                  ProductionPhase.verticalSlice
+                                              ? '03 · Vertical Slice'
+                                              : '04 · Full Production'));
+                              return InkWell(
+                                key: ValueKey(
+                                  'progressive_phase_pill_${phase.name}',
+                                ),
+                                borderRadius: BorderRadius.circular(5),
+                                onTap: widget.workbench.isAgentBusy
+                                    ? null
+                                    : () async {
+                                        if (isSelected) return;
+                                        await widget.workbench
+                                            .setDraftReleasePhase(phase);
+                                        if (mounted) _rebuild(() {});
+                                      },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? accentCyan.withValues(alpha: 0.14)
+                                        : bgRecessed,
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? accentCyan.withValues(alpha: 0.55)
+                                          : borderSubtle,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    shortLabel,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w800
+                                          : FontWeight.w600,
+                                      color: isSelected
+                                          ? accentCyan
+                                          : textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
                   ],
                 ),
                 Row(
@@ -1916,4 +1992,322 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     );
   }
 
+  void _showSavedReleasePlanDialog(BuildContext context, TierDocument rel) {
+    final verTag = widget.workbench.releaseVersionTagFor(rel);
+    final displayName = widget.workbench.releaseDisplayName(rel);
+    final phaseBadge = widget.workbench.releasePhaseShortBadge(rel);
+    final savedBp = widget.workbench.releaseBlueprintFor(rel.id);
+
+    final goalText = (savedBp != null && savedBp.goal.trim().isNotEmpty)
+        ? savedBp.goal.trim()
+        : (rel.sections['scope']
+                ?.split('\n')
+                .first
+                .replaceFirst(RegExp(r'^Goal:\s*', caseSensitive: false), '')
+                .trim() ??
+            'Build and playtest $displayName.');
+    final doneWhenText = (savedBp != null && savedBp.doneWhen.trim().isNotEmpty)
+        ? savedBp.doneWhen.trim()
+        : 'All $verTag features pass playtest verification.';
+
+    final builtChips = <String>[
+      if (savedBp != null)
+        for (final item in savedBp.builtSoFar)
+          if (item.trim().isNotEmpty) item.trim(),
+    ];
+    final lackingChips = <String>[
+      if (savedBp != null)
+        for (final g in savedBp.missingGaps)
+          if (g.trim().isNotEmpty) g.trim(),
+    ];
+
+    final scopeRows = <({String epicBadge, String title, String goal, String badge})>[];
+    if (savedBp != null) {
+      for (int bIdx = 0; bIdx < savedBp.beats.length; bIdx++) {
+        final b = savedBp.beats[bIdx];
+        final eBadge = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+        for (final f in b.features) {
+          if (!f.included || f.lifecycle == FeatureLifecycleStatus.stable) {
+            continue;
+          }
+          scopeRows.add((
+            epicBadge: eBadge,
+            title: _formatOutlineFeatureDisplayTitle(
+              f.title,
+              b.title,
+              beatIndex: bIdx,
+            ),
+            goal: f.goal.trim(),
+            badge: f.lifecycle == FeatureLifecycleStatus.newFeature
+                ? '+ NEW · +${f.activeDeltaHours}h'
+                : '↻ UPGRADE · +${f.activeDeltaHours}h',
+          ));
+        }
+      }
+    }
+    if (scopeRows.isEmpty) {
+      final beats = widget.workbench.activeReleaseBeats;
+      for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+        final b = beats[bIdx];
+        final eBadge = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+        for (final f in widget.workbench.featuresForBeat(b.id)) {
+          final states = FeatureStateNode.getStatesForDocument(f);
+          final inVer = states.any(
+            (s) => s.releaseVersion.toLowerCase() == verTag.toLowerCase(),
+          );
+          if (!inVer && verTag != 'v0.1') continue;
+          scopeRows.add((
+            epicBadge: eBadge,
+            title: _formatOutlineFeatureDisplayTitle(
+              f.title,
+              b.title,
+              beatIndex: bIdx,
+            ),
+            goal: (f.sections['scope'] ?? '')
+                .split('\n')
+                .first
+                .replaceFirst(RegExp(r'^Goal:\s*', caseSensitive: false), '')
+                .trim(),
+            badge: (f.sections['originVersion'] ?? 'v0.1') == verTag
+                ? '+ NEW'
+                : '↻ UPGRADE',
+          ));
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: borderBright),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: bgRecessed,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: borderSubtle),
+              ),
+              child: Text(
+                '$phaseBadge · $verTag',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: accentCyan,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$verTag Release Plan — $displayName',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680, maxHeight: 540),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  goalText,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bgRecessed,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: borderSubtle),
+                  ),
+                  child: Text(
+                    'DONE WHEN · $doneWhenText',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: textSecondary,
+                    ),
+                  ),
+                ),
+                if (builtChips.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    '✓ BUILT BEFORE ${verTag.toUpperCase()} (${builtChips.length})',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final chip in builtChips)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Text(
+                            '✓ $chip',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                if (lackingChips.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    '⚠ LACKING AT THE TIME (${lackingChips.length})',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  for (final gap in lackingChips)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 5),
+                      child: Text(
+                        '• $gap',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  '✦ SCOPE IN ${verTag.toUpperCase()} (${scopeRows.length} FEATURES)',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final row in scopeRows)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: bgRecessed,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgSurface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Text(
+                            row.epicBadge,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                row.title,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textPrimary,
+                                ),
+                              ),
+                              if (row.goal.isNotEmpty)
+                                Text(
+                                  row.goal,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: textMuted,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          row.badge,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: row.badge.startsWith('+')
+                                ? accentEmerald
+                                : accentAmber,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Close',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

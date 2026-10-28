@@ -215,6 +215,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       onSelected: (value) {
                         if (value == '__progressive_release__') {
                           _showProgressiveNextReleaseModal(context);
+                        } else if (value == '__view_release_plan__') {
+                          _showSavedReleasePlanDialog(context, rel);
                         } else if (value.startsWith('rel:')) {
                           final targetId = value.substring(4);
                           final targetDoc = widget.workbench.documents[targetId];
@@ -493,6 +495,37 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         }
 
                         menuItems.add(const PopupMenuDivider());
+                        menuItems.add(
+                          PopupMenuItem<String>(
+                            value: '__view_release_plan__',
+                            height: 36,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '📋 View $activeVer Release Plan',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Saved Ledger',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
                         menuItems.add(
                           PopupMenuItem<String>(
                             value: '__progressive_release__',

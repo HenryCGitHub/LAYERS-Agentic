@@ -1742,6 +1742,15 @@ void main() {
           provider.releaseDisplayName(allRels[1]),
           'Room Clearance & Threat Variety',
         );
+        // Once all Core Loop Epics are populated and at least 1 MVP release is built, v0.3 advances to Vertical Slice, and the next inferred phase is Full Production
+        expect(
+          provider.releasePhaseFor(allRels[2]),
+          ProductionPhase.verticalSlice,
+        );
+        expect(
+          provider.inferNextProgressivePhase(),
+          ProductionPhase.fullProduction,
+        );
 
         // Verify that executing a v0.4 blueprint with a + NEW feature placed before an existing STABLE feature never collides feature IDs or duplicates beatDoc.childrenIds
         final firstEpic = liveBeats.first;

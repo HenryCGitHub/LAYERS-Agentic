@@ -159,6 +159,107 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     caseSensitive: false,
   );
 
+  void _updateSerializedReleaseBlueprintMetadata(
+    TierDocument doc, {
+    String? releaseDocId,
+    required String versionTag,
+    required String title,
+  }) {
+    final rawArchivedBp = doc.sections['release_blueprint_json'];
+    if (rawArchivedBp == null || rawArchivedBp.trim().isEmpty) return;
+    try {
+      final archivedMap = Map<String, dynamic>.from(
+        jsonDecode(rawArchivedBp) as Map,
+      );
+      if (releaseDocId != null) {
+        archivedMap['releaseDocId'] = releaseDocId;
+      }
+      archivedMap['releaseVersionTag'] = versionTag;
+      archivedMap['releaseTitle'] = title;
+      doc.sections['release_blueprint_json'] = jsonEncode(archivedMap);
+    } catch (_) {}
+  }
+
+  /// Infers the natural next `ProductionPhase` (`prototype` -> `mvp` -> `verticalSlice` -> `fullProduction`)
+  /// based on the live game tree so agent-reasoned progressive releases never get stuck in MVP forever.
+  ProductionPhase inferNextProgressivePhase() {
+    final releases = projectReleases;
+    final builtReleases =
+        releases.where((r) => r.childrenIds.isNotEmpty).toList();
+    if (builtReleases.isEmpty) {
+      return ProductionPhase.prototype;
+    }
+    if (builtReleases.any(
+          (r) => releasePhaseFor(r) == ProductionPhase.fullProduction,
+        ) ||
+        builtReleases.any(
+          (r) => releasePhaseFor(r) == ProductionPhase.verticalSlice,
+        )) {
+      return ProductionPhase.fullProduction;
+    }
+    final hasBuiltMvp = builtReleases.any(
+      (r) => releasePhaseFor(r) == ProductionPhase.mvp,
+    );
+    final beats = activeReleaseBeats;
+    final allBeatsPopulated = beats.isNotEmpty &&
+        beats.every((b) => featuresForBeat(b.id).isNotEmpty);
+    if (hasBuiltMvp && allBeatsPopulated) {
+      return ProductionPhase.verticalSlice;
+    }
+    return ProductionPhase.mvp;
+  }
+
+  ReleaseScope _releaseScopeForPhase(ProductionPhase phase) {
+    switch (phase) {
+      case ProductionPhase.prototype:
+        return ReleaseScope.prototype;
+      case ProductionPhase.mvp:
+        return ReleaseScope.mvp;
+      case ProductionPhase.verticalSlice:
+        return ReleaseScope.verticalSlice;
+      case ProductionPhase.fullProduction:
+        return ReleaseScope.fullProduction;
+    }
+  }
+
+  /// Allows the developer to switch the target `ProductionPhase` (`MVP`, `Vertical Slice`, `Full Production`)
+  /// inside the Progressive Release Co-Pilot modal and re-synthesize the draft blueprint for that phase.
+  Future<void> setDraftReleasePhase(ProductionPhase targetPhase) async {
+    final relDoc = activeRelease;
+    final proj = activeProject;
+    if (relDoc == null || proj == null) return;
+    _currentPhase = targetPhase;
+    final targetScope = _releaseScopeForPhase(targetPhase);
+    relDoc.sections['phase'] = targetPhase.name;
+    relDoc.sections['releaseScope'] = targetScope.name;
+    relDoc.sections['agentReasoned'] = 'true';
+    if (targetPhase == ProductionPhase.fullProduction) {
+      final existingFullProdCount = projectReleases
+          .where(
+            (r) =>
+                r.id != relDoc.id &&
+                releasePhaseFor(r) == ProductionPhase.fullProduction,
+          )
+          .length;
+      final pass = existingFullProdCount + 1;
+      final fpVer = 'v1.${pass - 1}';
+      relDoc.sections['versionTag'] = fpVer;
+      relDoc.sections['fullProductionPass'] = '$pass';
+    } else {
+      relDoc.sections.remove('fullProductionPass');
+      final idx = proj.childrenIds.indexOf(relDoc.id);
+      if (idx >= 0) {
+        relDoc.sections['versionTag'] = 'v0.${idx + 1}';
+      }
+    }
+    _persistDocument(relDoc);
+    _syncActiveProjectMetadata();
+    await openReleasePlanGate(
+      releaseId: relDoc.id,
+      transitionToGateStage: false,
+    );
+  }
+
   /// Prunes any leftover unbuilt draft releases (once the project has at least one built release)
   /// and sequentially re-packs all `v0.X` releases (`v0.1`, `v0.2`, ..., `v0.N`) so skipped
   /// version gaps never occur.
@@ -281,19 +382,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           id: expectedId,
           sections: Map<String, String>.from(relDoc.sections),
         );
-        final rawArchivedBp = movedDoc.sections['release_blueprint_json'];
-        if (rawArchivedBp != null && rawArchivedBp.trim().isNotEmpty) {
-          try {
-            final archivedMap = Map<String, dynamic>.from(
-              jsonDecode(rawArchivedBp) as Map,
-            );
-            archivedMap['releaseDocId'] = expectedId;
-            archivedMap['releaseVersionTag'] = expectedVer;
-            archivedMap['releaseTitle'] = movedDoc.title;
-            movedDoc.sections['release_blueprint_json'] =
-                jsonEncode(archivedMap);
-          } catch (_) {}
-        }
+        _updateSerializedReleaseBlueprintMetadata(
+          movedDoc,
+          releaseDocId: expectedId,
+          versionTag: expectedVer,
+          title: movedDoc.title,
+        );
         documents.remove(oldRelId);
         LocalVaultService.deleteDocument(oldRelId);
         if (user != null) {
@@ -340,18 +434,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
         anyChanged = true;
       } else if (docChanged) {
-        final rawArchivedBp = relDoc.sections['release_blueprint_json'];
-        if (rawArchivedBp != null && rawArchivedBp.trim().isNotEmpty) {
-          try {
-            final archivedMap = Map<String, dynamic>.from(
-              jsonDecode(rawArchivedBp) as Map,
-            );
-            archivedMap['releaseVersionTag'] = expectedVer;
-            archivedMap['releaseTitle'] = relDoc.title;
-            relDoc.sections['release_blueprint_json'] =
-                jsonEncode(archivedMap);
-          } catch (_) {}
-        }
+        _updateSerializedReleaseBlueprintMetadata(
+          relDoc,
+          versionTag: expectedVer,
+          title: relDoc.title,
+        );
         if (_releaseBlueprint != null &&
             _releaseBlueprint!.releaseDocId == oldRelId) {
           _releaseBlueprint!.releaseVersionTag = expectedVer;
@@ -1553,21 +1640,49 @@ Return ONLY a JSON object with this schema:
                 f.id,
         ];
         if (activeFeatureIds.isNotEmpty) {
+          final primaryFeatId = (_selectedFeatureId != null &&
+                  activeFeatureIds.contains(_selectedFeatureId))
+              ? _selectedFeatureId!
+              : activeFeatureIds.first;
+          final primaryTitle =
+              documents[primaryFeatId]?.title ?? 'Primary Feature';
           _agentProgressStep =
-              'Synthesizing Engine Steps for all ${activeFeatureIds.length} Features in ${relDoc.title} ($_planningModel)...';
+              'Synthesizing Engine Steps for $primaryTitle ($_planningModel)...';
           _executionLog.add(_agentProgressStep!);
           notifyListeners();
-          await Future.wait(
-            activeFeatureIds.map(
-              (fId) => synthesizeFeatureHowToStepsWithAi(fId),
-            ),
-          );
+          await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
+
+          final remainingFeatIds = activeFeatureIds
+              .where((id) => id != primaryFeatId)
+              .toList();
+          if (remainingFeatIds.isNotEmpty) {
+            if (GeminiAgentClient.testMockResponder != null) {
+              await Future.wait(
+                remainingFeatIds.map(
+                  (fId) => synthesizeFeatureHowToStepsWithAi(fId),
+                ),
+              );
+            } else {
+              unawaited(
+                _prefetchRemainingFeatureStepsInBackground(remainingFeatIds),
+              );
+            }
+          }
         }
       }
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
+    }
+  }
+
+  Future<void> _prefetchRemainingFeatureStepsInBackground(
+    List<String> featureIds,
+  ) async {
+    for (final fId in featureIds) {
+      if (!documents.containsKey(fId)) continue;
+      await synthesizeFeatureHowToStepsWithAi(fId);
     }
   }
 
@@ -2685,19 +2800,35 @@ Return ONLY valid JSON:
     }
 
     if (agentReasonedProgressive) {
-      _currentPhase = ProductionPhase.mvp;
+      final nextPhase = inferNextProgressivePhase();
+      _currentPhase = nextPhase;
+      final nextScope = _releaseScopeForPhase(nextPhase);
+      final existingFullProdCount = releases
+          .where((r) => releasePhaseFor(r) == ProductionPhase.fullProduction)
+          .length;
+      final fullProdPass = existingFullProdCount + 1;
+      final effectiveVer = nextPhase == ProductionPhase.fullProduction
+          ? 'v1.${fullProdPass - 1}'
+          : 'v0.$newIndex';
+      final defaultTitle = nextPhase == ProductionPhase.verticalSlice
+          ? '$effectiveVer: Gold Standard Polish Pass - Vertical Slice'
+          : (nextPhase == ProductionPhase.fullProduction
+              ? '$effectiveVer: Content & World Expansion - Full Production'
+              : '$effectiveVer: Progressive Release');
       final newRelDoc = TierDocument(
         id: newRelId,
-        title: 'v0.$newIndex: Progressive Release',
+        title: defaultTitle,
         tier: TierType.release,
         parentId: proj.id,
         sections: {
-          'versionTag': 'v0.$newIndex',
-          'releaseScope': ReleaseScope.mvp.name,
-          'phase': ProductionPhase.mvp.name,
+          'versionTag': effectiveVer,
+          'releaseScope': nextScope.name,
+          'phase': nextPhase.name,
           'agentReasoned': 'true',
+          if (nextPhase == ProductionPhase.fullProduction)
+            'fullProductionPass': '$fullProdPass',
           'scope':
-              'Goal: Synthesize the highest-impact v0.$newIndex features and upgrades for ${proj.title}.\n\nIn Scope:\n• Agent-recommended v0.$newIndex features and upgrades\n\nDone When: All v0.$newIndex features pass playtest verification.',
+              'Goal: Synthesize the highest-impact $effectiveVer features and upgrades for ${proj.title}.\n\nIn Scope:\n• Agent-recommended $effectiveVer features and upgrades\n\nDone When: All $effectiveVer features pass playtest verification.',
         },
       );
       documents[newRelId] = newRelDoc;

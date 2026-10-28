@@ -133,24 +133,12 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 ),
               ),
               const SizedBox(height: 4),
-              Builder(
-                builder: (context) {
-                  final totalBeats = draft.coreLoopBeats.length;
-                  final isSplitTrain = draft.releaseTrainTitles.length > 1;
-                  final halfCount = (totalBeats + 1) ~/ 2;
-                  final scopeCaption = isSplitTrain
-                      ? (index == 0
-                          ? 'Part 1 Scope: Core Loop Beats 1–$halfCount (Controls & Primary Mechanics)'
-                          : 'Part 2 Scope: Core Loop Beats ${halfCount + 1}–$totalBeats (Progression & Loop Reset)')
-                      : 'Scope: $totalBeats Core Loop Beats · ${draft.gameSpec.length} Game Specs · ${draft.designPillars.length} Design Pillars';
-                  return Text(
-                    scopeCaption,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      color: textSecondary.withValues(alpha: 0.85),
-                    ),
-                  );
-                },
+              Text(
+                'Scope: ${draft.coreLoopBeats.length} Core Loop Beats · ${draft.gameSpec.length} Game Specs · ${draft.designPillars.length} Design Pillars',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  color: textSecondary.withValues(alpha: 0.85),
+                ),
               ),
             ],
           ),
