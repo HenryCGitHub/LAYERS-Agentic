@@ -3955,7 +3955,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           if (prompt.contains(
             'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps',
           )) {
-            expect(prompt, contains('ONE CANONICAL ASSET ACROSS ALL TASKS'));
+            expect(prompt, contains('ONE SHARED ASSET ACROSS ALL TASKS'));
             expect(prompt, contains('STRICT TASK-ROLE ALIGNMENT'));
             return <String, dynamic>{
               'tasks': [

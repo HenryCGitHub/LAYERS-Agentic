@@ -15,7 +15,7 @@ class GeminiAgentClient {
   static const String compactStyleRules = '''
 RULES:
 - Use plain, literal 2-4 word game-dev titles naming the observable player or world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").
-- Write in straightforward, everyday English—never roleplay the genre's slang or lore. Use game terms only when they name a specific mechanic or tactic ("kite", "dash", "parry", "cooldown"); never use subculture slang ("gib", "frag"), archaic/lore words ("Husbandry", "Homestead", "Expedition"), or corporate buzzwords ("deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly") when a plain verb ("blast", "clear", "defeat") means the same thing.
+- Write in straightforward, everyday English—never roleplay the genre's slang or lore. Use game terms only when they name a specific mechanic or tactic ("kite", "dash", "parry", "cooldown"); never use subculture slang ("gib", "frag"), archaic/lore words ("Husbandry", "Homestead", "Expedition"), or corporate/engineering buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly") when a plain word ("main", "blast", "clear", "defeat") means the same thing.
 - NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").
 - Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.
 - `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").
