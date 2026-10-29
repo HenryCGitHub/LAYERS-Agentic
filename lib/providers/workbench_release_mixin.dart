@@ -1753,7 +1753,7 @@ Return ONLY a JSON object with this schema:
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
-        preferredModel: _planningModel,
+        preferredModel: _conversationModel,
         thinkingLevel: _thinkingLevel,
         temperature: 0.25,
       );
@@ -1850,29 +1850,25 @@ Return ONLY a JSON object with this schema:
                   activeFeatureIds.contains(_selectedFeatureId))
               ? _selectedFeatureId!
               : activeFeatureIds.first;
-          final primaryTitle =
-              documents[primaryFeatId]?.title ?? 'Primary Feature';
-          _agentProgressStep =
-              'Synthesizing Engine Steps for $primaryTitle ($_planningModel)...';
-          _executionLog.add(_agentProgressStep!);
-          notifyListeners();
-          await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
-
           final remainingFeatIds = activeFeatureIds
               .where((id) => id != primaryFeatId)
               .toList();
-          if (remainingFeatIds.isNotEmpty) {
-            if (GeminiAgentClient.testMockResponder != null) {
+          if (GeminiAgentClient.testMockResponder != null) {
+            await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
+            if (remainingFeatIds.isNotEmpty) {
               await Future.wait(
                 remainingFeatIds.map(
                   (fId) => synthesizeFeatureHowToStepsWithAi(fId),
                 ),
               );
-            } else {
-              unawaited(
-                _prefetchRemainingFeatureStepsInBackground(remainingFeatIds),
-              );
             }
+          } else {
+            unawaited(
+              _prefetchRemainingFeatureStepsInBackground(<String>[
+                primaryFeatId,
+                ...remainingFeatIds,
+              ]),
+            );
           }
         }
       }
@@ -2076,7 +2072,7 @@ Return ONLY valid JSON:
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
-        preferredModel: _planningModel,
+        preferredModel: _conversationModel,
         thinkingLevel: _thinkingLevel,
         temperature: 0.25,
       );

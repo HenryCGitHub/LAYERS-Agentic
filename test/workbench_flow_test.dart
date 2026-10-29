@@ -3103,7 +3103,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           GeminiAgentClient.testMockResponder = prevResponder;
         }
 
-        expect(capturedModel, equals('gemini-4-argon'));
+        expect(capturedModel, equals('gemini-flash-latest'));
         expect(capturedPrompt, contains('UNREAL 5 C++'));
         expect(capturedPrompt, contains('Sibling Feature'));
 

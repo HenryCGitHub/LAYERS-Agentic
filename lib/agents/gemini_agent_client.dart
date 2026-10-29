@@ -101,7 +101,7 @@ RULES:
           final isHeavyPlanningModel =
               model.contains('argon') || model.contains('pro');
           final timeoutDuration = Duration(
-            seconds: isHeavyPlanningModel ? 35 : 18,
+            seconds: isHeavyPlanningModel ? 45 : 18,
           );
 
           final response = await http
@@ -143,15 +143,20 @@ RULES:
           } else if (response.statusCode == 401 ||
               response.statusCode == 402 ||
               response.statusCode == 403) {
-            // Fail fast on auth/billing errors instead of retrying 8x across models
+            // Fail fast on auth/billing errors instead of retrying across models
             lastErrorStatus = 'HTTP ${response.statusCode}';
             return null;
-          } else if (response.statusCode == 404) {
-            // Model not found; skip second thinking pass and try next model
+          } else if (response.statusCode == 400 && includeThinking) {
+            // Only retry without thinkingConfig when HTTP 400 indicates unsupported thinking field
+            continue;
+          } else {
+            // Skip second thinking pass on 404/429/5xx and fall back to next model immediately
             break;
           }
         } catch (_) {
-          // Retry without thinkingConfig or fall back to next model
+          // Never retry the same model without thinkingConfig on TimeoutException (which would
+          // drop thinkingLevel: 'LOW' and stall in HIGH thinking); fall back to next model.
+          break;
         }
       }
     }
