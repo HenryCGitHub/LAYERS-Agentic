@@ -144,6 +144,12 @@ class WorkbenchProvider extends ChangeNotifier {
 
   final Set<String> _aiSynthesizedFeatureSteps = <String>{};
   final Set<String> _synthesizingFeatureIds = <String>{};
+  final List<String> _pendingFeatureStepQueue = <String>[];
+  List<String> get pendingFeatureStepQueue =>
+      List.unmodifiable(_pendingFeatureStepQueue);
+  bool _isPrewarmingReleaseBlueprint = false;
+  bool get isPrewarmingReleaseBlueprint => _isPrewarmingReleaseBlueprint;
+  String? _prewarmedConceptSignature;
 
   ProductionPhase _currentPhase = ProductionPhase.prototype;
   ProductionPhase get currentPhase => _currentPhase;

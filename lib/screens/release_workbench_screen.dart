@@ -112,7 +112,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       );
     }
 
-    if (widget.workbench.isAgentBusy && !_isProgressiveModalOpen) {
+    if (widget.workbench.isAgentBusy &&
+        !_isProgressiveModalOpen &&
+        (widget.workbench.activeReleaseBeats.isEmpty ||
+            widget.workbench.selectedFeature == null)) {
       return _buildAgentExecutionProgress(rel);
     }
 

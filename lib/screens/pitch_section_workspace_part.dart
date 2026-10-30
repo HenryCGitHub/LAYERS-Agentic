@@ -558,7 +558,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     final sec = _sections[sectionIdx];
     final nextTitle = sectionIdx + 1 < _sections.length
         ? 'Next: ${_sections[sectionIdx + 1].shortTitle} →'
-        : 'Next: Full Blueprint Review →';
+        : '09 · Full Blueprint Review →';
 
     return Container(
       key: const ValueKey('concept_sticky_bottom_dock'),
@@ -703,33 +703,35 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   ),
                   Row(
                     children: [
-                      OutlinedButton(
-                        key: const ValueKey('skip_to_full_review_btn'),
-                        onPressed: () => _goToStep(_sections.length),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: textPrimary,
-                          backgroundColor: bgRecessed,
-                          side: BorderSide(
-                            color: accentAmber.withValues(alpha: 0.55),
+                      if (sectionIdx + 1 < _sections.length) ...[
+                        OutlinedButton(
+                          key: const ValueKey('skip_to_full_review_btn'),
+                          onPressed: () => _goToStep(_sections.length),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: textPrimary,
+                            backgroundColor: bgRecessed,
+                            side: BorderSide(
+                              color: accentAmber.withValues(alpha: 0.55),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 11,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
                           ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 11,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5),
+                          child: Text(
+                            'Review Full Blueprint ◫',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
+                            ),
                           ),
                         ),
-                        child: Text(
-                          'Review Full Blueprint ◫',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
+                        const SizedBox(width: 10),
+                      ],
                       ElevatedButton(
                         key: const ValueKey('next_section_btn'),
                         onPressed: () => _goToStep(sectionIdx + 1),

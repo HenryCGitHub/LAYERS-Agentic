@@ -4203,5 +4203,128 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    test(
+      '21. Sequential Feature-by-Feature Cumulative Project Ledger, Multi-Feature Epic Scope Boundaries, and Zero Artificial Step Limits',
+      () async {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await provider.startConceptInterview(
+          'Unreal 5 arena shooter with grapple hook, wave spawner, and ore extraction.',
+        );
+        provider.updateConceptDraft((d) {
+          d.techSpec = ['Unreal Engine 5', '3D Arena'];
+        });
+        await provider.approveConceptAndBuildRelease();
+
+        final beat1 = provider.activeReleaseBeats.first;
+        final beat1Feats = provider.featuresForBeat(beat1.id);
+        expect(beat1Feats.length, greaterThanOrEqualTo(2));
+        final feat1 = beat1Feats[0];
+        final feat2 = beat1Feats[1];
+
+        final capturedPromptsByFeatTitle = <String, String>{};
+        final prevResponder = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, preferredModel) async {
+          if (prompt.contains(
+            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps',
+          )) {
+            if (prompt.contains('for Feature "${feat1.title}"')) {
+              capturedPromptsByFeatTitle[feat1.title] = prompt;
+              return <String, dynamic>{
+                'tasks': [
+                  {
+                    'taskIndex': 0,
+                    'subSteps': [
+                      {
+                        'title': 'STEP 1.1 · CREATE BP_PLAYERCHARACTER ASSET',
+                        'stepPath': '/Game/Blueprints/BP_PlayerCharacter',
+                        'instruction':
+                            'Create BP_PlayerCharacter and attach GrappleComponent.',
+                        'area1Hierarchy':
+                            'BP_PlayerCharacter (Self)\n └─ GrappleComponent (USceneComponent)',
+                        'area2Inspector': 'moveSpeed: 600.0 cm/s',
+                        'codeFormula': 'moveSpeed = 600.0;',
+                        'verifyResult':
+                            'BP_PlayerCharacter spawns in the arena.',
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+            if (prompt.contains('for Feature "${feat2.title}"')) {
+              capturedPromptsByFeatTitle[feat2.title] = prompt;
+              return <String, dynamic>{
+                'tasks': [
+                  {
+                    'taskIndex': 0,
+                    'subSteps': [
+                      {
+                        'title': 'STEP 1.1 · EXTEND BP_PLAYERCHARACTER RELEASE IMPULSE',
+                        'stepPath': '/Game/Blueprints/BP_PlayerCharacter',
+                        'instruction':
+                            'Extend BP_PlayerCharacter with releaseBoostSpeed.',
+                        'area1Hierarchy': '',
+                        'area2Inspector': 'releaseBoostSpeed: 320.0 px/s',
+                        'codeFormula': 'releaseBoostSpeed = 320.0;',
+                        'verifyResult':
+                            'Release boost launches BP_PlayerCharacter.',
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+          }
+          return prevResponder != null
+              ? await prevResponder(prompt, preferredModel)
+              : null;
+        };
+
+        try {
+          await provider.synthesizeFeatureHowToStepsWithAi(
+            feat1.id,
+            forceRefresh: true,
+          );
+          await provider.synthesizeFeatureHowToStepsWithAi(
+            feat2.id,
+            forceRefresh: true,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevResponder;
+        }
+
+        final prompt1 = capturedPromptsByFeatTitle[feat1.title]!;
+        final prompt2 = capturedPromptsByFeatTitle[feat2.title]!;
+
+        // 1. Zero artificial step count limits
+        expect(prompt1, contains('zero artificial step count limits'));
+        expect(prompt1, isNot(contains('return 3 to 5 sequential sub-steps')));
+
+        // 2. Same-Epic Multi-Feature Scope Boundaries
+        expect(prompt1, contains('SAME-EPIC MULTI-FEATURE SCOPE BOUNDARIES'));
+        expect(
+          prompt1,
+          contains(
+            'Later Sibling in Same Epic (2/${beat1Feats.length}): "${feat2.title}"',
+          ),
+        );
+        expect(prompt1, contains('QUEUED LATER IN THIS EPIC'));
+
+        expect(prompt2, contains('SAME-EPIC MULTI-FEATURE SCOPE BOUNDARIES'));
+        expect(
+          prompt2,
+          contains(
+            'Earlier Sibling in Same Epic (1/${beat1Feats.length}): "${feat1.title}"',
+          ),
+        );
+        expect(prompt2, contains('ALREADY BUILT'));
+
+        // 3. Cumulative Project Ledger passed from Feature #1 into Feature #2
+        expect(prompt2, contains('CUMULATIVE PROJECT LEDGER'));
+        expect(prompt2, contains('BP_PlayerCharacter'));
+        expect(prompt2, contains('moveSpeed: 240.0 px/s'));
+      },
+    );
   });
 }

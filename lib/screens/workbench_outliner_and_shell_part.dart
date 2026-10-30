@@ -736,6 +736,44 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             ],
           ),
         ),
+        if (widget.workbench.backgroundStepSynthesisRemainingCount > 0)
+          Container(
+            key: const ValueKey('outliner_background_synthesis_banner'),
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: accentCyan.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: accentCyan.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  '⟳',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: accentCyan,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Building remaining features (${widget.workbench.backgroundStepSynthesisRemainingCount} left)...',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: accentCyan,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (widget.workbench.releaseViewFilter == 'archived' &&
             archivedFeats.isNotEmpty) ...[
           Padding(
@@ -1194,6 +1232,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               hintText: 'Feature title...',
                               onSave: (val) => widget.workbench
                                   .renameLiveFeature(feat.id, val),
+                              onDelete: () =>
+                                  widget.workbench.removeLiveFeature(feat.id),
+                              deleteBtnKey:
+                                  ValueKey('rail_remove_feat_${feat.id}'),
                             )
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1233,7 +1275,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             ),
                     ),
                     const SizedBox(width: 8),
-                    if (isSelected) ...[
+                    if (isSelected &&
+                        _activeStage2InlineEditKey !=
+                            'rename_rail_feat_${feat.id}') ...[
                       InkWell(
                         key: ValueKey('rail_rename_feat_${feat.id}'),
                         onTap: () => _startStage2InlineEdit(
@@ -1256,27 +1300,25 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 2),
-                      InkWell(
-                        key: ValueKey('rail_remove_feat_${feat.id}'),
-                        onTap: () => widget.workbench.removeLiveFeature(feat.id),
-                        borderRadius: BorderRadius.circular(3),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 3,
-                            vertical: 1,
-                          ),
-                          child: Text(
-                            '×',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: textMuted,
-                            ),
+                      const SizedBox(width: 4),
+                    ],
+                    if (widget.workbench.isSynthesizingFeatureSteps(feat.id) ||
+                        widget.workbench.isFeatureQueuedForSteps(feat.id)) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2, right: 4),
+                        child: Text(
+                          '⟳',
+                          key: ValueKey('rail_queued_badge_${feat.id}'),
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: widget.workbench
+                                    .isSynthesizingFeatureSteps(feat.id)
+                                ? accentCyan
+                                : textMuted,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 4),
                     ],
                     Padding(
                       padding: const EdgeInsets.only(top: 2),

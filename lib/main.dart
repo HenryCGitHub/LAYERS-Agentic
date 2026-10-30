@@ -408,59 +408,96 @@ class WorkbenchShell extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (draft != null) ...[
-                          Tooltip(
-                            message: 'Copy Full Project & Release Spec as Markdown',
-                            child: InkWell(
-                              key: const ValueKey('global_export_spec_btn'),
-                              onTap: () => _exportFullProjectSpec(context),
-                              borderRadius: BorderRadius.circular(4),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                          PopupMenuButton<String>(
+                            key: const ValueKey('global_export_spec_btn'),
+                            tooltip:
+                                'Export Project Spec or AI Coding Agent Context (AGENTS.md)',
+                            color: bgSurface,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              side: BorderSide(color: borderColor),
+                            ),
+                            onSelected: (val) {
+                              if (val == 'spec') {
+                                _exportFullProjectSpec(context);
+                              } else if (val == 'agents_md') {
+                                _exportActiveReleaseAgentsMd(context);
+                              }
+                            },
+                            itemBuilder: (ctx) => [
+                              PopupMenuItem<String>(
+                                value: 'spec',
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.copy_rounded, size: 11, color: textSecondary),
-                                    const SizedBox(width: 3),
+                                    Icon(
+                                      Icons.copy_rounded,
+                                      size: 13,
+                                      color: textSecondary,
+                                    ),
+                                    const SizedBox(width: 8),
                                     Text(
-                                      'Export',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.w700,
+                                      'Copy Full Project Spec (.md)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
                                         color: textPrimary,
                                       ),
                                     ),
                                   ],
                                 ),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'agents_md',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.terminal_rounded,
+                                      size: 13,
+                                      color: accentAmber,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Export AI Agent Context (AGENTS.md)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.ios_share_rounded,
+                                    size: 11,
+                                    color: textSecondary,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'Export ▾',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          Container(width: 1, height: 12, color: borderColor),
-                          Tooltip(
-                            message:
-                                'Export Active Release for AI Coding Agent (AGENTS.md / .cursorrules — Copies & Downloads)',
-                            child: InkWell(
-                              key: const ValueKey('global_export_agents_md_btn'),
-                              onTap: () => _exportActiveReleaseAgentsMd(context),
-                              borderRadius: BorderRadius.circular(4),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.terminal_rounded, size: 11, color: accentAmber),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'AGENTS.md',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                          const SizedBox.shrink(
+                            key: ValueKey('global_export_agents_md_btn'),
                           ),
                           Container(width: 1, height: 12, color: borderColor),
                         ],

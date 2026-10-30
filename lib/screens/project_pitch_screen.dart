@@ -348,6 +348,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       }
       _inlineEditingSectionIdx = null;
     });
+    if (clamped == _sections.length) {
+      widget.workbench.prewarmInitialReleasePlanIfNeeded();
+    }
   }
 
   void _captureSectionDefaultIfNeeded(

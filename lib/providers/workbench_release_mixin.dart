@@ -143,8 +143,85 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     await approveConceptAndBuildRelease(releaseId: releaseId);
   }
 
+  String _computeConceptSignature(ProjectConceptBlueprint? draft) {
+    if (draft == null) return '';
+    return [
+      draft.title.trim(),
+      draft.goal.trim(),
+      draft.gameSpec.join('|'),
+      draft.techSpec.join('|'),
+      draft.designPillars.join('|'),
+      draft.tradeOffs.join('|'),
+      draft.coreLoopBeats.join('|'),
+      draft.exclusions.join('|'),
+      draft.doneWhen.trim(),
+    ].join('::');
+  }
+
+  /// Pre-warms the `v0.1` Release Blueprint in the background while the user is reviewing
+  /// Step `09 · Full Concept Review` in Stage 1 so clicking `Approve & Build v0.1 →`
+  /// can jump straight to synthesizing Feature #1 without waiting on the Release Planner pass.
+  Future<void> prewarmInitialReleasePlanIfNeeded() async {
+    if (!GeminiAgentClient.hasKey(_apiKey) ||
+        GeminiAgentClient.testMockResponder != null) {
+      return;
+    }
+    if (_isAgentBusy || _isPrewarmingReleaseBlueprint) return;
+    final draft = _conceptDraft;
+    if (draft == null || draft.coreLoopBeats.isEmpty) return;
+    final sig = _computeConceptSignature(draft);
+    if (_releaseBlueprint != null && _prewarmedConceptSignature == sig) {
+      return;
+    }
+    if (activeReleaseBeats.isNotEmpty) return;
+
+    _isPrewarmingReleaseBlueprint = true;
+    notifyListeners();
+    try {
+      _commitConceptToVault(draft, syncBuiltWorkbench: false);
+      final proj = activeProject;
+      if (proj == null || proj.childrenIds.isEmpty) return;
+      final targetRelId = _activeReleaseId ?? proj.childrenIds.first;
+      final relDoc = documents[targetRelId];
+      if (relDoc == null || relDoc.childrenIds.isNotEmpty) return;
+      final verTag = releaseVersionTagFor(relDoc);
+      relDoc.sections['versionTag'] = verTag;
+
+      final planned = await ReleasePlannerAgent.planRelease(
+        projectDoc: proj,
+        releaseDoc: relDoc,
+        completedReleases: const [],
+        existingBeats: const [],
+        existingFeaturesByBeat: const {},
+        deferredByBeatIndex: const {},
+        apiKey: _apiKey,
+        modelName: _planningModel,
+        thinkingLevel: _thinkingLevel,
+      );
+      if (planned != null &&
+          _computeConceptSignature(_conceptDraft) == sig &&
+          !_isAgentBusy) {
+        if (planned.releaseTitle.isNotEmpty &&
+            planned.releaseTitle != relDoc.title) {
+          relDoc.title = planned.releaseTitle;
+        }
+        relDoc.sections['versionTag'] = verTag;
+        relDoc.sections['release_blueprint_json'] =
+            jsonEncode(planned.toJson());
+        _persistDocument(relDoc);
+        _releaseBlueprint = planned;
+        _prewarmedConceptSignature = sig;
+        _syncActiveProjectMetadata();
+      }
+    } catch (_) {
+    } finally {
+      _isPrewarmingReleaseBlueprint = false;
+      notifyListeners();
+    }
+  }
+
   /// 2-Stage Flow (`1. Concept` -> `2. Workbench`): Transitions immediately to `2. Workbench`,
-  /// synthesizes the Release Blueprint, and executes it into the active Workbench in one click.
+  /// synthesizes the Release Blueprint (or reuses the pre-warmed blueprint), and executes it into the active Workbench.
   Future<void> approveConceptAndBuildRelease({String? releaseId}) async {
     if (_conceptDraft != null) {
       _commitConceptToVault(_conceptDraft!, syncBuiltWorkbench: false);
@@ -153,10 +230,18 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _currentStage = WorkbenchStage.releaseWorkbench;
     notifyListeners();
 
-    await openReleasePlanGate(
-      releaseId: releaseId,
-      transitionToGateStage: false,
-    );
+    final currentSig = _computeConceptSignature(_conceptDraft);
+    final hasFreshPrewarmedBp = releaseId == null &&
+        _releaseBlueprint != null &&
+        _prewarmedConceptSignature == currentSig &&
+        GeminiAgentClient.testMockResponder == null;
+
+    if (!hasFreshPrewarmedBp) {
+      await openReleasePlanGate(
+        releaseId: releaseId,
+        transitionToGateStage: false,
+      );
+    }
     if (_releaseBlueprint != null) {
       await approveAndExecuteReleasePlan();
     } else if (activeReleaseBeats.isEmpty) {
@@ -1853,22 +1938,32 @@ Return ONLY a JSON object with this schema:
           final remainingFeatIds = activeFeatureIds
               .where((id) => id != primaryFeatId)
               .toList();
-          if (GeminiAgentClient.testMockResponder != null) {
-            await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
-            if (remainingFeatIds.isNotEmpty) {
-              await Future.wait(
-                remainingFeatIds.map(
-                  (fId) => synthesizeFeatureHowToStepsWithAi(fId),
-                ),
+          _pendingFeatureStepQueue
+            ..clear()
+            ..addAll(remainingFeatIds);
+          final primaryTitle = documents[primaryFeatId]?.title ?? 'Feature 1';
+          _agentProgressStep =
+              'Synthesizing Feature #1 ($primaryTitle) so you can enter the Workarea immediately...';
+          notifyListeners();
+
+          // Always synthesize Feature #1 first so the user enters the Workarea with Step 1.1 ready
+          // and so Features #2..N receive Feature #1's Cumulative Project Ledger.
+          await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
+
+          if (remainingFeatIds.isNotEmpty) {
+            if (GeminiAgentClient.testMockResponder != null) {
+              // In test mode, run sequentially one feature at a time so each feature K
+              // receives the Cumulative Project Ledger from features 1..K-1.
+              await _prefetchRemainingFeatureStepsInBackground(
+                remainingFeatIds,
+              );
+            } else {
+              // In live mode, release _isAgentBusy immediately after Feature #1 finishes
+              // and synthesize Features #2..N sequentially in the background.
+              unawaited(
+                _prefetchRemainingFeatureStepsInBackground(remainingFeatIds),
               );
             }
-          } else {
-            unawaited(
-              _prefetchRemainingFeatureStepsInBackground(<String>[
-                primaryFeatId,
-                ...remainingFeatIds,
-              ]),
-            );
           }
         }
       }
@@ -1879,16 +1974,30 @@ Return ONLY a JSON object with this schema:
     }
   }
 
-  Future<void> _prefetchRemainingFeatureStepsInBackground(
-    List<String> featureIds,
-  ) async {
+  Future<void> _prefetchRemainingFeatureStepsInBackground([
+    List<String>? initialFeatureIds,
+  ]) async {
+    if (initialFeatureIds != null) {
+      _pendingFeatureStepQueue
+        ..clear()
+        ..addAll(
+          initialFeatureIds.where(
+            (id) => !_synthesizingFeatureIds.contains(id),
+          ),
+        );
+      notifyListeners();
+    }
     final startProjectId = _activeProjectId;
     final startReleaseId = _activeReleaseId;
-    for (final fId in featureIds) {
+    while (_pendingFeatureStepQueue.isNotEmpty) {
       if (_activeProjectId != startProjectId ||
           _activeReleaseId != startReleaseId) {
+        _pendingFeatureStepQueue.clear();
+        notifyListeners();
         break;
       }
+      final fId = _pendingFeatureStepQueue.removeAt(0);
+      notifyListeners();
       if (!documents.containsKey(fId)) continue;
       await synthesizeFeatureHowToStepsWithAi(fId);
     }
@@ -1897,14 +2006,96 @@ Return ONLY a JSON object with this schema:
   bool isSynthesizingFeatureSteps(String featureId) =>
       _synthesizingFeatureIds.contains(featureId);
 
+  bool isFeatureQueuedForSteps(String featureId) =>
+      _pendingFeatureStepQueue.contains(featureId);
+
+  int get backgroundStepSynthesisRemainingCount =>
+      _pendingFeatureStepQueue.length + _synthesizingFeatureIds.length;
+
+  static final RegExp _ledgerAssetTokenRegex = RegExp(
+    r'\b(?:BP_[A-Za-z0-9_]+|IA_[A-Za-z0-9_]+|IMC_[A-Za-z0-9_]+|WBP_[A-Za-z0-9_]+|[A-Z][A-Za-z0-9_]+(?:Character|Controller|Pawn|Actor|Component|Spawner|Projectile|Weapon|Manager)\b|[A-Za-z0-9_]+\.(?:cs|gd|tscn|h|cpp))\b',
+  );
+
+  /// Extracts a compact Cumulative Project Ledger entry for an already-synthesized feature
+  /// so subsequent features reuse exact Actor/Scene/Script names, tuning variables, and guards.
+  String _summarizeFeatureForProjectLedger(
+    TierDocument featDoc,
+    int orderNumber,
+  ) {
+    final states = FeatureStateNode.getStatesForDocument(featDoc);
+    final assetTokens = <String>{};
+    final pathTokens = <String>{};
+    final tuningTokens = <String>{};
+    final guardTokens = <String>{};
+
+    for (final cp in states) {
+      for (final param in cp.tuningParams) {
+        final clean = param.trim();
+        if (clean.isNotEmpty) tuningTokens.add(clean);
+      }
+      for (final g in cp.edgeCases) {
+        final clean = g
+            .replaceAll(RegExp(r'^\s*(?:\[[^\]]+\]\s*)+'), '')
+            .trim();
+        if (clean.isNotEmpty) guardTokens.add(clean);
+      }
+      for (final task in cp.checklist) {
+        for (final sub in task.children) {
+          final stepPath = (sub.codeLanguage ?? '').trim();
+          if (stepPath.isNotEmpty && stepPath != 'custom_snippet') {
+            pathTokens.add(stepPath);
+            for (final m in _ledgerAssetTokenRegex.allMatches(stepPath)) {
+              assetTokens.add(m.group(0)!);
+            }
+          }
+          final decoded =
+              TaskHowToBlueprint.decodeThreeAreaNotes(sub.specNotes);
+          final area1Text = decoded.area1Hierarchy?.trim() ?? '';
+          if (area1Text.isNotEmpty) {
+            final rootLine = area1Text
+                .split('\n')
+                .first
+                .replaceAll(RegExp(r'^[├└─│\s]+'), '')
+                .trim();
+            if (rootLine.isNotEmpty) {
+              assetTokens.add(rootLine);
+            }
+          }
+          final combinedText =
+              '${sub.text} ${decoded.cleanInstruction} ${sub.codeSnippet ?? ''}';
+          for (final m in _ledgerAssetTokenRegex.allMatches(combinedText)) {
+            assetTokens.add(m.group(0)!);
+          }
+        }
+      }
+    }
+
+    final parts = <String>[];
+    if (assetTokens.isNotEmpty) {
+      parts.add('assets=[${assetTokens.take(6).join(', ')}]');
+    } else if (pathTokens.isNotEmpty) {
+      parts.add('paths=[${pathTokens.take(3).join(', ')}]');
+    }
+    if (tuningTokens.isNotEmpty) {
+      parts.add('vars=[${tuningTokens.take(6).join(', ')}]');
+    }
+    if (guardTokens.isNotEmpty) {
+      parts.add('guards=[${guardTokens.take(3).join('; ')}]');
+    }
+    final summaryTail =
+        parts.isNotEmpty ? parts.join(' | ') : 'foundation initialized';
+    return '- Feature #$orderNumber "${featDoc.title}": $summaryTail';
+  }
+
   /// Synthesizes bespoke, engine-specific 3-Area How-To Sub-Steps (`Hierarchy` -> `Inspector` -> `Code` -> `Verify`)
-  /// for the active checkpoint of `featureId` using `_planningModel` (`gemini-4-argon`),
-  /// reasoning through the project's cumulative asset state, exact variable names, and previous checkpoints.
+  /// for the active checkpoint of `featureId` using `_conversationModel` (`gemini-flash-latest`),
+  /// reasoning through the project's cumulative asset state, same-Epic sibling boundaries, exact variable names, and previous checkpoints.
   Future<void> synthesizeFeatureHowToStepsWithAi(
     String featureId, {
     bool forceRefresh = false,
     bool unrealCppMode = false,
   }) async {
+    _pendingFeatureStepQueue.remove(featureId);
     if (!GeminiAgentClient.hasKey(_apiKey) &&
         GeminiAgentClient.testMockResponder == null) {
       return;
@@ -1987,7 +2178,20 @@ Return ONLY a JSON object with this schema:
           ? 'Project Build State: FEATURE #1 OF THE ENTIRE PROJECT (Greenfield). No Character Blueprint, Pawn, or Input Mapping Context exists yet. You MUST create the playable character/foundation asset (e.g., BP_PlayerCharacter inheriting from ACharacter with CapsuleComponent, CameraComponent, and CharacterMovement) and possess it in the level before or alongside wiring input and physics.'
           : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: ${precedingFeatureTitles.join(', ')}). Reuse and extend the existing player character (e.g., BP_PlayerCharacter and IMC_Default) for player-attached mechanics, or create this feature\'s dedicated Actor and connect it to the existing player character.';
 
-      // Gather previous checkpoints & sibling features' exact variable names and guards
+      // Build Cumulative Project Ledger from all preceding features (0 .. featOrderIdx - 1)
+      final cumulativeLedgerLines = <String>[];
+      if (featOrderIdx > 0) {
+        for (int pIdx = 0; pIdx < featOrderIdx; pIdx++) {
+          cumulativeLedgerLines.add(
+            _summarizeFeatureForProjectLedger(
+              allReleaseFeatures[pIdx],
+              pIdx + 1,
+            ),
+          );
+        }
+      }
+
+      // Gather previous checkpoints & Same-Epic Multi-Feature Scope Boundaries
       final priorCheckpointsSummary = <String>[];
       for (int i = 0; i < effectiveCpIndex; i++) {
         final prev = states[i];
@@ -1995,14 +2199,48 @@ Return ONLY a JSON object with this schema:
           '- ${prev.cleanStageTitle} (${prev.releaseVersion}): vars=[${prev.tuningParams.join(', ')}], guards=[${prev.edgeCases.join(', ')}]',
         );
       }
+      final sameEpicSiblingBoundaryLines = <String>[];
       if (feat.parentId != null) {
-        for (final sib in featuresForBeat(feat.parentId!)) {
+        final parentBeatDoc = documents[feat.parentId!];
+        final beatSiblings = featuresForBeat(feat.parentId!);
+        final selfBeatIdx = beatSiblings.indexWhere((s) => s.id == feat.id);
+        if (beatSiblings.length > 1) {
+          sameEpicSiblingBoundaryLines.add(
+            'SAME-EPIC MULTI-FEATURE SCOPE BOUNDARIES (Epic "${parentBeatDoc?.title ?? 'Active Epic'}" contains ${beatSiblings.length} distinct Features — current is ${selfBeatIdx + 1} of ${beatSiblings.length}):',
+          );
+        }
+        for (int sIdx = 0; sIdx < beatSiblings.length; sIdx++) {
+          final sib = beatSiblings[sIdx];
           if (sib.id == feat.id) continue;
           final sibStates = FeatureStateNode.getStatesForDocument(sib);
-          for (final sibCp in sibStates) {
-            if (sibCp.tuningParams.isNotEmpty) {
-              priorCheckpointsSummary.add(
-                '- Sibling Feature "${sib.title}" (${sibCp.releaseVersion}): vars=[${sibCp.tuningParams.join(', ')}]',
+          final sibVars = <String>{
+            for (final sibCp in sibStates) ...sibCp.tuningParams,
+          };
+          if (sibVars.isNotEmpty) {
+            priorCheckpointsSummary.add(
+              '- Sibling Feature "${sib.title}" (${sibStates.last.releaseVersion}): vars=[${sibVars.join(', ')}]',
+            );
+          }
+          if (beatSiblings.length > 1) {
+            final isEarlierInEpic = selfBeatIdx >= 0 && sIdx < selfBeatIdx;
+            final sibScopeRaw = (sib.sections['scope'] ?? '').trim();
+            final sibGoalLine = sibScopeRaw
+                .split('\n')
+                .firstWhere(
+                  (l) => l.toLowerCase().startsWith('goal:'),
+                  orElse: () => '',
+                )
+                .replaceFirst(RegExp(r'^goal:\s*', caseSensitive: false), '')
+                .trim();
+            final goalSuffix =
+                sibGoalLine.isNotEmpty ? ' ("$sibGoalLine")' : '';
+            if (isEarlierInEpic) {
+              sameEpicSiblingBoundaryLines.add(
+                '- Earlier Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}"$goalSuffix -> ALREADY BUILT. Reuse & extend the shared Actor/Script created in "${sib.title}" rather than creating a duplicate Actor.',
+              );
+            } else {
+              sameEpicSiblingBoundaryLines.add(
+                '- Later Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}"$goalSuffix -> QUEUED LATER IN THIS EPIC. Do NOT implement "${sib.title}" inside "${feat.title}"; keep "${feat.title}" strictly scoped to its own mechanic.',
               );
             }
           }
@@ -2028,6 +2266,8 @@ Return ONLY a JSON object with this schema:
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
 $projectBuildStateContext
+${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Already Built in Earlier Features — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
+${sameEpicSiblingBoundaryLines.isNotEmpty ? sameEpicSiblingBoundaryLines.join('\n') : ''}
 Tasks:
 ${taskSummaries.join('\n')}
 Active Tuning Parameters (MUST use exact variable names): ${cpNode.tuningParams.join(', ')}
@@ -2040,7 +2280,7 @@ CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
   * If Task 1 is Asset/Pawn/Character/Actor Setup: Step 1.1 creates the main asset (e.g., BP_PlayerCharacter inheriting from ACharacter with CapsuleComponent, CameraComponent, CharacterMovement), configures its base variables, and places/possesses it in the level. Then Task 2 creates/binds the Input Actions (IA_Move, IA_Sprint, IA_Slide) and IMC_Default inside that same asset and wires the core mechanic velocity/action logic. Then Task 3 stays inside that same asset to tune physics/capsule/friction (${cpNode.tuningParams.join(', ')}) and enforce the guards (${cleanEdgeCases.join(', ')}).
   * If Task 1 is Input Mapping: Task 1 creates and verifies the Enhanced Input Action(s) (IA_...) and Input Mapping Context (IMC_Default) in /Game/Input (NEVER a throwaway Actor). Then Task 2 Step 2.1 creates/opens BP_PlayerCharacter (ACharacter with CapsuleComponent, CameraComponent, CharacterMovement), registers IMC_Default from Task 1 on BeginPlay, and wires Task 1's Input Action into the core velocity/physics logic. Then Task 3 extends that same BP_PlayerCharacter with the remaining physics/animation/guard steps.
 
-For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return 3 to 5 sequential sub-steps covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
+For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
 1. "title": "STEP X.Y · SHORT LITERAL STEP TITLE"
 2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path
 3. "instruction": 1-2 sentences explaining what to click or type in $targetEngineMode
@@ -2738,6 +2978,9 @@ Return ONLY valid JSON:
     _selectedFeatureId = featureId;
     if (feat.parentId != null) {
       _selectedBeatId = feat.parentId;
+    }
+    if (_pendingFeatureStepQueue.remove(featureId)) {
+      _pendingFeatureStepQueue.insert(0, featureId);
     }
     final proj = activeProject;
     if (proj != null) {

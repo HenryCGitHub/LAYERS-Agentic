@@ -114,7 +114,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     String? compWhere;
     String? compBody;
-    String? inspWhere;
+    String inspWhere = '';
     final inspRows = <({String key, String value})>[];
     String? codeWhere;
     String? codeBody;
@@ -258,26 +258,39 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       codeWhere = stepPath;
       codeBody = rawCode;
     } else {
-      // Runtime Logic / Event Graph / Guard Step
-      inspWhere = activeSubStep.isGuardStep
-          ? 'Guard Condition & Safety Check'
-          : (isUnrealBp
-              ? 'Event Graph Node Pins & Details'
-              : 'Runtime Tuning & Inspector Binding');
-      if (activeSubStep.isGuardStep) {
-        inspRows.addAll([
-          (key: 'Guard Rule', value: primaryGuardLabel),
-          (key: 'Tuning Context', value: effectiveTuningLabel),
-        ]);
-      } else {
-        inspRows.addAll([
-          (key: 'Tuning Parameter', value: effectiveTuningLabel),
-          (key: 'Guard Rule', value: primaryGuardLabel),
-        ]);
+      // Runtime Logic / Event Graph / Guard Step:
+      // Avoid repeating the single Tuning Parameter & Guard Rule already shown in the Spec Bar pill above
+      // on follow-up runtime steps (activeSubStepIdx > 0), while keeping the inspector binding row on Step X.1.
+      if (activeSubStepIdx == 0) {
+        inspWhere = activeSubStep.isGuardStep
+            ? 'Guard Condition & Safety Check'
+            : (isUnrealBp
+                ? 'Event Graph Node Pins & Details'
+                : 'Runtime Tuning & Inspector Binding');
+        if (activeSubStep.isGuardStep) {
+          inspRows.addAll([
+            (key: 'Guard Rule', value: primaryGuardLabel),
+            (key: 'Tuning Context', value: effectiveTuningLabel),
+          ]);
+        } else {
+          inspRows.addAll([
+            (key: 'Tuning Parameter', value: effectiveTuningLabel),
+            (key: 'Guard Rule', value: primaryGuardLabel),
+          ]);
+        }
       }
       codeWhere = stepPath;
       codeBody = rawCode;
     }
+
+    final isPureRuntimeCodeStep = !isBlueprintAssetCreationStep &&
+        !isTreeHierarchyStep &&
+        !isCppConstructorSubobjectsStep &&
+        !isLevelPlacementStep &&
+        !isBlueprintVariableStep &&
+        !isCodeVariableStep &&
+        !isScriptCreationStep &&
+        activeSubStepIdx > 0;
 
     // Apply on-demand gemini-flash-latest 3-Area Hierarchy & Inspector overrides when present
     final aiArea1 = activeSubStep.area1Hierarchy?.trim() ?? '';
@@ -309,7 +322,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           parsedAiRows.add((key: 'Inspector Binding', value: cleanEntry));
         }
       }
-      if (parsedAiRows.isNotEmpty) {
+      final isSingleDuplicatePrimaryTuning = isPureRuntimeCodeStep &&
+          aiArea1.isEmpty &&
+          parsedAiRows.length == 1 &&
+          parsedAiRows.first.key.toLowerCase() ==
+              primaryVarName.toLowerCase();
+      if (parsedAiRows.isNotEmpty && !isSingleDuplicatePrimaryTuning) {
         inspRows
           ..clear()
           ..addAll(parsedAiRows);
