@@ -3,127 +3,89 @@ part of 'project_pitch_screen.dart';
 extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
   static const int _kSparkMaxCharsPerLine = 80;
 
-  // ── 80-Character Word Document Pitch & Concept Composer (00 · PITCH & CONCEPT) ──
+  // ── Single-Input 80-Character Word Document Composer + Progress Animation (00 · PITCH & CONCEPT) ──
   Widget _buildInitialSparkLauncher() {
     final intake = widget.workbench.sparkIntake;
     final isBusy = widget.workbench.isAgentBusy;
+    final progressStep = widget.workbench.agentProgressStep;
 
     // Word Document Editor Geometry:
     // Width is computed directly from the 80-character count and current font size
     // plus generous horizontal document margins so 80 chars/line always fills the width.
     final double pitchFontSize =
         _isMobileMeasure ? 15.0 : (_isTabletMeasure ? 16.5 : 18.0);
-    final double refineFontSize =
-        _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 16.0);
     final double docPadX =
         _isMobileMeasure ? 24.0 : (_isTabletMeasure ? 40.0 : 64.0);
     final double docMaxWidth =
         (_kSparkMaxCharsPerLine * 0.515 * pitchFontSize) + (2 * docPadX);
 
-    final String currentPitch = _sparkController.text.trim();
-    final String currentTweak = _sparkTweakController.text.trim();
-    final bool hasPitchContent = currentPitch.isNotEmpty;
-    final bool hasTweakContent = currentTweak.isNotEmpty;
+    final bool hasSubmittedIdea =
+        intake != null && intake.effectiveSummary.trim().isNotEmpty;
+    final String rawInputText = _sparkController.text.trim();
+    final bool hasInputText = rawInputText.isNotEmpty;
 
-    Future<void> refinePitchInPlace() async {
+    Future<void> submitOrRefineIdea() async {
       if (isBusy) return;
-      final rawPitch = _sparkController.text.trim();
-      final rawTweak = _sparkTweakController.text.trim();
+      final singleLineInput = _sparkController.text
+          .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+          .trim();
+      if (singleLineInput.isEmpty && !hasSubmittedIdea) return;
 
-      // If top pitch box is empty and user typed their idea into the bottom bar, promote it to the top box.
-      if (rawPitch.isEmpty && rawTweak.isNotEmpty) {
-        final wrapped = MaxColumnLineWrapFormatter.wrapTextAtColumn(
-          rawTweak,
-          maxCharsPerLine: _kSparkMaxCharsPerLine,
-        );
-        _rebuild(() {
-          _sparkController.value = TextEditingValue(
-            text: wrapped,
-            selection: TextSelection.collapsed(offset: wrapped.length),
-          );
-          _sparkTweakController.clear();
-        });
-        return;
-      }
-
-      if (rawPitch.isEmpty) return;
-
-      final previousText = _sparkController.text;
-      final singleLinePitch =
-          rawPitch.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim();
-      final singleLineTweak =
-          rawTweak.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim();
-
+      final previousSummary = intake?.baseSummary;
       _rebuild(() {
-        _sparkUndoStack.add(previousText);
-        _sparkTweakController.clear();
+        if (previousSummary != null && previousSummary.trim().isNotEmpty) {
+          _sparkUndoStack.add(previousSummary);
+        }
+        _sparkController.clear();
       });
 
-      if (widget.workbench.sparkIntake == null) {
-        final combinedInput = singleLineTweak.isNotEmpty
-            ? '$singleLinePitch. $singleLineTweak'
-            : singleLinePitch;
-        await widget.workbench.ingestOrRefineSparkIdea(combinedInput);
-      } else {
-        final refineInput =
-            singleLineTweak.isNotEmpty ? singleLineTweak : singleLinePitch;
-        await widget.workbench.ingestOrRefineSparkIdea(refineInput);
-      }
-
-      if (!mounted) return;
-      final updatedSummary = widget.workbench.sparkIntake?.effectiveSummary;
-      if (updatedSummary != null && updatedSummary.trim().isNotEmpty) {
-        final wrapped = MaxColumnLineWrapFormatter.wrapTextAtColumn(
-          updatedSummary.trim(),
-          maxCharsPerLine: _kSparkMaxCharsPerLine,
-        );
-        _rebuild(() {
-          _sparkController.value = TextEditingValue(
-            text: wrapped,
-            selection: TextSelection.collapsed(offset: wrapped.length),
-          );
-        });
-      }
+      final promptToSend = singleLineInput.isNotEmpty
+          ? singleLineInput
+          : (intake?.baseSummary ?? '');
+      await widget.workbench.ingestOrRefineSparkIdea(promptToSend);
     }
 
     void revertUndo() {
-      if (_sparkUndoStack.isEmpty) return;
+      if (_sparkUndoStack.isEmpty || intake == null || isBusy) return;
       _rebuild(() {
-        final restored = _sparkUndoStack.removeLast();
-        _sparkController.value = TextEditingValue(
-          text: restored,
-          selection: TextSelection.collapsed(offset: restored.length),
-        );
+        intake.baseSummary = _sparkUndoStack.removeLast();
       });
     }
 
     Future<void> generateConceptBlueprint() async {
       if (isBusy) return;
-      final rawPitch = _sparkController.text
+      final unsubmittedInput = _sparkController.text
           .replaceAll(RegExp(r'\s*\n\s*'), ' ')
           .trim();
-      final rawTweak = _sparkTweakController.text
-          .replaceAll(RegExp(r'\s*\n\s*'), ' ')
-          .trim();
-      if (rawPitch.isEmpty && rawTweak.isEmpty) return;
+      if (!hasSubmittedIdea && unsubmittedInput.isEmpty) return;
 
-      // Zero-loss safeguard: if user typed a refinement and clicked Generate directly, fold it in.
-      final effectivePitch = (rawPitch.isNotEmpty && rawTweak.isNotEmpty)
-          ? '$rawPitch. $rawTweak'
-          : (rawPitch.isNotEmpty ? rawPitch : rawTweak);
-      _sparkTweakController.clear();
+      // Zero-loss safeguard: if user typed in the input box and clicked Generate directly,
+      // fold their unsubmitted text into the pitch automatically.
+      final String effectivePitch;
+      if (hasSubmittedIdea && unsubmittedInput.isNotEmpty) {
+        effectivePitch = '${intake.canonicalPrompt}. $unsubmittedInput';
+      } else if (hasSubmittedIdea) {
+        effectivePitch = intake.canonicalPrompt;
+      } else {
+        effectivePitch = unsubmittedInput;
+      }
+      _sparkController.clear();
       await widget.workbench.startConceptInterview(effectivePitch, true);
     }
 
-    final String topTooltipMessage = hasPitchContent
-        ? 'Input to refine in the bar below, or edit your pitch text directly'
-        : 'Input your game idea (a 4-word spark or a full pasted GDD)';
-    final String refineTooltipMessage = hasPitchContent
+    final String dynamicTooltipMessage = hasSubmittedIdea
         ? 'Input to refine your pitch (Enter to submit · Shift+Enter for new line · 80 chars/line)'
-        : 'Input your game idea above first';
-    final String refineHintText = hasPitchContent
+        : 'Input your game idea (Enter to submit · Shift+Enter for new line · 80 chars/line)';
+    final String dynamicHintText = hasSubmittedIdea
         ? 'Input to refine (Enter to submit · Shift+Enter for new line)...'
-        : 'Input your game idea above first...';
+        : 'Input your game idea (Enter to submit · Shift+Enter for new line)...';
+
+    final String wrappedCommittedSummary = hasSubmittedIdea
+        ? MaxColumnLineWrapFormatter.wrapTextAtColumn(
+            intake.effectiveSummary.trim(),
+            maxCharsPerLine: _kSparkMaxCharsPerLine,
+          )
+        : '';
 
     return Center(
       child: ConstrainedBox(
@@ -139,7 +101,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                 children: [
                   Expanded(
                     child: Text(
-                      intake != null && intake.workingTitle.trim().isNotEmpty
+                      hasSubmittedIdea && intake.workingTitle.trim().isNotEmpty
                           ? '00 · PITCH & CONCEPT · ${intake.workingTitle.toUpperCase()}'
                           : '00 · PITCH & CONCEPT',
                       style: GoogleFonts.jetBrainsMono(
@@ -218,7 +180,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
               ),
             ),
 
-            // ── Single Word-Document Greyscale Composer Box ──
+            // ── Single Word-Document Greyscale Composer Box (ONLY ONE INPUT AREA) ──
             Container(
               key: const ValueKey('spark_composer_card'),
               decoration: BoxDecoration(
@@ -230,213 +192,153 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Dynamic Status / Tooltip Hint Row
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(docPadX, 24, docPadX, 0),
-                    child: Text(
-                      hasPitchContent
-                          ? 'Input to refine below, or edit pitch directly'
-                          : 'Input your game idea to get started',
-                      key: const ValueKey('spark_dynamic_tooltip_label'),
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: hasPitchContent ? textSecondary : textMuted,
-                      ),
+                  // Work-In-Progress Top Indeterminate Bar (Visible while AI is working)
+                  if (isBusy)
+                    LinearProgressIndicator(
+                      key: const ValueKey('spark_busy_progress_bar'),
+                      minHeight: 3,
+                      backgroundColor: borderSubtle,
+                      valueColor: AlwaysStoppedAnimation<Color>(textPrimary),
                     ),
-                  ),
 
-                  // 1. Pitch Area (Word Document Sheet Column: 80 chars/line, 1.65 line-height)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(docPadX, 12, docPadX, 24),
-                    child: Tooltip(
-                      key: const ValueKey('spark_pitch_tooltip'),
-                      message: topTooltipMessage,
-                      child: Focus(
-                        onKeyEvent: (node, event) {
-                          if ((event is KeyDownEvent ||
-                                  event is KeyRepeatEvent) &&
-                              (event.logicalKey == LogicalKeyboardKey.enter ||
-                                  event.logicalKey ==
-                                      LogicalKeyboardKey.numpadEnter) &&
-                              (HardwareKeyboard.instance.isMetaPressed ||
-                                  HardwareKeyboard.instance.isControlPressed)) {
-                            generateConceptBlueprint();
-                            return KeyEventResult.handled;
-                          }
-                          return _handleMultilinePitchKeyEvent(
-                            event,
-                            _sparkController,
-                            onSubmit: refinePitchInPlace,
-                          );
-                        },
-                        child: TextField(
-                          key: const ValueKey('spark_input_field'),
-                          controller: _sparkController,
-                          focusNode: _sparkFocusNode,
-                          minLines: 5,
-                          maxLines: null,
-                          keyboardType: TextInputType.multiline,
-                          textInputAction: TextInputAction.newline,
-                          inputFormatters: const [
-                            MaxColumnLineWrapFormatter(
-                              maxCharsPerLine: _kSparkMaxCharsPerLine,
-                            ),
-                          ],
-                          onChanged: (_) => _rebuild(),
+                  // Submitted Pitch Document Display (Plain Document Text, NOT a 2nd Input Box!)
+                  if (hasSubmittedIdea)
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 180),
+                      opacity: isBusy ? 0.45 : 1.0,
+                      child: Container(
+                        padding: EdgeInsets.fromLTRB(
+                          docPadX,
+                          28,
+                          docPadX,
+                          22,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: borderSubtle),
+                          ),
+                        ),
+                        child: SelectableText(
+                          wrappedCommittedSummary,
+                          key: const ValueKey('spark_committed_pitch_text'),
                           style: GoogleFonts.inter(
                             fontSize: pitchFontSize,
                             height: 1.65,
                             color: textPrimary,
                           ),
-                          decoration: InputDecoration(
-                            hintMaxLines: 4,
-                            hintText:
-                                'Input your game idea (e.g., A cozy submarine roguelike where you salvage sunken megastructures and brew coffee for your deep-sea crew between dives)...',
-                            hintStyle: GoogleFonts.inter(
-                              fontSize: pitchFontSize,
-                              height: 1.65,
-                              color: textMuted,
-                            ),
-                            isCollapsed: true,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  // 2. Inline Refine Bar with Larger Return Icon (↵, 20px), Shift+Enter & 80-Char Word Wrap
-                  Container(
+                  // Live Work-In-Progress Status Banner (Visible while AI is working)
+                  if (isBusy)
+                    Padding(
+                      key: const ValueKey('spark_busy_progress_banner'),
+                      padding: EdgeInsets.fromLTRB(docPadX, 16, docPadX, 0),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(textPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              progressStep ??
+                                  (hasSubmittedIdea
+                                      ? 'Refining your pitch...'
+                                      : 'Summarizing your game idea...'),
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // THE ONLY INPUT AREA (Switches from "Input your game idea..." -> "Input to refine...")
+                  Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: docPadX,
-                      vertical: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: bgRecessed,
-                      border: Border(top: BorderSide(color: borderSubtle)),
+                      vertical: hasSubmittedIdea ? 18 : 28,
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
                           child: Tooltip(
-                            key: const ValueKey('spark_refine_tooltip'),
-                            message: refineTooltipMessage,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: bgBase,
-                                borderRadius: BorderRadius.circular(7),
-                                border: Border.all(color: borderSubtle),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Expanded(
-                                    child: Focus(
-                                      onKeyEvent: (node, event) =>
-                                          _handleMultilinePitchKeyEvent(
-                                        event,
-                                        _sparkTweakController,
-                                        onSubmit: refinePitchInPlace,
-                                      ),
-                                      child: TextField(
-                                        key: const ValueKey(
-                                          'spark_tweak_input_field',
-                                        ),
-                                        controller: _sparkTweakController,
-                                        focusNode: _sparkTweakFocusNode,
-                                        minLines: 1,
-                                        maxLines: null,
-                                        keyboardType: TextInputType.multiline,
-                                        textInputAction:
-                                            TextInputAction.newline,
-                                        inputFormatters: const [
-                                          MaxColumnLineWrapFormatter(
-                                            maxCharsPerLine:
-                                                _kSparkMaxCharsPerLine,
-                                          ),
-                                        ],
-                                        onChanged: (_) => _rebuild(),
-                                        style: GoogleFonts.inter(
-                                          fontSize: refineFontSize,
-                                          height: 1.48,
-                                          color: textPrimary,
-                                        ),
-                                        decoration: InputDecoration(
-                                          hintMaxLines: 1,
-                                          hintText: refineHintText,
-                                          hintStyle: GoogleFonts.inter(
-                                            fontSize: refineFontSize,
-                                            height: 1.48,
-                                            color: textMuted,
-                                          ),
-                                          isCollapsed: true,
-                                          border: InputBorder.none,
-                                          enabledBorder: InputBorder.none,
-                                          focusedBorder: InputBorder.none,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                            vertical: 2,
-                                          ),
-                                        ),
-                                        onSubmitted: (_) =>
-                                            refinePitchInPlace(),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Tooltip(
-                                    message: hasPitchContent
-                                        ? 'Submit refinement (Return)'
-                                        : 'Input your game idea above first',
-                                    child: InkWell(
-                                      key: const ValueKey(
-                                        'ingest_idea_summary_btn',
-                                      ),
-                                      onTap: (!isBusy &&
-                                              (hasPitchContent ||
-                                                  hasTweakContent))
-                                          ? refinePitchInPlace
-                                          : null,
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        child: Text(
-                                          '↵',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w700,
-                                            height: 1.0,
-                                            color: (hasPitchContent ||
-                                                    hasTweakContent)
-                                                ? (hasTweakContent
-                                                    ? textPrimary
-                                                    : textSecondary)
-                                                : textMuted.withValues(
-                                                    alpha: 0.4,
-                                                  ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                            key: const ValueKey('spark_pitch_tooltip'),
+                            message: dynamicTooltipMessage,
+                            child: Focus(
+                              onKeyEvent: (node, event) {
+                                if ((event is KeyDownEvent ||
+                                        event is KeyRepeatEvent) &&
+                                    (event.logicalKey ==
+                                            LogicalKeyboardKey.enter ||
+                                        event.logicalKey ==
+                                            LogicalKeyboardKey.numpadEnter) &&
+                                    (HardwareKeyboard
+                                            .instance.isMetaPressed ||
+                                        HardwareKeyboard
+                                            .instance.isControlPressed)) {
+                                  generateConceptBlueprint();
+                                  return KeyEventResult.handled;
+                                }
+                                return _handleMultilinePitchKeyEvent(
+                                  event,
+                                  _sparkController,
+                                  onSubmit: submitOrRefineIdea,
+                                );
+                              },
+                              child: TextField(
+                                key: const ValueKey('spark_input_field'),
+                                controller: _sparkController,
+                                focusNode: _sparkFocusNode,
+                                minLines: hasSubmittedIdea ? 1 : 3,
+                                maxLines: null,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.newline,
+                                inputFormatters: const [
+                                  MaxColumnLineWrapFormatter(
+                                    maxCharsPerLine: _kSparkMaxCharsPerLine,
                                   ),
                                 ],
+                                onChanged: (_) => _rebuild(),
+                                style: GoogleFonts.inter(
+                                  fontSize: pitchFontSize,
+                                  height: 1.65,
+                                  color: textPrimary,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: false,
+                                  isCollapsed: true,
+                                  hintMaxLines: hasSubmittedIdea ? 1 : 3,
+                                  hintText: dynamicHintText,
+                                  hintStyle: GoogleFonts.inter(
+                                    fontSize: pitchFontSize,
+                                    height: 1.65,
+                                    color: textMuted,
+                                  ),
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                onSubmitted: (_) => submitOrRefineIdea(),
                               ),
                             ),
                           ),
                         ),
-                        if (_sparkUndoStack.isNotEmpty) ...[
+                        if (_sparkUndoStack.isNotEmpty && !isBusy) ...[
                           const SizedBox(width: 10),
                           OutlinedButton(
                             key: const ValueKey('spark_undo_btn'),
@@ -445,13 +347,13 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                               side: BorderSide(color: borderSubtle),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
-                                vertical: 11,
+                                vertical: 10,
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(7),
                               ),
                             ),
-                            onPressed: isBusy ? null : revertUndo,
+                            onPressed: revertUndo,
                             child: Text(
                               'Undo',
                               style: GoogleFonts.jetBrainsMono(
@@ -461,6 +363,52 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                             ),
                           ),
                         ],
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: hasSubmittedIdea
+                              ? 'Refine pitch (Return)'
+                              : 'Submit game idea (Return)',
+                          child: InkWell(
+                            key: const ValueKey('ingest_idea_summary_btn'),
+                            onTap: (!isBusy &&
+                                    (hasInputText || hasSubmittedIdea))
+                                ? submitOrRefineIdea
+                                : null,
+                            borderRadius: BorderRadius.circular(7),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              child: isBusy
+                                  ? SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          textPrimary,
+                                        ),
+                                      ),
+                                    )
+                                  : Text(
+                                      '↵',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.0,
+                                        color: (hasInputText ||
+                                                hasSubmittedIdea)
+                                            ? (hasInputText
+                                                ? textPrimary
+                                                : textSecondary)
+                                            : textMuted.withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -468,7 +416,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
               ),
             ),
 
-            // ── 3. Separated Primary Stage-Gate CTA (Outside & Below the Composer Card) ──
+            // ── Separated Primary Stage-Gate CTA (Outside & Below the Composer Card) ──
             Padding(
               padding: const EdgeInsets.only(top: 18),
               child: Align(
@@ -492,17 +440,34 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                     elevation: 0,
                   ),
                   onPressed:
-                      (!isBusy && (hasPitchContent || hasTweakContent))
+                      (!isBusy && (hasSubmittedIdea || hasInputText))
                           ? generateConceptBlueprint
                           : null,
-                  child: Text(
-                    isBusy
-                        ? 'Generating 01–08...'
-                        : 'Generate Concept Blueprint →',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isBusy) ...[
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(bgBase),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Text(
+                        isBusy
+                            ? 'Generating Blueprint (01–08)...'
+                            : 'Generate Concept Blueprint →',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

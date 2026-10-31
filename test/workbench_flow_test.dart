@@ -1037,26 +1037,32 @@ void main() {
         await tester.pumpWidget(LayersAgenticApp(provider: provider));
         await tester.pumpAndSettle();
 
-        // ── Stage 1A: 80-Character Word Document Pitch & Concept Composer (00 · PITCH & CONCEPT) ──
+        // ── Stage 1A: Single-Input 80-Character Word Document Composer (00 · PITCH & CONCEPT) ──
         expect(find.byKey(const ValueKey('connected_pipeline_track')), findsOneWidget);
         expect(find.text('00 · PITCH & CONCEPT'), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_composer_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('spark_tweak_input_field')), findsOneWidget);
+        // Only ONE TextField is rendered in Step 1A
+        expect(find.byType(TextField), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_input_field')), findsOneWidget);
         expect(find.byKey(const ValueKey('ingest_idea_summary_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('direct_generate_blueprint_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_committed_pitch_text')), findsNothing);
         expect(find.byKey(const ValueKey('spark_undo_btn')), findsNothing);
 
         // Verify dynamic tooltip & hint when empty ('Input your game idea...')
-        expect(
-          find.text('Input your game idea to get started'),
-          findsOneWidget,
-        );
         final emptyPitchTooltip = tester.widget<Tooltip>(
           find.byKey(const ValueKey('spark_pitch_tooltip')),
         );
         expect(emptyPitchTooltip.message, contains('Input your game idea'));
+        final initialSparkField = tester.widget<TextField>(
+          find.byKey(const ValueKey('spark_input_field')),
+        );
+        expect(
+          initialSparkField.decoration?.hintText,
+          contains('Input your game idea'),
+        );
 
-        // Verify 80-character line wrapping and Shift+Enter line skipping in the pitch input
+        // Verify 80-character line wrapping and Shift+Enter line skipping in the single input
         const longPitch =
             'A high-speed grappling hook parkour roguelite where players swing across floating ruins and chain aerial combos';
         final wrappedPitch = MaxColumnLineWrapFormatter.wrapTextAtColumn(
@@ -1084,16 +1090,6 @@ void main() {
           expect(line.length, lessThanOrEqualTo(80));
         }
 
-        // Once content is entered, dynamic tooltip switches to 'Input to refine...'
-        expect(
-          find.text('Input to refine below, or edit pitch directly'),
-          findsOneWidget,
-        );
-        final filledRefineTooltip = tester.widget<Tooltip>(
-          find.byKey(const ValueKey('spark_refine_tooltip')),
-        );
-        expect(filledRefineTooltip.message, contains('Input to refine'));
-
         // Verify Shift + Enter skips to a new line instead of submitting
         await tester.enterText(
           find.byKey(const ValueKey('spark_input_field')),
@@ -1105,32 +1101,48 @@ void main() {
         await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
         await tester.pump();
         expect(sparkField.controller!.text, equals('High-speed grappling hook\n'));
+        expect(find.byKey(const ValueKey('spark_committed_pitch_text')), findsNothing);
 
-        // Input a raw game idea and refine in-place using the inline refine bar + Return icon (↵)
+        // Submit initial game idea via Return icon (↵) -> displays clean document text above
+        // and switches the SAME single input area to 'Input to refine...'
         await tester.enterText(
           find.byKey(const ValueKey('spark_input_field')),
           'High-speed grappling hook parkour roguelite',
         );
         await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('spark_committed_pitch_text')), findsOneWidget);
+        expect(find.byType(TextField), findsOneWidget);
+        expect(sparkField.controller!.text, isEmpty);
+        final refineTooltip = tester.widget<Tooltip>(
+          find.byKey(const ValueKey('spark_pitch_tooltip')),
+        );
+        expect(refineTooltip.message, contains('Input to refine'));
+        final refineSparkField = tester.widget<TextField>(
+          find.byKey(const ValueKey('spark_input_field')),
+        );
+        expect(
+          refineSparkField.decoration?.hintText,
+          contains('Input to refine'),
+        );
+
+        // Use the SAME single input field to refine the pitch -> updates document text and reveals Undo
         await tester.enterText(
-          find.byKey(const ValueKey('spark_tweak_input_field')),
+          find.byKey(const ValueKey('spark_input_field')),
           'Add wall-run chains',
         );
         await tester.pump();
         await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
         await tester.pumpAndSettle();
 
-        // Pitch is rewritten in-place and Undo button appears
-        expect(sparkField.controller!.text.toLowerCase(), contains('wall-run chains'));
+        expect(find.textContaining('wall-run chains'), findsWidgets);
         expect(find.byKey(const ValueKey('spark_undo_btn')), findsOneWidget);
 
-        // Verify Undo reverts to the pre-edit pitch text, then re-apply refinement
+        // Verify Undo reverts to the previous summary in one click
         await tester.tap(find.byKey(const ValueKey('spark_undo_btn')));
         await tester.pumpAndSettle();
-        expect(
-          sparkField.controller!.text,
-          equals('High-speed grappling hook parkour roguelite'),
-        );
         expect(find.byKey(const ValueKey('spark_undo_btn')), findsNothing);
 
         // Explicitly click "Generate Concept Blueprint →" to launch Stage 1B (Sections 01–08)

@@ -110,10 +110,8 @@ class ProjectPitchScreen extends StatefulWidget {
 class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     with WorkbenchThemeMixin {
   final TextEditingController _sparkController = TextEditingController();
-  final TextEditingController _sparkTweakController = TextEditingController();
   final TextEditingController _agentPromptController = TextEditingController();
   final FocusNode _sparkFocusNode = FocusNode();
-  final FocusNode _sparkTweakFocusNode = FocusNode();
   final FocusNode _conceptChatFocusNode = FocusNode();
   final List<String> _sparkUndoStack = <String>[];
 
@@ -347,11 +345,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   @override
   void dispose() {
     _sparkController.dispose();
-    _sparkTweakController.dispose();
     _agentPromptController.dispose();
     _inlineItemEditController.dispose();
     _sparkFocusNode.dispose();
-    _sparkTweakFocusNode.dispose();
     _conceptChatFocusNode.dispose();
     super.dispose();
   }
@@ -817,7 +813,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _focusedBentoSectionIdx = null;
       _activeInlineEditKey = null;
       _sparkController.clear();
-      _sparkTweakController.clear();
       _sparkUndoStack.clear();
       _agentPromptController.clear();
     }
