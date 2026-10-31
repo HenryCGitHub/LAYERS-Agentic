@@ -200,8 +200,9 @@ class ReleasePlannerAgent {
           '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
     } else {
       phaseInstruction =
-          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into 4 to 6 major Epics (big bodies of work, e.g. 1. Player Traversal & Physical Controls, 2. Environment/Tank Simulation & Alarms, 3. Resource/Crop Lifecycle & Harvesting, 4. Cargo Delivery, Economy & Upgrades) required to build ${releaseDoc.title} across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n'
-          '- ONE ATOMIC MECHANIC PER FEATURE (NEVER BUNDLE SEQUENTIAL ACTIONS INTO ONE FEATURE): Audit every clause across `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When`. Every distinct player action, physical device/valve/canister interaction, simulation drift rule, alarm/wilt feedback state, planting/spawning step, growth/escalation stage, harvesting/pickup action, container/crate loading step, terminal sale, shop purchase, and equipment mounting step MUST be its own separate Feature card (4 to 5 Features per Epic, 14 to 20 Features total across the release). NEVER bundle 2 or 3 sequential mechanics (like "Planting + Growth + Harvesting + Crate Loading" or "Shop Menu + Equipment Mounting") inside a single Feature\'s `inScope`.';
+          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into 4 to 6 major Epics (big bodies of work, e.g. 1. Station Layout, Traversal & Physical Controls, 2. Environment/Tank Simulation & Alarms, 3. Resource/Crop Lifecycle & Harvesting, 4. Cargo Delivery, Shop & Upgrade Mounting) required to build ${releaseDoc.title} across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n'
+          '- GREYBOX LEVEL / ARENA BLOCKOUT IN EPIC 1: Epic 1 (`beat_1`) MUST include a dedicated Greybox Environment / Arena Blockout Feature matching `02 Game Spec` and `08 Done When` (e.g., `"Station Corridor Blockout"` connecting the four growth bays and cargo airlock, or `"Greybox Arena Layout"`) alongside First-Person Movement, Interaction Raycast, and Physical Control manipulation (at least 4 Features in Epic 1).\n'
+          '- ONE ATOMIC MECHANIC PER FEATURE (MINIMUM 4 FEATURES PER EPIC, 16–20 TOTAL): Audit every verb and clause across `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When`. Every distinct greybox room/corridor layout, player locomotion mechanic, interaction raycast/prompt, valve rotation, canister injection, simulation drift rule, gauge readout, alarm/wilt feedback state, container unsealing/depressurization step, seed planting step, crop growth timer, mature crop harvest, crate loading step, airlock terminal sale, shop purchase, and physical equipment mounting + second-cycle reset MUST be its own separate Feature card (4 to 5 Features per Epic, 16 to 20 Features total across the release). NEVER bundle two distinct devices or sequential steps (like "Valve + Canister", "Growth + Harvest", or "Shop Purchase + Equipment Mounting") into a single Feature!';
     }
 
     bool conflictsWithExclusions(String featureTitle) {
@@ -320,13 +321,14 @@ $progressiveDiagnosticInstructions
 - THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into all the individual Playable Features (`"included": true`, 4 to 5 features per Epic across 4 to 6 Epics for a full prototype loop) needed to complete that Epic end-to-end for ${releaseDoc.title}. If a Feature's `inScope` would list 3 different mechanics (e.g., growth stages + harvesting + crate loading, or shop purchase + equipment mounting + seed planting), split each of those mechanics into its own separate Feature card inside that Epic!
 - ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
-- PLAIN ACTION FEATURE TITLES (NO CODE SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Mature Crop Harvest"`, `"Vacuum Chute Sale"`). NEVER use code-architecture nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
+- PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Station Corridor Blockout"`, `"First Person Movement"`, `"Object Interaction Raycast"`, `"Manual Valve Turn"`, `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Tank Seal Depressurize"`, `"Seed Planting"`, `"Crop Growth Timer"`, `"Mature Crop Harvest"`, `"Cargo Crate Loading"`, `"Airlock Terminal Sale"`, `"Upgrade Shop Purchase"`, `"Pump Upgrade Mount"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
-- SPECIFIC, FOUNDATION-FIRST TASKS ON ONE SHARED ASSET: Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2–4` words + duration tag, e.g. `"Tank Actor & Ports (2h)"` -> `"Canister Snap & Refill (2h)"` -> `"Gauge Readout & Clamp (1h)"`) following a strict Foundation-First build dependency sequence:
-  * `Task 1` (Foundation / Asset & Component Setup): Create or configure the specific playable Character/Actor/Device and its collision/ports in the level (e.g., `"Character Capsule Setup (2h)"`, `"Tank Actor & Ports (2h)"`, `"Chute Trigger Actor (1h)"`). NEVER start `Task 1` with `"Input Mapping"` before the Character/Actor exists.
-  * `Task 2` (Input & Core Mechanic Logic): Wire the specific interaction, movement, or simulation math onto `Task 1`'s asset (e.g., `"Raycast Prompt & Aim (2h)"`, `"Nutrient Refill Math (2h)"`, `"Wilt Color Lerp (2h)"`).
-  * `Task 3` (Visual/Audio Readout, Tuning & Guard): Hook the observable gauge/mesh/audio cue and state guard onto that asset (e.g., `"Gauge Bar & Clamp (1h)"`, `"Harvest Carry Guard (1h)"`) — avoid generic boilerplate like `"Actor Setup"` -> `"State Logic"` -> `"State Guard"`.
+- MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"plantSnapRadius: 0.4 m"`, `"slotsPerTank: 4 slots"`, `"crateCapacity: 8 crops"`, `"depressurizeDuration: 1.5 s"`). NEVER return an empty `"tuningParams": []` array on any feature.
+- NATURAL, CONCRETE TASKS ON ONE SHARED ASSET (NO REPETITIVE "SETUP / LOGIC / GUARD" SUFFIXES): Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2–4` words + duration tag) that name the actual node/mesh, behavior, and boundary condition WITHOUT mechanically ending every task in the words `"Setup"`, `"Logic"`, or `"Guard"` (e.g., use `"Capsule Body & Camera (2h)"` -> `"WASD Velocity & Pitch (2h)"` -> `"Wall Slide & Pitch Clamp (1h)"`, or `"Tank Mesh & Pipe Ports (2h)"` -> `"Canister Snap & Refill (2h)"` -> `"Full Tank Overflow Stop (1h)"`):
+  * `Task 1` (Entity / Node / Scene Foundation): Create or place the specific playable Character, Greybox Room, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Corridor & Bay Colliders (2h)"`, `"Tank Mesh & Pipe Ports (2h)"`). NEVER start `Task 1` with `"Input Mapping"` before the Character/Actor exists.
+  * `Task 2` (Core Interaction, Movement, or Simulation Math): Wire the specific interaction, movement, or simulation behavior onto `Task 1`'s asset (e.g., `"WASD Velocity & Look (2h)"`, `"Hold-E Valve Rotation (2h)"`, `"Wilt Color Lerp (2h)"`).
+  * `Task 3` (Observable Feedback & Boundary Condition): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Full Tank Overflow Stop (1h)"`, `"Occupied Slot Reject (1h)"`).
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
@@ -353,13 +355,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           "lifecycle": "new",
           "inScope": ["Specific scope item 1", "Specific scope item 2"],
           "outOfScope": ["Deferred item"],
-          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.25 s"],
-          "edgeCases": ["[TAG] Specific edge case behavior"],
+          "tuningParams": ["walkSpeed: 4.5 m/s", "lookSensitivity: 0.15 deg/px"],
+          "edgeCases": ["[COLLISION] Prevent player capsule from clipping through corridor walls"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "tasks": ["Specific Actor Setup (2h)", "Specific Mechanic Logic (2h)", "Readout Cue & Guard (1h)"]
+              "tasks": ["Capsule Body & Camera (2h)", "WASD Velocity & Look (2h)", "Wall Slide & Pitch Clamp (1h)"]
             }
           ]
         },
@@ -373,13 +375,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           "lifecycle": "new",
           "inScope": ["Specific scope item"],
           "outOfScope": ["Deferred item"],
-          "tuningParams": ["paramOne: 5.0 units"],
-          "edgeCases": ["[TAG] Specific edge case behavior"],
+          "tuningParams": ["interactDistance: 2.2 m", "highlightOutlineWidth: 2.0 px"],
+          "edgeCases": ["[OCCLUSION] Block interaction raycast when a wall or closed door is in between"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "tasks": ["Device Actor Setup (1h)", "Interaction Trigger (2h)", "Bounds Clamp Guard (1h)"]
+              "tasks": ["Center Aim Raycast (1h)", "Hover Outline & Prompt (2h)", "Line-of-Sight Occlusion Stop (1h)"]
             }
           ]
         }
@@ -513,6 +515,61 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     return tasks;
   }
 
+  static List<String> _defaultTuningParamsForFeature(
+    String featureTitle,
+    String featureGoal,
+  ) {
+    final cleanWords = featureTitle
+        .replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), ' ')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
+    final stem = cleanWords.isEmpty
+        ? 'action'
+        : cleanWords.first.toLowerCase() +
+            cleanWords
+                .skip(1)
+                .take(2)
+                .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+                .join();
+    final corpus = '$featureTitle $featureGoal'.toLowerCase();
+    if (corpus.contains('crate') ||
+        corpus.contains('slot') ||
+        corpus.contains('storage') ||
+        corpus.contains('plant') ||
+        corpus.contains('seed') ||
+        corpus.contains('container')) {
+      return <String>[
+        '${stem}MaxSlots: 4 slots',
+        '${stem}SnapRadius: 0.45 m',
+      ];
+    }
+    if (corpus.contains('harvest') ||
+        corpus.contains('pickup') ||
+        corpus.contains('collect') ||
+        corpus.contains('pull')) {
+      return <String>[
+        '${stem}ReachRange: 1.8 m',
+        '${stem}HoldDuration: 0.35 s',
+      ];
+    }
+    if (corpus.contains('corridor') ||
+        corpus.contains('room') ||
+        corpus.contains('arena') ||
+        corpus.contains('layout') ||
+        corpus.contains('blockout')) {
+      return <String>[
+        '${stem}WidthMeters: 4.0 m',
+        '${stem}BayCount: 4 bays',
+      ];
+    }
+    return <String>[
+      '${stem}Rate: 1.0 units/s',
+      '${stem}CooldownSec: 0.25 s',
+    ];
+  }
+
   static ReleaseBlueprint? _parseDynamicReleaseBlueprint({
     required Map<String, dynamic> json,
     required TierDocument releaseDoc,
@@ -612,8 +669,18 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
 
         final inScope = toStrList(fMap['inScope']);
         final outOfScope = toStrList(fMap['outOfScope']);
-        final tuning = toStrList(fMap['tuningParams']);
-        final edges = toStrList(fMap['edgeCases']);
+        final rawTuning = toStrList(fMap['tuningParams']);
+        final tuning = rawTuning.isNotEmpty
+            ? rawTuning
+            : _defaultTuningParamsForFeature(fTitle, fGoal);
+        final edges = toStrList(fMap['edgeCases'])
+            .map(
+              (e) => e.replaceFirst(
+                RegExp(r'^\[TAG\]\s*', caseSensitive: false),
+                '[STATE GUARD] ',
+              ),
+            )
+            .toList();
 
         final checkpoints = <ProposedCheckpointBlueprint>[];
         final rawCps = fMap['checkpoints'];
