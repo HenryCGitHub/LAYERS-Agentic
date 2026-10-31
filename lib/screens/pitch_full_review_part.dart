@@ -103,8 +103,13 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── Step `10 · Full Review`: Boxless Single Editorial Dossier Sheet ──────────
+  // ── Single-Page Complete Concept Blueprint (Open Borderless Architectural Sheet) ──
   Widget _buildFullReviewWorkspace(ProjectConceptBlueprint draft) {
+    final intake = widget.workbench.sparkIntake;
+    final expansionCards = intake?.expansionCards ?? const [];
+    final isPrewarming = widget.workbench.isPrewarmingReleaseBlueprint;
+    final isPrewarmed = widget.workbench.hasPrewarmedReleaseBlueprint;
+
     return Container(
       key: const ValueKey('project_blueprint_card'),
       color: Colors.transparent,
@@ -126,14 +131,48 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'STEP 09 · FINAL BLUEPRINT VERIFICATION',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                        color: accentAmber,
-                      ),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'STEP 09 · FINAL BLUEPRINT VERIFICATION',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: accentAmber,
+                          ),
+                        ),
+                        if (isPrewarming || isPrewarmed)
+                          Container(
+                            key: const ValueKey('blueprint_prewarm_status_badge'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (isPrewarmed ? accentEmerald : accentAmber)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: (isPrewarmed ? accentEmerald : accentAmber)
+                                    .withValues(alpha: 0.45),
+                              ),
+                            ),
+                            child: Text(
+                              isPrewarmed
+                                  ? '● v0.1 Outline Pre-Warmed'
+                                  : '⟳ Pre-warming v0.1 Outline...',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: isPrewarmed ? accentEmerald : accentAmber,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     if (_activeInlineEditKey == 'blueprint_project_title')
@@ -164,7 +203,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       ),
                     const SizedBox(height: 3),
                     Text(
-                      'Hover any section to adjust it inline with the Agent, or click any item to edit directly.',
+                      'Click any item to edit inline, or use 💬 Ask Agent on any section.',
                       style: GoogleFonts.inter(
                         fontSize: 12.5,
                         color: textSecondary,
@@ -172,9 +211,34 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                     ),
                   ],
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    OutlinedButton(
+                      key: const ValueKey('new_spark_reset_btn'),
+                      onPressed: () => widget.workbench.resetConceptToSpark(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textSecondary,
+                        backgroundColor: bgRecessed,
+                        side: BorderSide(color: borderSubtle),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      child: Text(
+                        '+ New Project',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                     OutlinedButton.icon(
                       onPressed: () => _copyBlueprintAsMarkdown(draft),
                       icon: const Icon(Icons.copy_rounded, size: 14),
@@ -198,7 +262,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
                     _buildPrimaryApproveButton(),
                   ],
                 ),
@@ -206,69 +269,207 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             ),
           ),
 
-          const SizedBox(height: 20),
-
-          // Open Editorial Sections (Hairline Dividers Only — No Outer Box)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 01 Goal (Full Width)
-              _buildFullReviewBlock(
-                draft: draft,
-                sectionIdx: 0,
-                child: _buildSectionContentWidget(
-                  draft,
-                  0,
-                  isReadOnlySummary: false,
-                ),
+          // Optional 1-Line Mechanic Twist Pill Bar (when Spark Expansion Cards exist)
+          if (expansionCards.isNotEmpty)
+            Container(
+              key: const ValueKey('blueprint_twist_pills_bar'),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: borderSubtle)),
               ),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 22),
-                child: Divider(height: 1, thickness: 1, color: borderSubtle),
-              ),
-
-              // 02 Game Spec + 03 Tech Spec (50/50 Side-by-Side Row with Equal Height)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 720) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildFullReviewBlock(
-                          draft: draft,
-                          sectionIdx: 1,
-                          child: _buildSectionContentWidget(
-                            draft,
-                            1,
-                            isReadOnlySummary: false,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    '✦ ADD MECHANIC TWIST:',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: textMuted,
+                    ),
+                  ),
+                  for (int i = 0; i < expansionCards.length; i++)
+                    Builder(
+                      builder: (context) {
+                        final card = expansionCards[i];
+                        final isSelected = card.isSelected;
+                        return Tooltip(
+                          message: card.description,
+                          waitDuration: const Duration(milliseconds: 220),
+                          child: InkWell(
+                            key: ValueKey('blueprint_twist_pill_$i'),
+                            onTap: widget.workbench.isAgentBusy
+                                ? null
+                                : () {
+                                    widget.workbench.toggleSparkExpansionCard(i);
+                                    widget.workbench.updateConceptDraft((d) {
+                                      final beatEntry =
+                                          '${card.title}: ${card.description}';
+                                      if (card.isSelected) {
+                                        if (!d.coreLoopBeats.any(
+                                          (b) => b
+                                              .toLowerCase()
+                                              .startsWith(card.title.toLowerCase()),
+                                        )) {
+                                          d.coreLoopBeats = [
+                                            ...d.coreLoopBeats,
+                                            beatEntry,
+                                          ];
+                                        }
+                                      } else {
+                                        d.coreLoopBeats = d.coreLoopBeats
+                                            .where(
+                                              (b) => !b
+                                                  .toLowerCase()
+                                                  .startsWith(
+                                                    card.title.toLowerCase(),
+                                                  ),
+                                            )
+                                            .toList();
+                                      }
+                                    });
+                                  },
+                            borderRadius: BorderRadius.circular(5),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? accentEmerald.withValues(alpha: 0.14)
+                                    : bgRecessed,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? accentEmerald.withValues(alpha: 0.7)
+                                      : borderSubtle,
+                                ),
+                              ),
+                              child: Text(
+                                isSelected
+                                    ? '✓ ${card.title}'
+                                    : '+ ${card.title}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10.5,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                  color: isSelected
+                                      ? accentEmerald
+                                      : textSecondary,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 18),
+
+          // Compact 2-Column Architectural Blueprint Grid (All 9 Sections Visible Together)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 720) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int idx = 0; idx < _sections.length; idx++) ...[
+                      if (idx > 0)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 22),
+                          padding: const EdgeInsets.symmetric(vertical: 18),
                           child: Divider(
                             height: 1,
                             thickness: 1,
                             color: borderSubtle,
                           ),
                         ),
-                        _buildFullReviewBlock(
-                          draft: draft,
-                          sectionIdx: 2,
-                          child: _buildSectionContentWidget(
-                            draft,
-                            2,
-                            isReadOnlySummary: false,
+                      _buildFullReviewBlock(
+                        draft: draft,
+                        sectionIdx: idx,
+                        child: _buildSectionContentWidget(
+                          draft,
+                          idx,
+                          isReadOnlySummary: false,
+                        ),
+                      ),
+                    ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      child: Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: borderSubtle,
+                      ),
+                    ),
+                    _buildReleaseTrainPipeline(draft),
+                  ],
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Row 1: 01 Goal (Left) | 08 Done When (Right)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 20),
+                          child: _buildFullReviewBlock(
+                            draft: draft,
+                            sectionIdx: 0,
+                            child: _buildSectionContentWidget(
+                              draft,
+                              0,
+                              isReadOnlySummary: false,
+                            ),
                           ),
                         ),
-                      ],
-                    );
-                  }
-                  return IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
+                      ),
+                      Expanded(
+                        flex: 5,
+                        child: Container(
+                          padding: const EdgeInsets.only(left: 20),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              left: BorderSide(color: borderSubtle),
+                            ),
+                          ),
+                          child: _buildFullReviewBlock(
+                            draft: draft,
+                            sectionIdx: 7,
+                            child: _buildSectionContentWidget(
+                              draft,
+                              7,
+                              isReadOnlySummary: false,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Divider(height: 1, thickness: 1, color: borderSubtle),
+                  ),
+
+                  // Row 2: 02 Game Spec (Left) | 03 Tech Spec (Right)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 20),
                           child: _buildFullReviewBlock(
                             draft: draft,
                             sectionIdx: 1,
@@ -279,15 +480,15 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                             ),
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: VerticalDivider(
-                            width: 1,
-                            thickness: 1,
-                            color: borderSubtle,
+                      ),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.only(left: 20),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              left: BorderSide(color: borderSubtle),
+                            ),
                           ),
-                        ),
-                        Expanded(
                           child: _buildFullReviewBlock(
                             draft: draft,
                             sectionIdx: 2,
@@ -298,42 +499,106 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      ),
+                    ],
+                  ),
 
-              // 04 Design Pillars through 08 Done When
-              for (int idx = 3; idx < _sections.length; idx++) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 22),
-                  child: Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: borderSubtle,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Divider(height: 1, thickness: 1, color: borderSubtle),
                   ),
-                ),
-                _buildFullReviewBlock(
-                  draft: draft,
-                  sectionIdx: idx,
-                  child: _buildSectionContentWidget(
-                    draft,
-                    idx,
-                    isReadOnlySummary: false,
+
+                  // Row 3: 06 Core Loop (Left) | 04 Design Pillars + 05 Trade-Offs + 07 Out of Scope (Right)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 11,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 20),
+                          child: _buildFullReviewBlock(
+                            draft: draft,
+                            sectionIdx: 5,
+                            child: _buildSectionContentWidget(
+                              draft,
+                              5,
+                              isReadOnlySummary: false,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 10,
+                        child: Container(
+                          padding: const EdgeInsets.only(left: 20),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              left: BorderSide(color: borderSubtle),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildFullReviewBlock(
+                                draft: draft,
+                                sectionIdx: 3,
+                                child: _buildSectionContentWidget(
+                                  draft,
+                                  3,
+                                  isReadOnlySummary: false,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                child: Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: borderSubtle,
+                                ),
+                              ),
+                              _buildFullReviewBlock(
+                                draft: draft,
+                                sectionIdx: 4,
+                                child: _buildSectionContentWidget(
+                                  draft,
+                                  4,
+                                  isReadOnlySummary: false,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                child: Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: borderSubtle,
+                                ),
+                              ),
+                              _buildFullReviewBlock(
+                                draft: draft,
+                                sectionIdx: 6,
+                                child: _buildSectionContentWidget(
+                                  draft,
+                                  6,
+                                  isReadOnlySummary: false,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 22),
-                child: Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: borderSubtle,
-                ),
-              ),
-              _buildReleaseTrainPipeline(draft),
-            ],
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Divider(height: 1, thickness: 1, color: borderSubtle),
+                  ),
+
+                  // Row 4: 09 Release Train (v0.1)
+                  _buildReleaseTrainPipeline(draft),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -518,23 +783,72 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (sectionIdx != 1 && sectionIdx != 2 && options.isEmpty) ...[
+                      Tooltip(
+                        message:
+                            'Generate AI preset options for ${sec.shortTitle}',
+                        child: InkWell(
+                          key: ValueKey(
+                            'compact_shuffle_options_btn_$sectionIdx',
+                          ),
+                          onTap: widget.workbench.isAgentBusy
+                              ? null
+                              : () => widget.workbench
+                                  .regenerateStage1SectionOptions(sec.optionKey),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: bgRecessed,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: borderSubtle),
+                            ),
+                            child: Text(
+                              '✦ Presets ↻',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     OutlinedButton(
                       key: ValueKey('inline_agent_toggle_$sectionIdx'),
                       onPressed: () {
+                        final willOpen = _inlineEditingSectionIdx != sectionIdx;
                         _rebuild(() {
-                          if (_inlineEditingSectionIdx == sectionIdx) {
+                          if (!willOpen) {
                             _inlineEditingSectionIdx = null;
                           } else {
                             _inlineEditingSectionIdx = sectionIdx;
                             _inlineReviewPromptController.clear();
                           }
                         });
+                        if (willOpen &&
+                            _optionsForSection(draft, sectionIdx).isEmpty &&
+                            !widget.workbench.isAgentBusy) {
+                          widget.workbench.regenerateStage1SectionOptions(
+                            sec.optionKey,
+                          );
+                        }
                       },
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: isInlineOpen ? focalAccentFg : textPrimary,
-                        backgroundColor: isInlineOpen ? focalAccent : bgRecessed,
+                        foregroundColor:
+                            isInlineOpen ? focalAccentFg : textPrimary,
+                        backgroundColor:
+                            isInlineOpen ? focalAccent : bgRecessed,
                         side: BorderSide(color: borderBright),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         minimumSize: const Size(0, 26),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(4),
@@ -542,27 +856,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       ),
                       child: Text(
                         isInlineOpen ? 'Close Agent' : '💬 Ask Agent',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    OutlinedButton(
-                      onPressed: () => _goToStep(sectionIdx),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: textSecondary,
-                        backgroundColor: bgRecessed,
-                        side: BorderSide(color: borderSubtle),
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                        minimumSize: const Size(0, 26),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      child: Text(
-                        'Focus →',
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,

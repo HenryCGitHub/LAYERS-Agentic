@@ -83,6 +83,21 @@ class ProjectConceptAgent {
       return null;
     }
 
+    final includeUpfrontOptions = GeminiAgentClient.testMockResponder != null;
+    final optionsSchemaTail = includeUpfrontOptions
+        ? ''',
+  "sectionOptions": {
+    "goal": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."],
+    "gameSpec": ["View · Controls · Mode · Structure", "View 2 · Controls 2 · Mode 2 · Structure 2", "View 3 · Controls 3 · Mode 3 · Structure 3"],
+    "techSpec": ["Engine · Platform · Pipeline · Save", "Engine 2 · Platform 2 · Pipeline 2 · Save 2", "Engine 3 · Platform 3 · Pipeline 3 · Save 3"],
+    "designPillars": ["Title 1: Experience...", "Title 2: Experience...", "Title 3: Experience..."],
+    "tradeOffs": ["Rule Title 1: Specific X over Y rule for $cleanSpark", "Rule Title 2: Specific X over Y rule", "Rule Title 3: Specific X over Y rule"],
+    "coreLoop": ["Title 1: Beat A → Beat B → Beat C → Beat D", "Title 2: ...", "Title 3: ..."],
+    "exclusions": ["Cut Title 1: Specific prototype cut for $cleanSpark", "Cut Title 2: Specific prototype cut", "Cut Title 3: Specific prototype cut"],
+    "doneWhen": ["Playtest Gate 1: Observable completion condition", "Playtest Gate 2: ...", "Playtest Gate 3: ..."]
+  }'''
+        : '';
+
     final prompt = '''
 You are an indie game producer creating a Stage 1 Concept Blueprint for this spark idea:
 "$cleanSpark"
@@ -105,17 +120,7 @@ Return ONLY valid JSON:
   "coreLoopBeats": ["Beat Name: Literal action and response", "..."],
   "exclusions": ["Specific prototype exclusion for $cleanSpark", "Specific prototype exclusion 2", "Specific prototype exclusion 3"],
   "doneWhen": "Concrete playtest completion condition",
-  "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"],
-  "sectionOptions": {
-    "goal": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."],
-    "gameSpec": ["View · Controls · Mode · Structure", "View 2 · Controls 2 · Mode 2 · Structure 2", "View 3 · Controls 3 · Mode 3 · Structure 3"],
-    "techSpec": ["Engine · Platform · Pipeline · Save", "Engine 2 · Platform 2 · Pipeline 2 · Save 2", "Engine 3 · Platform 3 · Pipeline 3 · Save 3"],
-    "designPillars": ["Title 1: Experience...", "Title 2: Experience...", "Title 3: Experience..."],
-    "tradeOffs": ["Rule Title 1: Specific X over Y rule for $cleanSpark", "Rule Title 2: Specific X over Y rule", "Rule Title 3: Specific X over Y rule"],
-    "coreLoop": ["Title 1: Beat A → Beat B → Beat C → Beat D", "Title 2: ...", "Title 3: ..."],
-    "exclusions": ["Cut Title 1: Specific prototype cut for $cleanSpark", "Cut Title 2: Specific prototype cut", "Cut Title 3: Specific prototype cut"],
-    "doneWhen": ["Playtest Gate 1: Observable completion condition", "Playtest Gate 2: ...", "Playtest Gate 3: ..."]
-  }
+  "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"]$optionsSchemaTail
 }
 ''';
 

@@ -121,6 +121,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
+      if (_conceptDraft != null) {
+        unawaited(prewarmInitialReleasePlanIfNeeded());
+      }
     }
   }
 
@@ -171,6 +174,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   Future<void> startConceptInterview([
     String sparkText = '',
     bool jumpToFullReview = true,
+    bool prewarmRelease = true,
   ]) async {
     final cleanText = sparkText.trim();
     final effectiveSpark = cleanText.isNotEmpty
@@ -204,6 +208,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
+      if (_conceptDraft != null && prewarmRelease) {
+        unawaited(prewarmInitialReleasePlanIfNeeded());
+      }
     }
   }
 
@@ -211,7 +218,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   /// (if not yet drafted) and immediately builds the v0.1 Release Workbench in a single pass.
   Future<void> expressBuildReleaseFromSpark([String sparkText = '']) async {
     if (_conceptDraft == null || sparkText.trim().isNotEmpty) {
-      await startConceptInterview(sparkText, true);
+      await startConceptInterview(sparkText, true, false);
     }
     if (_conceptDraft != null) {
       await approveConceptAndBuildRelease();
@@ -254,6 +261,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
+      if (_conceptDraft != null) {
+        unawaited(prewarmInitialReleasePlanIfNeeded());
+      }
     }
   }
 

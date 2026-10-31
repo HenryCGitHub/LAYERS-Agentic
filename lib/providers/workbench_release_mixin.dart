@@ -158,6 +158,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     ].join('::');
   }
 
+  /// True when the `v0.1` Release Blueprint is already pre-warmed for the current Concept Blueprint.
+  bool get hasPrewarmedReleaseBlueprint {
+    final sig = _computeConceptSignature(_conceptDraft);
+    return sig.isNotEmpty &&
+        _releaseBlueprint != null &&
+        _prewarmedConceptSignature == sig;
+  }
+
   /// Pre-warms the `v0.1` Release Blueprint in the background while the user is reviewing
   /// Step `09 · Full Concept Review` in Stage 1 so clicking `Approve & Build v0.1 →`
   /// can jump straight to synthesizing Feature #1 without waiting on the Release Planner pass.

@@ -106,826 +106,119 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── Steps `01`–`08`: De-Boxed Full-Width Single-Section Workspace ──────────
-  Widget _buildFocusedSectionWorkspace(ProjectConceptBlueprint draft, int sectionIdx) {
-    final sec = _sections[sectionIdx];
-    final agentNote = _agentNotesBySection[sectionIdx];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // SECTION 1: DE-BOXED EDITORIAL ARTIFACT SECTION WORKSPACE
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: borderSubtle),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    runSpacing: 8,
-                    spacing: 12,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'SECTION ${sec.numLabel} / 08',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                              color: accentCyan,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '· ${sec.shortTitle.toUpperCase()}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                              color: textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.edit_outlined,
-                            size: 11,
-                            color: textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Click any item below to edit inline',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: textSecondary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          InkWell(
-                            key: const ValueKey('section_header_approve_build_btn'),
-                            onTap: widget.workbench.isAgentBusy
-                                ? null
-                                : () {
-                                    if (widget.workbench.activeReleaseBeats.isNotEmpty) {
-                                      widget.workbench.setStage(
-                                        WorkbenchStage.releaseWorkbench,
-                                      );
-                                    } else {
-                                      widget.workbench.approveConceptAndBuildRelease();
-                                    }
-                                  },
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: accentEmerald.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: accentEmerald.withValues(alpha: 0.55),
-                                ),
-                              ),
-                              child: Text(
-                                widget.workbench.activeReleaseBeats.isNotEmpty
-                                    ? '✓ Synced · Return to Workbench →'
-                                    : 'Approve & Build v0.1 →',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: accentEmerald,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Text(
-                        sec.numLabel,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: accentCyan,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          sec.title,
-                          style: AppTheme.displayFont(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                            color: textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    sec.purpose,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Full-Width Editorial Artifact Content (No Outer 4-Sided Box)
-            _buildSectionContentWidget(draft, sectionIdx),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        // SECTION 2: BOXLESS AGENT OPTIONS (Top Hairline Divider + Listed Option Rows)
-        Container(
-          padding: const EdgeInsets.only(top: 12),
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: borderSubtle),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: borderSubtle),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: accentCyan,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'AGENT · ${widget.workbench.conversationModel.toUpperCase()}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                            color: accentCyan,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        sec.question,
-                        style: GoogleFonts.inter(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
-                        ),
-                      ),
-                    ),
-                    if (sec.isMultiSelect) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        key: ValueKey('multi_select_badge_$sectionIdx'),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3,
-                        ),
-                        child: Text(
-                          '+ / ✓ MULTI-SELECT · ADD ANY',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: accentEmerald,
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(width: 8),
-                    InkWell(
-                      key: const ValueKey('regenerate_section_options_btn'),
-                      onTap: () {
-                        _rebuild(() {
-                          _selectedOptionBySection.remove(sectionIdx);
-                          _selectedOptionsBySection.remove(sectionIdx);
-                        });
-                        widget.workbench.regenerateStage1SectionOptions(
-                          sec.optionKey,
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
-                        ),
-                        child: Text(
-                          '↻ Refresh Options',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Vertical Listed Option Rows (Full-Width, Hairline-Divided)
-              Builder(
-                builder: (context) {
-                  final options = _optionsForSection(draft, sectionIdx);
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (int optIdx = 0; optIdx < options.length; optIdx++)
-                        _buildAgentOptionCard(
-                          draft: draft,
-                          sectionIdx: sectionIdx,
-                          optIdx: optIdx,
-                          label: options[optIdx],
-                          isSelected: _isSectionOptionSelected(sectionIdx, optIdx),
-                        ),
-                    ],
-                  );
-                },
-              ),
-
-              if (agentNote != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(color: accentEmerald, width: 2),
-                    ),
-                  ),
-                  child: Text(
-                    agentNote,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: textSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Sticky Bottom Studio Dock (Steps `01`–`09` + Step `10 Full Review`) ─────
+  // ── Sticky Bottom Studio Dock (Single-Page Complete Concept Blueprint) ─────
   Widget _buildConceptStickyBottomDock(ProjectConceptBlueprint draft) {
-    final isFullReview = _currentStep >= _sections.length;
-    if (isFullReview) {
-      Future<void> submitGlobalChat() async {
-        final text = _agentPromptController.text.trim();
-        if (text.isEmpty) return;
-        _agentPromptController.clear();
-        await widget.workbench.sendConceptChatMessage(text);
-      }
-
-      return Container(
-        key: const ValueKey('concept_sticky_bottom_dock'),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-        decoration: BoxDecoration(
-          color: bgSurface,
-          border: Border(top: BorderSide(color: borderBright)),
-        ),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1160),
-            child: Row(
-              children: [
-                OutlinedButton(
-                  onPressed: () => _goToStep(0),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: textPrimary,
-                    backgroundColor: bgRecessed,
-                    side: BorderSide(color: borderSubtle),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                  child: Text(
-                    'Step-by-Step (01–08)',
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: bgRecessed,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: borderSubtle),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          '✦ CO-DESIGN:',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: accentCyan,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            key: const ValueKey('full_blueprint_global_chat_input'),
-                            controller: _agentPromptController,
-                            style: GoogleFonts.inter(
-                              fontSize: 12.5,
-                              color: textPrimary,
-                            ),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              hintText:
-                                  'Tell the Agent what to change across any section (e.g. "Switch to Godot 4 and add a grapple dash beat")...',
-                              hintStyle: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: textMuted,
-                              ),
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                            onSubmitted: (_) => submitGlobalChat(),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        InkWell(
-                          key: const ValueKey('full_blueprint_global_chat_send_btn'),
-                          onTap: widget.workbench.isAgentBusy ? null : submitGlobalChat,
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            child: Text(
-                              widget.workbench.isAgentBusy ? '...' : 'Apply ↵',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: accentCyan,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: () => _copyBlueprintAsMarkdown(draft),
-                  icon: const Icon(Icons.copy_rounded, size: 14),
-                  label: Text(
-                    'Copy Markdown',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: textPrimary,
-                    backgroundColor: bgRecessed,
-                    side: BorderSide(color: borderSubtle),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _buildPrimaryApproveButton(
-                  key: const ValueKey('approve_concept_plan_release_btn'),
-                  showRebuildSecondary: false,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+    Future<void> submitGlobalChat() async {
+      final text = _agentPromptController.text.trim();
+      if (text.isEmpty) return;
+      _agentPromptController.clear();
+      await widget.workbench.sendConceptChatMessage(text);
     }
-
-    final sectionIdx = _currentStep;
-    final sec = _sections[sectionIdx];
-    final nextTitle = sectionIdx + 1 < _sections.length
-        ? 'Next: ${_sections[sectionIdx + 1].shortTitle} →'
-        : '09 · Full Blueprint Review →';
 
     return Container(
       key: const ValueKey('concept_sticky_bottom_dock'),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       decoration: BoxDecoration(
         color: bgSurface,
         border: Border(top: BorderSide(color: borderBright)),
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1160),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          constraints: const BoxConstraints(maxWidth: 1180),
+          child: Row(
             children: [
-              // [ASK AGENT] Input Bar
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: bgRecessed,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: borderSubtle),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: bgRecessed,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: borderSubtle),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '✦ CO-DESIGN:',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: accentCyan,
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          Text(
-                            '[ASK AGENT]',
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('full_blueprint_global_chat_input'),
+                          controller: _agentPromptController,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText:
+                                'Tell the Agent what to change across any section (e.g. "Switch to Godot 4 and add a grapple dash beat")...',
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: textMuted,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          onSubmitted: (_) => submitGlobalChat(),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        key: const ValueKey('full_blueprint_global_chat_send_btn'),
+                        onTap: widget.workbench.isAgentBusy ? null : submitGlobalChat,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          child: Text(
+                            widget.workbench.isAgentBusy ? '...' : 'Apply ↵',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: textSecondary,
+                              fontWeight: FontWeight.w800,
+                              color: accentCyan,
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Focus(
-                              onKeyEvent: (node, event) =>
-                                  _handleMultilinePitchKeyEvent(
-                                event,
-                                _agentPromptController,
-                                onSubmit: () =>
-                                    _submitSectionPrompt(draft, sectionIdx),
-                              ),
-                              child: TextField(
-                                key: const ValueKey('concept_chat_input_field'),
-                                controller: _agentPromptController,
-                                focusNode: _conceptChatFocusNode,
-                                minLines: 1,
-                                maxLines: null,
-                                keyboardType: TextInputType.multiline,
-                                textInputAction: TextInputAction.newline,
-                                inputFormatters: const [
-                                  MaxColumnLineWrapFormatter(
-                                    maxCharsPerLine: 70,
-                                  ),
-                                ],
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  height: 1.4,
-                                  color: textPrimary,
-                                ),
-                                decoration: InputDecoration(
-                                  hintMaxLines: 1,
-                                  hintText:
-                                      'Tell the Agent how to change or expand ${sec.title} (70 chars/line · Shift+Enter for new line)...',
-                                  hintStyle: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    color: textMuted,
-                                  ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  filled: false,
-                                  isDense: true,
-                                  contentPadding:
-                                      const EdgeInsets.symmetric(vertical: 8),
-                                ),
-                                onSubmitted: (_) =>
-                                    _submitSectionPrompt(draft, sectionIdx),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: widget.workbench.isAgentBusy
-                        ? null
-                        : () => _submitSectionPrompt(draft, sectionIdx),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: textPrimary,
-                      backgroundColor: bgRecessed,
-                      side: BorderSide(color: borderBright),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                    ),
-                    child: Text(
-                      widget.workbench.isAgentBusy ? 'Updating...' : 'Send to Agent',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Step Navigation Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  OutlinedButton(
-                    onPressed: sectionIdx == 0
-                        ? null
-                        : () => _goToStep(sectionIdx - 1),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: textPrimary,
-                      backgroundColor: bgRecessed,
-                      side: BorderSide(color: borderSubtle),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                    ),
-                    child: Text(
-                      '← Previous Section',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      if (sectionIdx + 1 < _sections.length) ...[
-                        OutlinedButton(
-                          key: const ValueKey('skip_to_full_review_btn'),
-                          onPressed: () => _goToStep(_sections.length),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: textPrimary,
-                            backgroundColor: bgRecessed,
-                            side: BorderSide(
-                              color: accentAmber.withValues(alpha: 0.55),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 11,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                          child: Text(
-                            'Review Full Blueprint ◫',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      ElevatedButton(
-                        key: const ValueKey('next_section_btn'),
-                        onPressed: () => _goToStep(sectionIdx + 1),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: focalAccent,
-                          foregroundColor: focalAccentFg,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 11,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ),
-                        child: Text(
-                          nextTitle,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAgentOptionCard({
-    required ProjectConceptBlueprint draft,
-    required int sectionIdx,
-    required int optIdx,
-    required String label,
-    required bool isSelected,
-  }) {
-    final parsed = _splitOptionIntoCardTitleAndBody(label, sectionIdx, optIdx);
-    final sec = _sections[sectionIdx];
-    final isMulti = sec.isMultiSelect;
-    final activeBarColor = isMulti ? accentEmerald : accentCyan;
-
-    return Material(
-      color: isSelected ? bgHover.withValues(alpha: 0.45) : Colors.transparent,
-      child: InkWell(
-        key: ValueKey('agent_option_card_${sectionIdx}_$optIdx'),
-        onTap: () => _selectSectionOption(draft, sectionIdx, optIdx),
-        child: Container(
-          padding: EdgeInsets.fromLTRB(isSelected ? 13 : 8, 10, 8, 10),
-          decoration: BoxDecoration(
-            border: Border(
-              left: isSelected
-                  ? BorderSide(color: activeBarColor, width: 3)
-                  : BorderSide.none,
-              bottom: BorderSide(color: borderSubtle),
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Unified Selection Indicator: Radio Circle for single-select, Check/Add for multi-select
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: isMulti
-                    ? Icon(
-                        isSelected
-                            ? Icons.check_circle_rounded
-                            : Icons.add_circle_outline_rounded,
-                        size: 16,
-                        color: isSelected ? accentEmerald : textMuted,
-                      )
-                    : Container(
-                        width: 15,
-                        height: 15,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected ? accentCyan : Colors.transparent,
-                          border: Border.all(
-                            color: isSelected ? accentCyan : textMuted,
-                            width: 1.4,
-                          ),
-                        ),
-                        child: isSelected
-                            ? Container(
-                                width: 5,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: bgBase,
-                                ),
-                              )
-                            : null,
-                      ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 10,
-                      runSpacing: 4,
-                      children: [
-                        Text(
-                          parsed.title,
-                          style: AppTheme.displayFont(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w700,
-                            color: textPrimary,
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              optIdx == 0 ? 'RECOMMENDED' : 'OPTION 0${optIdx + 1}',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: optIdx == 0 ? accentCyan : textSecondary,
-                              ),
-                            ),
-                            if (isMulti) ...[
-                              const SizedBox(width: 10),
-                              Text(
-                                isSelected
-                                    ? '✓ Added to ${sec.shortTitle}'
-                                    : '+ Add to ${sec.shortTitle}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: isSelected
-                                      ? accentEmerald
-                                      : textSecondary,
-                                ),
-                              ),
-                            ] else ...[
-                              const SizedBox(width: 10),
-                              InkWell(
-                                key: ValueKey(
-                                  'use_and_next_option_btn_${sectionIdx}_$optIdx',
-                                ),
-                                onTap: () {
-                                  if (!isSelected) {
-                                    _selectSectionOption(draft, sectionIdx, optIdx);
-                                  }
-                                  _goToStep(sectionIdx + 1);
-                                },
-                                borderRadius: BorderRadius.circular(4),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: accentCyan.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: accentCyan.withValues(alpha: 0.45),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    'Use & Next →',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: accentCyan,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      parsed.description,
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        height: 1.42,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ],
                 ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: () => _copyBlueprintAsMarkdown(draft),
+                icon: const Icon(Icons.copy_rounded, size: 14),
+                label: Text(
+                  'Copy Markdown',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: textPrimary,
+                  backgroundColor: bgRecessed,
+                  side: BorderSide(color: borderSubtle),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildPrimaryApproveButton(
+                key: const ValueKey('approve_concept_plan_release_btn'),
+                showRebuildSecondary: false,
               ),
             ],
           ),
@@ -1777,13 +1070,18 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: textMuted,
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: textMuted,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(

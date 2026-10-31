@@ -1126,74 +1126,58 @@ void main() {
         await tester.pumpAndSettle();
         expect(provider.sparkIntake!.expansionCards.first.isSelected, isFalse);
 
-        // Explicitly click "Start Concept Blueprint →" to accept and launch Stage 1B (Option A Single-Page Blueprint default)
+        // Explicitly click "Start Concept Blueprint →" to accept and launch Stage 1B (Full-Width Single-Page Blueprint only)
         await tester.tap(find.byKey(const ValueKey('start_concept_interview_btn')));
         await tester.pumpAndSettle();
 
+        // ── Stage 1B: Full-Width Single-Page Concept Blueprint (All 9 Sections Together, Zero Left Stepper Rail) ──
         expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
-        // Click Section 01 in the Left Outliner Rail to verify the Focused One-Section-at-a-Time view
-        await tester.tap(find.byKey(const ValueKey('step_node_0')));
-        await tester.pumpAndSettle();
-
-        // ── Stage 1B: One-Section-at-a-Time Dynamic UI (Sections 01..08) ──
+        expect(find.byKey(const ValueKey('stage1_left_outliner_rail')), findsNothing);
         expect(find.byKey(const ValueKey('top_bar_project_title')), findsOneWidget);
         expect(find.byKey(const ValueKey('project_switcher_dropdown_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('cloud_sync_auth_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('global_export_spec_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_left_outliner_rail')), findsOneWidget);
         expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
         expect(find.byKey(const ValueKey('new_spark_reset_btn')), findsOneWidget);
         expect(find.text('+ New Project'), findsOneWidget);
-        expect(find.byKey(const ValueKey('agent_option_card_0_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('agent_option_card_0_1')), findsOneWidget);
-        expect(find.byKey(const ValueKey('agent_option_card_0_2')), findsOneWidget);
-        expect(find.text('SECTION 01 / 08'), findsOneWidget);
-        expect(find.text('Goal'), findsWidgets);
-        // Verify Option A structured Goal card + 3 Scannable Clause Cards (01, 02, 03)
+        expect(find.byKey(const ValueKey('blueprint_twist_pills_bar')), findsOneWidget);
+
+        // Verify structured Goal card + 3 Scannable Clause Cards (01, 02, 03) on the Single-Page Blueprint
         expect(find.byKey(const ValueKey('stage1_goal_structured_card')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_goal_clause_card_0')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_goal_clause_card_1')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_goal_clause_card_2')), findsOneWidget);
 
-        // Verify clicking a Stage 1B Option Card applies it, and clicking it again unselects it and restores the default Goal
+        // Verify clicking a Compact Option Pill on Section 01 applies it, and clicking it again unselects it and restores the default Goal
         final initialGoal = provider.conceptDraft!.goal;
-        await tester.tap(find.byKey(const ValueKey('agent_option_card_0_1')));
+        final goalPill1 = find.byKey(const ValueKey('compact_option_pill_0_1'));
+        await tester.ensureVisible(goalPill1);
+        await tester.pumpAndSettle();
+        await tester.tap(goalPill1);
         await tester.pumpAndSettle();
         expect(provider.conceptDraft!.goal, isNot(equals(initialGoal)));
-        await tester.tap(find.byKey(const ValueKey('agent_option_card_0_1')));
+        await tester.tap(goalPill1);
         await tester.pumpAndSettle();
         expect(provider.conceptDraft!.goal, equals(initialGoal));
 
-        // Step to Section 02 (Game Spec) and verify 2x2 KV grid labels
-        await tester.tap(find.byKey(const ValueKey('next_section_btn')));
-        await tester.pumpAndSettle();
-        expect(find.text('SECTION 02 / 08'), findsOneWidget);
+        // Verify 02 Game Spec and 03 Tech Spec 2x2 KV grid labels are visible together on the Single-Page Blueprint
         expect(find.text('CAMERA VIEW'), findsOneWidget);
         expect(find.text('CONTROLS'), findsOneWidget);
-
-        // Step to Section 03 (Tech Spec) and verify 2x2 KV grid labels
-        await tester.tap(find.byKey(const ValueKey('next_section_btn')));
-        await tester.pumpAndSettle();
-        expect(find.text('SECTION 03 / 08'), findsOneWidget);
         expect(find.text('ENGINE'), findsOneWidget);
         expect(find.text('PLATFORM'), findsOneWidget);
 
-        // Step to Section 04 (Design Pillars — plain label, never "Load-Bearing")
-        await tester.tap(find.byKey(const ValueKey('next_section_btn')));
-        await tester.pumpAndSettle();
-        expect(find.text('SECTION 04 / 08'), findsOneWidget);
-        expect(find.text('Design Pillars'), findsWidgets);
+        // Verify 04 Design Pillars (plain label, never "Load-Bearing") & multi-select compact pills
+        expect(find.text('DESIGN PILLARS'), findsOneWidget);
         expect(find.textContaining('Load-Bearing'), findsNothing);
-        // Verify Stage 1 + / ✓ Multi-Select Playing Cards on Section 04
-        expect(find.byKey(const ValueKey('multi_select_badge_3')), findsOneWidget);
-        expect(find.text('+ Add to Design Pillars'), findsNWidgets(3));
-        await tester.tap(find.byKey(const ValueKey('agent_option_card_3_0')));
+        final pillarPill0 = find.byKey(const ValueKey('compact_option_pill_3_0'));
+        final pillarPill1 = find.byKey(const ValueKey('compact_option_pill_3_1'));
+        await tester.ensureVisible(pillarPill0);
         await tester.pumpAndSettle();
-        expect(find.text('✓ Added to Design Pillars'), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('agent_option_card_3_1')));
+        await tester.tap(pillarPill0);
         await tester.pumpAndSettle();
-        expect(find.text('✓ Added to Design Pillars'), findsNWidgets(2));
+        await tester.tap(pillarPill1);
+        await tester.pumpAndSettle();
         expect(
           provider.conceptDraft!.designPillars.join(' '),
           contains('Unbroken Momentum'),
@@ -1203,17 +1187,7 @@ void main() {
           contains('Tactical Positioning'),
         );
 
-        // Jump to Step 09: Full Blueprint Review using the prominent bottom dock button
-        expect(find.byKey(const ValueKey('skip_to_full_review_btn')), findsOneWidget);
-        final synthBtn = find.byKey(const ValueKey('synthesize_concept_btn'));
-        await tester.ensureVisible(synthBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(synthBtn);
-        await tester.pumpAndSettle();
-
-        // ── Stage 1C: Step 09 Full Blueprint Review & Progressive Releases ──
-        expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
+        // Verify Full Blueprint Review header & Release Train
         expect(find.text('STEP 09 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
         expect(find.text('v0.1: Core Movement & Game Loop - Prototype'), findsOneWidget);
         expect(find.text('1. Concept'), findsOneWidget);
@@ -3486,27 +3460,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           contains('lock missiles, and extract scrap'),
         );
 
-        // ── 3. Upgrade 4: Focused Section "Anytime Build" Header + "Use & Next →" on Option Cards ──
-        await tester.tap(find.byKey(const ValueKey('step_node_0')));
+        // ── 3. Upgrade 4: 1-Click Direct Pitch -> Blueprint & 1-Click Express Build v0.1 from Spark ──
+        final resetBtn = find.byKey(const ValueKey('new_spark_reset_btn'));
+        await tester.ensureVisible(resetBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(resetBtn);
         await tester.pumpAndSettle();
         expect(
-          find.byKey(const ValueKey('section_header_approve_build_btn')),
+          find.byKey(const ValueKey('direct_generate_blueprint_btn')),
           findsOneWidget,
         );
-        final useAndNextBtn = find.byKey(
-          const ValueKey('use_and_next_option_btn_0_0'),
-        );
-        expect(useAndNextBtn, findsOneWidget);
-        await tester.ensureVisible(useAndNextBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(useAndNextBtn);
-        await tester.pumpAndSettle();
-        // Advanced immediately to Section 02 / 08
-        expect(find.text('SECTION 02 / 08'), findsOneWidget);
-
-        // ── 4. Upgrade 1: 1-Click Express Build v0.1 from Spark ──
-        await tester.tap(find.byKey(const ValueKey('new_spark_reset_btn')));
-        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('express_build_v01_btn')),
           findsOneWidget,

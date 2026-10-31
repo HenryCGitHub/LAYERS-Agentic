@@ -159,10 +159,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final RegExp _goalClauseSplitRegex = RegExp(r',\s*and\s+|,\s+');
   final RegExp _nonWordStripRegex = RegExp(r'[^\w\s-]');
 
-  /// Active step index: `0`..`7` for sections `01`..`08`, and `8` (default) for `09 · Full Concept Review` (Single-Page Blueprint).
   String? _lastTrackedProjectId;
-  int _currentStep = 8;
-  final Set<int> _visitedSteps = {0, 1, 2, 3, 4, 5, 6, 7};
   final Map<int, int?> _selectedOptionBySection = {};
   final Map<int, Set<int>> _selectedOptionsBySection = {};
   final Map<int, dynamic> _initialSectionDefaults = {};
@@ -331,26 +328,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     _sparkFocusNode.dispose();
     _conceptChatFocusNode.dispose();
     super.dispose();
-  }
-
-  void _goToStep(int step) {
-    final clamped = step.clamp(0, _sections.length);
-    setState(() {
-      _visitedSteps.add(_currentStep);
-      _currentStep = clamped;
-      if (clamped == _sections.length) {
-        // When entering Full Review, mark all 9 sections visited
-        for (int i = 0; i < _sections.length; i++) {
-          _visitedSteps.add(i);
-        }
-      } else {
-        _visitedSteps.add(clamped);
-      }
-      _inlineEditingSectionIdx = null;
-    });
-    if (clamped == _sections.length) {
-      widget.workbench.prewarmInitialReleasePlanIfNeeded();
-    }
   }
 
   void _captureSectionDefaultIfNeeded(
@@ -806,10 +783,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     final currentProjectId = widget.workbench.activeProjectId;
     if (currentProjectId != _lastTrackedProjectId) {
       _lastTrackedProjectId = currentProjectId;
-      _currentStep = _sections.length;
-      _visitedSteps
-        ..clear()
-        ..addAll(List<int>.generate(_sections.length, (i) => i));
       _selectedOptionBySection.clear();
       _selectedOptionsBySection.clear();
       _initialSectionDefaults.clear();
@@ -842,63 +815,28 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
 
     if (widget.workbench.jumpToFullReviewPending) {
       widget.workbench.consumeJumpToFullReviewPending();
-      _currentStep = _sections.length;
-      for (int i = 0; i < _sections.length; i++) {
-        _visitedSteps.add(i);
-      }
     }
 
-    // Step 1B / 1C: Unified Left Outliner Sidebar (308px) + Focused Co-Design Canvas
+    // Step 1B: Full-Width Single-Page Concept Blueprint + Sticky Global Co-Design Dock
     return Container(
       key: const ValueKey('concept_interview_card'),
       color: bgBase,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 780;
-          final mainCanvasColumn = Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1100),
-                      child: _currentStep < _sections.length
-                          ? _buildFocusedSectionWorkspace(draft, _currentStep)
-                          : _buildFullReviewWorkspace(draft),
-                    ),
-                  ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1180),
+                  child: _buildFullReviewWorkspace(draft),
                 ),
               ),
-              _buildConceptStickyBottomDock(draft),
-            ],
-          );
-
-          if (!isWide) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: 220,
-                  child: _buildLeftConceptOutlinerRail(draft),
-                ),
-                Expanded(child: mainCanvasColumn),
-              ],
-            );
-          }
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: 248,
-                child: _buildLeftConceptOutlinerRail(draft),
-              ),
-              Expanded(child: mainCanvasColumn),
-            ],
-          );
-        },
+            ),
+          ),
+          _buildConceptStickyBottomDock(draft),
+        ],
       ),
     );
   }

@@ -383,7 +383,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                 onPressed:
                     widget.workbench.isAgentBusy ? null : submitIdeaToAgent,
                 child: Text(
-                  intake == null ? 'Summarize Idea' : 'Update Summary',
+                  intake == null ? 'Summarize & Twists' : 'Update Summary',
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
@@ -454,39 +454,76 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
             ],
           ),
           const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const ValueKey('express_build_v01_btn'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: accentAmber,
-                backgroundColor: accentAmber.withValues(alpha: 0.08),
-                side: BorderSide(color: accentAmber.withValues(alpha: 0.55)),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 11,
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (intake == null)
+                ElevatedButton(
+                  key: const ValueKey('direct_generate_blueprint_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: focalAccent,
+                    foregroundColor: focalAccentFg,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: widget.workbench.isAgentBusy
+                      ? null
+                      : () => widget.workbench.startConceptInterview(
+                            _sparkController.text
+                                .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+                                .trim(),
+                            true,
+                          ),
+                  child: Text(
+                    widget.workbench.isAgentBusy
+                        ? 'Drafting Blueprint...'
+                        : 'Generate Concept Blueprint →',
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+              OutlinedButton.icon(
+                key: const ValueKey('express_build_v01_btn'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: accentAmber,
+                  backgroundColor: accentAmber.withValues(alpha: 0.08),
+                  side: BorderSide(color: accentAmber.withValues(alpha: 0.55)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: widget.workbench.isAgentBusy
+                    ? null
+                    : () => widget.workbench.expressBuildReleaseFromSpark(
+                          _sparkController.text
+                              .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+                              .trim(),
+                        ),
+                icon: Icon(Icons.bolt_rounded, size: 15, color: accentAmber),
+                label: Text(
+                  'Express Build v0.1 →',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: accentAmber,
+                  ),
                 ),
               ),
-              onPressed: widget.workbench.isAgentBusy
-                  ? null
-                  : () => widget.workbench.expressBuildReleaseFromSpark(
-                        _sparkController.text
-                            .replaceAll(RegExp(r'\s*\n\s*'), ' ')
-                            .trim(),
-                      ),
-              icon: Icon(Icons.bolt_rounded, size: 15, color: accentAmber),
-              label: Text(
-                'Express Build v0.1 →',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: accentAmber,
-                ),
-              ),
-            ),
+            ],
           ),
           if (intake != null) ...[
             const SizedBox(height: 18),
@@ -780,343 +817,4 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
       },
     );
   }
-
-  // ── Unified 2-Surface Recessed Left Concept Stepper (`01 Goal` ... `09 Releases` + `10 Full Review`) ─
-  Widget _buildLeftConceptOutlinerRail(ProjectConceptBlueprint draft) {
-    final verifiedCount =
-        _visitedSteps.where((idx) => idx >= 0 && idx < _sections.length).length;
-    final viewSummary = draft.gameSpec.isNotEmpty ? draft.gameSpec.first : '2D/3D';
-    final engineSummary = draft.techSpec.isNotEmpty ? draft.techSpec.first : 'Engine';
-
-    return Container(
-      key: const ValueKey('stage1_left_outliner_rail'),
-      color: bgRecessed,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Flush Top Snapshot Header (Zero 4-sided nested boxes)
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 12, 11),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_activeInlineEditKey == 'outliner_project_title')
-                  _buildInlineEditorBox(
-                    editKey: 'outliner_project_title',
-                    hintText: 'Project title...',
-                    onSave: _saveInlineProjectTitle,
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          key: const ValueKey('stage1_rename_project_title_btn'),
-                          onTap: () => _promptEditProjectTitle(
-                            draft,
-                            key: 'outliner_project_title',
-                          ),
-                          borderRadius: BorderRadius.circular(3),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  draft.title.trim().isEmpty
-                                      ? 'Concept Blueprint'
-                                      : draft.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: textPrimary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.edit_outlined,
-                                size: 11,
-                                color: textMuted,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$verifiedCount/${_sections.length} ✓',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          color: accentEmerald,
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '$viewSummary · $engineSummary · ${draft.coreLoopBeats.length} Beats',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          color: textMuted,
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      key: const ValueKey('new_spark_reset_btn'),
-                      onTap: () => widget.workbench.resetConceptToSpark(),
-                      borderRadius: BorderRadius.circular(3),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        child: Text(
-                          '+ New Project',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: accentCyan,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Flat 10-Step Section List (`01`..`09` + `10 Full Concept Review` as the last item)
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              children: [
-                for (int i = 0; i < _sections.length; i++)
-                  _buildOutlineSectionNode(draft, i),
-                _buildFinalReviewOutlineNode(verifiedCount: verifiedCount),
-              ],
-            ),
-          ),
-
-          // Quick-Action Footer: Jump straight to 2. Workbench (Build v0.1 or Return to Synced Workbench) from any section
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
-            child: InkWell(
-              key: const ValueKey('outliner_quick_build_v01_btn'),
-              onTap: widget.workbench.isAgentBusy
-                  ? null
-                  : () {
-                      if (widget.workbench.activeReleaseBeats.isNotEmpty) {
-                        widget.workbench.setStage(WorkbenchStage.releaseWorkbench);
-                      } else {
-                        widget.workbench.approveConceptAndBuildRelease();
-                      }
-                    },
-              borderRadius: BorderRadius.circular(5),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                child: Text(
-                  widget.workbench.activeReleaseBeats.isNotEmpty
-                      ? '✓ Return to Workbench →'
-                      : 'Build v0.1 →',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: accentEmerald,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _sectionOutlineMetaBadge(ProjectConceptBlueprint draft, int index) {
-    switch (index) {
-      case 0:
-        return draft.goal.trim().isEmpty ? 'Draft' : 'Locked';
-      case 1:
-        return draft.gameSpec.isNotEmpty ? draft.gameSpec.first : 'Spec';
-      case 2:
-        return draft.techSpec.isNotEmpty ? draft.techSpec.first : 'Tech';
-      case 3:
-        return '${draft.designPillars.length} Pillars';
-      case 4:
-        return '${draft.tradeOffs.length} Rules';
-      case 5:
-        return '${draft.coreLoopBeats.length} Beats';
-      case 6:
-        return '${draft.exclusions.length} Cuts';
-      case 7:
-        return 'Playtest';
-      default:
-        return '';
-    }
-  }
-
-  Widget _buildOutlineSectionNode(ProjectConceptBlueprint draft, int index) {
-    final sec = _sections[index];
-    final isActive = _currentStep == index;
-    final isDone = _visitedSteps.contains(index);
-    final metaBadge = _sectionOutlineMetaBadge(draft, index);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-      child: InkWell(
-        key: ValueKey('step_node_$index'),
-        borderRadius: BorderRadius.circular(6),
-        onTap: () => _goToStep(index),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-          decoration: BoxDecoration(
-            color: isActive
-                ? (isDark
-                    ? Colors.white.withValues(alpha: 0.065)
-                    : bgSurface)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 24,
-              child: Text(
-                sec.numLabel,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10.5,
-                  fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                  color: isActive ? accentCyan : textMuted,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                sec.shortTitle,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive
-                      ? textPrimary
-                      : (isDone ? textSecondary : textMuted),
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 88),
-              child: Text(
-                metaBadge,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? textPrimary : textMuted,
-                ),
-              ),
-            ),
-            if (isDone) ...[
-              const SizedBox(width: 6),
-              Text(
-                '✓',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  color: accentEmerald,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      ),
-    );
-  }
-
-  Widget _buildFinalReviewOutlineNode({required int verifiedCount}) {
-    final isActive = _currentStep == _sections.length;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: borderSubtle),
-          bottom: BorderSide(color: borderSubtle),
-        ),
-      ),
-      child: InkWell(
-        key: const ValueKey('synthesize_concept_btn'),
-        onTap: () => _goToStep(_sections.length),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(13, 11, 12, 11),
-          decoration: BoxDecoration(
-            color: isActive
-                ? accentEmerald.withValues(alpha: 0.10)
-                : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: isActive ? accentEmerald : Colors.transparent,
-                width: 3,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                child: Text(
-                  '09',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: isActive ? accentEmerald : textSecondary,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Full Concept Review',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: textPrimary,
-                      ),
-                    ),
-                    Text(
-                      'Inspect all ${_sections.length} sections ($verifiedCount/${_sections.length})',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.5,
-                        color: textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                'READY →',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: accentEmerald,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
 }
