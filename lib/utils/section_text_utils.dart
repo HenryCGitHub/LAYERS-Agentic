@@ -57,7 +57,7 @@ class SectionTextUtils {
 
   /// Resolves the `In Scope:` bullet list from a document's `sections`.
   static List<String> resolveInScope(Map<String, String> sections) {
-    final raw = sections['scope'];
+    final raw = sections['scope'] ?? sections['inScope'];
     if (raw != null && raw.trim().isNotEmpty) {
       if (_inScopeHeaderRegex.hasMatch(raw)) {
         final parts = raw.split(_inScopeHeaderRegex);

@@ -103,10 +103,10 @@ You are an indie game producer creating a Stage 1 Concept Blueprint for this spa
 "$cleanSpark"
 
 ${GeminiAgentClient.compactStyleRules}
-- Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) ordered by PLAYABLE DEVELOPER IMPACT ("Fastest Path to the Fun"):
-  1. Beat 1 MUST be the Core Toy & Primary Control (the #1 interactive verb on screen 80% of the time—e.g. Player Movement & Grapple/Dash, Vehicle Handling, Grid Placement/Harvest, or Card Play/Targeting).
-  2. Next Beats cover Primary Action & Reactive Challenge (always pair player weapons/defenses with active enemies/hazards that push back so the beat is testable on screen).
-  3. Final Beats cover Reward/Pickup, Extraction/Upgrade payoff, and continuing or resetting into the next run/route so the loop never dead-ends.
+- Decompose `coreLoopBeats` into 4 to 6 sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:
+  1. Beat 1 MUST be the immediate in-game player control & primary action (e.g. Walking & Tank Inspection, Grapple/Dash Traversal, Vehicle Handling, or Grid Placement—never a pre-match menu).
+  2. Middle Beats cover the core simulation/action and reactive challenge (e.g. chemical drift & plant stress, active enemy/hazard pressure, or resource processing) in the exact chronological sequence the player experiences them.
+  3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.
 - Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
 
 Return ONLY valid JSON:
@@ -336,21 +336,16 @@ Return ONLY valid JSON:
     return true;
   }
 
-  /// Ranks a Core Loop Beat by Playable Developer Impact ("Fastest Path to the Fun"):
-  /// - `0`: Core Toy & Primary Control
-  /// - `1`: Primary Action & Reactive Challenge
-  /// - `2`: Mid-Loop Reward & Objective Escalation
-  /// - `3`: Pre-Match Prep / Loadout / Staging Multipliers
-  /// - `4`: Loop Closure & Reset
+  /// Ranks a Core Loop Beat so pre-match Staging/Loadout menus (`3`) and end-of-run Reset/Summary (`4`)
+  /// are never placed ahead of active in-game gameplay beats (`0`), while preserving the exact
+  /// chronological player order of all active gameplay beats (`0`).
   static int developerImpactTierForBeat(String rawBeat) {
     final head = rawBeat.split(':').first.toLowerCase();
-    final full = rawBeat.toLowerCase();
 
     final isResetOrSummary = head.contains('reset') ||
         head.contains('resolution') ||
         head.contains('summary') ||
-        head.contains('tally') ||
-        head.contains('dropoff');
+        head.contains('tally');
     if (isResetOrSummary) return 4;
 
     final isPrepOrLoadout = (head.contains('staging') ||
@@ -365,35 +360,7 @@ Return ONLY valid JSON:
         !head.contains('parkour');
     if (isPrepOrLoadout) return 3;
 
-    final isCoreToyOrControl = head.contains('traversal') ||
-        head.contains('movement') ||
-        head.contains('locomotion') ||
-        head.contains('parkour') ||
-        head.contains('wall-run') ||
-        head.contains('grappl') ||
-        head.contains('driving') ||
-        head.contains('steering') ||
-        head.contains('control') ||
-        head.contains('plant') ||
-        head.contains('harvest') ||
-        head.contains('card play') ||
-        head.contains('placement') ||
-        full.contains('primary movement') ||
-        full.contains('chain wall-runs');
-    if (isCoreToyOrControl) return 0;
-
-    final isActionOrChallenge = head.contains('combat') ||
-        head.contains('weapon') ||
-        head.contains('hazard') ||
-        head.contains('wave') ||
-        head.contains('ambush') ||
-        head.contains('enemy') ||
-        head.contains('strike') ||
-        head.contains('attack') ||
-        head.contains('shoot');
-    if (isActionOrChallenge) return 1;
-
-    return 2;
+    return 0;
   }
 
   /// Ensures `coreLoopBeats` starts with the highest-impact Core Toy & Primary Control beat

@@ -321,6 +321,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
       if (existingRel.childrenIds.isEmpty) {
         existingRel.sections['releaseScope'] = ReleaseScope.prototype.name;
+        existingRel.sections['synced_core_loop_sig'] =
+            draft.coreLoopBeats.join('||');
         existingRel.sections['scope'] =
             'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
       }
@@ -335,6 +337,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         sections: {
           'releaseScope': ReleaseScope.prototype.name,
           'phase': ProductionPhase.prototype.name,
+          'synced_core_loop_sig': draft.coreLoopBeats.join('||'),
           if (isSplitPrototype) 'prototypePart': '1',
           if (isSplitPrototype) 'splitPrototypePart2Title': trainTitles[1],
           'scope':
@@ -475,8 +478,16 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _persistDocument(rel);
     }
 
-    // Once v0.2+ releases are built, keep v0.2+ Epics and Release Scope intact rather than reconstructing them from Stage 1's v0.1 Core Loop
-    if (!isSingleV01Release || draft.coreLoopBeats.isEmpty) return;
+    // Once v0.2+ releases are built, or when 06 · Core Loop itself was not modified,
+    // keep synthesized Stage 2 Epics intact rather than reconstructing them from Stage 1's v0.1 Core Loop.
+    final currentLoopSig = draft.coreLoopBeats.join('||');
+    final previousLoopSig = rel.sections['synced_core_loop_sig'] ?? '';
+    if (!isSingleV01Release ||
+        draft.coreLoopBeats.isEmpty ||
+        currentLoopSig == previousLoopSig) {
+      return;
+    }
+    rel.sections['synced_core_loop_sig'] = currentLoopSig;
 
     final existingBeats = <TierDocument>[
       for (final bid in rel.childrenIds)

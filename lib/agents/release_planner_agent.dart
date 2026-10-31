@@ -64,10 +64,16 @@ class ReleasePlannerAgent {
       projectDoc.sections,
       splitSingleSentence: false,
     );
-    final gameSpecText = projectDoc.sections['game_spec'] ?? '';
-    final techSpecText = projectDoc.sections['tech_spec'] ?? '';
-    final pillarsText = projectDoc.sections['design_pillars'] ?? '';
-    final tradeOffsText = projectDoc.sections['trade_offs'] ?? '';
+    final gameSpecText =
+        projectDoc.sections['game_spec'] ?? projectDoc.sections['gameSpec'] ?? '';
+    final techSpecText =
+        projectDoc.sections['tech_spec'] ?? projectDoc.sections['techSpec'] ?? '';
+    final pillarsText = projectDoc.sections['design_pillars'] ??
+        projectDoc.sections['designPillars'] ??
+        '';
+    final tradeOffsText = projectDoc.sections['trade_offs'] ??
+        projectDoc.sections['tradeOffs'] ??
+        '';
 
     final String schemaPhaseHint =
         releasePhase.isNotEmpty ? releasePhase : 'mvp';
@@ -194,7 +200,8 @@ class ReleasePlannerAgent {
           '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
     } else {
       phaseInstruction =
-          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into the major Epics (big bodies of work, e.g. Player & Environment, Core Gameplay Domain, Economy & Upgrades, HUD & Loop Closure) required to build ${releaseDoc.title} across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`). Do NOT force a mechanical 1-to-1 copy of the Core Loop sentences when multiple loop actions belong to the same body of work or when foundational Game Spec systems need their own Epic.';
+          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into 4 to 6 major Epics (big bodies of work, e.g. 1. Player Traversal & Physical Controls, 2. Environment/Tank Simulation & Alarms, 3. Resource/Crop Lifecycle & Harvesting, 4. Cargo Delivery, Economy & Upgrades) required to build ${releaseDoc.title} across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n'
+          '- ONE ATOMIC MECHANIC PER FEATURE (NEVER BUNDLE SEQUENTIAL ACTIONS INTO ONE FEATURE): Audit every clause across `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When`. Every distinct player action, physical device/valve/canister interaction, simulation drift rule, alarm/wilt feedback state, planting/spawning step, growth/escalation stage, harvesting/pickup action, container/crate loading step, terminal sale, shop purchase, and equipment mounting step MUST be its own separate Feature card (4 to 5 Features per Epic, 14 to 20 Features total across the release). NEVER bundle 2 or 3 sequential mechanics (like "Planting + Growth + Harvesting + Crate Loading" or "Shop Menu + Equipment Mounting") inside a single Feature\'s `inScope`.';
     }
 
     bool conflictsWithExclusions(String featureTitle) {
@@ -310,16 +317,16 @@ ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
 $progressiveDiagnosticInstructions
 - IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics (big bodies of work) and Features (individual features to complete each Epic) by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Farming, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later.
-- Break each Epic into the individual Playable Features (`"included": true`) needed to complete that Epic for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
-- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never impose an arbitrary cap or minimum on the number of Epics in a project or the number of Features inside an Epic. An Epic may have 1 feature or multiple features (2, 4, 6+) depending on what that body of work genuinely requires to playtest cleanly on screen—never merge distinct features just to hit a smaller number, and never pad with filler features to hit a larger number.
-- PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, and ensure the final Beat covers both the reward/upgrade payoff and continuing or resetting into the next run/route so the prototype loop never dead-ends.
-- PLAIN ACTION FEATURE TITLES (NO CODE SUFFIXES): Every Feature must name 1 observable gameplay action (`2–3` plain game-dev words, e.g. `"Truck Steering"`, `"Roof Turret Fire"`, `"Raider Ambush"`, `"Crate Pickup"`). NEVER use code-architecture nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
+- THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into all the individual Playable Features (`"included": true`, 4 to 5 features per Epic across 4 to 6 Epics for a full prototype loop) needed to complete that Epic end-to-end for ${releaseDoc.title}. If a Feature's `inScope` would list 3 different mechanics (e.g., growth stages + harvesting + crate loading, or shop purchase + equipment mounting + seed planting), split each of those mechanics into its own separate Feature card inside that Epic!
+- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
+- PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
+- PLAIN ACTION FEATURE TITLES (NO CODE SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Mature Crop Harvest"`, `"Vacuum Chute Sale"`). NEVER use code-architecture nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
-- FOUNDATION-FIRST, CUMULATIVE TASKS ON ONE SHARED ASSET: Keep each entry in `tasks` a short 2–3 word singular-focused title plus duration tag following a strict Foundation-First build dependency sequence on ONE shared asset:
-  * `Task 1` (Foundation / Asset & Component Setup): Create or open the primary playable asset (`"Character Setup (2h)"` for player movement/control features, or `"Actor Setup (2h)"` for world/combat mechanics), configure its components, and place/possess it in the level. NEVER start `Task 1` with `"Input Mapping"` before a Character/Pawn/Actor exists to attach it to.
-  * `Task 2` (Input & Core Mechanic Logic): Bind the Input Action (`IA_...`, `IMC_Default`) or trigger event and wire the core movement/velocity/state logic onto `Task 1`'s asset (e.g., `"Input & Velocity Logic (2h)"`, `"Input Mapping (2h)"`, or `"State Logic (2h)"`).
-  * `Task 3` (Physics Tuning, Feel & Guard): Layer physics curves, friction/capsule blends, and edge-case guards onto that same asset (e.g., `"Physics Tuning (2h)"`, `"Friction Tuning (2h)"`, or `"State Guard (1h)"`) — never create duplicate Pawn/Character setup tasks or repeat the Beat/Feature name inside a task title.
+- SPECIFIC, FOUNDATION-FIRST TASKS ON ONE SHARED ASSET: Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2–4` words + duration tag, e.g. `"Tank Actor & Ports (2h)"` -> `"Canister Snap & Refill (2h)"` -> `"Gauge Readout & Clamp (1h)"`) following a strict Foundation-First build dependency sequence:
+  * `Task 1` (Foundation / Asset & Component Setup): Create or configure the specific playable Character/Actor/Device and its collision/ports in the level (e.g., `"Character Capsule Setup (2h)"`, `"Tank Actor & Ports (2h)"`, `"Chute Trigger Actor (1h)"`). NEVER start `Task 1` with `"Input Mapping"` before the Character/Actor exists.
+  * `Task 2` (Input & Core Mechanic Logic): Wire the specific interaction, movement, or simulation math onto `Task 1`'s asset (e.g., `"Raycast Prompt & Aim (2h)"`, `"Nutrient Refill Math (2h)"`, `"Wilt Color Lerp (2h)"`).
+  * `Task 3` (Visual/Audio Readout, Tuning & Guard): Hook the observable gauge/mesh/audio cue and state guard onto that asset (e.g., `"Gauge Bar & Clamp (1h)"`, `"Harvest Carry Guard (1h)"`) — avoid generic boilerplate like `"Actor Setup"` -> `"State Logic"` -> `"State Guard"`.
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
@@ -332,27 +339,47 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
   "beats": [
     {
       "id": "beat_1",
-      "title": "Plain Beat Title",
-      "goal": "Literal beat goal",
-      "doneWhen": "Literal beat completion criteria",
+      "title": "Plain Epic Title",
+      "goal": "Literal epic goal",
+      "doneWhen": "Literal epic completion criteria",
       "features": [
         {
           "id": "feat_1_1",
-          "title": "Plain Feature Title",
+          "title": "First Feature Title",
           "goal": "Literal feature goal",
           "doneWhen": "Literal feature doneWhen",
-          "estimatedHours": 6,
+          "estimatedHours": 5,
           "included": true,
           "lifecycle": "new",
-          "inScope": ["Scope item"],
+          "inScope": ["Specific scope item 1", "Specific scope item 2"],
           "outOfScope": ["Deferred item"],
-          "tuningParams": ["paramOne: 10.0 m/s"],
+          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.25 s"],
           "edgeCases": ["[TAG] Specific edge case behavior"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "tasks": ["Task (2h)"]
+              "tasks": ["Specific Actor Setup (2h)", "Specific Mechanic Logic (2h)", "Readout Cue & Guard (1h)"]
+            }
+          ]
+        },
+        {
+          "id": "feat_1_2",
+          "title": "Second Feature Title",
+          "goal": "Literal feature goal",
+          "doneWhen": "Literal feature doneWhen",
+          "estimatedHours": 4,
+          "included": true,
+          "lifecycle": "new",
+          "inScope": ["Specific scope item"],
+          "outOfScope": ["Deferred item"],
+          "tuningParams": ["paramOne: 5.0 units"],
+          "edgeCases": ["[TAG] Specific edge case behavior"],
+          "checkpoints": [
+            {
+              "title": "Plain Checkpoint Title",
+              "playtestCriteria": "Action -> observable result on screen",
+              "tasks": ["Device Actor Setup (1h)", "Interaction Trigger (2h)", "Bounds Clamp Guard (1h)"]
             }
           ]
         }
