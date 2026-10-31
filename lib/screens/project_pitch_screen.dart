@@ -9,15 +9,15 @@ part 'pitch_spark_and_outliner_part.dart';
 part 'pitch_section_workspace_part.dart';
 part 'pitch_full_review_part.dart';
 
-/// Wraps each line of text at [maxCharsPerLine] (default 70 characters),
-/// breaking cleanly at the last space before column 70 (or at column 70 for
+/// Wraps each line of text at [maxCharsPerLine] (default 80 characters),
+/// breaking cleanly at the last space before column 80 (or at column 80 for
 /// continuous words) while preserving manual `Shift + Enter` newlines.
 class MaxColumnLineWrapFormatter extends TextInputFormatter {
   final int maxCharsPerLine;
 
-  const MaxColumnLineWrapFormatter({this.maxCharsPerLine = 70});
+  const MaxColumnLineWrapFormatter({this.maxCharsPerLine = 80});
 
-  static String wrapTextAtColumn(String input, {int maxCharsPerLine = 70}) {
+  static String wrapTextAtColumn(String input, {int maxCharsPerLine = 80}) {
     if (input.isEmpty) return input;
     final rawLines = input.split('\n');
     final wrappedLines = <String>[];
@@ -110,9 +110,12 @@ class ProjectPitchScreen extends StatefulWidget {
 class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     with WorkbenchThemeMixin {
   final TextEditingController _sparkController = TextEditingController();
+  final TextEditingController _sparkTweakController = TextEditingController();
   final TextEditingController _agentPromptController = TextEditingController();
   final FocusNode _sparkFocusNode = FocusNode();
+  final FocusNode _sparkTweakFocusNode = FocusNode();
   final FocusNode _conceptChatFocusNode = FocusNode();
+  final List<String> _sparkUndoStack = <String>[];
 
   KeyEventResult _handleMultilinePitchKeyEvent(
     KeyEvent event,
@@ -344,9 +347,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   @override
   void dispose() {
     _sparkController.dispose();
+    _sparkTweakController.dispose();
     _agentPromptController.dispose();
     _inlineItemEditController.dispose();
     _sparkFocusNode.dispose();
+    _sparkTweakFocusNode.dispose();
     _conceptChatFocusNode.dispose();
     super.dispose();
   }
@@ -812,6 +817,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _focusedBentoSectionIdx = null;
       _activeInlineEditKey = null;
       _sparkController.clear();
+      _sparkTweakController.clear();
+      _sparkUndoStack.clear();
       _agentPromptController.clear();
     }
 
