@@ -1,6 +1,13 @@
 part of 'project_pitch_screen.dart';
 
 extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
+  Color get _secT1Primary => isDark ? const Color(0xFFF9FAFB) : textPrimary;
+  Color get _secT2Body => isDark ? const Color(0xFFD1D5DB) : textSecondary;
+  Color get _secT3Label => isDark ? const Color(0xFF8E95A5) : textMuted;
+  Color get _secT4Muted => isDark ? const Color(0xFF636A78) : textMuted;
+  Color get _secHairline =>
+      isDark ? Colors.white.withValues(alpha: 0.065) : borderSubtle;
+
   // ── Inline Click-to-Edit Box (Replaces Popup AlertDialogs Across Stage 1) ──
   Widget _buildInlineEditorBox({
     required String editKey,
@@ -24,11 +31,14 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bgRecessed,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: textPrimary.withValues(alpha: 0.7), width: 1.2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _secT1Primary.withValues(alpha: 0.65),
+          width: 1.2,
+        ),
       ),
       child: Row(
         children: [
@@ -48,11 +58,11 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 autofocus: true,
                 maxLines: 2,
                 minLines: 1,
-                style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                style: GoogleFonts.inter(fontSize: 15, color: _secT1Primary),
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: hintText,
-                  hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
+                  hintStyle: GoogleFonts.inter(fontSize: 14, color: _secT4Muted),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -62,41 +72,40 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           InkWell(
             key: ValueKey('stage1_inline_save_btn_$editKey'),
             onTap: commitSave,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(5),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: accentEmerald.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: accentEmerald.withValues(alpha: 0.6)),
+                color: _secT1Primary,
+                borderRadius: BorderRadius.circular(5),
               ),
               child: Text(
                 '✓ Save',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: accentEmerald,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: bgBase,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           InkWell(
             key: ValueKey('stage1_inline_cancel_btn_$editKey'),
             onTap: cancelEdit,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(5),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               child: Text(
                 '×',
                 style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: textMuted,
+                  color: _secT3Label,
                 ),
               ),
             ),
@@ -106,7 +115,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── Non-Jumping Scoped Bottom Co-Design Dock (3×3 Bento Board) ─────────────
+  // ── Sticky Bottom AI Co-Designer Bar (Centered 920px Single Column) ────────
   Widget _buildConceptStickyBottomDock(ProjectConceptBlueprint draft) {
     final focusedIdx = _focusedBentoSectionIdx;
     final focusedSec =
@@ -131,113 +140,110 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
 
     return Container(
       key: const ValueKey('concept_sticky_bottom_dock'),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
       decoration: BoxDecoration(
         color: bgRecessed,
         border: Border(top: BorderSide(color: borderSubtle)),
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1580),
+          constraints: const BoxConstraints(maxWidth: 920),
           child: Row(
             children: [
-              // Active Scope Badge (All 01–09 or Focused Bento Section)
+              // Active Scope Badge (All 01–09 or Focused Section)
               InkWell(
                 key: const ValueKey('bento_dock_scope_badge'),
                 onTap: focusedSec == null
                     ? null
                     : () => _rebuild(() => _focusedBentoSectionIdx = null),
-                borderRadius: BorderRadius.circular(5),
+                borderRadius: BorderRadius.circular(6),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 6,
+                    horizontal: 10,
+                    vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    color: focusedSec != null ? focalAccent : bgSurface,
-                    borderRadius: BorderRadius.circular(5),
+                    color: focusedSec != null ? _secT1Primary : bgSurface,
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: focusedSec != null ? focalAccent : borderSubtle,
+                      color: focusedSec != null ? _secT1Primary : borderSubtle,
                     ),
                   ),
                   child: Text(
                     focusedSec != null
                         ? '${focusedSec.numLabel} ${focusedSec.shortTitle} ×'
-                        : 'All 01–09',
+                        : '✦ AI CO-DESIGNER',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: focusedSec != null ? focalAccentFg : textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: focusedSec != null ? bgBase : _secT3Label,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 2,
+                    horizontal: 14,
+                    vertical: 3,
                   ),
                   decoration: BoxDecoration(
                     color: bgBase,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: borderBright),
                   ),
                   child: Row(
                     children: [
-                      Text(
-                        '✦ CO-DESIGN:',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: textMuted,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
                           key: const ValueKey('full_blueprint_global_chat_input'),
                           controller: _agentPromptController,
                           style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            color: textPrimary,
+                            fontSize: 14,
+                            color: _secT1Primary,
                           ),
                           decoration: InputDecoration(
                             isDense: true,
                             hintText: focusedSec != null
-                                ? 'Tell the Agent how to adjust ${focusedSec.numLabel} ${focusedSec.shortTitle} (or type a global change)...'
-                                : 'Tell the Agent what to change across any section (or click a Bento card above to scope)...',
+                                ? 'Ask AI to refine ${focusedSec.numLabel} ${focusedSec.shortTitle}...'
+                                : 'Ask AI to refine any section (e.g. "Add 2 more core loop beats" or "Switch engine to Unity")...',
                             hintStyle: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: textMuted,
+                              fontSize: 13.5,
+                              color: _secT4Muted,
                             ),
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
                             contentPadding:
-                                const EdgeInsets.symmetric(vertical: 7),
+                                const EdgeInsets.symmetric(vertical: 8),
                           ),
                           onSubmitted: (_) => submitDockChat(),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       InkWell(
                         key: const ValueKey('full_blueprint_global_chat_send_btn'),
                         onTap:
                             widget.workbench.isAgentBusy ? null : submitDockChat,
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 4,
+                            horizontal: 14,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            widget.workbench.isAgentBusy ? '...' : 'Apply ↵',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: textPrimary,
+                            widget.workbench.isAgentBusy
+                                ? '...'
+                                : 'Update Blueprint',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
                             ),
                           ),
                         ),
@@ -253,14 +259,14 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── Tailored Bento Card Micro-Layouts (01..08) ─────────────────────────────
+  // ── Tailored Single-Column Section Content (01..08) ────────────────────────
   Widget _buildSectionContentWidget(
     ProjectConceptBlueprint draft,
     int sectionIdx, {
     bool isReadOnlySummary = false,
   }) {
     switch (sectionIdx) {
-      case 0: // 01 Goal — Lead Sentence + 3 Verb Pills
+      case 0: // 01 Goal — Lead Sentence + Aligned 2-Column Verb Clauses
         return _buildStructuredGoalSection(
           draft,
           onEditTap: isReadOnlySummary
@@ -270,21 +276,21 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     ProjectConceptBlueprint.sanitizeGoalText(draft.goal),
                   ),
         );
-      case 1: // 02 Game Spec — 2×2 Tactile Spec Selector Tiles
+      case 1: // 02 Game Spec — 4-Across Open Spec Strip
         return _buildKvSpecGrid(
           isGameSpec: true,
           keys: const ['CAMERA VIEW', 'CONTROLS', 'PLAYER MODE', 'ARENA STRUCTURE'],
           values: draft.gameSpec,
         );
-      case 2: // 03 Tech Spec — 2×2 Tactile Spec Selector Tiles
+      case 2: // 03 Tech Spec — 4-Across Open Spec Strip
         return _buildKvSpecGrid(
           isGameSpec: false,
           keys: const ['ENGINE', 'PLATFORM', 'ASSET PIPELINE', 'NETWORK / SAVE'],
           values: draft.techSpec,
         );
-      case 3: // 04 Design Pillars — 2-Line Scannable Stack
+      case 3: // 04 Design Pillars — 2-Column Split (Bold Left Title | Right Description)
         return _buildDesignPillarCards(draft, isReadOnlySummary: isReadOnlySummary);
-      case 4: // 05 Trade-Offs — Visual WIN › OVER › Strikethrough Rows
+      case 4: // 05 Trade-Offs — Aligned 3-Column Comparison (Priority X | OVER | Priority Y)
         return _buildTradeOffSplitBars(
           draft.tradeOffs,
           onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
@@ -304,7 +310,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     d.tradeOffs = [...d.tradeOffs, val];
                   }),
         );
-      case 5: // 06 Core Loop — E01..E0N Epic-Tagged Core Loop Beats
+      case 5: // 06 Core Loop — Aligned E01..E0N Open Beat Rows
         return _buildIndexedRows(
           prefix: 'BEAT',
           items: draft.coreLoopBeats,
@@ -335,7 +341,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     d.coreLoopBeats = [...d.coreLoopBeats, val];
                   }),
         );
-      case 6: // 07 Out of Scope — Muted Dashed Cut Chips
+      case 6: // 07 Out of Scope — 2-Column Grid of Open Exclusions
         return _buildCutGuardrailChips(
           draft.exclusions,
           onEditItem: (i, val) => widget.workbench.updateConceptDraft((d) {
@@ -355,7 +361,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     d.exclusions = [...d.exclusions, val];
                   }),
         );
-      case 7: // 08 Done When — Playtest Gate Callout Box
+      case 7: // 08 Done When — Open Playtest Gate Statement
       default:
         return _buildCalloutStatement(
           draft.doneWhen,
@@ -365,7 +371,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     }
   }
 
-  // ── 01 Goal: Lead Sentence + 3 Compact Verb Pills ──────────────────────────
+  // ── 01 Goal: Lead Sentence + Aligned 2-Column Verb Clauses (Zero Inner Box) ─
   Widget _buildStructuredGoalSection(
     ProjectConceptBlueprint draft, {
     VoidCallback? onEditTap,
@@ -397,66 +403,62 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              height: 40,
-              child: Text(
-                headline,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  height: 1.4,
-                  color: textPrimary,
-                ),
+            Text(
+              headline,
+              style: GoogleFonts.inter(
+                fontSize: 19.5,
+                fontWeight: FontWeight.w700,
+                height: 1.45,
+                color: _secT1Primary,
               ),
             ),
             if (clauses.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (var i = 0; i < clauses.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 5),
+                  for (var i = 0; i < clauses.length; i++)
                     Container(
                       key: ValueKey('stage1_goal_clause_card_$i'),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
                       decoration: BoxDecoration(
-                        color: bgRecessed,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: borderSubtle),
+                        border: Border(
+                          top: BorderSide(color: _secHairline),
+                        ),
                       ),
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Text(
-                            (i + 1).toString().padLeft(2, '0'),
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: textMuted,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
+                          SizedBox(
+                            width: 140,
                             child: Text(
-                              '${clauses[i].title}: ${clauses[i].body}',
+                              clauses[i].title.toUpperCase(),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
+                              style: GoogleFonts.jetBrainsMono(
                                 fontSize: 12,
-                                height: 1.35,
-                                color: textSecondary,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: _secT3Label,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              clauses[i].body,
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                height: 1.45,
+                                color: _secT2Body,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
                 ],
               ),
             ],
@@ -473,7 +475,8 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     final lower = headline.toLowerCase();
     final whereIdx = lower.indexOf('where you ');
     if (whereIdx != -1) {
-      final afterWhere = headline.substring(whereIdx + 'where you '.length).trim();
+      final afterWhere =
+          headline.substring(whereIdx + 'where you '.length).trim();
       final parts = afterWhere
           .split(_goalClauseSplitRegex)
           .map((s) => s.trim())
@@ -482,7 +485,8 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       if (parts.length >= 3) {
         return List.generate(3, (i) {
           final rawClause = parts[i];
-          final formattedClause = rawClause[0].toUpperCase() + rawClause.substring(1);
+          final formattedClause =
+              rawClause[0].toUpperCase() + rawClause.substring(1);
           final body = formattedClause.endsWith('.')
               ? formattedClause
               : '$formattedClause.';
@@ -523,7 +527,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     if (lower.contains('plant') && lower.contains('harvest')) {
       return 'Plant & Harvest';
     }
-    if (lower.contains('sell') || lower.contains('ammo') || lower.contains('load')) {
+    if (lower.contains('sell') ||
+        lower.contains('ammo') ||
+        lower.contains('load')) {
       return 'Load or Sell';
     }
     if (lower.contains('wave') || lower.contains('arena')) {
@@ -539,7 +545,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return words.join(' ');
   }
 
-  // ── 08 Done When: Playtest Gate Callout Box ────────────────────────────────
+  // ── 08 Done When: Open Playtest Gate Statement (Zero Nested Callout Box) ───
   Widget _buildCalloutStatement(
     String statement, {
     required bool highlightMetrics,
@@ -548,49 +554,32 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     if (_activeInlineEditKey == 'done_when') {
       return _buildInlineEditorBox(
         editKey: 'done_when',
-        onSave: (val) => widget.workbench.updateConceptDraft((d) => d.doneWhen = val),
+        onSave: (val) =>
+            widget.workbench.updateConceptDraft((d) => d.doneWhen = val),
       );
     }
-    final barColor = highlightMetrics ? accentEmerald : borderBright;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onEditTap,
         borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: bgRecessed,
-            borderRadius: BorderRadius.circular(6),
-            border: Border(
-              left: BorderSide(
-                color: barColor,
-                width: 3,
-              ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(
+            statement,
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.5,
+              color: _secT1Primary,
             ),
           ),
-          child: highlightMetrics
-              ? buildMetricHighlightedRichText(
-                  statement,
-                  usePill: true,
-                  fontSize: 13,
-                  height: 1.48,
-                )
-              : Text(
-                  statement,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    height: 1.48,
-                    color: textPrimary,
-                  ),
-                ),
         ),
       ),
     );
   }
 
-  // ── 02 Game Spec & 03 Tech Spec: 2×2 Tactile Spec Selector Tiles ───────────
+  // ── 02 Game Spec & 03 Tech Spec: 4-Across Open Spec Strip (Zero Tile Boxes) ─
   Widget _buildKvSpecGrid({
     required bool isGameSpec,
     required List<String> keys,
@@ -601,54 +590,86 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       return MapEntry(keys[i], val);
     });
 
-    return Column(
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _buildKvCell(
-                isGameSpec: isGameSpec,
-                cellIndex: 0,
-                k: pairs[0].key,
-                v: pairs[0].value,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 2x2 grid on narrow screens (< 580px)
+        if (constraints.maxWidth < 580) {
+          return Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildKvCell(
+                      isGameSpec: isGameSpec,
+                      cellIndex: 0,
+                      k: pairs[0].key,
+                      v: pairs[0].value,
+                      showRightDivider: true,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildKvCell(
+                      isGameSpec: isGameSpec,
+                      cellIndex: 1,
+                      k: pairs[1].key,
+                      v: pairs[1].value,
+                      showRightDivider: false,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildKvCell(
-                isGameSpec: isGameSpec,
-                cellIndex: 1,
-                k: pairs[1].key,
-                v: pairs[1].value,
+              Divider(height: 22, thickness: 1, color: _secHairline),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildKvCell(
+                      isGameSpec: isGameSpec,
+                      cellIndex: 2,
+                      k: pairs[2].key,
+                      v: pairs[2].value,
+                      showRightDivider: true,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildKvCell(
+                      isGameSpec: isGameSpec,
+                      cellIndex: 3,
+                      k: pairs[3].key,
+                      v: pairs[3].value,
+                      showRightDivider: false,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _buildKvCell(
-                isGameSpec: isGameSpec,
-                cellIndex: 2,
-                k: pairs[2].key,
-                v: pairs[2].value,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildKvCell(
-                isGameSpec: isGameSpec,
-                cellIndex: 3,
-                k: pairs[3].key,
-                v: pairs[3].value,
-              ),
-            ),
-          ],
-        ),
-      ],
+            ],
+          );
+        }
+
+        // 4-across open spec strip on desktop/tablet (>= 580px)
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (int i = 0; i < 4; i++) ...[
+                if (i > 0) const SizedBox(width: 18),
+                Expanded(
+                  child: _buildKvCell(
+                    isGameSpec: isGameSpec,
+                    cellIndex: i,
+                    k: pairs[i].key,
+                    v: pairs[i].value,
+                    showRightDivider: i < 3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -657,33 +678,27 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     required int cellIndex,
     required String k,
     required String v,
+    required bool showRightDivider,
   }) {
     final editKey = 'kv_${isGameSpec ? "game" : "tech"}_$cellIndex';
     if (_activeInlineEditKey == editKey) {
-      return Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: bgRecessed,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: borderBright),
-        ),
-        child: _buildInlineEditorBox(
-          editKey: editKey,
-          onSave: (val) => _applyDirectKvValue(
-            isGameSpec: isGameSpec,
-            cellIndex: cellIndex,
-            newValue: val,
-          ),
+      return _buildInlineEditorBox(
+        editKey: editKey,
+        onSave: (val) => _applyDirectKvValue(
+          isGameSpec: isGameSpec,
+          cellIndex: cellIndex,
+          newValue: val,
         ),
       );
     }
 
     final presets = _kvPresetsForCell(isGameSpec, cellIndex);
     return Material(
-      color: bgRecessed,
-      borderRadius: BorderRadius.circular(6),
+      color: Colors.transparent,
       child: PopupMenuButton<String>(
-        key: ValueKey('kv_cell_dropdown_${isGameSpec ? "game" : "tech"}_$cellIndex'),
+        key: ValueKey(
+          'kv_cell_dropdown_${isGameSpec ? "game" : "tech"}_$cellIndex',
+        ),
         tooltip: 'Click to pick $k preset or type custom value',
         color: bgSurface,
         onSelected: (val) {
@@ -704,9 +719,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
               child: Text(
                 p,
                 style: GoogleFonts.inter(
-                  fontSize: 12,
+                  fontSize: 13.5,
                   fontWeight: p == v ? FontWeight.w700 : FontWeight.w500,
-                  color: p == v ? textPrimary : textSecondary,
+                  color: p == v ? _secT1Primary : _secT2Body,
                 ),
               ),
             ),
@@ -716,18 +731,23 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
             child: Text(
               '✎ Custom Edit...',
               style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: textPrimary,
+                color: _secT1Primary,
               ),
             ),
           ),
         ],
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: EdgeInsets.only(
+            right: showRightDivider ? 14 : 0,
+            top: 2,
+            bottom: 2,
+          ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: borderSubtle),
+            border: showRightDivider
+                ? Border(right: BorderSide(color: _secHairline))
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -742,35 +762,36 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                        color: textMuted,
+                        letterSpacing: 0.5,
+                        color: _secT3Label,
                       ),
                     ),
                   ),
                   Text(
                     '▾',
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: textMuted,
+                      color: _secT4Muted,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 6),
               Text(
                 v.trim().isEmpty ? 'Click to set...' : v,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
-                  fontSize: 12.5,
+                  fontSize: 17,
+                  height: 1.3,
                   fontWeight:
-                      v.trim().isEmpty ? FontWeight.w500 : FontWeight.w600,
+                      v.trim().isEmpty ? FontWeight.w500 : FontWeight.w700,
                   fontStyle:
                       v.trim().isEmpty ? FontStyle.italic : FontStyle.normal,
-                  color: v.trim().isEmpty ? textMuted : textPrimary,
+                  color: v.trim().isEmpty ? _secT4Muted : _secT1Primary,
                 ),
               ),
             ],
@@ -781,18 +802,17 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
   }
 
   /// Splits `"Lead-In Label: Description text"` so the lead-in before `:` is bold & bright
-  /// and the description after `:` is slightly muted for instant scanability.
+  /// and the description after `:` is slightly softer for instant greyscale scanability.
   Widget _buildFormattedLeadInText(String rawText) {
     final colonIdx = rawText.indexOf(':');
     if (colonIdx <= 0 || colonIdx >= rawText.length - 1) {
       return Text(
         rawText,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
         style: GoogleFonts.inter(
-          fontSize: 12,
-          height: 1.38,
-          color: textPrimary,
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          height: 1.45,
+          color: _secT1Primary,
         ),
       );
     }
@@ -801,26 +821,24 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     final rest = rawText.substring(colonIdx + 1).trim();
 
     return RichText(
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
       text: TextSpan(
         style: GoogleFonts.inter(
-          fontSize: 12,
-          height: 1.38,
+          fontSize: 16,
+          height: 1.45,
         ),
         children: [
           TextSpan(
             text: '$leadIn — ',
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: textPrimary,
+              color: _secT1Primary,
             ),
           ),
           TextSpan(
             text: rest,
             style: TextStyle(
               fontWeight: FontWeight.w400,
-              color: textSecondary,
+              color: _secT2Body,
             ),
           ),
         ],
@@ -828,7 +846,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 04 Design Pillars: 2-Line Scannable Stack ──────────────────────────────
+  // ── 04 Design Pillars: 2-Column Split (Bold Left Title | Right Description) ─
   Widget _buildDesignPillarCards(
     ProjectConceptBlueprint draft, {
     bool isReadOnlySummary = false,
@@ -845,7 +863,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
 
       if (_activeInlineEditKey == editKey) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           child: _buildInlineEditorBox(
             editKey: editKey,
             onSave: (val) => widget.workbench.updateConceptDraft((d) {
@@ -867,66 +885,97 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           ),
           borderRadius: BorderRadius.circular(4),
           child: Container(
-            margin: EdgeInsets.only(bottom: idx < pillars.length - 1 ? 7 : 0),
-            padding: const EdgeInsets.only(left: 10, top: 2, bottom: 2, right: 4),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(color: borderBright, width: 2),
-              ),
+            padding: EdgeInsets.only(
+              top: idx == 0 ? 2 : 13,
+              bottom: idx == pillars.length - 1 ? 2 : 13,
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
+            decoration: BoxDecoration(
+              border: idx < pillars.length - 1
+                  ? Border(bottom: BorderSide(color: _secHairline))
+                  : null,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 540) {
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
-                          fontSize: 12.5,
+                          fontSize: 16.5,
                           fontWeight: FontWeight.w700,
-                          color: textPrimary,
+                          color: _secT1Primary,
                         ),
                       ),
-                      const SizedBox(height: 1.5),
+                      const SizedBox(height: 4),
                       Text(
                         body,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
-                          fontSize: 11.5,
-                          height: 1.35,
-                          color: textSecondary,
+                          fontSize: 15.5,
+                          height: 1.48,
+                          color: _secT2Body,
                         ),
                       ),
                     ],
-                  ),
-                ),
-                if (!isReadOnlySummary && pillars.length > 1) ...[
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () => widget.workbench.updateConceptDraft((d) {
-                      final next = List<String>.from(d.designPillars)..removeAt(idx);
-                      d.designPillars = next;
-                    }),
-                    borderRadius: BorderRadius.circular(3),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    SizedBox(
+                      width: 230,
                       child: Text(
-                        '×',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
+                        title,
+                        style: GoogleFonts.inter(
+                          fontSize: 16.5,
                           fontWeight: FontWeight.w700,
-                          color: textMuted,
+                          height: 1.35,
+                          color: _secT1Primary,
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ],
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Text(
+                        body,
+                        style: GoogleFonts.inter(
+                          fontSize: 15.5,
+                          height: 1.48,
+                          color: _secT2Body,
+                        ),
+                      ),
+                    ),
+                    if (!isReadOnlySummary && pillars.length > 1) ...[
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => widget.workbench.updateConceptDraft((d) {
+                          final next = List<String>.from(d.designPillars)
+                            ..removeAt(idx);
+                          d.designPillars = next;
+                        }),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          child: Text(
+                            '×',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: _secT4Muted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -937,82 +986,28 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < pillars.length; i++) buildPillarRow(i),
-        if (!isReadOnlySummary) ...[
-          const SizedBox(height: 8),
-          if (_activeInlineEditKey == 'add_pillar')
-            _buildInlineEditorBox(
-              editKey: 'add_pillar',
-              hintText: 'Type a new Design Pillar (e.g. Every Choice Echoes: Visible arena feedback)...',
-              onSave: (val) => widget.workbench.updateConceptDraft((d) {
-                d.designPillars = [
-                  ...d.designPillars,
-                  ProjectConceptBlueprint.ensureNamedPillar(
-                    val,
-                    d.designPillars.length,
-                  ),
-                ];
-              }),
-            )
-          else
-            _buildInlineAddBar(
-              barKey: const ValueKey('section_3_add_pillar_btn'),
-              label: '+ Add Design Pillar...',
-              onTap: () => _startInlineEdit('add_pillar', ''),
-            ),
+        if (!isReadOnlySummary && _activeInlineEditKey == 'add_pillar') ...[
+          const SizedBox(height: 10),
+          _buildInlineEditorBox(
+            editKey: 'add_pillar',
+            hintText:
+                'Type a new Design Pillar (e.g. Every Choice Echoes: Visible arena feedback)...',
+            onSave: (val) => widget.workbench.updateConceptDraft((d) {
+              d.designPillars = [
+                ...d.designPillars,
+                ProjectConceptBlueprint.ensureNamedPillar(
+                  val,
+                  d.designPillars.length,
+                ),
+              ];
+            }),
+          ),
         ],
       ],
     );
   }
 
-  Widget _buildInlineAddBar({
-    Key? barKey,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: bgRecessed.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(5),
-      child: InkWell(
-        key: barKey,
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(5),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: borderSubtle),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    color: textMuted,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '+ Add',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── 06 Core Loop: Connected E01..E0N Epic Timeline Rows ────────────────────
+  // ── 06 Core Loop: Open E01..E0N Rows Separated by Hairlines ────────────────
   Widget _buildIndexedRows({
     required String prefix,
     required List<String> items,
@@ -1026,11 +1021,10 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < items.length; i++) ...[
-          if (i > 0) const SizedBox(height: 5),
           if (_activeInlineEditKey == 'indexed_${prefix.toLowerCase()}_$i' &&
               onEditItem != null)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: _buildInlineEditorBox(
                 editKey: 'indexed_${prefix.toLowerCase()}_$i',
                 onSave: (val) => onEditItem(i, val),
@@ -1047,61 +1041,57 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                           'indexed_${prefix.toLowerCase()}_$i',
                           items[i],
                         ),
-                borderRadius: BorderRadius.circular(5),
+                borderRadius: BorderRadius.circular(4),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: EdgeInsets.only(
+                    top: i == 0 ? 2 : 12,
+                    bottom: i == items.length - 1 ? 2 : 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: bgRecessed,
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: borderSubtle),
+                    border: i < items.length - 1
+                        ? Border(bottom: BorderSide(color: _secHairline))
+                        : null,
                   ),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bgSurface,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(color: borderBright),
-                        ),
+                      SizedBox(
+                        width: 48,
                         child: Text(
                           isCoreLoop
                               ? 'E${(i + 1).toString().padLeft(2, '0')}'
                               : '$prefix·${(i + 1).toString().padLeft(2, '0')}',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: textSecondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _secT3Label,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: _buildFormattedLeadInText(items[i]),
                       ),
                       if (onReorderItem != null && items.length > 1) ...[
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         InkWell(
                           key: ValueKey('core_loop_move_up_$i'),
                           onTap: i > 0 ? () => onReorderItem(i, i - 1) : null,
                           borderRadius: BorderRadius.circular(3),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 2,
+                              horizontal: 3,
                               vertical: 1,
                             ),
                             child: Text(
                               '↑',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10.5,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: i > 0
-                                    ? textSecondary
-                                    : textMuted.withValues(alpha: 0.3),
+                                    ? _secT3Label
+                                    : _secT4Muted.withValues(alpha: 0.35),
                               ),
                             ),
                           ),
@@ -1114,38 +1104,38 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                           borderRadius: BorderRadius.circular(3),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 2,
+                              horizontal: 3,
                               vertical: 1,
                             ),
                             child: Text(
                               '↓',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10.5,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: i < items.length - 1
-                                    ? textSecondary
-                                    : textMuted.withValues(alpha: 0.3),
+                                    ? _secT3Label
+                                    : _secT4Muted.withValues(alpha: 0.35),
                               ),
                             ),
                           ),
                         ),
                       ],
                       if (onDeleteItem != null) ...[
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         InkWell(
                           onTap: () => onDeleteItem(i),
-                          borderRadius: BorderRadius.circular(3),
+                          borderRadius: BorderRadius.circular(4),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 3,
+                              horizontal: 4,
                               vertical: 1,
                             ),
                             child: Text(
                               '×',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: textMuted,
+                                color: _secT4Muted,
                               ),
                             ),
                           ),
@@ -1157,28 +1147,20 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
               ),
             ),
         ],
-        if (onAddSave != null) ...[
-          const SizedBox(height: 7),
-          if (_activeInlineEditKey == 'add_beat')
-            _buildInlineEditorBox(
-              editKey: 'add_beat',
-              hintText: 'Type a Core Loop Beat (e.g. Extract & Upgrade: Spend gathered ore)...',
-              onSave: onAddSave,
-            )
-          else
-            _buildInlineAddBar(
-              barKey: const ValueKey('section_5_add_beat_btn'),
-              label: isCoreLoop
-                  ? '+ Add Core Loop Beat...'
-                  : '+ Add item...',
-              onTap: () => _startInlineEdit('add_beat', ''),
-            ),
+        if (onAddSave != null && _activeInlineEditKey == 'add_beat') ...[
+          const SizedBox(height: 10),
+          _buildInlineEditorBox(
+            editKey: 'add_beat',
+            hintText:
+                'Type a Core Loop Beat (e.g. Extract & Upgrade: Spend gathered ore)...',
+            onSave: onAddSave,
+          ),
         ],
       ],
     );
   }
 
-  // ── 05 Trade-Offs: Visual WIN › OVER › Strikethrough Rows ──────────────────
+  // ── 05 Trade-Offs: Aligned 3-Column Comparison (Priority X | OVER | Priority Y) ─
   Widget _buildTradeOffSplitBars(
     List<String> tradeOffs, {
     void Function(int index, String newValue)? onEditItem,
@@ -1189,10 +1171,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < tradeOffs.length; i++) ...[
-          if (i > 0) const SizedBox(height: 6),
           if (_activeInlineEditKey == 'tradeoff_$i' && onEditItem != null)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: _buildInlineEditorBox(
                 editKey: 'tradeoff_$i',
                 onSave: (val) => onEditItem(i, val),
@@ -1201,26 +1182,22 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           else
             _buildSingleTradeOffBar(
               tradeOffs[i],
+              isFirst: i == 0,
+              isLast: i == tradeOffs.length - 1,
               onTap: onEditItem == null
                   ? null
                   : () => _startInlineEdit('tradeoff_$i', tradeOffs[i]),
               onDelete: onDeleteItem == null ? null : () => onDeleteItem(i),
             ),
         ],
-        if (onAddSave != null) ...[
-          const SizedBox(height: 7),
-          if (_activeInlineEditKey == 'add_tradeoff')
-            _buildInlineEditorBox(
-              editKey: 'add_tradeoff',
-              hintText: 'Type X over Y trade-off (e.g. Immediate arcade feel over simulation depth)...',
-              onSave: onAddSave,
-            )
-          else
-            _buildInlineAddBar(
-              barKey: const ValueKey('section_4_add_guardrail_btn'),
-              label: '+ Add Trade-Off (X over Y)...',
-              onTap: () => _startInlineEdit('add_tradeoff', ''),
-            ),
+        if (onAddSave != null && _activeInlineEditKey == 'add_tradeoff') ...[
+          const SizedBox(height: 10),
+          _buildInlineEditorBox(
+            editKey: 'add_tradeoff',
+            hintText:
+                'Type X over Y trade-off (e.g. Immediate arcade feel over simulation depth)...',
+            onSave: onAddSave,
+          ),
         ],
       ],
     );
@@ -1228,6 +1205,8 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
 
   Widget _buildSingleTradeOffBar(
     String rawRule, {
+    required bool isFirst,
+    required bool isLast,
     VoidCallback? onTap,
     VoidCallback? onDelete,
   }) {
@@ -1242,75 +1221,74 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(4),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          padding: EdgeInsets.only(
+            top: isFirst ? 2 : 12,
+            bottom: isLast ? 2 : 12,
+          ),
           decoration: BoxDecoration(
-            color: bgRecessed,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: borderSubtle),
+            border: !isLast
+                ? Border(bottom: BorderSide(color: _secHairline))
+                : null,
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
               Expanded(
                 child: Text(
                   winText,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: textPrimary,
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.4,
+                    color: _secT1Primary,
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: accentEmerald.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(3),
-                ),
+              SizedBox(
+                width: 64,
                 child: Text(
                   'OVER',
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w800,
-                    color: accentEmerald,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: _secT4Muted,
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   loseText,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
                   style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    color: textMuted,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                    color: _secT4Muted,
                     decoration: TextDecoration.lineThrough,
-                    decorationColor: textMuted.withValues(alpha: 0.7),
+                    decorationColor: _secT4Muted.withValues(alpha: 0.75),
                   ),
                 ),
               ),
               if (onDelete != null) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 InkWell(
                   onTap: onDelete,
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: BorderRadius.circular(4),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 3,
+                      horizontal: 4,
                       vertical: 1,
                     ),
                     child: Text(
                       '×',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: textMuted,
+                        color: _secT4Muted,
                       ),
                     ),
                   ),
@@ -1323,18 +1301,18 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 07 Out of Scope: Muted Cut Chips ───────────────────────────────────────
+  // ── 07 Out of Scope: 2-Column Grid of Open Exclusions (Zero Chip Boxes) ────
   Widget _buildCutGuardrailChips(
     List<String> exclusions, {
     void Function(int index, String newValue)? onEditItem,
     void Function(int index)? onDeleteItem,
     ValueChanged<String>? onAddSave,
   }) {
-    Widget buildExclusionRow(int idx) {
+    Widget buildExclusionRow(int idx, {required bool showBottomHairline}) {
       final editKey = 'exclusion_$idx';
       if (_activeInlineEditKey == editKey && onEditItem != null) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           child: _buildInlineEditorBox(
             editKey: editKey,
             onSave: (val) => onEditItem(idx, val),
@@ -1348,34 +1326,35 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           onTap: onEditItem == null
               ? null
               : () => _startInlineEdit(editKey, exclusions[idx]),
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.circular(4),
           child: Container(
-            margin: EdgeInsets.only(bottom: idx < exclusions.length - 1 ? 5 : 0),
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              color: bgRecessed.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: borderSubtle),
+              border: showBottomHairline
+                  ? Border(bottom: BorderSide(color: _secHairline))
+                  : null,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                  '✕',
+                  '—',
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: accentAmber,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _secT4Muted,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     exclusions[idx],
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: textSecondary,
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: _secT2Body,
                     ),
                   ),
                 ),
@@ -1383,18 +1362,18 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   const SizedBox(width: 6),
                   InkWell(
                     onTap: () => onDeleteItem(idx),
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: BorderRadius.circular(4),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 3,
+                        horizontal: 4,
                         vertical: 1,
                       ),
                       child: Text(
                         '×',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: textMuted,
+                          color: _secT4Muted,
                         ),
                       ),
                     ),
@@ -1410,21 +1389,62 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (int i = 0; i < exclusions.length; i++) buildExclusionRow(i),
-        if (onAddSave != null) ...[
-          const SizedBox(height: 7),
-          if (_activeInlineEditKey == 'add_exclusion')
-            _buildInlineEditorBox(
-              editKey: 'add_exclusion',
-              hintText: 'Type an Out of Scope exclusion (e.g. No multiplayer networking in v0.1)...',
-              onSave: onAddSave,
-            )
-          else
-            _buildInlineAddBar(
-              barKey: const ValueKey('section_6_add_cut_btn'),
-              label: '+ Add Out of Scope Cut...',
-              onTap: () => _startInlineEdit('add_exclusion', ''),
-            ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 560 || exclusions.length <= 1) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int i = 0; i < exclusions.length; i++)
+                    buildExclusionRow(
+                      i,
+                      showBottomHairline: i < exclusions.length - 1,
+                    ),
+                ],
+              );
+            }
+
+            final rows = <Widget>[];
+            for (int i = 0; i < exclusions.length; i += 2) {
+              final hasRight = i + 1 < exclusions.length;
+              final isLastPair = i + 2 >= exclusions.length;
+              rows.add(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: buildExclusionRow(
+                        i,
+                        showBottomHairline: !isLastPair,
+                      ),
+                    ),
+                    const SizedBox(width: 32),
+                    Expanded(
+                      child: hasRight
+                          ? buildExclusionRow(
+                              i + 1,
+                              showBottomHairline: !isLastPair,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rows,
+            );
+          },
+        ),
+        if (onAddSave != null && _activeInlineEditKey == 'add_exclusion') ...[
+          const SizedBox(height: 10),
+          _buildInlineEditorBox(
+            editKey: 'add_exclusion',
+            hintText:
+                'Type an Out of Scope exclusion (e.g. No multiplayer networking in v0.1)...',
+            onSave: onAddSave,
+          ),
         ],
       ],
     );

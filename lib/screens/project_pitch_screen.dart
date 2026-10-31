@@ -819,7 +819,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       widget.workbench.consumeJumpToFullReviewPending();
     }
 
-    // Step 1B: 3x3 Spaced Bento Concept Board + Scoped Co-Design Dock
+    // Step 1B: Spacious Single-Column Concept Blueprint (01 -> 09) + Scoped Co-Design Dock
     return Container(
       key: const ValueKey('concept_interview_card'),
       color: bgBase,
@@ -828,10 +828,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1580),
+                  constraints: const BoxConstraints(maxWidth: 920),
                   child: _buildFullReviewWorkspace(draft),
                 ),
               ),
