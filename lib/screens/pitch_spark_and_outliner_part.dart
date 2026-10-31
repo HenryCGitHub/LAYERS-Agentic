@@ -970,22 +970,22 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
     final isDone = _visitedSteps.contains(index);
     final metaBadge = _sectionOutlineMetaBadge(draft, index);
 
-    return InkWell(
-      key: ValueKey('step_node_$index'),
-      onTap: () => _goToStep(index),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(13, 9, 12, 9),
-        decoration: BoxDecoration(
-          color: isActive
-              ? accentCyan.withValues(alpha: 0.09)
-              : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: isActive ? accentCyan : Colors.transparent,
-              width: 3,
-            ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      child: InkWell(
+        key: ValueKey('step_node_$index'),
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => _goToStep(index),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          decoration: BoxDecoration(
+            color: isActive
+                ? (isDark
+                    ? Colors.white.withValues(alpha: 0.065)
+                    : bgSurface)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
           ),
-        ),
         child: Row(
           children: [
             SizedBox(
@@ -1039,6 +1039,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
             ],
           ],
         ),
+      ),
       ),
     );
   }

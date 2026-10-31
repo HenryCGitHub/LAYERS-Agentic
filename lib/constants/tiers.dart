@@ -61,13 +61,13 @@ enum TierType {
 
   Color colorFor(bool isDark) => switch (this) {
         TierType.project =>
-          isDark ? const Color(0xFFC084FC) : const Color(0xFF7E22CE), // Purple
+          isDark ? const Color(0xFFF9FAFB) : const Color(0xFF0F172A),
         TierType.release =>
-          isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7), // Sky Blue
+          isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
         TierType.epic =>
-          isDark ? const Color(0xFF22D3EE) : const Color(0xFF0891B2), // Cyan
+          isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
         TierType.feature =>
-          isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C), // Coral / Orange
+          isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
       };
 
   Color get color => colorFor(true);

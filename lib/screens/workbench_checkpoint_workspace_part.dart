@@ -1146,11 +1146,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     ),
                   ),
 
-                // ── 2. Balanced 2-Card Body (4 cols Framed STEPS Card | 8 cols Framed ACTIVE STEP Card) ──
+                // ── 2. Borderless IDE Split Canvas (4 cols Open STEPS Column | 1px Hairline | 8 cols Open ACTIVE STEP Pane) ──
                 Padding(
                   padding: EdgeInsets.fromLTRB(
-                    isHalfScreenOverlayMode ? 16 : 24,
-                    isHalfScreenOverlayMode ? 12 : 20,
+                    isHalfScreenOverlayMode ? 16 : 20,
+                    isHalfScreenOverlayMode ? 12 : 16,
                     isHalfScreenOverlayMode ? 16 : 24,
                     28,
                   ),
@@ -1160,17 +1160,19 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                       if (!isHalfScreenOverlayMode) ...[
                         Expanded(
                           flex: 4,
-                          child: _buildFlatFeatureStepTimeline(
-                            feat: feat,
-                            states: states,
-                            checkpointIndex: index,
-                            node: node,
-                            howToBlueprints: howToBlueprints,
-                            selectedTaskIdx: selectedTaskIdx,
-                            activeSubStepIdx: activeSubStepIdx,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 16),
+                            child: _buildFlatFeatureStepTimeline(
+                              feat: feat,
+                              states: states,
+                              checkpointIndex: index,
+                              node: node,
+                              howToBlueprints: howToBlueprints,
+                              selectedTaskIdx: selectedTaskIdx,
+                              activeSubStepIdx: activeSubStepIdx,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 22),
                       ],
                       Expanded(
                         flex: 8,
@@ -1178,23 +1180,29 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           key: ValueKey(
                             'task_sheet_active_step_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
                           ),
-                          decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: borderSubtle),
+                          padding: EdgeInsets.only(
+                            left: isHalfScreenOverlayMode ? 0 : 20,
                           ),
-                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            border: isHalfScreenOverlayMode
+                                ? null
+                                : Border(
+                                    left: BorderSide(color: borderSubtle),
+                                  ),
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // ── Card Header Bar (Step X of Y + [ Blueprint | C++ ] Toggle + Prev/Next) ──
+                              // ── Open Step Header Bar (Step X of Y + [ Blueprint | C++ ] Toggle + Prev/Next) ──
                               Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 10,
+                                padding: const EdgeInsets.fromLTRB(
+                                  4,
+                                  2,
+                                  4,
+                                  10,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: bgSurfaceHover,
                                   border: Border(
                                     bottom: BorderSide(color: borderSubtle),
                                   ),
@@ -1476,9 +1484,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                 ),
                               ),
 
-                              // ── Card Body: Step Title + 1-Line Spec Bar + HOW TO BUILD + Example + VERIFY ──
+                              // ── Open Step Body: Step Title + 1-Line Spec Bar + HOW TO BUILD + Recessed Code Well + VERIFY ──
                               Padding(
-                                padding: const EdgeInsets.all(22),
+                                padding: const EdgeInsets.fromLTRB(4, 16, 4, 18),
                                 child: Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
@@ -1838,14 +1846,15 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                 ),
                               ),
 
-                              // ── Card Footer Bar (Primary [ ✓ Complete & Next → ] + Quiet Links) ──
+                              // ── Open Step Footer Bar (Crisp White [ ✓ Complete & Next → ] + Monochrome Outlined Copy) ──
                               Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 22,
-                                  vertical: 12,
+                                padding: const EdgeInsets.fromLTRB(
+                                  4,
+                                  14,
+                                  4,
+                                  4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: bgSurfaceHover,
                                   border: Border(
                                     top: BorderSide(color: borderSubtle),
                                   ),
@@ -1864,9 +1873,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             'one_click_complete_next_btn_${node.id}',
                                           ),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: accentCyan,
-                                            foregroundColor:
-                                                const Color(0xFF04131D),
+                                            backgroundColor: focalAccent,
+                                            foregroundColor: focalAccentFg,
                                             elevation: 0,
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 16,
@@ -1874,7 +1882,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             ),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(7),
+                                                  BorderRadius.circular(6),
                                             ),
                                           ),
                                           onPressed: () {
@@ -1916,13 +1924,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             'copy_and_complete_next_btn_${node.id}',
                                           ),
                                           style: OutlinedButton.styleFrom(
-                                            foregroundColor: accentCyan,
-                                            backgroundColor: accentCyan
-                                                .withValues(alpha: 0.08),
+                                            foregroundColor: textPrimary,
+                                            backgroundColor: bgSurface,
                                             side: BorderSide(
-                                              color: accentCyan.withValues(
-                                                alpha: 0.45,
-                                              ),
+                                              color: borderBright,
                                             ),
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 13,
@@ -1930,7 +1935,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             ),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(7),
+                                                  BorderRadius.circular(6),
                                             ),
                                           ),
                                           onPressed: () {

@@ -1147,18 +1147,21 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     return Opacity(
       opacity: shouldDim ? 0.45 : 1.0,
       child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
         decoration: BoxDecoration(
           color: isSelected
               ? (isDark
-                  ? Colors.white.withValues(alpha: 0.035)
+                  ? Colors.white.withValues(alpha: 0.065)
                   : bgSurface)
               : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             InkWell(
               key: ValueKey('rail_feat_${feat.id}'),
+              borderRadius: BorderRadius.circular(6),
               onTap: () {
                 _rebuild(() {
                   _manualCheckpointFocusIndex = null;
@@ -1166,21 +1169,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 widget.workbench.selectFeature(feat.id);
               },
               child: Container(
-                padding: EdgeInsets.fromLTRB(
-                  isSelected ? 13 : 16,
-                  8,
-                  16,
-                  8,
-                ),
-                decoration: BoxDecoration(
-                  border: isSelected
-                      ? Border(
-                          left: BorderSide(
-                            color: isDone ? accentEmerald : accentCyan,
-                            width: 3,
-                          ),
-                        )
-                      : null,
+                padding: const EdgeInsets.fromLTRB(
+                  10,
+                  7,
+                  10,
+                  7,
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1390,20 +1383,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
 
     return Container(
       key: ValueKey('work_area_step_timeline_${node.id}'),
-      decoration: BoxDecoration(
-        color: bgSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
+      color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Framed STEPS Card Header Bar
+          // Open Canvas STEPS Header Bar (1px Bottom Hairline, Zero Outer Card Box)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            padding: const EdgeInsets.fromLTRB(8, 2, 8, 10),
             decoration: BoxDecoration(
-              color: bgSurfaceHover,
               border: Border(
                 bottom: BorderSide(color: borderSubtle),
               ),
@@ -1418,10 +1405,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.7,
-                      color: textSecondary,
+                      color: textMuted,
                     ),
                   ),
                 ),
@@ -1740,10 +1727,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 });
                                               },
                                               borderRadius:
-                                                  const BorderRadius.only(
-                                                topRight: Radius.circular(6),
-                                                bottomRight: Radius.circular(6),
-                                              ),
+                                                  BorderRadius.circular(6),
                                               child: Container(
                                                 margin: const EdgeInsets.only(
                                                   bottom: 2,
@@ -1755,25 +1739,15 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: isStepActive
-                                                      ? accentCyan.withValues(
-                                                          alpha: 0.14,
-                                                        )
+                                                      ? (isDark
+                                                          ? Colors.white
+                                                              .withValues(
+                                                              alpha: 0.065,
+                                                            )
+                                                          : bgSurface)
                                                       : Colors.transparent,
                                                   borderRadius:
-                                                      const BorderRadius.only(
-                                                    topRight:
-                                                        Radius.circular(6),
-                                                    bottomRight:
-                                                        Radius.circular(6),
-                                                  ),
-                                                  border: Border(
-                                                    left: BorderSide(
-                                                      color: isStepActive
-                                                          ? accentCyan
-                                                          : Colors.transparent,
-                                                      width: 2.5,
-                                                    ),
-                                                  ),
+                                                      BorderRadius.circular(6),
                                                 ),
                                                 child: Row(
                                                   crossAxisAlignment:

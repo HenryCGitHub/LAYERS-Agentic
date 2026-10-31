@@ -434,7 +434,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(6),
-          side: BorderSide(color: accentAmber.withValues(alpha: 0.55)),
         ),
       ),
       child: Text(

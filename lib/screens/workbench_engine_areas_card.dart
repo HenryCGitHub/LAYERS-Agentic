@@ -452,8 +452,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     return Container(
       decoration: BoxDecoration(
-        color: bgBase,
-        borderRadius: BorderRadius.circular(10),
+        color: bgRecessed,
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: borderSubtle),
       ),
       clipBehavior: Clip.antiAlias,
@@ -467,7 +467,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               vertical: 8,
             ),
             decoration: BoxDecoration(
-              color: bgSurfaceHover,
+              color: bgSurface,
               border: Border(
                 bottom: BorderSide(color: borderSubtle),
               ),
