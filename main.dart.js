@@ -26273,7 +26273,7 @@ for(;;)switch(s){case 0:b=A.aLy(B.b.q(a))
 if(b.length===0||!A.fF(a0)){q=null
 s=1
 break}s=3
-return A.t(A.id(a0,a1,'You are an indie game producer creating a Stage 1 Concept Blueprint for this spark idea:\n"'+b+'"\n\nRULES:\n- Use plain, literal 2-4 word game-dev titles naming the observable player or world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").\n- Write in straightforward, everyday English\u2014never roleplay the genre\'s slang or lore. Use game terms only when they name a specific mechanic or tactic ("kite", "dash", "parry", "cooldown"); never use subculture slang ("gib", "frag"), archaic/lore words ("Husbandry", "Homestead", "Expedition"), or corporate/engineering buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly") when a plain word ("main", "blast", "clear", "defeat") means the same thing.\n- NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").\n- Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.\n- `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").\n- Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.\n- Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) ordered by PLAYABLE DEVELOPER IMPACT ("Fastest Path to the Fun"):\n  1. Beat 1 MUST be the Core Toy & Primary Control (the #1 interactive verb on screen 80% of the time\u2014e.g. Player Movement & Grapple/Dash, Vehicle Handling, Grid Placement/Harvest, or Card Play/Targeting).\n  2. Next Beats cover Primary Action & Reactive Challenge (always pair player weapons/defenses with active enemies/hazards that push back so the beat is testable on screen).\n  3. Final Beats cover Reward/Pickup, Extraction/Upgrade payoff, and continuing or resetting into the next run/route so the loop never dead-ends.\n- Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."\n\nReturn ONLY valid JSON:\n{\n  "title": "Short 2-3 word title",\n  "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",\n  "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],\n  "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],\n  "designPillars": ["2-3 Word Pillar Name: Experiential player feeling 1", "2-3 Word Pillar Name: Experiential player feeling 2", "2-3 Word Pillar Name: Experiential player feeling 3"],\n  "tradeOffs": ["Concrete X over Y rule tailored to '+b+'", "Concrete X over Y rule 2", "Concrete X over Y rule 3"],\n  "coreLoopBeats": ["Beat Name: Literal action and response", "..."],\n  "exclusions": ["Specific prototype exclusion for '+b+'", "Specific prototype exclusion 2", "Specific prototype exclusion 3"],\n  "doneWhen": "Concrete playtest completion condition",\n  "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"]\n}\n',0.55,a2),$async$afH)
+return A.t(A.id(a0,a1,'You are an indie game producer creating a Stage 1 Concept Blueprint for this spark idea:\n"'+b+'"\n\nRULES:\n- Use plain, literal 2-4 word game-dev titles naming the observable player or world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").\n- Write in straightforward, everyday English\u2014never roleplay the genre\'s slang or lore. Use game terms only when they name a specific mechanic or tactic ("kite", "dash", "parry", "cooldown"); never use subculture slang ("gib", "frag"), archaic/lore words ("Husbandry", "Homestead", "Expedition"), or corporate/engineering buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly") when a plain word ("main", "blast", "clear", "defeat") means the same thing.\n- NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").\n- Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.\n- `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").\n- Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.\n- Decompose `coreLoopBeats` into 4 to 6 sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:\n  1. Beat 1 MUST be the immediate in-game player control & primary action (e.g. Walking & Tank Inspection, Grapple/Dash Traversal, Vehicle Handling, or Grid Placement\u2014never a pre-match menu).\n  2. Middle Beats cover the core simulation/action and reactive challenge (e.g. chemical drift & plant stress, active enemy/hazard pressure, or resource processing) in the exact chronological sequence the player experiences them.\n  3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.\n- Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."\n\nReturn ONLY valid JSON:\n{\n  "title": "Short 2-3 word title",\n  "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",\n  "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],\n  "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],\n  "designPillars": ["2-3 Word Pillar Name: Experiential player feeling 1", "2-3 Word Pillar Name: Experiential player feeling 2", "2-3 Word Pillar Name: Experiential player feeling 3"],\n  "tradeOffs": ["Concrete X over Y rule tailored to '+b+'", "Concrete X over Y rule 2", "Concrete X over Y rule 3"],\n  "coreLoopBeats": ["Beat Name: Literal action and response", "..."],\n  "exclusions": ["Specific prototype exclusion for '+b+'", "Specific prototype exclusion 2", "Specific prototype exclusion 3"],\n  "doneWhen": "Concrete playtest completion condition",\n  "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"]\n}\n',0.55,a2),$async$afH)
 case 3:p=a4
 if(p==null){q=null
 s=1
@@ -26360,12 +26360,10 @@ s=1
 break
 case 1:return A.x(q,r)}})
 return A.y($async$afA,r)},
-aLw(a){var s="traversal",r="movement",q=B.c.gM(a.split(":")).toLowerCase(),p=a.toLowerCase()
-if(B.b.m(q,"reset")||B.b.m(q,"resolution")||B.b.m(q,"summary")||B.b.m(q,"tally")||B.b.m(q,"dropoff"))return 4
-if((B.b.m(q,"staging")||B.b.m(q,"loadout")||B.b.m(q,"prep")||B.b.m(q,"contract")||B.b.m(q,"menu")||B.b.m(q,"rig select"))&&!B.b.m(q,s)&&!B.b.m(q,r)&&!B.b.m(q,"driving")&&!B.b.m(q,"parkour"))return 3
-if(B.b.m(q,s)||B.b.m(q,r)||B.b.m(q,"locomotion")||B.b.m(q,"parkour")||B.b.m(q,"wall-run")||B.b.m(q,"grappl")||B.b.m(q,"driving")||B.b.m(q,"steering")||B.b.m(q,"control")||B.b.m(q,"plant")||B.b.m(q,"harvest")||B.b.m(q,"card play")||B.b.m(q,"placement")||B.b.m(p,"primary movement")||B.b.m(p,"chain wall-runs"))return 0
-if(B.b.m(q,"combat")||B.b.m(q,"weapon")||B.b.m(q,"hazard")||B.b.m(q,"wave")||B.b.m(q,"ambush")||B.b.m(q,"enemy")||B.b.m(q,"strike")||B.b.m(q,"attack")||B.b.m(q,"shoot"))return 1
-return 2},
+aLw(a){var s=B.c.gM(a.split(":")).toLowerCase()
+if(B.b.m(s,"reset")||B.b.m(s,"resolution")||B.b.m(s,"summary")||B.b.m(s,"tally"))return 4
+if((B.b.m(s,"staging")||B.b.m(s,"loadout")||B.b.m(s,"prep")||B.b.m(s,"contract")||B.b.m(s,"menu")||B.b.m(s,"rig select"))&&!B.b.m(s,"traversal")&&!B.b.m(s,"movement")&&!B.b.m(s,"driving")&&!B.b.m(s,"parkour"))return 3
+return 0},
 aRT(a){var s,r,q,p,o,n
 if(a.length<=1)return a
 s=A.aLw(B.c.gM(a))
@@ -26530,24 +26528,28 @@ g=f7.z
 e=A.Ed(g)
 d=A.aLI(g,!1)
 c=g.h(0,"game_spec")
-if(c==null)c=""
-b=g.h(0,"tech_spec")
+b=c==null?g.h(0,"gameSpec"):c
 if(b==null)b=""
-a=g.h(0,"design_pillars")
+c=g.h(0,"tech_spec")
+a=c==null?g.h(0,"techSpec"):c
 if(a==null)a=""
-a0=g.h(0,"trade_offs")
+c=g.h(0,"design_pillars")
+a0=c==null?g.h(0,"designPillars"):c
 if(a0==null)a0=""
-a1=m.length!==0?m:"mvp"
+c=g.h(0,"trade_offs")
+a1=c==null?g.h(0,"tradeOffs"):c
+if(a1==null)a1=""
+a2=m.length!==0?m:"mvp"
 n=n.h(0,"phaseLockedByUser")
-a2=t.N
-a3=A.aA(a2)
+c=t.N
+a3=A.aA(c)
 for(a4=f2.length,a5=0;a6=f2.length,a5<a6;f2.length===a4||(0,A.j)(f2),++a5){a7=f2[a5]
 a6=a7.z
 a8=a6.h(0,"phase")
 if((a8==null?"":a8)==="mvp"||A.hS(a7)===B.d6){a8=a6.h(0,"versionTag")
 if((a8==null?null:a8.length!==0)===!0){a6=a6.h(0,"versionTag")
 a6.toString}else a6=a7.b
-a3.C(0,A.Dn(a6).toLowerCase())}}a4=A.aA(a2)
+a3.C(0,A.Dn(a6).toLowerCase())}}a4=A.aA(c)
 for(a5=0;a5<f2.length;f2.length===a6||(0,A.j)(f2),++a5){a7=f2[a5]
 a8=a7.z
 a9=a8.h(0,"phase")
@@ -26588,12 +26590,12 @@ a3=b1.length!==0?B.c.O(b1,", "):"None"
 c6="\n     * Still-Greybox v0.1 Epics needing MVP coverage: "+n+"\n     * Still-Greybox v0.1 Features awaiting MVP upgrade: "+a3+"\n     * Prioritize upgrading the next cohesive batch of these still-greybox v0.1 Epics & Features (and adding any missing functional mechanics for them) rather than re-upgrading features that already received an MVP pass."}else c6=""
 n=b2.length===0
 if(!n||b3.length!==0){n=!n?B.c.O(b2,", "):"All Epics touched once"
-c7="\n     * Unpolished Epics needing Vertical Slice pass: "+n+"\n     * Features awaiting Vertical Slice polish: "+A.dn(b3,0,A.eB(8,"count",t.S),a2).O(0,", ")+"\n     * Prioritize bringing the next cohesive batch of these unpolished Epics & Features up to Gold Standard polish rather than re-polishing already-polished features."}else c7=""
+c7="\n     * Unpolished Epics needing Vertical Slice pass: "+n+"\n     * Features awaiting Vertical Slice polish: "+A.dn(b3,0,A.eB(8,"count",t.S),c).O(0,", ")+"\n     * Prioritize bringing the next cohesive batch of these unpolished Epics & Features up to Gold Standard polish rather than re-polishing already-polished features."}else c7=""
 if(m==="verticalSlice")c8='  1. TARGET PHASE IS `"verticalSlice"` (MULTI-RELEASE VERTICAL SLICE POLISH TRACK): Set `"releasePhase": "verticalSlice"` and a descriptive `"releaseTitle"` (`"'+o+': <Polish & Feel Focus>"`). Focus upgrades on visual/material polish, SFX/VFX & camera/hit-stop feel cues, HUD readability, and state/frame guards across unpolished Core Loop Beats.'+c7
 else c8=m==="fullProduction"?'  1. TARGET PHASE IS `"fullProduction"` (CONTENT & BACKLOG EXPANSION): Set `"releasePhase": "fullProduction"` and a descriptive `"releaseTitle"` (`"'+o+': <Content & Expansion Focus>"`). Scale content/encounter variety and promote deferred backlog systems while honoring active exclusions.':'  1. TARGET PHASE IS `"mvp"` (MULTI-RELEASE MVP TRACK): Set `"releasePhase": "mvp"` and a specific, descriptive `"releaseTitle"` (`"'+o+': <Concrete MVP Focus>"`). Bring the next cohesive group of greybox prototype mechanics up to functional MVP depth across the Core Loop and Design Pillars.'+c6
 c5="- AGENT-REASONED PROGRESSIVE RELEASE ("+o+'): You are the Lead Game Architect deciding what "'+f7.b+'" needs next in '+o+" by evaluating the Existing Live Game Tree against the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n"+c8+'\n  2. Decide which existing Features need an `"upgrade"` vs. which remain `"stable"`, and what `"new"` Features to introduce across ANY of the Core Loop Beats\u2014with zero artificial count limits: include whatever set of `"upgrade"` and `"new"` Features across whichever Beats are required to make '+o+" a complete, cohesive playable milestone.\n  3. DELTA-ONLY JSON OUTPUT (DO NOT REPEAT STABLE FEATURES): In `beats`, output ONLY the Beats and Features receiving active work in "+o+' (`"lifecycle": "upgrade"` or `"lifecycle": "new"`). Use the exact Beat `id` (e.g. `"beat_1"`) and Feature `id`/`title` from the Existing Live Game Tree when upgrading. Do NOT output untouched `"stable"` features in JSON\u2014all omitted existing Beats and Features are automatically preserved as `STABLE \u2713` (`0h`).\n  4. Strictly enforce the Project Exclusions: NEVER include or promote any feature that violates an Exclusion, even if it was previously queued or requested.'}else if(m==="mvp"||h!=null){n=""+((h==null?0:h)+1)
 c5="- PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC "+n+" ONLY): Upgrade ONLY Beat/Epic #"+n+' from greybox to MVP (`"lifecycle": "upgrade"` with delta MVP checkpoints, plus any queued deferred features for Epic #'+n+"). Keep all other Epics (`!= "+n+'`) strictly `"lifecycle": "stable"` (0h, empty checkpoints).'}else if(m==="verticalSlice"||p===B.cx)c5='- PHASE 3 VERTICAL SLICE (GOLD STANDARD LEVEL): Combine all completed MVP Epics into 1 polished Gold Standard showcase level by upgrading the primary feature in EVERY Beat/Epic (`"lifecycle": "upgrade"`) with a Vertical Slice polish checkpoint (Final Art & Material Swap, SFX/VFX & Camera Feel Cues, HUD Readability & Frame Guard).'
-else c5=m==="fullProduction"||p===B.cw?'- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.':"- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01\u201308): Organize `beats` into the major Epics (big bodies of work, e.g. Player & Environment, Core Gameplay Domain, Economy & Upgrades, HUD & Loop Closure) required to build "+f8.b+" across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`). Do NOT force a mechanical 1-to-1 copy of the Core Loop sentences when multiple loop actions belong to the same body of work or when foundational Game Spec systems need their own Epic."}}c9=new A.ahC(d)
+else c5=m==="fullProduction"||p===B.cw?'- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.':"- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01\u201308): Organize `beats` into 4 to 6 major Epics (big bodies of work, e.g. 1. Player Traversal & Physical Controls, 2. Environment/Tank Simulation & Alarms, 3. Resource/Crop Lifecycle & Harvesting, 4. Cargo Delivery, Economy & Upgrades) required to build "+f8.b+' across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n- ONE ATOMIC MECHANIC PER FEATURE (NEVER BUNDLE SEQUENTIAL ACTIONS INTO ONE FEATURE): Audit every clause across `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When`. Every distinct player action, physical device/valve/canister interaction, simulation drift rule, alarm/wilt feedback state, planting/spawning step, growth/escalation stage, harvesting/pickup action, container/crate loading step, terminal sale, shop purchase, and equipment mounting step MUST be its own separate Feature card (4 to 5 Features per Epic, 14 to 20 Features total across the release). NEVER bundle 2 or 3 sequential mechanics (like "Planting + Growth + Harvesting + Crate Loading" or "Shop Menu + Equipment Mounting") inside a single Feature\'s `inScope`.'}}c9=new A.ahC(d)
 d0=new A.cK("")
 if(f4.length!==0){d0.a="Existing Live Game Tree (completed in prior releases):\n"
 for(n="  * QUEUED FROM PRIOR RELEASE FOR "+o+': "',b4=0;b4<f4.length;++b4){b5=f4[b4]
@@ -26606,8 +26608,8 @@ c2=A.d4(c0)
 c1=c0.z.h(0,"originVersion")
 if(c1==null)c1="v0.1"
 d1=A.a([],a6)
-d2=A.aA(a2)
-d3=A.aA(a2)
+d2=A.aA(c)
+d3=A.aA(c)
 for(a4=c2.length,d4=0;a8=c2.length,d4<a8;c2.length===a4||(0,A.j)(c2),++d4){d5=c2[d4]
 a8=d5.r
 a9=A.E(a8).i("C<1,e>")
@@ -26636,12 +26638,12 @@ e7=f?'- ARCHITECTURAL DIAGNOSTIC ("builtSoFar" & "missingGaps"):\n  * `"builtSoF
 e8=f?'  "builtSoFar": ["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"],\n  "missingGaps": ["E01: No incoming enemy fire to dodge", "E02: Missing rapid-fire plasma weapon", "E05: Single room only \u2014 no boss room"],\n  "agentReasoning": "1-2 concise sentences explaining why these '+o+' features are recommended next.",\n  "questions": [\n    {\n      "id": "rel_q_1",\n      "question": "How should we focus '+o+" for "+f7.b+'?",\n      "options": ["(Recommended) Specific Focus A: 1-sentence game-specific description", "Specific Focus B: ...", "Specific Focus C: ..."]\n    }\n  ],':""
 n=f8.b
 g=f7.b
-a2=B.c.O(d," | ")
+c=B.c.O(d," | ")
 a3=d0.a
 a3=a3.length!==0?a3.charCodeAt(0)==0?a3:a3:"First Release (v0.1): No prior features exist yet."
 a4=f8.b
 s=3
-return A.t(A.id(f1,e6,"You are the Antigravity Release Planner Agent (`"+e6+'`) planning Release: "'+n+'" ('+o+", "+p.c+').\nFull Concept Blueprint (01\u201308):\n- 01 Goal: "'+e4+'" (Project: "'+g+'")\n- 02 Game Spec: '+c+"\n- 03 Tech Spec: "+b+"\n- 04 Design Pillars: "+a+"\n- 05 Trade-Offs: "+a0+"\n- 06 Core Loop:\n"+e3+"\n- 07 Out of Scope (Exclusions): "+a2+'\n- 08 Done When: "'+e5+'"\n'+a3+'\n\nRULES:\n- Use plain, literal 2-4 word game-dev titles naming the observable player or world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").\n- Write in straightforward, everyday English\u2014never roleplay the genre\'s slang or lore. Use game terms only when they name a specific mechanic or tactic ("kite", "dash", "parry", "cooldown"); never use subculture slang ("gib", "frag"), archaic/lore words ("Husbandry", "Homestead", "Expedition"), or corporate/engineering buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly") when a plain word ("main", "blast", "clear", "defeat") means the same thing.\n- NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").\n- Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.\n- `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").\n- Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.\n'+c5+"\n"+e7+'\n- IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics (big bodies of work) and Features (individual features to complete each Epic) by Playable Developer Impact\u2014start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Farming, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later.\n- Break each Epic into the individual Playable Features (`"included": true`) needed to complete that Epic for '+a4+' (do NOT generate pre-unchecked `"included": false` filler features).\n- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never impose an arbitrary cap or minimum on the number of Epics in a project or the number of Features inside an Epic. An Epic may have 1 feature or multiple features (2, 4, 6+) depending on what that body of work genuinely requires to playtest cleanly on screen\u2014never merge distinct features just to hit a smaller number, and never pad with filler features to hit a larger number.\n- PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, and ensure the final Beat covers both the reward/upgrade payoff and continuing or resetting into the next run/route so the prototype loop never dead-ends.\n- PLAIN ACTION FEATURE TITLES (NO CODE SUFFIXES): Every Feature must name 1 observable gameplay action (`2\u20133` plain game-dev words, e.g. `"Truck Steering"`, `"Roof Turret Fire"`, `"Raider Ambush"`, `"Crate Pickup"`). NEVER use code-architecture nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.\n- RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.\n- Keep temporary greybox testbeds in a separate Feature from permanent mechanics.\n- FOUNDATION-FIRST, CUMULATIVE TASKS ON ONE SHARED ASSET: Keep each entry in `tasks` a short 2\u20133 word singular-focused title plus duration tag following a strict Foundation-First build dependency sequence on ONE shared asset:\n  * `Task 1` (Foundation / Asset & Component Setup): Create or open the primary playable asset (`"Character Setup (2h)"` for player movement/control features, or `"Actor Setup (2h)"` for world/combat mechanics), configure its components, and place/possess it in the level. NEVER start `Task 1` with `"Input Mapping"` before a Character/Pawn/Actor exists to attach it to.\n  * `Task 2` (Input & Core Mechanic Logic): Bind the Input Action (`IA_...`, `IMC_Default`) or trigger event and wire the core movement/velocity/state logic onto `Task 1`\'s asset (e.g., `"Input & Velocity Logic (2h)"`, `"Input Mapping (2h)"`, or `"State Logic (2h)"`).\n  * `Task 3` (Physics Tuning, Feel & Guard): Layer physics curves, friction/capsule blends, and edge-case guards onto that same asset (e.g., `"Physics Tuning (2h)"`, `"Friction Tuning (2h)"`, or `"State Guard (1h)"`) \u2014 never create duplicate Pawn/Character setup tasks or repeat the Beat/Feature name inside a task title.\n- `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).\n\nReturn ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):\n{\n  "releasePhase": "'+a1+'",\n  "releaseTitle": "'+o+': Concrete Release Focus",'+e8+'\n  "goal": "Build... goal of '+a4+'",\n  "doneWhen": "Concrete playtest completion condition",\n  "explicitExclusions": ["Excluded mechanic", "..."],\n  "beats": [\n    {\n      "id": "beat_1",\n      "title": "Plain Beat Title",\n      "goal": "Literal beat goal",\n      "doneWhen": "Literal beat completion criteria",\n      "features": [\n        {\n          "id": "feat_1_1",\n          "title": "Plain Feature Title",\n          "goal": "Literal feature goal",\n          "doneWhen": "Literal feature doneWhen",\n          "estimatedHours": 6,\n          "included": true,\n          "lifecycle": "new",\n          "inScope": ["Scope item"],\n          "outOfScope": ["Deferred item"],\n          "tuningParams": ["paramOne: 10.0 m/s"],\n          "edgeCases": ["[TAG] Specific edge case behavior"],\n          "checkpoints": [\n            {\n              "title": "Plain Checkpoint Title",\n              "playtestCriteria": "Action -> observable result on screen",\n              "tasks": ["Task (2h)"]\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}\n',0.35,f9),$async$Pw)
+return A.t(A.id(f1,e6,"You are the Antigravity Release Planner Agent (`"+e6+'`) planning Release: "'+n+'" ('+o+", "+p.c+').\nFull Concept Blueprint (01\u201308):\n- 01 Goal: "'+e4+'" (Project: "'+g+'")\n- 02 Game Spec: '+b+"\n- 03 Tech Spec: "+a+"\n- 04 Design Pillars: "+a0+"\n- 05 Trade-Offs: "+a1+"\n- 06 Core Loop:\n"+e3+"\n- 07 Out of Scope (Exclusions): "+c+'\n- 08 Done When: "'+e5+'"\n'+a3+'\n\nRULES:\n- Use plain, literal 2-4 word game-dev titles naming the observable player or world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").\n- Write in straightforward, everyday English\u2014never roleplay the genre\'s slang or lore. Use game terms only when they name a specific mechanic or tactic ("kite", "dash", "parry", "cooldown"); never use subculture slang ("gib", "frag"), archaic/lore words ("Husbandry", "Homestead", "Expedition"), or corporate/engineering buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly") when a plain word ("main", "blast", "clear", "defeat") means the same thing.\n- NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").\n- Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.\n- `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").\n- Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.\n'+c5+"\n"+e7+'\n- IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics (big bodies of work) and Features (individual features to complete each Epic) by Playable Developer Impact\u2014start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Farming, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later.\n- THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into all the individual Playable Features (`"included": true`, 4 to 5 features per Epic across 4 to 6 Epics for a full prototype loop) needed to complete that Epic end-to-end for '+a4+'. If a Feature\'s `inScope` would list 3 different mechanics (e.g., growth stages + harvesting + crate loading, or shop purchase + equipment mounting + seed planting), split each of those mechanics into its own separate Feature card inside that Epic!\n- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.\n- PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.\n- PLAIN ACTION FEATURE TITLES (NO CODE SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2\u20133` plain game-dev words, e.g. `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Mature Crop Harvest"`, `"Vacuum Chute Sale"`). NEVER use code-architecture nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.\n- RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.\n- Keep temporary greybox testbeds in a separate Feature from permanent mechanics.\n- SPECIFIC, FOUNDATION-FIRST TASKS ON ONE SHARED ASSET: Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2\u20134` words + duration tag, e.g. `"Tank Actor & Ports (2h)"` -> `"Canister Snap & Refill (2h)"` -> `"Gauge Readout & Clamp (1h)"`) following a strict Foundation-First build dependency sequence:\n  * `Task 1` (Foundation / Asset & Component Setup): Create or configure the specific playable Character/Actor/Device and its collision/ports in the level (e.g., `"Character Capsule Setup (2h)"`, `"Tank Actor & Ports (2h)"`, `"Chute Trigger Actor (1h)"`). NEVER start `Task 1` with `"Input Mapping"` before the Character/Actor exists.\n  * `Task 2` (Input & Core Mechanic Logic): Wire the specific interaction, movement, or simulation math onto `Task 1`\'s asset (e.g., `"Raycast Prompt & Aim (2h)"`, `"Nutrient Refill Math (2h)"`, `"Wilt Color Lerp (2h)"`).\n  * `Task 3` (Visual/Audio Readout, Tuning & Guard): Hook the observable gauge/mesh/audio cue and state guard onto that asset (e.g., `"Gauge Bar & Clamp (1h)"`, `"Harvest Carry Guard (1h)"`) \u2014 avoid generic boilerplate like `"Actor Setup"` -> `"State Logic"` -> `"State Guard"`.\n- `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).\n\nReturn ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):\n{\n  "releasePhase": "'+a2+'",\n  "releaseTitle": "'+o+': Concrete Release Focus",'+e8+'\n  "goal": "Build... goal of '+a4+'",\n  "doneWhen": "Concrete playtest completion condition",\n  "explicitExclusions": ["Excluded mechanic", "..."],\n  "beats": [\n    {\n      "id": "beat_1",\n      "title": "Plain Epic Title",\n      "goal": "Literal epic goal",\n      "doneWhen": "Literal epic completion criteria",\n      "features": [\n        {\n          "id": "feat_1_1",\n          "title": "First Feature Title",\n          "goal": "Literal feature goal",\n          "doneWhen": "Literal feature doneWhen",\n          "estimatedHours": 5,\n          "included": true,\n          "lifecycle": "new",\n          "inScope": ["Specific scope item 1", "Specific scope item 2"],\n          "outOfScope": ["Deferred item"],\n          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 0.25 s"],\n          "edgeCases": ["[TAG] Specific edge case behavior"],\n          "checkpoints": [\n            {\n              "title": "Plain Checkpoint Title",\n              "playtestCriteria": "Action -> observable result on screen",\n              "tasks": ["Specific Actor Setup (2h)", "Specific Mechanic Logic (2h)", "Readout Cue & Guard (1h)"]\n            }\n          ]\n        },\n        {\n          "id": "feat_1_2",\n          "title": "Second Feature Title",\n          "goal": "Literal feature goal",\n          "doneWhen": "Literal feature doneWhen",\n          "estimatedHours": 4,\n          "included": true,\n          "lifecycle": "new",\n          "inScope": ["Specific scope item"],\n          "outOfScope": ["Deferred item"],\n          "tuningParams": ["paramOne: 5.0 units"],\n          "edgeCases": ["[TAG] Specific edge case behavior"],\n          "checkpoints": [\n            {\n              "title": "Plain Checkpoint Title",\n              "playtestCriteria": "Action -> observable result on screen",\n              "tasks": ["Device Actor Setup (1h)", "Interaction Trigger (2h)", "Bounds Clamp Guard (1h)"]\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}\n',0.35,f9),$async$Pw)
 case 3:e9=g1
 if(e9==null){q=null
 s=1
@@ -28972,66 +28974,68 @@ b.$1(s)
 A.xA(a,s,!0)
 a.aW()
 A.G0(a)},
-xA(b0,b1,b2){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a=null,a0="scope",a1="\n",a2="phase",a3="prototypePart",a4="splitPrototypePart2Title",a5="releaseScope",a6="\n\nOut of Scope:\n",a7="prototype",a8="featurePrototype",a9=b0.cx
-if(a9==null)a9="proj_main"
-s=b0.a
-r=s.h(0,a9)
+xA(b1,b2,b3){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a=null,a0="scope",a1="\n",a2="phase",a3="prototypePart",a4="splitPrototypePart2Title",a5="releaseScope",a6="synced_core_loop_sig",a7="\n\nOut of Scope:\n",a8="prototype",a9="featurePrototype",b0=b1.cx
+if(b0==null)b0="proj_main"
+s=b1.a
+r=s.h(0,b0)
 q=r==null
-p=q?A.iC("Me",a,"#3b82f6","",a,"\ud83d\udcc4",a9,!1,!1,!1,a,a,a,a,B.cO,b1.a):r
-p.b=b1.a
+p=q?A.iC("Me",a,"#3b82f6","",a,"\ud83d\udcc4",b0,!1,!1,!1,a,a,a,a,B.cO,b2.a):r
+p.b=b2.a
 o=p.z
-o.l(0,a0,b1.as6())
-o.l(0,"game_spec",B.c.O(b1.e," \xb7 "))
-o.l(0,"tech_spec",B.c.O(b1.f," \xb7 "))
-n=b1.r
+o.l(0,a0,b2.as6())
+o.l(0,"game_spec",B.c.O(b2.e," \xb7 "))
+o.l(0,"tech_spec",B.c.O(b2.f," \xb7 "))
+n=b2.r
 o.l(0,"design_pillars",new A.C(n,new A.aop(),A.E(n).i("C<1,e>")).O(0,a1))
-n=b1.w
+n=b2.w
 o.l(0,"trade_offs",new A.C(n,new A.aoq(),A.E(n).i("C<1,e>")).O(0,a1))
 n=t.s
 m=A.a([],n)
-l=b1.as
-if(!(l.length!==0)){o=B.b.q(b1.a)
+l=b2.as
+if(!(l.length!==0)){o=B.b.q(b2.a)
 l=A.a(["v0.1: "+(o.length===0?"Game":o)+" Core Loop - Prototype"],n)}k=l.length>1
-j=a9==="proj_main"?"rel_v0_1":a9+"_rel_v0_1"
+j=b0==="proj_main"?"rel_v0_1":b0+"_rel_v0_1"
 i=B.c.gM(l)
 h=s.h(0,j)
 if(h!=null){h.b=i
 o=h.z
-if(o.h(0,a2)==null)o.l(0,a2,a7)
+if(o.h(0,a2)==null)o.l(0,a2,a8)
 if(k){o.l(0,a3,"1")
 o.l(0,a4,l[1])}else{o.H(0,a3)
-o.H(0,a4)}if(h.e.length===0){o.l(0,a5,a8)
-n=b1.d
-g=b1.x
+o.H(0,a4)}if(h.e.length===0){o.l(0,a5,a9)
+o.l(0,a6,B.c.O(b2.x,"||"))
+n=b2.d
+g=b2.x
 g=new A.C(g,new A.aor(),A.E(g).i("C<1,e>")).O(0,a1)
-f=b1.y
-o.l(0,a0,"Goal: "+n+"\n\nIn Scope:\n"+g+a6+new A.C(f,new A.aos(),A.E(f).i("C<1,e>")).O(0,a1)+"\n\nDone When: "+b1.z)}A.c0(b0,h,!1)
+f=b2.y
+o.l(0,a0,"Goal: "+n+"\n\nIn Scope:\n"+g+a7+new A.C(f,new A.aos(),A.E(f).i("C<1,e>")).O(0,a1)+"\n\nDone When: "+b2.z)}A.c0(b1,h,!1)
 m.push(j)}else{o=t.N
 o=A.o(o,o)
-o.l(0,a5,a8)
-o.l(0,a2,a7)
+o.l(0,a5,a9)
+o.l(0,a2,a8)
+o.l(0,a6,B.c.O(b2.x,"||"))
 if(k)o.l(0,a3,"1")
 if(k)o.l(0,a4,l[1])
-n=b1.d
-g=b1.x
+n=b2.d
+g=b2.x
 g=new A.C(g,new A.aot(),A.E(g).i("C<1,e>")).O(0,a1)
-f=b1.y
-o.l(0,a0,"Goal: "+n+"\n\nIn Scope:\n"+g+a6+new A.C(f,new A.aou(),A.E(f).i("C<1,e>")).O(0,a1)+"\n\nDone When: "+b1.z)
-e=A.iC("Me",a,"#3b82f6","",a,"\ud83d\udcc4",j,!1,!1,!1,a9,a,o,a,B.cP,i)
+f=b2.y
+o.l(0,a0,"Goal: "+n+"\n\nIn Scope:\n"+g+a7+new A.C(f,new A.aou(),A.E(f).i("C<1,e>")).O(0,a1)+"\n\nDone When: "+b2.z)
+e=A.iC("Me",a,"#3b82f6","",a,"\ud83d\udcc4",j,!1,!1,!1,b0,a,o,a,B.cP,i)
 s.l(0,j,e)
-A.c0(b0,e,!1)
+A.c0(b1,e,!1)
 m.push(e.a)}if(!q)for(q=r.e,o=q.length,d=0;d<q.length;q.length===o||(0,A.j)(q),++d){c=q[d]
 if(B.c.m(m,c))continue
 b=s.h(0,c)
 if(b==null)continue
-if(b.e.length!==0||c===b0.cy)m.push(c)}p.e=m
-s.l(0,a9,p)
-b0.cx=a9
-s=b0.cy
-if(s==null)s=b0.cy=m.length!==0?B.c.gM(m):a
-A.S4(b0,p,s,!1)
-if(b2)A.b79(b0,b1)
-A.e_(b0)},
+if(b.e.length!==0||c===b1.cy)m.push(c)}p.e=m
+s.l(0,b0,p)
+b1.cx=b0
+s=b1.cy
+if(s==null)s=b1.cy=m.length!==0?B.c.gM(m):a
+A.S4(b1,p,s,!1)
+if(b3)A.b79(b1,b2)
+A.e_(b1)},
 aTg(a,b){var s,r,q,p,o=A.aA(t.N)
 for(s=$.aZ9().hd(0,b.toLowerCase()),s=new A.i_(s.a,s.b,s.c),r=t.Qz;s.t();){q=s.d
 p=(q==null?r.a(q):q).b[0]
@@ -29052,114 +29056,118 @@ if(r>0){q=B.b.q(B.b.U(o,0,r))
 p=B.b.q(B.b.aM(o,r+1))
 s=q.length!==0?q:"Core Loop Beat "+(c+1)
 return new A.lr(p.length!==0?p:o,s)}return new A.lr(o,o.length!==0?o:"Core Loop Beat "+(c+1))},
-b79(e8,e9){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,d0,d1,d2,d3,d4,d5,d6,d7,d8,d9,e0,e1,e2=null,e3="scope",e4="release_blueprint_json",e5="Goal: Build and playtest ",e6=e8.gfj(),e7=A.o3(e6)
-if(e7==null)e7=e8.ghc()
-if(e7==null||e7.e.length===0)return
-s=new A.Y(e6,new A.aow(),A.E(e6).i("Y<1>")).gE(0)<=1
-r=e7.z
-q=e9.d
-p=e9.x
+b79(f1,f2){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,d0,d1,d2,d3,d4,d5,d6,d7,d8,d9,e0,e1,e2,e3,e4=null,e5="scope",e6="release_blueprint_json",e7="synced_core_loop_sig",e8="Goal: Build and playtest ",e9=f1.gfj(),f0=A.o3(e9)
+if(f0==null)f0=f1.ghc()
+if(f0==null||f0.e.length===0)return
+s=new A.Y(e9,new A.aow(),A.E(e9).i("Y<1>")).gE(0)<=1
+r=f0.z
+q=f2.d
+p=f2.x
 p=new A.C(p,new A.aox(),A.E(p).i("C<1,e>")).O(0,"\n")
-o=e9.y
-r.l(0,e3,"Goal: "+q+"\n\nIn Scope:\n"+p+"\n\nOut of Scope:\n"+new A.C(o,new A.aoy(),A.E(o).i("C<1,e>")).O(0,"\n")+"\n\nDone When: "+e9.z)
-A.c0(e8,e7,!1)
-n=e8.fy
+o=f2.y
+r.l(0,e5,"Goal: "+q+"\n\nIn Scope:\n"+p+"\n\nOut of Scope:\n"+new A.C(o,new A.aoy(),A.E(o).i("C<1,e>")).O(0,"\n")+"\n\nDone When: "+f2.z)
+A.c0(f1,f0,!1)
+n=f1.fy
 q=n!=null
-m=q&&n.a===e7.a?n:e2
-if(q)n.x=A.bJ(e9.y,!0,t.N)
+m=q&&n.a===f0.a?n:e4
+if(q)n.x=A.bJ(f2.y,!0,t.N)
 q=m!=null
-if(q){p=B.b.q(e9.d)
+if(q){p=B.b.q(f2.d)
 if(p.length!==0)m.e=p
-p=B.b.q(e9.z)
+p=B.b.q(f2.z)
 if(p.length!==0)m.f=p
-r.l(0,e4,B.X.e4(m.bI(),e2))
-A.c0(e8,e7,!1)}if(!s||e9.x.length===0)return
+r.l(0,e6,B.X.e4(m.bI(),e4))
+A.c0(f1,f0,!1)}l=B.c.O(f2.x,"||")
+k=r.h(0,e7)
+if(k==null)k=""
+if(!s||f2.x.length===0||l===k)return
+r.l(0,e7,l)
 p=A.a([],t.e)
-for(o=e7.e,l=o.length,k=e8.a,j=0;j<o.length;o.length===l||(0,A.j)(o),++j){i=o[j]
-if(k.h(0,i)!=null){h=k.h(0,i)
-h.toString
-p.push(h)}}if(p.length===0)return
+for(o=f0.e,j=o.length,i=f1.a,h=0;h<o.length;o.length===j||(0,A.j)(o),++h){g=o[h]
+if(i.h(0,g)!=null){f=i.h(0,g)
+f.toString
+p.push(f)}}if(p.length===0)return
 o=A.a([],t.BN)
-for(g=0;l=e9.x,g<l.length;++g)o.push(A.b74(e8,l[g],g))
-f=A.o(t.S,t.zj)
-l=t.N
-e=A.aA(l)
-for(g=0;g<o.length;++g){d=o[g]
-h=d.b
-c=B.b.q(h.toLowerCase())
-for(b=p.length,h=h+" "+d.a,a=c.length>=4,a0=e2,a1=0,j=0;j<p.length;p.length===b||(0,A.j)(p),++j){a2=p[j]
-if(e.m(0,a2.a))continue
-a3=a2.b
-a4=B.b.q(a3.toLowerCase())
-if(a4!==c){a5=!1
-if(a4.length>=4)if(a)a5=B.b.m(a4,c)||B.b.m(c,a4)}else a5=!0
-if(a5){a0=a2
-break}a5=a2.z.h(0,e3)
-if(a5==null)a5=""
-a6=A.aTf(e8,h,a3+" "+a5)
-if(a6>=0.45&&a6>a1){a1=a6
-a0=a2}}if(a0!=null){f.l(0,g,a0)
-e.C(0,a0.a)}}h=A.a([],t.t)
-for(g=0;b=o.length,g<b;++g)if(!f.a1(g))h.push(g)
-a=p.length
-a7=b===a&&h.length===1&&a-e.a===1
-for(b=h.length,a=!a7,j=0;j<h.length;h.length===b||(0,A.j)(h),++j){a8=h[j]
-if(a8<p.length){a9=p[a8]
-a3=a9.a
-if(!e.m(0,a3)){d=o[a8]
-a5=a9.b
-b0=a9.z.h(0,e3)
-if(b0==null)b0=""
-a6=A.aTf(e8,d.b+" "+d.a,a5+" "+b0)
-if(!a||a6>=0.2){f.l(0,a8,a9)
-e.C(0,a3)}}}}b1=e8.geO()
-h=t.s
-b2=A.a([],h)
-b3=A.a([],t.tJ)
-for(b=t.a4,a=t.v2,a3=e7.a,a5=t.k7,b0="beat_"+a3+"_sync_",b4=t.mf,b5=t.kR,g=0;g<o.length;++g){d=o[g]
-b6=f.h(0,g)
-b7=d.b
-b8=d.a
-if(b6!=null){b9=b6.b
-b6.b=b7
-b6.z.l(0,e3,e5+b8+"\n\nIn Scope:\n\u2022 "+b7+": "+b8+"\n\nDone When: Playtester can trigger and complete "+b7+" in the test scene.")
-A.c0(e8,b6,!1)
-b2.push(b6.a)
-if(q){c0=m.w
-c1=A.o3(new A.Y(c0,new A.aoz(b6,b9),A.E(c0).i("Y<1>")))
-if(c1!=null){c1.b=b7
-c1.c=b8
-b3.push(c1)}}}else{c2=b0+(g+1)+"_"+B.e.bm(Date.now(),1e4)
-c3=A.j4(b7,b8,g,b7)
-c4="feat_"+c2+"_1"
-c5="Trigger "+c3+" in the test scene -> "+b8+" completes cleanly"
-c6=A.a(["Create actor/node structure and base properties for "+c3+" (2h)","Implement core state transitions and player input for "+c3+" (1h)","Hook visual/audio feedback cues and state guard for "+c3+" (1h)"],h)
-c7=A.a(["responseTime: 0.12 s","cooldownDuration: 0.50 s"],h)
-c8=A.a(["[STATE GUARD] Block duplicate "+c3+" activation while active"],h)
-c0=A.a([],a5)
-for(c9=c4+"_t_",d0=0;d0<c6.length;d0=d1){d1=d0+1
-d2=c6[d0]
-d3=A.a([],a5)
-c0.push(new A.ca(c9+d1,d2,!1,d3,!0,e2,e2,!1,e2,e2,e2))}d4=A.vi(c0,A.a([c3],h),c8,e2,e2,c4+"_"+b1+"_cp_1","Checkpoint 1: "+c3,0,A.ao(["releaseVersion",b1],l,l),"Playtest: "+c5,c7)
-d5=A.iC("Me",e2,"#3b82f6","","4h","\ud83d\udcc4",c4,!1,!1,!1,c2,e2,A.ao(["originVersion",b1,"activeReleaseVersion",b1,"lifecycle","newFeature","scope","Goal: Build "+b8+"\n\nIn Scope:\n\u2022 "+c3+"\n\nDone When: "+c5,"tuning",new A.C(c7,new A.aoA(),b).O(0,"\n"),"variables",new A.C(c7,new A.aoB(),b).O(0,"\n"),"edge_cases",new A.C(c8,new A.aoC(),b).O(0,"\n")],l,l),e2,B.ce,c3)
-A.qv(d5,A.a([d4],a))
-k.l(0,c4,d5)
-A.c0(e8,d5,!1)
-d6=A.iC("Me",A.a([c4],h),"#3b82f6","","4h","\ud83d\udcc4",c2,!1,!1,!1,a3,e2,A.ao(["scope",e5+b8+"\n\nIn Scope:\n\u2022 "+c3+"\n\nDone When: "+c5],l,l),e2,B.dE,b7)
-k.l(0,c2,d6)
-A.c0(e8,d6,!1)
-b2.push(c2)
-if(q)b3.push(new A.eK(c2,b7,b8,c5,A.a([new A.dw(c4,c3,"Build "+b8,c5,4,!0,B.bH,b1,e2,A.a([c3],h),B.L,c7,c8,A.a([new A.fm(c3,c5,c6,A.a([c3],h),c7,c8,b1)],b4))],b5)))}}if(b2.length!==0){for(o=p.length,j=0;j<p.length;p.length===o||(0,A.j)(p),++j){d7=p[j]
-l=d7.a
-if(!e.m(0,l))if(s)for(l=d7.e,h=l.length,d8=0;d8<l.length;l.length===h||(0,A.j)(l),++d8){d9=k.h(0,l[d8])
-if(d9!=null){d9.z.l(0,"lifecycle","superseded")
-A.c0(e8,d9,!1)}}else if(!B.c.m(b2,l))b2.push(l)}e7.e=b2
-if(!s)for(p=e6.length,j=0;j<e6.length;e6.length===p||(0,A.j)(e6),++j){e0=e6[j]
-if(e0.a!==a3&&e0.e.length!==0){for(o=b2.length,d8=0;d8<b2.length;b2.length===o||(0,A.j)(b2),++d8){e1=b2[d8]
-if(!B.c.m(e0.e,e1))B.c.C(e0.e,e1)}A.c0(e8,e0,!1)}}if(q&&b3.length!==0){m.w=b3
-r.l(0,e4,B.X.e4(m.bI(),e2))}A.c0(e8,e7,!1)
-r=e8.db
-if(r==null||!B.c.m(b2,r))A.xB(e8)}},
+for(e=0;j=f2.x,e<j.length;++e)o.push(A.b74(f1,j[e],e))
+d=A.o(t.S,t.zj)
+j=t.N
+c=A.aA(j)
+for(e=0;e<o.length;++e){b=o[e]
+f=b.b
+a=B.b.q(f.toLowerCase())
+for(a0=p.length,f=f+" "+b.a,a1=a.length>=4,a2=e4,a3=0,h=0;h<p.length;p.length===a0||(0,A.j)(p),++h){a4=p[h]
+if(c.m(0,a4.a))continue
+a5=a4.b
+a6=B.b.q(a5.toLowerCase())
+if(a6!==a){a7=!1
+if(a6.length>=4)if(a1)a7=B.b.m(a6,a)||B.b.m(a,a6)}else a7=!0
+if(a7){a2=a4
+break}a7=a4.z.h(0,e5)
+if(a7==null)a7=""
+a8=A.aTf(f1,f,a5+" "+a7)
+if(a8>=0.45&&a8>a3){a3=a8
+a2=a4}}if(a2!=null){d.l(0,e,a2)
+c.C(0,a2.a)}}f=A.a([],t.t)
+for(e=0;a0=o.length,e<a0;++e)if(!d.a1(e))f.push(e)
+a1=p.length
+a9=a0===a1&&f.length===1&&a1-c.a===1
+for(a0=f.length,a1=!a9,h=0;h<f.length;f.length===a0||(0,A.j)(f),++h){b0=f[h]
+if(b0<p.length){b1=p[b0]
+a5=b1.a
+if(!c.m(0,a5)){b=o[b0]
+a7=b1.b
+b2=b1.z.h(0,e5)
+if(b2==null)b2=""
+a8=A.aTf(f1,b.b+" "+b.a,a7+" "+b2)
+if(!a1||a8>=0.2){d.l(0,b0,b1)
+c.C(0,a5)}}}}b3=f1.geO()
+f=t.s
+b4=A.a([],f)
+b5=A.a([],t.tJ)
+for(a0=t.a4,a1=t.v2,a5=f0.a,a7=t.k7,b2="beat_"+a5+"_sync_",b6=t.mf,b7=t.kR,e=0;e<o.length;++e){b=o[e]
+b8=d.h(0,e)
+b9=b.b
+c0=b.a
+if(b8!=null){c1=b8.b
+b8.b=b9
+b8.z.l(0,e5,e8+c0+"\n\nIn Scope:\n\u2022 "+b9+": "+c0+"\n\nDone When: Playtester can trigger and complete "+b9+" in the test scene.")
+A.c0(f1,b8,!1)
+b4.push(b8.a)
+if(q){c2=m.w
+c3=A.o3(new A.Y(c2,new A.aoz(b8,c1),A.E(c2).i("Y<1>")))
+if(c3!=null){c3.b=b9
+c3.c=c0
+b5.push(c3)}}}else{c4=b2+(e+1)+"_"+B.e.bm(Date.now(),1e4)
+c5=A.j4(b9,c0,e,b9)
+c6="feat_"+c4+"_1"
+c7="Trigger "+c5+" in the test scene -> "+c0+" completes cleanly"
+c8=A.a(["Create actor/node structure and base properties for "+c5+" (2h)","Implement core state transitions and player input for "+c5+" (1h)","Hook visual/audio feedback cues and state guard for "+c5+" (1h)"],f)
+c9=A.a(["responseTime: 0.12 s","cooldownDuration: 0.50 s"],f)
+d0=A.a(["[STATE GUARD] Block duplicate "+c5+" activation while active"],f)
+c2=A.a([],a7)
+for(d1=c6+"_t_",d2=0;d2<c8.length;d2=d3){d3=d2+1
+d4=c8[d2]
+d5=A.a([],a7)
+c2.push(new A.ca(d1+d3,d4,!1,d5,!0,e4,e4,!1,e4,e4,e4))}d6=A.vi(c2,A.a([c5],f),d0,e4,e4,c6+"_"+b3+"_cp_1","Checkpoint 1: "+c5,0,A.ao(["releaseVersion",b3],j,j),"Playtest: "+c7,c9)
+d7=A.iC("Me",e4,"#3b82f6","","4h","\ud83d\udcc4",c6,!1,!1,!1,c4,e4,A.ao(["originVersion",b3,"activeReleaseVersion",b3,"lifecycle","newFeature","scope","Goal: Build "+c0+"\n\nIn Scope:\n\u2022 "+c5+"\n\nDone When: "+c7,"tuning",new A.C(c9,new A.aoA(),a0).O(0,"\n"),"variables",new A.C(c9,new A.aoB(),a0).O(0,"\n"),"edge_cases",new A.C(d0,new A.aoC(),a0).O(0,"\n")],j,j),e4,B.ce,c5)
+A.qv(d7,A.a([d6],a1))
+i.l(0,c6,d7)
+A.c0(f1,d7,!1)
+d8=A.iC("Me",A.a([c6],f),"#3b82f6","","4h","\ud83d\udcc4",c4,!1,!1,!1,a5,e4,A.ao(["scope",e8+c0+"\n\nIn Scope:\n\u2022 "+c5+"\n\nDone When: "+c7],j,j),e4,B.dE,b9)
+i.l(0,c4,d8)
+A.c0(f1,d8,!1)
+b4.push(c4)
+if(q)b5.push(new A.eK(c4,b9,c0,c7,A.a([new A.dw(c6,c5,"Build "+c0,c7,4,!0,B.bH,b3,e4,A.a([c5],f),B.L,c9,d0,A.a([new A.fm(c5,c7,c8,A.a([c5],f),c9,d0,b3)],b6))],b7)))}}if(b4.length!==0){for(o=p.length,h=0;h<p.length;p.length===o||(0,A.j)(p),++h){d9=p[h]
+j=d9.a
+if(!c.m(0,j))if(s)for(j=d9.e,f=j.length,e0=0;e0<j.length;j.length===f||(0,A.j)(j),++e0){e1=i.h(0,j[e0])
+if(e1!=null){e1.z.l(0,"lifecycle","superseded")
+A.c0(f1,e1,!1)}}else if(!B.c.m(b4,j))b4.push(j)}f0.e=b4
+if(!s)for(p=e9.length,h=0;h<e9.length;e9.length===p||(0,A.j)(e9),++h){e2=e9[h]
+if(e2.a!==a5&&e2.e.length!==0){for(o=b4.length,e0=0;e0<b4.length;b4.length===o||(0,A.j)(b4),++e0){e3=b4[e0]
+if(!B.c.m(e2.e,e3))B.c.C(e2.e,e3)}A.c0(f1,e2,!1)}}if(q&&b5.length!==0){m.w=b5
+r.l(0,e6,B.X.e4(m.bI(),e4))}A.c0(f1,f0,!1)
+r=f1.db
+if(r==null||!B.c.m(b4,r))A.xB(f1)}},
 xB(a){var s,r,q,p,o,n,m,l,k,j=null,i=a.gdh(),h=i.length
 if(h===0)return
 for(s=j,r=s,q=0;q<i.length;i.length===h||(0,A.j)(i),++q){p=i[q]
@@ -34267,6 +34275,7 @@ o=A.aZ(q,o,"")
 p=$.aYn()
 return B.b.q(A.aZ(o,p,""))}}return""},
 Ed(a){var s,r,q,p,o,n,m,l,k,j,i=a.h(0,"scope")
+if(i==null)i=a.h(0,"inScope")
 if(i!=null&&B.b.q(i).length!==0){s=$.aYw()
 if(s.b.test(i)){r=B.b.dJ(i,s)
 if(r.length>1){s=new A.C(A.a(B.b.dJ(r[1],$.aYv())[0].split("\n"),t.s),new A.ajF(),t.a4).d6(0,new A.ajG())
