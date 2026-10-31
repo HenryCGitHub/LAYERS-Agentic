@@ -154,7 +154,11 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _apiKey = loaded.apiKey!.trim();
       }
       if (loaded.modelName != null && loaded.modelName!.trim().isNotEmpty) {
-        _conversationModel = loaded.modelName!.trim();
+        final rawModel = loaded.modelName!.trim();
+        // Guard Stage 1 _conversationModel against stale localStorage 'argon' values
+        _conversationModel = rawModel.contains('argon')
+            ? 'gemini-flash-latest'
+            : rawModel;
       }
       if (loaded.planningModel != null &&
           loaded.planningModel!.trim().isNotEmpty) {

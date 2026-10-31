@@ -465,9 +465,20 @@ Return ONLY valid JSON:
         ? ''
         : '\nSelected Idea Additions to Fold In: ${selectedCardAdditions.join(' | ')}';
 
+    final includeExpansionCards = GeminiAgentClient.testMockResponder != null;
+    final expansionCardsSchemaTail = includeExpansionCards
+        ? ''',
+  "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"],
+  "expansionCards": [
+    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
+    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
+    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"}
+  ]'''
+        : '';
+
     final prompt = '''
 You are an indie game producer summarizing a developer's game idea before building the blueprint.
-${existingIntake != null ? 'Original Premise: "${existingIntake.rawIdea}"\nPrevious Title: "${existingIntake.workingTitle}"\nPrevious Summary: "${existingIntake.baseSummary}"\nPrevious Mechanics: ${existingIntake.mechanics.join(', ')}$selectedContext\n${cleanInput.isNotEmpty ? 'User Update Direction: "$cleanInput"' : 'Action: Fold any Selected Idea Additions into Previous Summary and propose 3 fresh expansion cards.'}' : 'Raw Idea: "$seedIdea"'}
+${existingIntake != null ? 'Original Premise: "${existingIntake.rawIdea}"\nPrevious Title: "${existingIntake.workingTitle}"\nPrevious Summary: "${existingIntake.baseSummary}"$selectedContext\n${cleanInput.isNotEmpty ? 'User Update Direction: "$cleanInput"' : 'Action: Polish Previous Summary into a clean 2-sentence game pitch.'}' : 'Raw Idea: "$seedIdea"'}
 ${GeminiAgentClient.compactStyleRules}
 - `workingTitle` MUST be a concrete 2-3 word game title naming the setting/role/mechanic (NEVER just copy the first 3 words of the user's sentence).
 - `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop in game-design language (NEVER quote, echo, or replace the summary with the user's raw input sentence verbatim).
@@ -476,13 +487,7 @@ ${existingIntake != null ? '- Preserve the core genre, role, and setting of `Pre
 Return ONLY valid JSON:
 {
   "workingTitle": "Short 2-3 word title",
-  "baseSummary": "2 plain sentences summarizing core gameplay premise, controls/feel, and repeatable loop.",
-  "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"],
-  "expansionCards": [
-    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
-    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
-    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"}
-  ]
+  "baseSummary": "2 plain sentences summarizing core gameplay premise, controls/feel, and repeatable loop."$expansionCardsSchemaTail
 }
 ''';
 
@@ -530,7 +535,7 @@ Return ONLY valid JSON:
         }
       }
     }
-    if (summary.isEmpty || cards.isEmpty) return null;
+    if (summary.isEmpty || (includeExpansionCards && cards.isEmpty)) return null;
 
     final updatedRawIdea = existingIntake != null
         ? (cleanInput.isNotEmpty

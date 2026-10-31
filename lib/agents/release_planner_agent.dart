@@ -194,7 +194,7 @@ class ReleasePlannerAgent {
           '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
     } else {
       phaseInstruction =
-          '- Map each Stage 1 Beat (`BEAT-01..BEAT-${coreLoopItems.length.toString().padLeft(2, '0')}`) 1-to-1 to a Beat entry in `beats`.';
+          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into the major Epics (big bodies of work, e.g. Player & Environment, Core Gameplay Domain, Economy & Upgrades, HUD & Loop Closure) required to build ${releaseDoc.title} across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`). Do NOT force a mechanical 1-to-1 copy of the Core Loop sentences when multiple loop actions belong to the same body of work or when foundational Game Spec systems need their own Epic.';
     }
 
     bool conflictsWithExclusions(String featureTitle) {
@@ -265,6 +265,8 @@ class ReleasePlannerAgent {
         : '  (Decompose the project goal into sequential playable loop beats)';
 
     final projectGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
+    final projectDoneWhen =
+        SectionTextUtils.resolveDoneWhen(projectDoc.sections);
     final effectiveModel =
         (!isSubsequentRelease && modelName == 'gemini-4-argon')
             ? 'gemini-flash-latest'
@@ -292,22 +294,24 @@ class ReleasePlannerAgent {
         : '';
     final prompt = '''
 You are the Antigravity Release Planner Agent (`$effectiveModel`) planning Release: "${releaseDoc.title}" ($versionTag, ${preset.label}).
-Project: "${projectDoc.title}" | Goal: "$projectGoal"
-Game Spec: $gameSpecText | Tech Spec: $techSpecText
-Pillars: $pillarsText
-Trade-Offs: $tradeOffsText
-Exclusions: ${projectExclusions.join(' | ')}
-
-Approved Stage 1 Core Loop Beats (${coreLoopItems.length} Beats):
+Full Concept Blueprint (01–08):
+- 01 Goal: "$projectGoal" (Project: "${projectDoc.title}")
+- 02 Game Spec: $gameSpecText
+- 03 Tech Spec: $techSpecText
+- 04 Design Pillars: $pillarsText
+- 05 Trade-Offs: $tradeOffsText
+- 06 Core Loop:
 $numberedCoreLoopSummary
+- 07 Out of Scope (Exclusions): ${projectExclusions.join(' | ')}
+- 08 Done When: "$projectDoneWhen"
 ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
 
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
 $progressiveDiagnosticInstructions
-- IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics and Features by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Enemies, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later in the loop.
-- Break each active Beat into the focused Playable Features (`"included": true`) needed for ${releaseDoc.title} to be genuinely playable on screen (do NOT generate pre-unchecked `"included": false` filler features).
-- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never impose an arbitrary cap or minimum on the number of Epics in a project or the number of Features inside an Epic. An Epic may have 1 feature or multiple features (2, 4, 6+) depending on what that Core Loop Beat genuinely requires to playtest cleanly on screen—never merge distinct mechanics just to hit a smaller number, and never pad with filler features to hit a larger number.
+- IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics (big bodies of work) and Features (individual features to complete each Epic) by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Farming, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later.
+- Break each Epic into the individual Playable Features (`"included": true`) needed to complete that Epic for ${releaseDoc.title} (do NOT generate pre-unchecked `"included": false` filler features).
+- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never impose an arbitrary cap or minimum on the number of Epics in a project or the number of Features inside an Epic. An Epic may have 1 feature or multiple features (2, 4, 6+) depending on what that body of work genuinely requires to playtest cleanly on screen—never merge distinct features just to hit a smaller number, and never pad with filler features to hit a larger number.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, and ensure the final Beat covers both the reward/upgrade payoff and continuing or resetting into the next run/route so the prototype loop never dead-ends.
 - PLAIN ACTION FEATURE TITLES (NO CODE SUFFIXES): Every Feature must name 1 observable gameplay action (`2–3` plain game-dev words, e.g. `"Truck Steering"`, `"Roof Turret Fire"`, `"Raider Ambush"`, `"Crate Pickup"`). NEVER use code-architecture nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
