@@ -265,8 +265,33 @@ class ReleasePlannerAgent {
         : '  (Decompose the project goal into sequential playable loop beats)';
 
     final projectGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
+    final effectiveModel =
+        (!isSubsequentRelease && modelName == 'gemini-4-argon')
+            ? 'gemini-flash-latest'
+            : modelName;
+    final progressiveDiagnosticInstructions = isSubsequentRelease
+        ? '''
+- ARCHITECTURAL DIAGNOSTIC ("builtSoFar" & "missingGaps"):
+  * `"builtSoFar"`: List 2–4 concise 2–5 word phrases summarizing the core mechanics already built and verified in prior releases (e.g., `["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"]`).
+  * `"missingGaps"`: List 2–4 concise 1-line statements naming the exact playable gaps in the current build prefixed with the Beat tag (e.g., `["E01: No incoming enemy projectiles to dodge while air-strafing", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no multi-room chain or boss"]`).
+  * `"agentReasoning"`: 1–2 concise summary sentences tying the gaps to $versionTag's focus.
+- BESPOKE GAME-SPECIFIC STRATEGIC OPTIONS ("questions"): In `questions[0]`, ask 1 architectural priority question for $versionTag with 3 concrete options tailored specifically to "${projectDoc.title}"'s actual mechanics (Option 1 prefixed with `(Recommended)` matching your primary plan; Options 2 and 3 offering distinct, game-specific alternative angles for $versionTag).'''
+        : '';
+    final progressiveJsonFields = isSubsequentRelease
+        ? '''
+  "builtSoFar": ["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"],
+  "missingGaps": ["E01: No incoming enemy fire to dodge", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no boss room"],
+  "agentReasoning": "1-2 concise sentences explaining why these $versionTag features are recommended next.",
+  "questions": [
+    {
+      "id": "rel_q_1",
+      "question": "How should we focus $versionTag for ${projectDoc.title}?",
+      "options": ["(Recommended) Specific Focus A: 1-sentence game-specific description", "Specific Focus B: ...", "Specific Focus C: ..."]
+    }
+  ],'''
+        : '';
     final prompt = '''
-You are the Antigravity Release Planner Agent (`gemini-4-argon`) planning Release: "${releaseDoc.title}" ($versionTag, ${preset.label}).
+You are the Antigravity Release Planner Agent (`$effectiveModel`) planning Release: "${releaseDoc.title}" ($versionTag, ${preset.label}).
 Project: "${projectDoc.title}" | Goal: "$projectGoal"
 Game Spec: $gameSpecText | Tech Spec: $techSpecText
 Pillars: $pillarsText
@@ -279,11 +304,7 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
-- ARCHITECTURAL DIAGNOSTIC ("builtSoFar" & "missingGaps"):
-  * `"builtSoFar"`: List 2–4 concise 2–5 word phrases summarizing the core mechanics already built and verified in prior releases (e.g., `["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"]`).
-  * `"missingGaps"`: List 2–4 concise 1-line statements naming the exact playable gaps in the current build prefixed with the Beat tag (e.g., `["E01: No incoming enemy projectiles to dodge while air-strafing", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no multi-room chain or boss"]`).
-  * `"agentReasoning"`: 1–2 concise summary sentences tying the gaps to $versionTag's focus.
-- BESPOKE GAME-SPECIFIC STRATEGIC OPTIONS ("questions"): In `questions[0]`, ask 1 architectural priority question for $versionTag with 3 concrete options tailored specifically to "${projectDoc.title}"'s actual mechanics (Option 1 prefixed with `(Recommended)` matching your primary plan; Options 2 and 3 offering distinct, game-specific alternative angles for $versionTag).
+$progressiveDiagnosticInstructions
 - IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics and Features by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Enemies, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later in the loop.
 - Break each active Beat into the focused Playable Features (`"included": true`) needed for ${releaseDoc.title} to be genuinely playable on screen (do NOT generate pre-unchecked `"included": false` filler features).
 - ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never impose an arbitrary cap or minimum on the number of Epics in a project or the number of Features inside an Epic. An Epic may have 1 feature or multiple features (2, 4, 6+) depending on what that Core Loop Beat genuinely requires to playtest cleanly on screen—never merge distinct mechanics just to hit a smaller number, and never pad with filler features to hit a larger number.
@@ -300,20 +321,10 @@ $phaseInstruction
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
 {
   "releasePhase": "$schemaPhaseHint",
-  "releaseTitle": "$versionTag: Concrete Release Focus",
-  "builtSoFar": ["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"],
-  "missingGaps": ["E01: No incoming enemy fire to dodge", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no boss room"],
-  "agentReasoning": "1-2 concise sentences explaining why these $versionTag features are recommended next.",
+  "releaseTitle": "$versionTag: Concrete Release Focus",$progressiveJsonFields
   "goal": "Build... goal of ${releaseDoc.title}",
   "doneWhen": "Concrete playtest completion condition",
   "explicitExclusions": ["Excluded mechanic", "..."],
-  "questions": [
-    {
-      "id": "rel_q_1",
-      "question": "How should we focus $versionTag for ${projectDoc.title}?",
-      "options": ["(Recommended) Specific Focus A: 1-sentence game-specific description", "Specific Focus B: ...", "Specific Focus C: ..."]
-    }
-  ],
   "beats": [
     {
       "id": "beat_1",
@@ -350,7 +361,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
       apiKey: apiKey,
-      preferredModel: modelName,
+      preferredModel: effectiveModel,
       thinkingLevel: thinkingLevel,
       temperature: 0.35,
     );
@@ -748,6 +759,132 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       builtSoFar: builtSoFar,
       missingGaps: missingGaps,
       lastAgentReply: effectiveReasoning,
+    );
+  }
+
+  /// Builds an immediate, deterministic `v0.1` `ReleaseBlueprint` directly from the approved
+  /// Stage 1 `06 · Core Loop` Beats (`projectDoc.sections`) as a safety net when a live network
+  /// timeout occurs during `v0.1` planning, ensuring `Approve & Build v0.1 →` never hangs or
+  /// bounces the user back to Stage 1.
+  static ReleaseBlueprint? buildImmediateInitialBaselineBlueprint({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+  }) {
+    final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
+    if (coreLoopItems.isEmpty) return null;
+    final preset = releaseDoc.releaseScope;
+    final versionTag = extractReleaseVersionTag(releaseDoc.title);
+    final projectExclusions = SectionTextUtils.resolveExclusions(
+      projectDoc.sections,
+      splitSingleSentence: false,
+    );
+    final prototypePart = releaseDoc.sections['prototypePart'] ?? '';
+    final effectiveLoopItems =
+        (prototypePart == '1' && coreLoopItems.length >= 2)
+            ? coreLoopItems.take((coreLoopItems.length / 2).ceil()).toList()
+            : coreLoopItems;
+
+    final beats = <ProposedBeatBlueprint>[];
+    for (int bIdx = 0; bIdx < effectiveLoopItems.length; bIdx++) {
+      final rawBeat = effectiveLoopItems[bIdx].trim();
+      final colonIdx = rawBeat.indexOf(':');
+      final rawTitlePart = colonIdx > 0
+          ? rawBeat.substring(0, colonIdx).trim()
+          : rawBeat;
+      final rawDescPart = colonIdx > 0 && colonIdx + 1 < rawBeat.length
+          ? rawBeat.substring(colonIdx + 1).trim()
+          : rawBeat;
+
+      final bTitle = MechanicArchetypeProfile.concreteBeatDisplayTitle(
+        rawTitlePart,
+        beatIndex: bIdx,
+      );
+      final bGoal = rawDescPart.isNotEmpty
+          ? (rawDescPart.endsWith('.') ? rawDescPart : '$rawDescPart.')
+          : 'Build $bTitle in the greybox arena.';
+      final fTitle = MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+        rawTitlePart,
+        beatTitle: bTitle,
+        beatGoal: bGoal,
+        beatIndex: bIdx,
+      );
+      final tasks = normalizeFoundationFirstTasks(
+        [
+          bIdx == 0 ? 'Character Setup (2h)' : 'Actor Setup (2h)',
+          'Input & State Logic (1h)',
+          'Physics & State Guard (1h)',
+        ],
+        featureTitle: fTitle,
+        beatTitle: bTitle,
+        isFirstFeatureOfRelease: bIdx == 0,
+      );
+
+      beats.add(
+        ProposedBeatBlueprint(
+          id: 'beat_${bIdx + 1}',
+          title: bTitle,
+          goal: bGoal,
+          doneWhen: 'Playtester verifies $bTitle in the test arena.',
+          features: [
+            ProposedFeatureBlueprint(
+              id: 'feat_${bIdx + 1}_1',
+              title: fTitle,
+              goal: bGoal,
+              doneWhen: 'Playtester triggers $fTitle and verifies response on screen.',
+              estimatedHours: 4,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.newFeature,
+              originVersion: versionTag,
+              inScope: [rawBeat],
+              outOfScope: const [],
+              tuningParams: const [
+                'primarySpeed: 240.0 units/s',
+                'responseCooldownSec: 0.25 s',
+              ],
+              edgeCases: const [
+                '[STATE GUARD] Prevent duplicate trigger while action is active',
+              ],
+              checkpoints: [
+                ProposedCheckpointBlueprint(
+                  title: '$fTitle Core',
+                  playtestCriteria:
+                      'Trigger $fTitle in playtest -> verify immediate response on screen',
+                  releaseVersion: versionTag,
+                  tasks: tasks,
+                  coveredScope: [rawBeat],
+                  tuningParams: const [
+                    'primarySpeed: 240.0 units/s',
+                    'responseCooldownSec: 0.25 s',
+                  ],
+                  edgeCases: const [
+                    '[STATE GUARD] Prevent duplicate trigger while action is active',
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    final projGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
+    final projDone = SectionTextUtils.resolveDoneWhen(projectDoc.sections);
+    return ReleaseBlueprint(
+      releaseDocId: releaseDoc.id,
+      releaseTitle: releaseDoc.title,
+      releaseVersionTag: versionTag,
+      preset: preset,
+      goal: projGoal.isNotEmpty
+          ? projGoal
+          : 'Build and verify the $versionTag playable greybox core loop.',
+      doneWhen: projDone.isNotEmpty
+          ? projDone
+          : 'All $versionTag Core Loop Epics pass playtest verification.',
+      questions: const [],
+      beats: beats,
+      explicitExclusions: projectExclusions,
+      lastAgentReply:
+          'Structured $versionTag Epics & Features directly from your approved Stage 1 Core Loop Beats.',
     );
   }
 

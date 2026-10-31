@@ -274,6 +274,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     mutator(draft);
     _commitConceptToVault(draft);
     notifyListeners();
+    unawaited(prewarmInitialReleasePlanIfNeeded());
   }
 
   void _commitConceptToVault(

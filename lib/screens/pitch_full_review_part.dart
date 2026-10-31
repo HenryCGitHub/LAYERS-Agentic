@@ -676,7 +676,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     required Widget child,
   }) {
     final sec = _sections[sectionIdx];
-    final isInlineOpen = _inlineEditingSectionIdx == sectionIdx;
     final isFocused = _focusedBentoSectionIdx == sectionIdx;
     final isHovered = _hoveredReviewSectionIdx == sectionIdx;
     final options = _optionsForSection(draft, sectionIdx);
@@ -769,88 +768,60 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (headerAddBtn != null) ...[
-                          headerAddBtn,
-                          const SizedBox(width: 8),
-                        ],
-                        if (sectionIdx != 1 &&
+                    if (headerAddBtn != null ||
+                        (sectionIdx != 1 &&
                             sectionIdx != 2 &&
-                            options.isEmpty) ...[
-                          Tooltip(
-                            message:
-                                'Generate AI preset options for ${sec.shortTitle}',
-                            child: InkWell(
-                              key: ValueKey(
-                                'compact_shuffle_options_btn_$sectionIdx',
-                              ),
-                              onTap: widget.workbench.isAgentBusy
-                                  ? null
-                                  : () => widget.workbench
-                                      .regenerateStage1SectionOptions(
-                                        sec.optionKey,
-                                      ),
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                  vertical: 5,
+                            options.isEmpty)) ...[
+                      const SizedBox(width: 12),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (headerAddBtn != null) headerAddBtn,
+                          if (headerAddBtn != null &&
+                              sectionIdx != 1 &&
+                              sectionIdx != 2 &&
+                              options.isEmpty)
+                            const SizedBox(width: 8),
+                          if (sectionIdx != 1 &&
+                              sectionIdx != 2 &&
+                              options.isEmpty)
+                            Tooltip(
+                              message:
+                                  'Generate AI preset options for ${sec.shortTitle}',
+                              child: InkWell(
+                                key: ValueKey(
+                                  'compact_shuffle_options_btn_$sectionIdx',
                                 ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: _gsCardBorder),
-                                ),
-                                child: Text(
-                                  '✦ Presets ↻',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: _gsT3Label,
+                                onTap: widget.workbench.isAgentBusy
+                                    ? null
+                                    : () => widget.workbench
+                                        .regenerateStage1SectionOptions(
+                                          sec.optionKey,
+                                        ),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 9,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: _gsCardBorder),
+                                  ),
+                                  child: Text(
+                                    '✦ Presets ↻',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: _gsT3Label,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
                         ],
-                        OutlinedButton(
-                          key: ValueKey('inline_agent_toggle_$sectionIdx'),
-                          onPressed: () {
-                            final willOpen =
-                                _inlineEditingSectionIdx != sectionIdx;
-                            _rebuild(() {
-                              _focusedBentoSectionIdx = sectionIdx;
-                              if (!willOpen) {
-                                _inlineEditingSectionIdx = null;
-                              } else {
-                                _inlineEditingSectionIdx = sectionIdx;
-                                _inlineReviewPromptController.clear();
-                              }
-                            });
-                            if (willOpen &&
-                                _optionsForSection(draft, sectionIdx).isEmpty &&
-                                !widget.workbench.isAgentBusy) {
-                              widget.workbench.regenerateStage1SectionOptions(
-                                sec.optionKey,
-                              );
-                            }
-                          },
-                          style: _headerNeutralButtonStyle(
-                            isActive: isInlineOpen,
-                          ),
-                          child: Text(
-                            isInlineOpen ? 'Close' : 'Ask AI',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -963,80 +934,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
 
               const SizedBox(height: 14),
               child,
-
-              // Contextual Inline Agent Input (when toggled via Ask AI)
-              if (isInlineOpen) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.only(top: 12),
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: _gsHairline)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _inlineReviewPromptController,
-                          autofocus: true,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: _gsT1Primary,
-                          ),
-                          decoration: InputDecoration(
-                            hintText:
-                                'Ask AI to refine ${sec.numLabel} ${sec.shortTitle}...',
-                            hintStyle: GoogleFonts.inter(
-                              fontSize: 13.5,
-                              color: _gsT4Muted,
-                            ),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            isDense: true,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 8),
-                          ),
-                          onSubmitted: (_) => _submitSectionPrompt(
-                            draft,
-                            sectionIdx,
-                            controller: _inlineReviewPromptController,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: widget.workbench.isAgentBusy
-                            ? null
-                            : () => _submitSectionPrompt(
-                                  draft,
-                                  sectionIdx,
-                                  controller: _inlineReviewPromptController,
-                                ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          minimumSize: const Size(0, 34),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                        child: Text(
-                          widget.workbench.isAgentBusy ? '...' : 'Update',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
         ),

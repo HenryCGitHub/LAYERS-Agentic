@@ -174,7 +174,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         GeminiAgentClient.testMockResponder != null) {
       return;
     }
-    if (_isAgentBusy || _isPrewarmingReleaseBlueprint) return;
+    if (_isAgentBusy) return;
+    if (_inFlightPrewarmFuture != null) {
+      return _inFlightPrewarmFuture!;
+    }
     final draft = _conceptDraft;
     if (draft == null || draft.coreLoopBeats.isEmpty) return;
     final sig = _computeConceptSignature(draft);
@@ -183,6 +186,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     }
     if (activeReleaseBeats.isNotEmpty) return;
 
+    final completer = Completer<void>();
+    _inFlightPrewarmFuture = completer.future;
     _isPrewarmingReleaseBlueprint = true;
     notifyListeners();
     try {
@@ -207,8 +212,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         thinkingLevel: _thinkingLevel,
       );
       if (planned != null &&
-          _computeConceptSignature(_conceptDraft) == sig &&
-          !_isAgentBusy) {
+          _computeConceptSignature(_conceptDraft) == sig) {
         if (planned.releaseTitle.isNotEmpty &&
             planned.releaseTitle != relDoc.title) {
           relDoc.title = planned.releaseTitle;
@@ -224,6 +228,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     } catch (_) {
     } finally {
       _isPrewarmingReleaseBlueprint = false;
+      _inFlightPrewarmFuture = null;
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
       notifyListeners();
     }
   }
@@ -237,6 +245,19 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _releaseViewFilter = 'active';
     _currentStage = WorkbenchStage.releaseWorkbench;
     notifyListeners();
+
+    if (releaseId == null && _inFlightPrewarmFuture != null) {
+      _isAgentBusy = true;
+      _agentProgressStep =
+          'Finishing v0.1 Release Architecture ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+      notifyListeners();
+      try {
+        await _inFlightPrewarmFuture;
+      } finally {
+        _isAgentBusy = false;
+        _agentProgressStep = null;
+      }
+    }
 
     final currentSig = _computeConceptSignature(_conceptDraft);
     final hasFreshPrewarmedBp = releaseId == null &&
@@ -1018,8 +1039,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final verTag = releaseVersionTagFor(relDoc);
     relDoc.sections['versionTag'] = verTag;
     _isAgentBusy = true;
+    final displayPlanModel = (isFirstPrototypeRelease &&
+            _planningModel == 'gemini-4-argon')
+        ? _conversationModel
+        : _planningModel;
     _agentProgressStep =
-        'Synthesizing $verTag Release Architecture ($_planningModel · ${_thinkingLevel.toLowerCase()})...';
+        'Synthesizing $verTag Release Architecture ($displayPlanModel · ${_thinkingLevel.toLowerCase()})...';
     notifyListeners();
 
     try {
@@ -1063,8 +1088,25 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
             existingFeaturesByBeat: existingFeaturesByBeat,
             deferredByBeatIndex: deferredByBeatIndex,
           );
+        } else if (isFirstPrototypeRelease &&
+            GeminiAgentClient.hasKey(_apiKey)) {
+          final fallbackInitial =
+              ReleasePlannerAgent.buildImmediateInitialBaselineBlueprint(
+            projectDoc: proj,
+            releaseDoc: relDoc,
+          );
+          if (fallbackInitial != null) {
+            relDoc.sections['versionTag'] = verTag;
+            relDoc.sections['release_blueprint_json'] =
+                jsonEncode(fallbackInitial.toJson());
+            _persistDocument(relDoc);
+            _releaseBlueprint = fallbackInitial;
+            _syncActiveProjectMetadata();
+          }
         }
-        _setOfflineState();
+        if (_releaseBlueprint == null) {
+          _setOfflineState();
+        }
       }
     } finally {
       _isAgentBusy = false;
