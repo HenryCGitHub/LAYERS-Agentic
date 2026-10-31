@@ -74,7 +74,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
-                  fontSize: 19.5,
+                  fontSize: _measureLeadFontSize,
                   fontWeight: FontWeight.w800,
                   color: _gsT1Primary,
                 ),
@@ -85,7 +85,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
-                  fontSize: 14,
+                  fontSize: _measureBodyFontSize - 1.5,
                   fontWeight: FontWeight.w500,
                   color: _gsT3Label,
                 ),
@@ -145,8 +145,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       ),
                       const SizedBox(height: 6),
                       if (_activeInlineEditKey == 'blueprint_project_title')
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 520),
+                        SizedBox(
+                          width: 420,
                           child: _buildInlineEditorBox(
                             editKey: 'blueprint_project_title',
                             hintText: 'Project title...',
@@ -171,7 +171,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                                   draft.title,
                                   overflow: TextOverflow.ellipsis,
                                   style: AppTheme.displayFont(
-                                    fontSize: 28,
+                                    fontSize: _measureTitleFontSize,
                                     fontWeight: FontWeight.w800,
                                     color: _gsT1Primary,
                                   ),
@@ -356,10 +356,10 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
 
         // Single-Column Vertical Stack of the 9 Section Cards (01 -> 09)
         for (int idx = 0; idx < _sections.length; idx++) ...[
-          if (idx > 0) const SizedBox(height: 20),
+          if (idx > 0) SizedBox(height: _measureCardGap),
           sectionCard(idx),
         ],
-        const SizedBox(height: 20),
+        SizedBox(height: _measureCardGap),
         launchpadCard,
       ],
     );
@@ -372,10 +372,13 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
 
     return Container(
       key: const ValueKey('bento_card_launchpad_09'),
-      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 22),
+      padding: EdgeInsets.symmetric(
+        horizontal: _measureCardPadH,
+        vertical: _measureCardPadV,
+      ),
       decoration: BoxDecoration(
         color: _gsCardLaunchBg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(13),
         border: Border.all(
           color: accentEmerald.withValues(alpha: 0.45),
         ),
@@ -447,7 +450,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
-              if (constraints.maxWidth < 620) {
+              if (constraints.maxWidth < 620 ||
+                  _activeInlineEditKey == 'release_train_0') {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -465,7 +469,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(child: _buildReleaseTrainPipeline(draft)),
-                  const SizedBox(width: 24),
+                  const SizedBox(width: 20),
                   _buildPrimaryApproveButton(
                     key: const ValueKey('approve_concept_plan_release_btn'),
                     showRebuildSecondary: true,
@@ -698,10 +702,13 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
         child: AnimatedContainer(
           key: ValueKey('bento_section_card_$sectionIdx'),
           duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 22),
+          padding: EdgeInsets.symmetric(
+            horizontal: _measureCardPadH,
+            vertical: _measureCardPadV,
+          ),
           decoration: BoxDecoration(
             color: _gsCardBg,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(13),
             border: Border.all(
               color: isFocused
                   ? _gsT1Primary.withValues(alpha: 0.75)

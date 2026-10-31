@@ -147,7 +147,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 920),
+          constraints: BoxConstraints(maxWidth: _measureColumnMaxWidth),
           child: Row(
             children: [
               // Active Scope Badge (All 01–09 or Focused Section)
@@ -406,9 +406,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
             Text(
               headline,
               style: GoogleFonts.inter(
-                fontSize: 19.5,
+                fontSize: _measureLeadFontSize,
                 fontWeight: FontWeight.w700,
-                height: 1.45,
+                height: 1.48,
                 color: _secT1Primary,
               ),
             ),
@@ -431,7 +431,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           SizedBox(
-                            width: 140,
+                            width: _isMobileMeasure ? 100 : 132,
                             child: Text(
                               clauses[i].title.toUpperCase(),
                               maxLines: 1,
@@ -444,14 +444,14 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 14),
                           Expanded(
                             child: Text(
                               clauses[i].body,
                               style: GoogleFonts.inter(
-                                fontSize: 16,
+                                fontSize: _measureBodyFontSize,
                                 fontWeight: FontWeight.w500,
-                                height: 1.45,
+                                height: 1.5,
                                 color: _secT2Body,
                               ),
                             ),
@@ -568,9 +568,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           child: Text(
             statement,
             style: GoogleFonts.inter(
-              fontSize: 18,
+              fontSize: _measureBodyFontSize + 1.5,
               fontWeight: FontWeight.w600,
-              height: 1.5,
+              height: 1.52,
               color: _secT1Primary,
             ),
           ),
@@ -785,7 +785,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
-                  fontSize: 17,
+                  fontSize: _measureSpecValueSize,
                   height: 1.3,
                   fontWeight:
                       v.trim().isEmpty ? FontWeight.w500 : FontWeight.w700,
@@ -809,9 +809,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       return Text(
         rawText,
         style: GoogleFonts.inter(
-          fontSize: 16,
+          fontSize: _measureBodyFontSize,
           fontWeight: FontWeight.w500,
-          height: 1.45,
+          height: 1.5,
           color: _secT1Primary,
         ),
       );
@@ -823,8 +823,8 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return RichText(
       text: TextSpan(
         style: GoogleFonts.inter(
-          fontSize: 16,
-          height: 1.45,
+          fontSize: _measureBodyFontSize,
+          height: 1.5,
         ),
         children: [
           TextSpan(
@@ -846,7 +846,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 04 Design Pillars: 2-Column Split (Bold Left Title | Right Description) ─
+  // ── 04 Design Pillars: Stacked inside 75ch/65ch/50ch Measure ────────────────
   Widget _buildDesignPillarCards(
     ProjectConceptBlueprint draft, {
     bool isReadOnlySummary = false,
@@ -886,96 +886,68 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           borderRadius: BorderRadius.circular(4),
           child: Container(
             padding: EdgeInsets.only(
-              top: idx == 0 ? 2 : 13,
-              bottom: idx == pillars.length - 1 ? 2 : 13,
+              top: idx == 0 ? 2 : 12,
+              bottom: idx == pillars.length - 1 ? 2 : 12,
             ),
             decoration: BoxDecoration(
               border: idx < pillars.length - 1
                   ? Border(bottom: BorderSide(color: _secHairline))
                   : null,
             ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 540) {
-                  return Column(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
                         style: GoogleFonts.inter(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w700,
-                          color: _secT1Primary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        body,
-                        style: GoogleFonts.inter(
-                          fontSize: 15.5,
-                          height: 1.48,
-                          color: _secT2Body,
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    SizedBox(
-                      width: 230,
-                      child: Text(
-                        title,
-                        style: GoogleFonts.inter(
-                          fontSize: 16.5,
+                          fontSize: _measureBodyFontSize + 0.5,
                           fontWeight: FontWeight.w700,
                           height: 1.35,
                           color: _secT1Primary,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      child: Text(
+                      const SizedBox(height: 3),
+                      Text(
                         body,
                         style: GoogleFonts.inter(
-                          fontSize: 15.5,
-                          height: 1.48,
+                          fontSize: _measureBodyFontSize,
+                          height: 1.52,
                           color: _secT2Body,
                         ),
                       ),
-                    ),
-                    if (!isReadOnlySummary && pillars.length > 1) ...[
-                      const SizedBox(width: 8),
-                      InkWell(
-                        onTap: () => widget.workbench.updateConceptDraft((d) {
-                          final next = List<String>.from(d.designPillars)
-                            ..removeAt(idx);
-                          d.designPillars = next;
-                        }),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          child: Text(
-                            '×',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: _secT4Muted,
-                            ),
-                          ),
+                    ],
+                  ),
+                ),
+                if (!isReadOnlySummary && pillars.length > 1) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => widget.workbench.updateConceptDraft((d) {
+                      final next = List<String>.from(d.designPillars)
+                        ..removeAt(idx);
+                      d.designPillars = next;
+                    }),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        '×',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _secT4Muted,
                         ),
                       ),
-                    ],
-                  ],
-                );
-              },
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -1240,7 +1212,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 child: Text(
                   winText,
                   style: GoogleFonts.inter(
-                    fontSize: 16.5,
+                    fontSize: _measureBodyFontSize,
                     fontWeight: FontWeight.w700,
                     height: 1.4,
                     color: _secT1Primary,
@@ -1248,12 +1220,12 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 ),
               ),
               SizedBox(
-                width: 64,
+                width: 56,
                 child: Text(
                   'OVER',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
                     color: _secT4Muted,
@@ -1264,7 +1236,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 child: Text(
                   loseText,
                   style: GoogleFonts.inter(
-                    fontSize: 15.5,
+                    fontSize: _measureBodyFontSize - 0.5,
                     fontWeight: FontWeight.w400,
                     height: 1.4,
                     color: _secT4Muted,
@@ -1351,9 +1323,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   child: Text(
                     exclusions[idx],
                     style: GoogleFonts.inter(
-                      fontSize: 15.5,
+                      fontSize: _measureBodyFontSize,
                       fontWeight: FontWeight.w500,
-                      height: 1.4,
+                      height: 1.45,
                       color: _secT2Body,
                     ),
                   ),

@@ -178,6 +178,30 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   @override
   bool get isDark => widget.workbench.isDark;
 
+  // Responsive Typographic Measure & Font Scale:
+  // - Desktop (>= 1024px): 75ch measure (~740px card width) @ 16px body
+  // - Tablet (640–1023px): 65ch measure (~620px card width) @ 15px body
+  // - Mobile (< 640px):    50ch measure (~460px card width) @ 14.5px body
+  double get _viewportWidth => MediaQuery.sizeOf(context).width;
+  bool get _isMobileMeasure => _viewportWidth < 640;
+  bool get _isTabletMeasure => _viewportWidth >= 640 && _viewportWidth < 1024;
+  double get _measureColumnMaxWidth =>
+      _isMobileMeasure ? 460.0 : (_isTabletMeasure ? 620.0 : 740.0);
+  double get _measureBodyFontSize =>
+      _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 16.0);
+  double get _measureLeadFontSize =>
+      _isMobileMeasure ? 16.5 : (_isTabletMeasure ? 17.5 : 19.0);
+  double get _measureTitleFontSize =>
+      _isMobileMeasure ? 21.0 : (_isTabletMeasure ? 24.0 : 26.0);
+  double get _measureSpecValueSize =>
+      _isMobileMeasure ? 15.0 : (_isTabletMeasure ? 15.5 : 16.5);
+  double get _measureCardPadH =>
+      _isMobileMeasure ? 18.0 : (_isTabletMeasure ? 24.0 : 28.0);
+  double get _measureCardPadV =>
+      _isMobileMeasure ? 16.0 : (_isTabletMeasure ? 20.0 : 22.0);
+  double get _measureCardGap =>
+      _isMobileMeasure ? 14.0 : (_isTabletMeasure ? 16.0 : 18.0);
+
   void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
 
   List<_SectionConfig> get _sections => _kSections;
@@ -819,7 +843,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       widget.workbench.consumeJumpToFullReviewPending();
     }
 
-    // Step 1B: Spacious Single-Column Concept Blueprint (01 -> 09) + Scoped Co-Design Dock
+    // Step 1B: Spacious Single-Column Concept Blueprint (75ch Desktop · 65ch Tablet · 50ch Mobile)
     return Container(
       key: const ValueKey('concept_interview_card'),
       color: bgBase,
@@ -828,10 +852,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+              padding: EdgeInsets.fromLTRB(
+                _isMobileMeasure ? 14 : 24,
+                _isMobileMeasure ? 18 : 26,
+                _isMobileMeasure ? 14 : 24,
+                36,
+              ),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 920),
+                  constraints: BoxConstraints(maxWidth: _measureColumnMaxWidth),
                   child: _buildFullReviewWorkspace(draft),
                 ),
               ),
