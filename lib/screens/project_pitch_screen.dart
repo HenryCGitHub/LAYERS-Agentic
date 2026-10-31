@@ -165,8 +165,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final Map<int, dynamic> _initialSectionDefaults = {};
   final Map<int, String> _agentNotesBySection = {};
 
-  /// Step 10 Full Review hover & inline contextual Agent drawer state.
+  /// Step 10 Full Review hover, Bento focus & inline contextual Agent drawer state.
   int? _hoveredReviewSectionIdx;
+  int? _focusedBentoSectionIdx;
   int? _inlineEditingSectionIdx;
 
   /// Inline Click-to-Edit state (Upgrade 2: replaces popup AlertDialogs across Stage 1).
@@ -788,6 +789,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _initialSectionDefaults.clear();
       _agentNotesBySection.clear();
       _hoveredReviewSectionIdx = null;
+      _focusedBentoSectionIdx = null;
       _inlineEditingSectionIdx = null;
       _activeInlineEditKey = null;
       _sparkController.clear();
@@ -817,7 +819,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       widget.workbench.consumeJumpToFullReviewPending();
     }
 
-    // Step 1B: Full-Width Single-Page Concept Blueprint + Sticky Global Co-Design Dock
+    // Step 1B: 3x3 Spaced Bento Concept Board + Scoped Co-Design Dock
     return Container(
       key: const ValueKey('concept_interview_card'),
       color: bgBase,
@@ -826,10 +828,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
+                  constraints: const BoxConstraints(maxWidth: 1580),
                   child: _buildFullReviewWorkspace(draft),
                 ),
               ),
