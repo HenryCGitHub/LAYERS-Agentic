@@ -4302,6 +4302,75 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(prompt2, contains('CUMULATIVE PROJECT LEDGER'));
         expect(prompt2, contains('BP_PlayerCharacter'));
         expect(prompt2, contains('moveSpeed: 240.0 px/s'));
+
+        // 4. Stage 2 Intra-Epic Build Dependency Rules (Surface Before Actor, Target Before Tether, Base Action Before Gate)
+        final epic1Ordered =
+            ReleasePlannerAgent.enforceIntraEpicBuildDependencies(
+          [
+            ProposedFeatureBlueprint(
+              id: 'f1',
+              title: 'First Person Movement',
+              goal: 'Walk',
+              doneWhen: 'Done',
+            ),
+            ProposedFeatureBlueprint(
+              id: 'f2',
+              title: 'Station Corridor Blockout',
+              goal: 'Corridor',
+              doneWhen: 'Done',
+            ),
+          ],
+          epicIndex: 0,
+        );
+        expect(epic1Ordered.first.title, equals('Station Corridor Blockout'));
+
+        final epic3SalvageOrdered =
+            ReleasePlannerAgent.enforceIntraEpicBuildDependencies(
+          [
+            ProposedFeatureBlueprint(
+              id: 'f3_1',
+              title: 'Harpoon Tow Cable',
+              goal: 'Tether',
+              doneWhen: 'Done',
+            ),
+            ProposedFeatureBlueprint(
+              id: 'f3_2',
+              title: 'Scrap Core Physics',
+              goal: 'Core body',
+              doneWhen: 'Done',
+            ),
+          ],
+          epicIndex: 2,
+        );
+        expect(epic3SalvageOrdered.first.title, equals('Scrap Core Physics'));
+        expect(epic3SalvageOrdered[1].title, equals('Harpoon Tow Cable'));
+
+        final epic3CropOrdered =
+            ReleasePlannerAgent.enforceIntraEpicBuildDependencies(
+          [
+            ProposedFeatureBlueprint(
+              id: 'f3_a',
+              title: 'Seed Planting',
+              goal: 'Plant',
+              doneWhen: 'Done',
+            ),
+            ProposedFeatureBlueprint(
+              id: 'f3_b',
+              title: 'Tank Seal Depressurize',
+              goal: 'Depressurize gate',
+              doneWhen: 'Done',
+            ),
+            ProposedFeatureBlueprint(
+              id: 'f3_c',
+              title: 'Mature Crop Harvest',
+              goal: 'Harvest crop',
+              doneWhen: 'Done',
+            ),
+          ],
+          epicIndex: 2,
+        );
+        expect(epic3CropOrdered[1].title, equals('Mature Crop Harvest'));
+        expect(epic3CropOrdered[2].title, equals('Tank Seal Depressurize'));
       },
     );
   });

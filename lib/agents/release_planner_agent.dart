@@ -201,7 +201,7 @@ class ReleasePlannerAgent {
     } else {
       phaseInstruction =
           '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into 4 to 6 major Epics (big bodies of work, e.g. 1. Station Layout, Traversal & Physical Controls, 2. Environment/Tank Simulation & Alarms, 3. Resource/Crop Lifecycle & Harvesting, 4. Cargo Delivery, Shop & Upgrade Mounting) required to build ${releaseDoc.title} across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n'
-          '- GREYBOX LEVEL / ARENA BLOCKOUT IN EPIC 1: Epic 1 (`beat_1`) MUST include a dedicated Greybox Environment / Arena Blockout Feature matching `02 Game Spec` and `08 Done When` (e.g., `"Station Corridor Blockout"` connecting the four growth bays and cargo airlock, or `"Greybox Arena Layout"`) alongside First-Person Movement, Interaction Raycast, and Physical Control manipulation (at least 4 Features in Epic 1).\n'
+          '- GREYBOX LEVEL / ARENA BLOCKOUT FIRST IN EPIC 1: Epic 1 (`beat_1`) MUST start at Feature #1 (`feat_1_1`) with a dedicated Greybox Environment / Arena Blockout Feature matching `02 Game Spec` and `08 Done When` (e.g., `"Station Corridor Blockout"` connecting the four growth bays and cargo airlock, or `"Greybox Arena Layout"`) so floor and wall colliders exist BEFORE Character/Vehicle Movement (`feat_1_2`), Interaction Raycast/Aim (`feat_1_3`), and Primary Control (`feat_1_4`).\n'
           '- ONE ATOMIC MECHANIC PER FEATURE (MINIMUM 4 FEATURES PER EPIC, 16–20 TOTAL): Audit every verb and clause across `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When`. Every distinct greybox room/corridor layout, player locomotion mechanic, interaction raycast/prompt, valve rotation, canister injection, simulation drift rule, gauge readout, alarm/wilt feedback state, container unsealing/depressurization step, seed planting step, crop growth timer, mature crop harvest, crate loading step, airlock terminal sale, shop purchase, and physical equipment mounting + second-cycle reset MUST be its own separate Feature card (4 to 5 Features per Epic, 16 to 20 Features total across the release). NEVER bundle two distinct devices or sequential steps (like "Valve + Canister", "Growth + Harvest", or "Shop Purchase + Equipment Mounting") into a single Feature!';
     }
 
@@ -317,16 +317,19 @@ ${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Relea
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
 $progressiveDiagnosticInstructions
-- IMPACT-FIRST BUILD ORDER (FASTEST PATH TO PLAYABLE PROGRESS): Order Epics (big bodies of work) and Features (individual features to complete each Epic) by Playable Developer Impact—start Epic 1 (`beat_1`) with the Core Toy & Primary Control (e.g., Player Movement/Traversal, Vehicle Handling, or Primary Board/Interaction Control), followed by Primary Action & Reactive Targets (Combat, Farming, Hazards), Loop Closure (Drops, Objectives, Reset), and place Pre-Match Staging/Loadout Prep or Menus later.
+- STRICT ENGINEERING BUILD DEPENDENCY ORDER (FEATURE N DEPENDS ONLY ON 1..N-1): Stage 1 Core Loop Beats are chronological, but Stage 2 Epics & Features MUST be ordered by **Engineering Build Dependency** so every Feature `N` can be built and playtested in the engine using only scenes, physics bodies, and actions already created in Features `1..N-1`:
+  * `Dependency Rule 1 (Surface / Space Before Actor)`: In Epic 1 (`beat_1`), always place the Greybox Level/Arena/Corridor Blockout feature at `Feature #1` BEFORE Player/Vehicle Locomotion at `Feature #2` (so a gravity-enabled body does not fall into the void).
+  * `Dependency Rule 2 (Target Entity Before Tool / Tether / Resolver)`: Inside any Epic, always build the physical Target Object, Pickup Body, Container, or Enemy Spawner (`"Scrap Core Physics"`, `"Sentry Drone Spawner"`, `"Water Tank Container"`, `"Cargo Crate"`) BEFORE the Tether, Harpoon, Raycast, Weapon Impact, or Delivery Zone (`"Harpoon Tow Cable"`, `"Drone Projectile Impact"`, `"Winch Docking Zone"`) that attaches to or acts on it. Never put a tether or interaction before the object it hooks onto!
+  * `Dependency Rule 3 (Base Mechanic Before Lock / Gate / Constraint)`: Always build the core playable action (`"Mature Crop Harvest"`, `"Heat Cannon Fire"`) BEFORE adding the lock, pressure seal, or overheat gate (`"Tank Seal Depressurize"`, `"Reactor Steam Vent"`) that restricts it.
 - THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into all the individual Playable Features (`"included": true`, 4 to 5 features per Epic across 4 to 6 Epics for a full prototype loop) needed to complete that Epic end-to-end for ${releaseDoc.title}. If a Feature's `inScope` would list 3 different mechanics (e.g., growth stages + harvesting + crate loading, or shop purchase + equipment mounting + seed planting), split each of those mechanics into its own separate Feature card inside that Epic!
 - ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
-- PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Station Corridor Blockout"`, `"First Person Movement"`, `"Object Interaction Raycast"`, `"Manual Valve Turn"`, `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Tank Seal Depressurize"`, `"Seed Planting"`, `"Crop Growth Timer"`, `"Mature Crop Harvest"`, `"Cargo Crate Loading"`, `"Airlock Terminal Sale"`, `"Upgrade Shop Purchase"`, `"Pump Upgrade Mount"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
+- PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Station Corridor Blockout"`, `"First Person Movement"`, `"Object Interaction Raycast"`, `"Manual Valve Turn"`, `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Seed Planting"`, `"Crop Growth Timer"`, `"Mature Crop Harvest"`, `"Tank Seal Depressurize"`, `"Cargo Crate Loading"`, `"Airlock Terminal Sale"`, `"Upgrade Shop Purchase"`, `"Pump Upgrade Mount"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
 - MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"plantSnapRadius: 0.4 m"`, `"slotsPerTank: 4 slots"`, `"crateCapacity: 8 crops"`, `"depressurizeDuration: 1.5 s"`). NEVER return an empty `"tuningParams": []` array on any feature.
 - NATURAL, CONCRETE TASKS ON ONE SHARED ASSET (NO REPETITIVE "SETUP / LOGIC / GUARD" SUFFIXES): Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2–4` words + duration tag) that name the actual node/mesh, behavior, and boundary condition WITHOUT mechanically ending every task in the words `"Setup"`, `"Logic"`, or `"Guard"` (e.g., use `"Capsule Body & Camera (2h)"` -> `"WASD Velocity & Pitch (2h)"` -> `"Wall Slide & Pitch Clamp (1h)"`, or `"Tank Mesh & Pipe Ports (2h)"` -> `"Canister Snap & Refill (2h)"` -> `"Full Tank Overflow Stop (1h)"`):
-  * `Task 1` (Entity / Node / Scene Foundation): Create or place the specific playable Character, Greybox Room, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Corridor & Bay Colliders (2h)"`, `"Tank Mesh & Pipe Ports (2h)"`). NEVER start `Task 1` with `"Input Mapping"` before the Character/Actor exists.
+  * `Task 1` (Entity / Node / Scene Foundation): Create or place the specific playable Character, Greybox Room, Emitter, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Corridor & Bay Colliders (2h)"`, `"Steam Vent Emitter (1h)"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in `Task 1`'s title.
   * `Task 2` (Core Interaction, Movement, or Simulation Math): Wire the specific interaction, movement, or simulation behavior onto `Task 1`'s asset (e.g., `"WASD Velocity & Look (2h)"`, `"Hold-E Valve Rotation (2h)"`, `"Wilt Color Lerp (2h)"`).
   * `Task 3` (Observable Feedback & Boundary Condition): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Full Tank Overflow Stop (1h)"`, `"Occupied Slot Reject (1h)"`).
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
@@ -570,6 +573,93 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     ];
   }
 
+  /// Enforces the 3 Engineering Build Dependency Rules inside an Epic so Feature `N`
+  /// only depends on scene geometry, target bodies, or base actions created in Features `1..N-1`:
+  /// 1. Surface / Space Before Actor (Epic 1 blockout/layout precedes character locomotion).
+  /// 2. Target Entity Before Tool / Tether / Resolver (`Scrap Core Physics` precedes `Harpoon Tow Cable`).
+  /// 3. Base Mechanic Before Lock / Gate / Constraint (`Mature Crop Harvest` precedes `Tank Seal Depressurize`).
+  static List<ProposedFeatureBlueprint> enforceIntraEpicBuildDependencies(
+    List<ProposedFeatureBlueprint> rawFeatures, {
+    required int epicIndex,
+  }) {
+    if (rawFeatures.length < 2) return rawFeatures;
+    final list = List<ProposedFeatureBlueprint>.from(rawFeatures);
+
+    bool isEnvironmentBlockout(ProposedFeatureBlueprint f) {
+      final t = f.title.toLowerCase();
+      return t.contains('blockout') ||
+          t.contains('arena layout') ||
+          t.contains('corridor layout') ||
+          t.contains('station layout') ||
+          t.contains('room layout') ||
+          t.contains('level layout') ||
+          t.contains('greybox arena') ||
+          t.contains('station corridor');
+    }
+
+    // Rule 1: In Epic 1 (epicIndex == 0), move Greybox Level / Arena Blockout to index 0
+    if (epicIndex == 0) {
+      final blockoutIdx = list.indexWhere(isEnvironmentBlockout);
+      if (blockoutIdx > 0) {
+        final blockoutFeat = list.removeAt(blockoutIdx);
+        list.insert(0, blockoutFeat);
+      }
+    }
+
+    // Rule 2: Target Entity / Spawner must precede Tether / Harpoon / Projectile Impact
+    bool isTetherOrImpactTool(ProposedFeatureBlueprint f) {
+      final t = f.title.toLowerCase();
+      return t.contains('tow cable') ||
+          t.contains('harpoon') ||
+          t.contains('tether') ||
+          t.contains('projectile impact') ||
+          t.contains('hit detection');
+    }
+
+    bool isTargetEntityOrSpawner(ProposedFeatureBlueprint f) {
+      final t = f.title.toLowerCase();
+      return (t.contains('scrap core') ||
+              t.contains('core physics') ||
+              t.contains('drone spawner') ||
+              t.contains('enemy spawner') ||
+              t.contains('target spawner')) &&
+          !isTetherOrImpactTool(f);
+    }
+
+    final toolIdx = list.indexWhere(isTetherOrImpactTool);
+    final targetIdx = list.indexWhere(isTargetEntityOrSpawner);
+    if (toolIdx != -1 && targetIdx > toolIdx) {
+      final targetFeat = list.removeAt(targetIdx);
+      list.insert(toolIdx, targetFeat);
+    }
+
+    // Rule 3: Base Harvest / Pickup Action must precede Lock / Seal / Depressurize Gate
+    bool isPressureOrSealGate(ProposedFeatureBlueprint f) {
+      final t = f.title.toLowerCase();
+      return t.contains('depressuriz') ||
+          t.contains('seal lock') ||
+          t.contains('hatch lock') ||
+          t.contains('pressure lock');
+    }
+
+    bool isBaseHarvestAction(ProposedFeatureBlueprint f) {
+      final t = f.title.toLowerCase();
+      return (t.contains('harvest') ||
+              t.contains('crop pickup') ||
+              t.contains('crop extract')) &&
+          !isPressureOrSealGate(f);
+    }
+
+    final gateIdx = list.indexWhere(isPressureOrSealGate);
+    final harvestIdx = list.indexWhere(isBaseHarvestAction);
+    if (gateIdx != -1 && harvestIdx > gateIdx) {
+      final gateFeat = list.removeAt(gateIdx);
+      list.insert(harvestIdx, gateFeat);
+    }
+
+    return list;
+  }
+
   static ReleaseBlueprint? _parseDynamicReleaseBlueprint({
     required Map<String, dynamic> json,
     required TierDocument releaseDoc,
@@ -748,13 +838,16 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       }
 
       if (features.isNotEmpty) {
+        final orderedFeatures = (capV01Checkpoints && versionTag == 'v0.1')
+            ? enforceIntraEpicBuildDependencies(features, epicIndex: bIdx)
+            : features;
         beats.add(
           ProposedBeatBlueprint(
             id: (bMap['id'] ?? 'beat_${bIdx + 1}').toString(),
             title: bTitle,
             goal: bGoal,
             doneWhen: bDone,
-            features: features,
+            features: orderedFeatures,
           ),
         );
       }
