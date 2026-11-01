@@ -15,6 +15,13 @@ import 'utils/markdown_exporter.dart';
 part 'screens/shell_exporters_part.dart';
 part 'screens/shell_dialogs_part.dart';
 
+const String _actionNewProject = '__new_project__';
+const String _actionExportJson = '__export_json__';
+const String _actionImportJson = '__import_json__';
+const String _prefixRename = '__rename__:';
+const String _prefixDuplicate = '__duplicate__:';
+const String _prefixDelete = '__delete__:';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -56,7 +63,6 @@ class WorkbenchShell extends StatelessWidget {
 
   const WorkbenchShell({super.key, required this.workbench});
 
-
   @override
   Widget build(BuildContext context) {
     final isDark = workbench.isDark;
@@ -73,27 +79,37 @@ class WorkbenchShell extends StatelessWidget {
     final draft = workbench.conceptDraft;
     final bp = workbench.releaseBlueprint;
     final rel = workbench.activeRelease;
-    final allFeatDocs = <TierDocument>[
-      for (final b in workbench.activeReleaseBeats)
-        ...workbench.featuresForBeat(b.id),
-    ];
-    final allFeats = [for (final f in allFeatDocs) f.id];
-    final nonStableFeatIds = [
-      for (final f in allFeatDocs)
-        if (workbench.isFeatureActiveInRelease(f)) f.id,
-    ];
-    final targetBadgeFeatIds =
-        nonStableFeatIds.isNotEmpty ? nonStableFeatIds : allFeats;
-    final doneFeatCount = targetBadgeFeatIds
-        .where((id) => workbench.getDocumentProgress(id) >= 100)
-        .length;
+
+    int totalFeatCount = 0;
+    int doneFeatCount = 0;
+    int activeTotalCount = 0;
+    int activeDoneCount = 0;
+
+    for (final b in workbench.activeReleaseBeats) {
+      for (final f in workbench.featuresForBeat(b.id)) {
+        totalFeatCount++;
+        final isDone = workbench.getDocumentProgress(f.id) >= 100;
+        if (isDone) doneFeatCount++;
+        if (workbench.isFeatureActiveInRelease(f)) {
+          activeTotalCount++;
+          if (isDone) activeDoneCount++;
+        }
+      }
+    }
+
+    final int targetTotal = activeTotalCount > 0 ? activeTotalCount : totalFeatCount;
+    final int targetDone = activeTotalCount > 0 ? activeDoneCount : doneFeatCount;
 
     final String? stage1Badge = draft != null ? '✓' : null;
-    final String? stage3Badge = targetBadgeFeatIds.isNotEmpty
-        ? '$doneFeatCount/${targetBadgeFeatIds.length}'
+    final String? stage3Badge = targetTotal > 0
+        ? '$targetDone/$targetTotal'
         : (rel != null ? '${workbench.getDocumentProgress(rel.id)}%' : null);
 
-    final String? rawSpark = workbench.activeProject?.title.trim() ?? draft?.sparkIdea.trim();
+    final projTitle = workbench.activeProject?.title.trim();
+    final draftIdea = draft?.sparkIdea.trim();
+    final String? rawSpark = (projTitle != null && projTitle.isNotEmpty)
+        ? projTitle
+        : ((draftIdea != null && draftIdea.isNotEmpty) ? draftIdea : null);
     final String? activeProjectLabel = (rawSpark != null && rawSpark.isNotEmpty)
         ? (rawSpark.length > 22 ? '${rawSpark.substring(0, 22)}…' : rawSpark)
         : null;
@@ -148,22 +164,22 @@ class WorkbenchShell extends StatelessWidget {
                       side: BorderSide(color: borderColor),
                     ),
                     onSelected: (val) async {
-                      if (val == '__new_project__') {
+                      if (val == _actionNewProject) {
                         workbench.createNewProject();
-                      } else if (val == '__export_json__') {
+                      } else if (val == _actionExportJson) {
                         await _exportActiveProjectJson(context);
-                      } else if (val == '__import_json__') {
+                      } else if (val == _actionImportJson) {
                         await _showImportProjectJsonDialog(context);
-                      } else if (val.startsWith('__rename__:')) {
-                        final projId = val.substring('__rename__:'.length);
+                      } else if (val.startsWith(_prefixRename)) {
+                        final projId = val.substring(_prefixRename.length);
                         final proj = savedProjects.where((p) => p.id == projId).firstOrNull;
                         if (proj == null) return;
                         await _promptRenameProjectDialog(context, proj);
-                      } else if (val.startsWith('__duplicate__:')) {
-                        final projId = val.substring('__duplicate__:'.length);
+                      } else if (val.startsWith(_prefixDuplicate)) {
+                        final projId = val.substring(_prefixDuplicate.length);
                         workbench.duplicateProject(projId);
-                      } else if (val.startsWith('__delete__:')) {
-                        final projId = val.substring('__delete__:'.length);
+                      } else if (val.startsWith(_prefixDelete)) {
+                        final projId = val.substring(_prefixDelete.length);
                         workbench.deleteProject(projId);
                       } else {
                         workbench.switchProject(val);
@@ -206,7 +222,7 @@ class WorkbenchShell extends StatelessWidget {
                                 message: 'Rename Project',
                                 child: InkWell(
                                   key: ValueKey('switcher_rename_${p.id}'),
-                                  onTap: () => Navigator.of(ctx).pop('__rename__:${p.id}'),
+                                  onTap: () => Navigator.of(ctx).pop('$_prefixRename${p.id}'),
                                   borderRadius: BorderRadius.circular(4),
                                   child: Padding(
                                     padding: const EdgeInsets.all(4),
@@ -222,7 +238,7 @@ class WorkbenchShell extends StatelessWidget {
                                 message: 'Duplicate Project',
                                 child: InkWell(
                                   key: ValueKey('switcher_duplicate_${p.id}'),
-                                  onTap: () => Navigator.of(ctx).pop('__duplicate__:${p.id}'),
+                                  onTap: () => Navigator.of(ctx).pop('$_prefixDuplicate${p.id}'),
                                   borderRadius: BorderRadius.circular(4),
                                   child: Padding(
                                     padding: const EdgeInsets.all(4),
@@ -238,7 +254,7 @@ class WorkbenchShell extends StatelessWidget {
                                 message: 'Delete Project',
                                 child: InkWell(
                                   key: ValueKey('switcher_delete_${p.id}'),
-                                  onTap: () => Navigator.of(ctx).pop('__delete__:${p.id}'),
+                                  onTap: () => Navigator.of(ctx).pop('$_prefixDelete${p.id}'),
                                   borderRadius: BorderRadius.circular(4),
                                   child: Padding(
                                     padding: const EdgeInsets.all(4),
@@ -255,7 +271,7 @@ class WorkbenchShell extends StatelessWidget {
                         ),
                       if (savedProjects.isNotEmpty) const PopupMenuDivider(),
                       PopupMenuItem<String>(
-                        value: '__new_project__',
+                        value: _actionNewProject,
                         child: Row(
                           children: [
                             Icon(Icons.add_circle_outline_rounded, size: 13, color: accentEmerald),
@@ -274,7 +290,7 @@ class WorkbenchShell extends StatelessWidget {
                       const PopupMenuDivider(),
                       PopupMenuItem<String>(
                         key: const ValueKey('switcher_export_project_json_item'),
-                        value: '__export_json__',
+                        value: _actionExportJson,
                         child: Row(
                           children: [
                             Icon(Icons.file_download_outlined, size: 13, color: textSecondary),
@@ -292,7 +308,7 @@ class WorkbenchShell extends StatelessWidget {
                       ),
                       PopupMenuItem<String>(
                         key: const ValueKey('switcher_import_project_json_item'),
-                        value: '__import_json__',
+                        value: _actionImportJson,
                         child: Row(
                           children: [
                             Icon(Icons.file_upload_outlined, size: 13, color: accentAmber),
@@ -366,7 +382,7 @@ class WorkbenchShell extends StatelessWidget {
                       label: '1. Concept',
                       badge: stage1Badge,
                       stage: WorkbenchStage.projectPitch,
-                      isCompleted: bp != null || allFeats.isNotEmpty,
+                      isCompleted: bp != null || totalFeatCount > 0,
                       onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
                     ),
                     Padding(
@@ -666,7 +682,6 @@ class WorkbenchShell extends StatelessWidget {
       ),
     );
   }
-
 
   Widget _buildStagePill({
     required String label,
