@@ -717,6 +717,68 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+          child: Builder(
+            builder: (context) {
+              final pendingCount =
+                  widget.workbench.pendingFeatureInboxItems.length;
+              final scheduledCount =
+                  widget.workbench.scheduledFeatureInboxItems.length;
+              final totalInbox = pendingCount + scheduledCount;
+              return InkWell(
+                key: const ValueKey('open_feature_inbox_btn'),
+                onTap: () => _showFeatureInboxModal(context),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bgSurface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: pendingCount > 0 ? borderBright : borderSubtle,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          totalInbox > 0
+                              ? '📥 Feature Inbox ($totalInbox)'
+                              : '📥 Feature Inbox',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        pendingCount > 0
+                            ? '$pendingCount TO TRIAGE ✦'
+                            : '+ ADD IDEA ✦',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: pendingCount > 0
+                              ? const Color(0xFF10B981)
+                              : textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
         if (widget.workbench.backgroundStepSynthesisRemainingCount > 0)
           Padding(
             key: const ValueKey('outliner_background_synthesis_banner'),
@@ -804,7 +866,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         final beat = beats[bIdx];
                         final allBeatFeats =
                             widget.workbench.featuresForBeat(beat.id);
-                        final beatFeats = releaseHasActiveFeats
+                        final showAllLiveFeatures =
+                            widget.workbench.releaseViewFilter == 'all';
+                        final beatFeats = (!showAllLiveFeatures &&
+                                releaseHasActiveFeats)
                             ? allBeatFeats
                                 .where(
                                   (f) => widget.workbench
@@ -1224,6 +1289,43 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         ? TextDecoration.lineThrough
                                         : TextDecoration.none,
                                   ),
+                                ),
+                                Builder(
+                                  builder: (context) {
+                                    final scheduledUpgrades = widget.workbench
+                                        .scheduledInboxUpgradesForFeature(
+                                      feat.id,
+                                    );
+                                    final isStableInAllView =
+                                        widget.workbench.releaseViewFilter ==
+                                                'all' &&
+                                            !widget.workbench
+                                                .isFeatureActiveInRelease(
+                                              feat,
+                                            ) &&
+                                            feat.sections['lifecycle'] !=
+                                                FeatureLifecycleStatus
+                                                    .superseded.name;
+                                    if (scheduledUpgrades.isEmpty &&
+                                        !isStableInAllView) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        scheduledUpgrades.isNotEmpty
+                                            ? '🗓 Queued for ${scheduledUpgrades.first.targetFuturePhase.shortName}: ${scheduledUpgrades.first.futureCheckpointTitle.isNotEmpty ? scheduledUpgrades.first.futureCheckpointTitle : scheduledUpgrades.first.checkpointTitle}'
+                                            : 'STABLE ✓ (${feat.sections['originVersion'] ?? 'v0.1'})',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w600,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                                 if (displayTitle != feat.title)
                                   SizedBox(

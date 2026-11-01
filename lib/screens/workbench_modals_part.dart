@@ -577,8 +577,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               }
                             }
 
-                            // 3. Collect "Next in v0.X" active feature rows
+                            // 3. Collect "Next in v0.X" active feature rows & pivoted/archived rows
                             final nextRows = <({
+                              String beatId,
+                              String epicCode,
+                              ProposedFeatureBlueprint feat,
+                            })>[];
+                            final pivotedRows = <({
                               String beatId,
                               String epicCode,
                               ProposedFeatureBlueprint feat,
@@ -588,7 +593,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               final eCode =
                                   'E${(bIdx + 1).toString().padLeft(2, '0')}';
                               for (final f in b.features) {
-                                if (!f.isStable && !f.isSuperseded) {
+                                if (f.isSuperseded) {
+                                  pivotedRows.add((
+                                    beatId: b.id,
+                                    epicCode: eCode,
+                                    feat: f,
+                                  ));
+                                } else if (!f.isStable) {
                                   nextRows.add((
                                     beatId: b.id,
                                     epicCode: eCode,
@@ -1154,6 +1165,78 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                               );
                                                             },
                                                           ),
+                                                        if (pivotedRows
+                                                            .isNotEmpty) ...[
+                                                          const SizedBox(
+                                                            height: 8,
+                                                          ),
+                                                          Wrap(
+                                                            spacing: 6,
+                                                            runSpacing: 6,
+                                                            children: [
+                                                              for (final pRow
+                                                                  in pivotedRows)
+                                                                InkWell(
+                                                                  key: ValueKey(
+                                                                    'progressive_restore_feat_${pRow.feat.id}',
+                                                                  ),
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                            4,
+                                                                          ),
+                                                                  onTap: () {
+                                                                    widget
+                                                                        .workbench
+                                                                        .toggleProposedFeatureSuperseded(
+                                                                      pRow.beatId,
+                                                                      pRow.feat
+                                                                          .id,
+                                                                    );
+                                                                    _rebuild(
+                                                                      () {},
+                                                                    );
+                                                                  },
+                                                                  child:
+                                                                      Container(
+                                                                    padding:
+                                                                        const EdgeInsets.symmetric(
+                                                                          horizontal:
+                                                                              8,
+                                                                          vertical:
+                                                                              4,
+                                                                        ),
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color:
+                                                                          bgSurface,
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                            4,
+                                                                          ),
+                                                                      border:
+                                                                          Border.all(
+                                                                        color:
+                                                                            borderSubtle,
+                                                                      ),
+                                                                    ),
+                                                                    child: Text(
+                                                                      'ARCHIVED: ${pRow.epicCode} · ${pRow.feat.title} · ↺ Restore',
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            9.5,
+                                                                        fontWeight:
+                                                                            FontWeight.w600,
+                                                                        color:
+                                                                            textMuted,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                            ],
+                                                          ),
+                                                        ],
                                                         if (bp.beats
                                                             .isNotEmpty) ...[
                                                           const SizedBox(
@@ -1709,40 +1792,74 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                     for (int eIdx = 0;
                                         eIdx < bp.explicitExclusions.length;
                                         eIdx++)
-                                      InkWell(
-                                        key: ValueKey(
-                                          'promote_exclusion_chip_$eIdx',
-                                        ),
-                                        borderRadius: BorderRadius.circular(5),
-                                        onTap: () {
-                                          widget.workbench
-                                              .promoteExclusionToNextRelease(
-                                            bp.explicitExclusions[eIdx],
+                                      Builder(
+                                        builder: (context) {
+                                          final exText =
+                                              bp.explicitExclusions[eIdx];
+                                          final activePhase =
+                                              widget.workbench.currentPhase;
+                                          final isUnlocked = ReleaseBlueprint
+                                              .isDeferredExclusionUnlockedInPhase(
+                                            exText,
+                                            activePhase,
                                           );
-                                          _rebuild(() {});
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 9,
-                                            vertical: 5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: bgRecessed,
+                                          final isNever = exText
+                                              .toLowerCase()
+                                              .contains('[never]');
+                                          final labelText = isUnlocked
+                                              ? '✦ UNLOCKED IN ${activePhase.shortName.toUpperCase()} · + Promote: $exText'
+                                              : (isNever
+                                                  ? '[NEVER] · + Override: $exText'
+                                                  : '+ Promote: $exText');
+                                          return InkWell(
+                                            key: ValueKey(
+                                              'promote_exclusion_chip_$eIdx',
+                                            ),
                                             borderRadius:
                                                 BorderRadius.circular(5),
-                                            border: Border.all(
-                                              color: borderSubtle,
+                                            onTap: () {
+                                              widget.workbench
+                                                  .promoteExclusionToNextRelease(
+                                                exText,
+                                              );
+                                              _rebuild(() {});
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 9,
+                                                    vertical: 5,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: bgRecessed,
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
+                                                border: Border.all(
+                                                  color: isUnlocked
+                                                      ? const Color(
+                                                          0xFF10B981,
+                                                        ).withValues(
+                                                          alpha: 0.55,
+                                                        )
+                                                      : borderSubtle,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                labelText,
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10.5,
+                                                  fontWeight: isUnlocked
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w600,
+                                                  color: isUnlocked
+                                                      ? textPrimary
+                                                      : textSecondary,
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                          child: Text(
-                                            '+ Promote: ${bp.explicitExclusions[eIdx]}',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w600,
-                                              color: textSecondary,
-                                            ),
-                                          ),
-                                        ),
+                                          );
+                                        },
                                       ),
                                   ],
                                 ),
@@ -1886,6 +2003,27 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       style: GoogleFonts.inter(
                         fontSize: 11.5,
                         color: textSecondary,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Builder(
+                        builder: (context) {
+                          final cov = widget.workbench.fullProductionCoverage();
+                          final nextPh =
+                              widget.workbench.inferNextProgressivePhase();
+                          final covPct = cov.totalBeats > 0
+                              ? ((cov.coveredBeats / cov.totalBeats) * 100)
+                                  .round()
+                              : 100;
+                          return Text(
+                            '• Lifecycle: ${widget.workbench.currentPhase.label} Shipped → Next: ${nextPh.label} (v1.0 Readiness: ${cov.coveredBeats}/${cov.totalBeats} Epics Hardened · $covPct%)',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: textSecondary,
+                            ),
+                          );
+                        },
                       ),
                     ),
                     if (retro.carryoverFeatureTitles.isNotEmpty)
@@ -2409,5 +2547,771 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     },
   ),
 );
+  }
+
+  void _showFeatureInboxModal(BuildContext context, {String? preferredBeatId}) {
+    final captureCtrl = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final pendingItems = widget.workbench.pendingFeatureInboxItems;
+          final scheduledItems = widget.workbench.scheduledFeatureInboxItems;
+          final beats = widget.workbench.activeReleaseBeats;
+          final activeVer = widget.workbench.activeReleaseVersionTag;
+          final activePhase = widget.workbench.currentPhase;
+
+          Future<void> handleCapture(String text) async {
+            final clean = text.trim();
+            if (clean.isEmpty || isSubmitting) return;
+            setModalState(() => isSubmitting = true);
+            captureCtrl.clear();
+            await widget.workbench.submitFeatureIdeaToInbox(
+              clean,
+              preferredBeatId: preferredBeatId,
+            );
+            if (ctx.mounted) {
+              setModalState(() => isSubmitting = false);
+            }
+            _rebuild(() {});
+          }
+
+          return AlertDialog(
+            backgroundColor: bgSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: borderBright),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📥 AGENTIC FEATURE INBOX · WHEN · WHERE · HOW TRIAGE',
+                        style: AppTheme.displayFont(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Capture any feature idea — the Agent figures out WHEN (Current vs. Split vs. Future Release), WHERE (Epic & Feature vs. Upgrade), and HOW to implement it.',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bgRecessed,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: borderSubtle),
+                  ),
+                  child: Text(
+                    '$activeVer · ${activePhase.shortName}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 720,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. Quick Capture Bar
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: bgRecessed,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: const ValueKey('inbox_capture_input'),
+                              controller: captureCtrl,
+                              autofocus: pendingItems.isEmpty,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                color: textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Describe a feature to add (e.g., "Add dash i-frames", "Skill tree shop", "Boss laser sweep")...',
+                                hintStyle: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: textMuted,
+                                ),
+                                isDense: true,
+                                border: InputBorder.none,
+                              ),
+                              onSubmitted: handleCapture,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            key: const ValueKey('inbox_capture_submit_btn'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: accentEmerald,
+                              foregroundColor: isDark
+                                  ? const Color(0xFF06281E)
+                                  : Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                            ),
+                            onPressed: isSubmitting
+                                ? null
+                                : () => handleCapture(captureCtrl.text),
+                            child: Text(
+                              isSubmitting
+                                  ? 'Triaging...'
+                                  : '+ Capture & Triage ✦',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // 2. Needs Triage Section
+                    Text(
+                      'NEEDS TRIAGE (${pendingItems.length})',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (pendingItems.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: borderSubtle),
+                        ),
+                        child: Text(
+                          'No untriaged ideas in your Inbox. Type a feature idea above and the Agent will figure out WHEN, WHERE, and HOW to build it.',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: textMuted,
+                          ),
+                        ),
+                      )
+                    else
+                      for (final item in pendingItems)
+                        Container(
+                          key: ValueKey('inbox_card_${item.id}'),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: borderBright),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.featureTitle,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    key: ValueKey(
+                                      'inbox_dismiss_btn_${item.id}',
+                                    ),
+                                    onTap: () {
+                                      widget.workbench
+                                          .removeFeatureInboxItem(item.id);
+                                      setModalState(() {});
+                                      _rebuild(() {});
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        '✕ Dismiss',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Request: "${item.rawIdea}"',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // 1. WHEN (Release Timing)
+                              Text(
+                                '1. WHEN · RELEASE TIMING VERDICT',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  for (final mode
+                                      in InboxReleaseTimingMode.values)
+                                    Builder(
+                                      builder: (context) {
+                                        final isSel =
+                                            item.releaseTimingMode == mode;
+                                        final label = switch (mode) {
+                                          InboxReleaseTimingMode.now =>
+                                            '🟢 Build Now ($activeVer)',
+                                          InboxReleaseTimingMode
+                                              .splitNowAndFuture =>
+                                            '🟣 Split: $activeVer Core + ${item.targetFuturePhase.shortName} Upgrade',
+                                          InboxReleaseTimingMode
+                                              .futureRelease =>
+                                            '🗓 Schedule for ${item.targetFuturePhase.shortName}',
+                                        };
+                                        return InkWell(
+                                          key: ValueKey(
+                                            'inbox_timing_${item.id}_${mode.name}',
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          onTap: () {
+                                            widget.workbench
+                                                .updateFeatureInboxItemTriage(
+                                              item.id,
+                                              timingMode: mode,
+                                            );
+                                            setModalState(() {});
+                                            _rebuild(() {});
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isSel
+                                                  ? bgSurface
+                                                  : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: isSel
+                                                    ? accentEmerald
+                                                    : borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              label,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                fontWeight: isSel
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                                color: isSel
+                                                    ? textPrimary
+                                                    : textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                              if (item.releaseTimingMode !=
+                                  InboxReleaseTimingMode.now) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    for (final ph in [
+                                      ProductionPhase.mvp,
+                                      ProductionPhase.verticalSlice,
+                                      ProductionPhase.fullProduction,
+                                      ProductionPhase.postLaunch,
+                                    ])
+                                      InkWell(
+                                        key: ValueKey(
+                                          'inbox_phase_${item.id}_${ph.name}',
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                        onTap: () {
+                                          widget.workbench
+                                              .updateFeatureInboxItemTriage(
+                                            item.id,
+                                            targetFuturePhase: ph,
+                                          );
+                                          setModalState(() {});
+                                          _rebuild(() {});
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: item.targetFuturePhase == ph
+                                                ? bgSurface
+                                                : Colors.transparent,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                              color:
+                                                  item.targetFuturePhase == ph
+                                                      ? borderBright
+                                                      : borderSubtle,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Target: ${ph.label}',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              fontWeight:
+                                                  item.targetFuturePhase == ph
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                              color:
+                                                  item.targetFuturePhase == ph
+                                                      ? textPrimary
+                                                      : textMuted,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                item.releaseTimingReasoning,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // 2. WHERE (Single Live Tree Placement)
+                              Text(
+                                '2. WHERE · EPIC & LIVE TREE PLACEMENT',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  for (final intMode in [
+                                    InboxIntegrationMode.newFeatureInEpic,
+                                    InboxIntegrationMode.upgradeExistingFeature,
+                                    InboxIntegrationMode.newEpicAndFeature,
+                                  ])
+                                    Builder(
+                                      builder: (context) {
+                                        final isSel =
+                                            item.integrationMode == intMode;
+                                        final modeLabel = switch (intMode) {
+                                          InboxIntegrationMode
+                                              .newFeatureInEpic =>
+                                            '+ NEW Feature in ${item.targetBeatTitle}',
+                                          InboxIntegrationMode
+                                              .upgradeExistingFeature =>
+                                            '↑ UPGRADE "${item.targetFeatureTitle ?? 'Existing Feature'}"',
+                                          InboxIntegrationMode
+                                              .newEpicAndFeature =>
+                                            '+ NEW Core Loop Epic',
+                                        };
+                                        return InkWell(
+                                          key: ValueKey(
+                                            'inbox_intmode_${item.id}_${intMode.name}',
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          onTap: () {
+                                            widget.workbench
+                                                .updateFeatureInboxItemTriage(
+                                              item.id,
+                                              integrationMode: intMode,
+                                            );
+                                            setModalState(() {});
+                                            _rebuild(() {});
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isSel
+                                                  ? bgSurface
+                                                  : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: isSel
+                                                    ? borderBright
+                                                    : borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              modeLabel,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                fontWeight: isSel
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                                color: isSel
+                                                    ? textPrimary
+                                                    : textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                              if (beats.length > 1 &&
+                                  item.integrationMode !=
+                                      InboxIntegrationMode
+                                          .newEpicAndFeature) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    for (int bIdx = 0;
+                                        bIdx < beats.length;
+                                        bIdx++)
+                                      Builder(
+                                        builder: (context) {
+                                          final b = beats[bIdx];
+                                          final isBeatSel =
+                                              item.targetBeatId == b.id;
+                                          final eCode =
+                                              'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                                          return InkWell(
+                                            key: ValueKey(
+                                              'inbox_beat_${item.id}_${b.id}',
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            onTap: () {
+                                              widget.workbench
+                                                  .updateFeatureInboxItemTriage(
+                                                item.id,
+                                                targetBeatId: b.id,
+                                              );
+                                              setModalState(() {});
+                                              _rebuild(() {});
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 7,
+                                                    vertical: 3,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: isBeatSel
+                                                    ? bgSurface
+                                                    : Colors.transparent,
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: isBeatSel
+                                                      ? borderBright
+                                                      : borderSubtle,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                '$eCode · ${b.title}',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9.5,
+                                                  fontWeight: isBeatSel
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                                  color: isBeatSel
+                                                      ? textPrimary
+                                                      : textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                item.placementReasoning,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // 3. HOW (Implementation Blueprint)
+                              Text(
+                                '3. HOW · ENGINE & CHECKPOINT ARCHITECTURE',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Goal: ${item.goal}\nPlaytest Gate: ${item.playtestGate}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: textPrimary,
+                                ),
+                              ),
+                              if (item.architectureHowSummary.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                for (final line in item.architectureHowSummary)
+                                  Text(
+                                    '• $line',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                              ],
+                              if (item.tasks.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Tasks: ${item.tasks.join(' · ')}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    color: textMuted,
+                                  ),
+                                ),
+                              ],
+                              if (item.releaseTimingMode !=
+                                      InboxReleaseTimingMode.now &&
+                                  item.futureCheckpointTitle.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: bgSurface,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: borderSubtle),
+                                  ),
+                                  child: Text(
+                                    '🗓 Queued for ${item.targetFuturePhase.label}: ${item.futureCheckpointTitle} — ${item.futureGoal}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  ElevatedButton(
+                                    key: ValueKey('inbox_accept_btn_${item.id}'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: accentEmerald,
+                                      foregroundColor: isDark
+                                          ? const Color(0xFF06281E)
+                                          : Colors.white,
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () async {
+                                      final timing = item.releaseTimingMode;
+                                      await widget.workbench
+                                          .acceptFeatureInboxTriage(item.id);
+                                      if (ctx.mounted) {
+                                        if (timing !=
+                                            InboxReleaseTimingMode
+                                                .futureRelease) {
+                                          Navigator.of(ctx).pop();
+                                        } else {
+                                          setModalState(() {});
+                                        }
+                                      }
+                                      _rebuild(() {});
+                                    },
+                                    child: Text(
+                                      switch (item.releaseTimingMode) {
+                                        InboxReleaseTimingMode.now =>
+                                          '✓ Build Now in $activeVer →',
+                                        InboxReleaseTimingMode
+                                            .splitNowAndFuture =>
+                                          '✓ Build $activeVer Core + Schedule ${item.targetFuturePhase.shortName} Upgrade →',
+                                        InboxReleaseTimingMode.futureRelease =>
+                                          '✓ Schedule for ${item.targetFuturePhase.label} →',
+                                      },
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                    // 3. Scheduled for Future Releases Section
+                    if (scheduledItems.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        'SCHEDULED FOR FUTURE RELEASES (${scheduledItems.length}) — AUTO-INJECTS WHEN PHASE OPENS',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final sched in scheduledItems)
+                        Container(
+                          key: ValueKey('inbox_scheduled_card_${sched.id}'),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '🗓 ${sched.targetFuturePhase.label} · ${sched.futureCheckpointTitle.isNotEmpty ? sched.futureCheckpointTitle : sched.featureTitle}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${sched.integrationMode == InboxIntegrationMode.upgradeExistingFeature ? 'Upgrades "${sched.targetFeatureTitle ?? sched.featureTitle}"' : 'New Feature in ${sched.targetBeatTitle}'} — ${sched.futureGoal.isNotEmpty ? sched.futureGoal : sched.goal}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                key: ValueKey(
+                                  'inbox_pull_now_btn_${sched.id}',
+                                ),
+                                onPressed: () async {
+                                  await widget.workbench
+                                      .acceptFeatureInboxTriage(
+                                    sched.id,
+                                    forceBuildNow: true,
+                                  );
+                                  if (ctx.mounted) {
+                                    Navigator.of(ctx).pop();
+                                  }
+                                  _rebuild(() {});
+                                },
+                                child: Text(
+                                  '⚡ Pull into $activeVer Now',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(
+                  'Close',
+                  style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }

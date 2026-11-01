@@ -319,13 +319,32 @@ class WorkbenchProvider extends ChangeNotifier {
     return const [];
   }
 
-  List<TierDocument> featuresForBeat(String beatId) {
+  bool isFeatureSuperseded(TierDocument featDoc) =>
+      featDoc.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
+
+  List<TierDocument> featuresForBeat(
+    String beatId, {
+    bool includeSuperseded = false,
+  }) {
     final beat = documents[beatId];
     if (beat == null) return const [];
-    return beat.childrenIds
+    final childDocs = beat.childrenIds
         .map((id) => documents[id])
         .whereType<TierDocument>()
         .toList();
+    if (!includeSuperseded) {
+      return childDocs.where((f) => !isFeatureSuperseded(f)).toList();
+    }
+    final seenIds = <String>{for (final f in childDocs) f.id};
+    for (final doc in documents.values) {
+      if (doc.tier == TierType.feature &&
+          doc.parentId == beatId &&
+          isFeatureSuperseded(doc) &&
+          seenIds.add(doc.id)) {
+        childDocs.add(doc);
+      }
+    }
+    return childDocs;
   }
 
   /// All superseded/archived testbed features belonging to the active project.
@@ -357,7 +376,11 @@ class WorkbenchProvider extends ChangeNotifier {
   TierDocument? get nextIncompleteFeature {
     final allFeats = <TierDocument>[];
     for (final b in activeReleaseBeats) {
-      allFeats.addAll(featuresForBeat(b.id));
+      for (final f in featuresForBeat(b.id)) {
+        if (isFeatureActiveInRelease(f)) {
+          allFeats.add(f);
+        }
+      }
     }
     if (allFeats.isEmpty) return null;
     final currentIdx =

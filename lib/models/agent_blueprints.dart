@@ -921,3 +921,193 @@ class ReleaseRetrospectiveSummary {
     required this.hardenedFeatureTitles,
   });
 }
+
+/// Lifecycle state of an item inside the Agentic Feature Inbox (`📥 Inbox`).
+enum FeatureInboxStatus {
+  /// Newly captured & auto-triaged by the Agent, awaiting 1-click user confirmation.
+  triagePending,
+
+  /// Confirmed and queued for a specific future `ProductionPhase` (`02 · MVP` -> `05 · Post-Launch`).
+  scheduledForFuture,
+
+  /// Materialized into the live Workbench tree.
+  implemented,
+}
+
+/// Temporal `WHEN` recommendation produced by the Agentic Feature Inbox Triage Engine.
+enum InboxReleaseTimingMode {
+  /// Build the full `4h` feature/checkpoint in the current active release (`v0.X`).
+  now,
+
+  /// Build a lean `4h` foundation in the current release (`v0.X`) AND schedule the deeper
+  /// progression/polish/content upgrade checkpoint for [targetFuturePhase].
+  splitNowAndFuture,
+
+  /// Keep the current release focused (`+0h` now) and schedule the feature/checkpoint
+  /// for [targetFuturePhase].
+  futureRelease,
+}
+
+/// Structural `WHERE` recommendation for how the feature integrates into the Single Live Game Tree.
+enum InboxIntegrationMode {
+  /// Create a standalone Playable Feature card inside an existing Core Loop Epic (`E0X`).
+  newFeatureInEpic,
+
+  /// Append a version-stamped Delta Checkpoint (`Checkpoint N+1`) onto an existing Feature card.
+  upgradeExistingFeature,
+
+  /// Create a brand-new Core Loop Epic (`E0(N+1)`) + Playable Feature card.
+  newEpicAndFeature,
+}
+
+/// An idea captured in the Agentic Feature Inbox (`📥 Inbox`) with full `WHEN` · `WHERE` · `HOW` triage.
+class FeatureInboxItem {
+  final String id;
+  String rawIdea;
+  FeatureInboxStatus status;
+  InboxReleaseTimingMode releaseTimingMode;
+  ProductionPhase targetFuturePhase;
+  String releaseTimingReasoning;
+
+  InboxIntegrationMode integrationMode;
+  String targetBeatId;
+  String targetBeatTitle;
+  String? targetFeatureId;
+  String? targetFeatureTitle;
+  String? newEpicTitle;
+  String? newEpicGoal;
+  String placementReasoning;
+
+  String featureTitle;
+  String goal;
+  List<String> inScope;
+  String doneWhen;
+  List<String> architectureHowSummary;
+  String checkpointTitle;
+  String playtestGate;
+  List<String> tasks;
+  List<String> tuningParams;
+  List<String> edgeCases;
+
+  /// Pre-architected future release upgrade slice (used when `releaseTimingMode` is
+  /// `splitNowAndFuture` or `futureRelease`).
+  String futureCheckpointTitle;
+  String futureGoal;
+  String futurePlaytestGate;
+  List<String> futureTasks;
+  List<String> futureTuningParams;
+  List<String> futureEdgeCases;
+
+  FeatureInboxItem({
+    required this.id,
+    required this.rawIdea,
+    this.status = FeatureInboxStatus.triagePending,
+    this.releaseTimingMode = InboxReleaseTimingMode.now,
+    this.targetFuturePhase = ProductionPhase.mvp,
+    this.releaseTimingReasoning = '',
+    this.integrationMode = InboxIntegrationMode.newFeatureInEpic,
+    required this.targetBeatId,
+    required this.targetBeatTitle,
+    this.targetFeatureId,
+    this.targetFeatureTitle,
+    this.newEpicTitle,
+    this.newEpicGoal,
+    this.placementReasoning = '',
+    required this.featureTitle,
+    required this.goal,
+    this.inScope = const [],
+    required this.doneWhen,
+    this.architectureHowSummary = const [],
+    required this.checkpointTitle,
+    required this.playtestGate,
+    this.tasks = const [],
+    this.tuningParams = const [],
+    this.edgeCases = const [],
+    this.futureCheckpointTitle = '',
+    this.futureGoal = '',
+    this.futurePlaytestGate = '',
+    this.futureTasks = const [],
+    this.futureTuningParams = const [],
+    this.futureEdgeCases = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'rawIdea': rawIdea,
+        'status': status.name,
+        'releaseTimingMode': releaseTimingMode.name,
+        'targetFuturePhase': targetFuturePhase.name,
+        'releaseTimingReasoning': releaseTimingReasoning,
+        'integrationMode': integrationMode.name,
+        'targetBeatId': targetBeatId,
+        'targetBeatTitle': targetBeatTitle,
+        if (targetFeatureId != null) 'targetFeatureId': targetFeatureId,
+        if (targetFeatureTitle != null) 'targetFeatureTitle': targetFeatureTitle,
+        if (newEpicTitle != null) 'newEpicTitle': newEpicTitle,
+        if (newEpicGoal != null) 'newEpicGoal': newEpicGoal,
+        'placementReasoning': placementReasoning,
+        'featureTitle': featureTitle,
+        'goal': goal,
+        'inScope': inScope,
+        'doneWhen': doneWhen,
+        'architectureHowSummary': architectureHowSummary,
+        'checkpointTitle': checkpointTitle,
+        'playtestGate': playtestGate,
+        'tasks': tasks,
+        'tuningParams': tuningParams,
+        'edgeCases': edgeCases,
+        'futureCheckpointTitle': futureCheckpointTitle,
+        'futureGoal': futureGoal,
+        'futurePlaytestGate': futurePlaytestGate,
+        'futureTasks': futureTasks,
+        'futureTuningParams': futureTuningParams,
+        'futureEdgeCases': futureEdgeCases,
+      };
+
+  factory FeatureInboxItem.fromJson(Map<String, dynamic> json) {
+    return FeatureInboxItem(
+      id: json['id']?.toString() ?? 'inbox_item',
+      rawIdea: json['rawIdea']?.toString() ?? '',
+      status: FeatureInboxStatus.values.firstWhere(
+        (s) => s.name == json['status'],
+        orElse: () => FeatureInboxStatus.triagePending,
+      ),
+      releaseTimingMode: InboxReleaseTimingMode.values.firstWhere(
+        (m) => m.name == json['releaseTimingMode'],
+        orElse: () => InboxReleaseTimingMode.now,
+      ),
+      targetFuturePhase: ProductionPhase.values.firstWhere(
+        (p) => p.name == json['targetFuturePhase'],
+        orElse: () => ProductionPhase.mvp,
+      ),
+      releaseTimingReasoning: json['releaseTimingReasoning']?.toString() ?? '',
+      integrationMode: InboxIntegrationMode.values.firstWhere(
+        (m) => m.name == json['integrationMode'],
+        orElse: () => InboxIntegrationMode.newFeatureInEpic,
+      ),
+      targetBeatId: json['targetBeatId']?.toString() ?? '',
+      targetBeatTitle: json['targetBeatTitle']?.toString() ?? '',
+      targetFeatureId: json['targetFeatureId']?.toString(),
+      targetFeatureTitle: json['targetFeatureTitle']?.toString(),
+      newEpicTitle: json['newEpicTitle']?.toString(),
+      newEpicGoal: json['newEpicGoal']?.toString(),
+      placementReasoning: json['placementReasoning']?.toString() ?? '',
+      featureTitle: json['featureTitle']?.toString() ?? '',
+      goal: json['goal']?.toString() ?? '',
+      inScope: _parseStringList(json['inScope']),
+      doneWhen: json['doneWhen']?.toString() ?? '',
+      architectureHowSummary: _parseStringList(json['architectureHowSummary']),
+      checkpointTitle: json['checkpointTitle']?.toString() ?? '',
+      playtestGate: json['playtestGate']?.toString() ?? '',
+      tasks: _parseStringList(json['tasks']),
+      tuningParams: _parseStringList(json['tuningParams']),
+      edgeCases: _parseStringList(json['edgeCases']),
+      futureCheckpointTitle: json['futureCheckpointTitle']?.toString() ?? '',
+      futureGoal: json['futureGoal']?.toString() ?? '',
+      futurePlaytestGate: json['futurePlaytestGate']?.toString() ?? '',
+      futureTasks: _parseStringList(json['futureTasks']),
+      futureTuningParams: _parseStringList(json['futureTuningParams']),
+      futureEdgeCases: _parseStringList(json['futureEdgeCases']),
+    );
+  }
+}

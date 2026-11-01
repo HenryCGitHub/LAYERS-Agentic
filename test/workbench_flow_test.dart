@@ -4858,5 +4858,142 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    test(
+      'Agentic Feature Inbox (WHEN / WHERE / HOW Triage, Split Now + Future, Auto-Injection on Phase Advance) & Multi-Release Superseded Restoration',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview(
+          'Top-down roguelike arena shooter with dash and twin-stick weapons',
+        );
+        await provider.openReleasePlanGate();
+        await provider.approveAndExecuteReleasePlan();
+
+        expect(provider.currentPhase, equals(ProductionPhase.prototype));
+        expect(provider.activeReleaseVersionTag, equals('v0.1'));
+        final beats = provider.activeReleaseBeats;
+        expect(beats, isNotEmpty);
+
+        // 1. Capture an immediate feature idea ('now') -> materialize in v0.1
+        final nowItem = await provider.submitFeatureIdeaToInbox(
+          'Add Grappling Hook Pull to yank enemies',
+          preferredBeatId: beats.first.id,
+        );
+        expect(nowItem, isNotNull);
+        expect(nowItem!.status, equals(FeatureInboxStatus.triagePending));
+        expect(
+          nowItem.releaseTimingMode,
+          equals(InboxReleaseTimingMode.now),
+        );
+        final createdNowFeatId =
+            await provider.acceptFeatureInboxTriage(nowItem.id);
+        expect(createdNowFeatId, isNotNull);
+        expect(
+          provider
+              .featuresForBeat(beats.first.id)
+              .any((f) => f.id == createdNowFeatId),
+          isTrue,
+        );
+
+        // 2. Capture a split progression idea during v0.1 Prototype ('splitNowAndFuture')
+        // -> builds lean core modifier in v0.1 AND schedules the upgrade for 02 · MVP
+        final splitItem = await provider.submitFeatureIdeaToInbox(
+          'Add Weapon Perk Shop with persistent tiers',
+          preferredBeatId: beats.first.id,
+        );
+        expect(splitItem, isNotNull);
+        expect(
+          splitItem!.releaseTimingMode,
+          equals(InboxReleaseTimingMode.splitNowAndFuture),
+        );
+        expect(splitItem.targetFuturePhase, equals(ProductionPhase.mvp));
+
+        final splitCoreFeatId =
+            await provider.acceptFeatureInboxTriage(splitItem.id);
+        expect(splitCoreFeatId, isNotNull);
+        expect(
+          provider.scheduledInboxUpgradesForFeature(splitCoreFeatId!),
+          hasLength(1),
+        );
+
+        // 3. Capture a future-phase idea ('futureRelease' targeting Vertical Slice)
+        final vsItem = await provider.submitFeatureIdeaToInbox(
+          'Add Boss Cutscene Shader & VFX Intro',
+          preferredBeatId: beats.last.id,
+        );
+        expect(vsItem, isNotNull);
+        expect(
+          vsItem!.releaseTimingMode,
+          equals(InboxReleaseTimingMode.futureRelease),
+        );
+        expect(vsItem.targetFuturePhase, equals(ProductionPhase.verticalSlice));
+        final vsImmediateFeatId =
+            await provider.acceptFeatureInboxTriage(vsItem.id);
+        expect(vsImmediateFeatId, isNull);
+        expect(provider.scheduledFeatureInboxItems, hasLength(2));
+
+        // 4. Test Multi-Release SUPERSEDED filtering & restoration across v0.1 -> v0.2
+        final activeCountBeforePivot =
+            provider.featuresForBeat(beats.first.id).length;
+        provider.toggleSupersedeFeature(
+          createdNowFeatId!,
+          pivotReason: 'Pivoted grappling hook in v0.1 playtest',
+        );
+        // Excluded from active featuresForBeat immediately, but retained with includeSuperseded: true
+        expect(
+          provider.featuresForBeat(beats.first.id).length,
+          equals(activeCountBeforePivot - 1),
+        );
+        expect(
+          provider
+              .featuresForBeat(beats.first.id, includeSuperseded: true)
+              .any((f) => f.id == createdNowFeatId),
+          isTrue,
+        );
+
+        // 5. Advance to v0.2 (02 · MVP) -> verify the scheduled 02 · MVP upgrade auto-injects into the v0.2 Release Blueprint!
+        await provider.prepareProgressiveNextReleaseDraft();
+        expect(provider.currentPhase, equals(ProductionPhase.mvp));
+        final v2Bp = provider.releaseBlueprint!;
+        final upgradedSplitFeatInBp = v2Bp.beats
+            .expand((b) => b.features)
+            .where((f) => f.id == splitCoreFeatId)
+            .firstOrNull;
+        expect(upgradedSplitFeatInBp, isNotNull);
+        expect(
+          upgradedSplitFeatInBp!.lifecycle,
+          equals(FeatureLifecycleStatus.upgrade),
+        );
+        expect(upgradedSplitFeatInBp.included, isTrue);
+
+        // Build v0.2 -> the 02 · MVP scheduled Inbox item marks implemented, while the 03 · Vertical Slice item remains scheduled
+        await provider.approveAndExecuteReleasePlan();
+        expect(
+          provider.scheduledInboxUpgradesForFeature(splitCoreFeatId),
+          isEmpty,
+        );
+        expect(provider.scheduledFeatureInboxItems, hasLength(1));
+        expect(
+          provider.scheduledFeatureInboxItems.first.targetFuturePhase,
+          equals(ProductionPhase.verticalSlice),
+        );
+
+        // Even after v0.2 executeBlueprint rebuilt beatDoc.childrenIds, the v0.1 superseded feature
+        // remains in buildCrossReleaseEvolutionLedger and restores cleanly back into beats.first.childrenIds!
+        expect(
+          provider
+              .buildCrossReleaseEvolutionLedger()
+              .any((r) => r.featureId == createdNowFeatId && r.lifecycle == 'ARCHIVED'),
+          isTrue,
+        );
+        provider.toggleSupersedeFeature(createdNowFeatId);
+        expect(
+          provider
+              .featuresForBeat(beats.first.id)
+              .any((f) => f.id == createdNowFeatId),
+          isTrue,
+        );
+      },
+    );
   });
 }
