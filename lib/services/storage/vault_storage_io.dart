@@ -34,7 +34,7 @@ class VaultStorageImpl implements VaultStorageBackend {
   @override
   Future<VaultLoadResult> loadVaultData() async {
     if (Platform.environment.containsKey('FLUTTER_TEST')) {
-      return VaultLoadResult(documents: {});
+      return const VaultLoadResult(documents: {});
     }
     try {
       String? activeDocumentId;
@@ -60,8 +60,7 @@ class VaultStorageImpl implements VaultStorageBackend {
       final docsMap = <String, TierDocument>{};
 
       if (await docsDir.exists()) {
-        final files = docsDir.listSync();
-        for (final entity in files) {
+        await for (final entity in docsDir.list()) {
           if (entity is File && entity.path.endsWith('.json')) {
             try {
               final raw = await entity.readAsString();
@@ -83,7 +82,7 @@ class VaultStorageImpl implements VaultStorageBackend {
         themeMode: themeMode,
       );
     } catch (_) {
-      return VaultLoadResult(documents: {});
+      return const VaultLoadResult(documents: {});
     }
   }
 
