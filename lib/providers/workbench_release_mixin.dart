@@ -2354,13 +2354,13 @@ CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
   * If Task 1 is Input Mapping: Task 1 creates and verifies the Enhanced Input Action(s) (IA_...) and Input Mapping Context (IMC_Default) in /Game/Input (NEVER a throwaway Actor). Then Task 2 Step 2.1 creates/opens BP_PlayerCharacter (ACharacter with CapsuleComponent, CameraComponent, CharacterMovement), registers IMC_Default from Task 1 on BeginPlay, and wires Task 1's Input Action into the core velocity/physics logic. Then Task 3 extends that same BP_PlayerCharacter with the remaining physics/animation/guard steps.
 
 For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
-1. "title": "STEP X.Y · SHORT LITERAL STEP TITLE"
-2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path
-3. "instruction": 1-2 sentences explaining what to click or type in $targetEngineMode
+1. "title": "STEP X.Y · Short Title-Case Telegraphic Step Title (3-5 words)"
+2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path (telegraphic breadcrumb)
+3. "instruction": 1 concise sentence explaining what to click or type in $targetEngineMode
 4. "area1Hierarchy": Optional Scene/Component hierarchy tree using ├─ / └─ when the step adds or modifies nodes/components (or "" if pure code step)
 5. "area2Inspector": Inspector/Details bindings formatted as "Property: Value | Property2: Value2" using the exact tuning parameter names
 6. "codeFormula": 2-6 lines of concrete $targetEngineMode code or node graph wiring using the exact tuning variables and guard checks
-7. "verifyResult": 1 sentence observable verification check in the editor or Play mode
+7. "verifyResult": 1 concise observable verification check in the editor or Play mode
 
 Return ONLY valid JSON:
 {

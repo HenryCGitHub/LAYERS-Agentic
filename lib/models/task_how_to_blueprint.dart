@@ -241,6 +241,123 @@ class TaskHowToBlueprint {
     return text.isEmpty ? rawCleanTitle : text;
   }
 
+  static const Set<String> _kAcronymWords = <String>{
+    '2D',
+    '3D',
+    'UI',
+    'HUD',
+    'VFX',
+    'SFX',
+    'NPC',
+    'AI',
+    'WASD',
+    'C++',
+    'FPS',
+    'IK',
+    'UV',
+    'LOD',
+    'PBR',
+    'GI',
+  };
+
+  static const Set<String> _kMinorTitleWords = <String>{
+    'a',
+    'an',
+    'the',
+    'and',
+    'or',
+    'for',
+    'to',
+    'in',
+    'on',
+    'at',
+    'by',
+    'of',
+    'with',
+  };
+
+  /// Formats a step title into Telegraphic Title Case (e.g. `"CREATE PLAYER CHARACTER FOUNDATION"`
+  /// -> `"Create Player Character Foundation"`), preserving engine asset identifiers and acronyms.
+  static String formatTelegraphicStepTitle(String raw) {
+    final stripped = raw.trim().replaceFirst(_stepHeaderPrefixRegex, '').trim();
+    if (stripped.isEmpty) return raw.trim();
+    // If it already contains lowercase letters (already Title-Cased or mixed-case), return as-is
+    if (stripped.contains(RegExp(r'[a-z]'))) {
+      return stripped;
+    }
+    final words = stripped.split(_whitespaceRegex);
+    final formatted = <String>[];
+    for (int i = 0; i < words.length; i++) {
+      final w = words[i];
+      if (w.isEmpty) continue;
+      if (_kAcronymWords.contains(w.toUpperCase())) {
+        formatted.add(w.toUpperCase());
+        continue;
+      }
+      if (w.contains('_')) {
+        // Handle engine prefixes like BP_ROOFRUNNER, IA_MOVE, IMC_DEFAULT
+        final parts = w.split('_');
+        final prefix = parts.first.toUpperCase();
+        final rest = parts
+            .skip(1)
+            .map(
+              (p) => p.isEmpty
+                  ? ''
+                  : p[0].toUpperCase() + p.substring(1).toLowerCase(),
+            )
+            .join('_');
+        formatted.add('${prefix}_$rest');
+        continue;
+      }
+      final lower = w.toLowerCase();
+      if (i > 0 && _kMinorTitleWords.contains(lower)) {
+        formatted.add(lower);
+      } else {
+        formatted.add(
+          lower.length == 1
+              ? lower.toUpperCase()
+              : lower[0].toUpperCase() + lower.substring(1),
+        );
+      }
+    }
+    return formatted.join(' ');
+  }
+
+  /// Formats a step instruction into Concise Messaging (1–2 direct sentences).
+  static String formatConciseStepInstruction(String raw) {
+    var clean = raw.trim();
+    if (clean.isEmpty) return clean;
+    clean = clean
+        .replaceFirst(
+          RegExp(r'^In order to [^,]+,\s*', caseSensitive: false),
+          '',
+        )
+        .trim();
+    if (clean.isNotEmpty) {
+      clean = clean[0].toUpperCase() + clean.substring(1);
+    }
+    return clean;
+  }
+
+  /// Formats a verify sentence into a direct observable check.
+  static String formatConciseVerifySentence(String raw) {
+    var clean = raw.trim();
+    if (clean.isEmpty) return clean;
+    clean = clean
+        .replaceFirst(
+          RegExp(
+            r'^(?:Confirm\s+that|Verify\s+that|Ensure\s+that|Make\s+sure\s+that)\s+',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+    if (clean.isNotEmpty) {
+      clean = clean[0].toUpperCase() + clean.substring(1);
+    }
+    return clean;
+  }
+
   /// Lightweight LRU-style memoization cache for `TaskHowToBlueprint.resolve`
   /// so Outliner ETA rollups and Active Step Workspace renders do not re-run regexes
   /// and object allocations multiple times per frame.
@@ -1926,7 +2043,7 @@ class TaskHowToBlueprint {
               : (decodedNotes.cleanInstruction.isNotEmpty
                   ? decodedNotes.cleanInstruction
                   : 'Implement and verify "$rawLabel" inside $whereLocation.'));
-      final instruction = rawInstruction;
+      final instruction = formatConciseStepInstruction(rawInstruction);
       final code = isCustomSnippet &&
               child.codeSnippet != null &&
               child.codeSnippet!.trim().isNotEmpty
@@ -1938,7 +2055,7 @@ class TaskHowToBlueprint {
                   : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)'));
       final shortTitle = (!isCustomSnippet && hasDynamicSpec)
           ? spec.shortTitle
-          : rawLabel.replaceFirst(_stepHeaderPrefixRegex, '');
+          : formatTelegraphicStepTitle(rawLabel);
 
       String nextStepTitle = 'Verify Checkpoint & Continue';
       if (i + 1 < parentTask.children.length) {
@@ -1946,7 +2063,7 @@ class TaskHowToBlueprint {
         final nextCustom = nextChild.codeTargetFile == 'custom_snippet';
         nextStepTitle = (!nextCustom && i + 1 < dynamicSpecs.length)
             ? dynamicSpecs[i + 1].shortTitle
-            : nextChild.text.trim().replaceFirst(_stepHeaderPrefixRegex, '');
+            : formatTelegraphicStepTitle(nextChild.text);
       }
 
       final isLastStep = i == parentTask.children.length - 1;
@@ -1972,11 +2089,13 @@ class TaskHowToBlueprint {
           stepNumberLabel: stepLabel,
           shortTitle: shortTitle,
           instruction: instruction,
-          verifyResult: customVerify.isNotEmpty
-              ? customVerify
-              : (hasDynamicSpec
-                  ? spec.verify
-                  : 'Verify "$shortTitle" responds cleanly in the active viewport.'),
+          verifyResult: formatConciseVerifySentence(
+            customVerify.isNotEmpty
+                ? customVerify
+                : (hasDynamicSpec
+                    ? spec.verify
+                    : 'Verify "$shortTitle" responds cleanly in the active viewport.'),
+          ),
           stepPath: customPath.isNotEmpty
               ? customPath
               : (hasDynamicSpec ? spec.path : whereLocation),

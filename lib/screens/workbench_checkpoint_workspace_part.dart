@@ -471,16 +471,25 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Text(
+                  '02',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: accentCyan,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.6,
                       color: activeSubStep.subtask.completed
                           ? accentEmerald
-                          : accentCyan,
+                          : textMuted,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -492,7 +501,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   size: 14,
                   color: activeSubStep.subtask.completed
                       ? accentEmerald
-                      : accentCyan,
+                      : textMuted,
                 ),
               ],
             ),
@@ -517,19 +526,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── 1. Anchored Full-Width Feature Header Bar (vs. Half-Width 1-Line Context Bar) ──
+                // ── 1. Open Feature Header on the 40% Canvas (Matches Stage 1 Open Project Header) ──
                 if (!isHalfScreenOverlayMode)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: bgSurface,
-                      border: Border(
-                        bottom: BorderSide(color: borderSubtle),
-                      ),
-                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 16, 24, 6),
+                    color: Colors.transparent,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -565,7 +566,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         overflow: TextOverflow.ellipsis,
                                         text: TextSpan(
                                           style: GoogleFonts.inter(
-                                            fontSize: 15,
+                                            fontSize: 16,
                                             fontWeight: FontWeight.w800,
                                             letterSpacing: -0.2,
                                             color: textPrimary,
@@ -577,7 +578,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w700,
-                                                color: textMuted,
+                                                color: accentCyan,
                                               ),
                                             ),
                                             TextSpan(
@@ -705,22 +706,22 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 5,
+                              horizontal: 10,
+                              vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: accentCyan.withValues(alpha: 0.1),
+                              color: bgSurface,
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: accentCyan.withValues(alpha: 0.35),
+                                color: borderSubtle,
                               ),
                             ),
                             child: Text(
                               '⧉ AI Prompt',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: accentCyan,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: textSecondary,
                               ),
                             ),
                           ),
@@ -1178,28 +1179,23 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           key: ValueKey(
                             'task_sheet_active_step_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
                           ),
-                          padding: EdgeInsets.only(
-                            left: isHalfScreenOverlayMode ? 0 : 20,
+                          padding: EdgeInsets.fromLTRB(
+                            isHalfScreenOverlayMode ? 16 : 20,
+                            14,
+                            isHalfScreenOverlayMode ? 16 : 20,
+                            16,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            border: isHalfScreenOverlayMode
-                                ? null
-                                : Border(
-                                    left: BorderSide(color: borderSubtle),
-                                  ),
+                            color: bgSurface,
+                            borderRadius: BorderRadius.circular(13),
+                            border: Border.all(color: borderSubtle),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // ── Open Step Header Bar (Step X of Y + [ Blueprint | C++ ] Toggle + Prev/Next) ──
+                              // ── Stage 1 Style Card Header Bar (02 STEP X OF Y + [ Blueprint | C++ ] Toggle + Prev/Next) ──
                               Container(
-                                padding: const EdgeInsets.fromLTRB(
-                                  4,
-                                  2,
-                                  4,
-                                  10,
-                                ),
+                                padding: const EdgeInsets.only(bottom: 11),
                                 decoration: BoxDecoration(
                                   border: Border(
                                     bottom: BorderSide(color: borderSubtle),
@@ -1215,13 +1211,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     else
                                       Flexible(
                                         child: Text(
-                                          'TASK ${selectedHowTo.numLabel}/${howToBlueprints.length.toString().padLeft(2, '0')} · ${selectedHowTo.shortTaskTitle.toUpperCase()}',
+                                          '02  TASK ${selectedHowTo.numLabel}/${howToBlueprints.length.toString().padLeft(2, '0')} · ${selectedHowTo.shortTaskTitle}',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10.5,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
                                             fontWeight: FontWeight.w800,
-                                            color: accentCyan,
+                                            color: textMuted,
                                           ),
                                         ),
                                       ),
@@ -1271,7 +1267,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             ),
                                             padding: const EdgeInsets.all(2),
                                             decoration: BoxDecoration(
-                                              color: bgBase,
+                                              color: bgRecessed,
                                               borderRadius:
                                                   BorderRadius.circular(6),
                                               border: Border.all(
@@ -1307,10 +1303,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                     decoration: BoxDecoration(
                                                       color: !_unrealCppMode
-                                                          ? accentCyan
-                                                              .withValues(
-                                                              alpha: 0.18,
-                                                            )
+                                                          ? bgActive
                                                           : Colors.transparent,
                                                       borderRadius:
                                                           BorderRadius.circular(
@@ -1329,7 +1322,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 : FontWeight
                                                                     .w600,
                                                         color: !_unrealCppMode
-                                                            ? accentCyan
+                                                            ? textPrimary
                                                             : textMuted,
                                                       ),
                                                     ),
@@ -1361,10 +1354,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                     decoration: BoxDecoration(
                                                       color: _unrealCppMode
-                                                          ? accentCyan
-                                                              .withValues(
-                                                              alpha: 0.18,
-                                                            )
+                                                          ? bgActive
                                                           : Colors.transparent,
                                                       borderRadius:
                                                           BorderRadius.circular(
@@ -1383,7 +1373,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 : FontWeight
                                                                     .w600,
                                                         color: _unrealCppMode
-                                                            ? accentCyan
+                                                            ? textPrimary
                                                             : textMuted,
                                                       ),
                                                     ),
@@ -1756,11 +1746,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     // 1. HOW TO BUILD Section Overline + Instruction
                                     Text(
                                       'HOW TO BUILD · ${selectedHowTo.engineLabel == 'UNREAL 5' ? (_unrealCppMode ? 'UNREAL 5 C++' : 'UNREAL 5 BLUEPRINT') : selectedHowTo.engineLabel}',
-                                      style: GoogleFonts.jetBrainsMono(
+                                      style: GoogleFonts.inter(
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.6,
-                                        color: accentCyan,
+                                        letterSpacing: 0.7,
+                                        color: textMuted,
                                       ),
                                     ),
                                     const SizedBox(height: 6),
@@ -1871,8 +1861,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             'one_click_complete_next_btn_${node.id}',
                                           ),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: focalAccent,
-                                            foregroundColor: focalAccentFg,
+                                            backgroundColor: accentEmerald,
+                                            foregroundColor: isDark
+                                                ? const Color(0xFF052E16)
+                                                : Colors.white,
                                             elevation: 0,
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 16,

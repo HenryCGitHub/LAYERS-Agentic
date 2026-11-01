@@ -4,14 +4,14 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
   Color get _gsT1Primary => isDark ? const Color(0xFFF9FAFB) : textPrimary;
   Color get _gsT2Body => isDark ? const Color(0xFFD1D5DB) : textSecondary;
   Color get _gsT3Label => isDark ? const Color(0xFF8E95A5) : textMuted;
-  Color get _gsT4Muted => isDark ? const Color(0xFF636A78) : textMuted;
-  Color get _gsCardBg => isDark ? const Color(0xFF111317) : bgSurface;
-  Color get _gsCardLaunchBg => isDark ? const Color(0xFF15181E) : bgSurface;
-  Color get _gsCardBorder => isDark ? const Color(0xFF22262E) : borderSubtle;
+  Color get _gsT4Muted => isDark ? const Color(0xFF646D7D) : textMuted;
+  Color get _gsCardBg => isDark ? const Color(0xFF13161D) : bgSurface;
+  Color get _gsCardLaunchBg => isDark ? const Color(0xFF13161D) : bgSurface;
+  Color get _gsCardBorder => isDark ? const Color(0xFF222733) : borderSubtle;
   Color get _gsCardHoverBorder =>
-      isDark ? const Color(0xFF363C48) : borderBright;
+      isDark ? const Color(0xFF333B4D) : borderBright;
   Color get _gsHairline =>
-      isDark ? Colors.white.withValues(alpha: 0.065) : borderSubtle;
+      isDark ? const Color(0xFF222733) : borderSubtle;
 
   Widget _buildReleaseTrainPipeline(ProjectConceptBlueprint draft) {
     final firstReleaseTitle = draft.releaseTrainTitles.isNotEmpty
@@ -456,7 +456,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: _gsT4Muted,
+                          color: accentCyan,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -483,9 +483,15 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: _gsCardBg,
+                      color: isPrewarmed
+                          ? accentEmerald.withValues(alpha: 0.12)
+                          : _gsCardBg,
                       borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: _gsCardBorder),
+                      border: Border.all(
+                        color: isPrewarmed
+                            ? accentEmerald.withValues(alpha: 0.4)
+                            : _gsCardBorder,
+                      ),
                     ),
                     child: Text(
                       isPrewarmed
@@ -493,8 +499,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                           : '⟳ Drafting v0.1...',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _gsT2Body,
+                        fontWeight: FontWeight.w700,
+                        color: isPrewarmed ? accentEmerald : _gsT2Body,
                       ),
                     ),
                   ),
@@ -741,7 +747,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: isFocused ? _gsT1Primary : _gsT4Muted,
+                              color: isFocused ? _gsT1Primary : accentCyan,
                             ),
                           ),
                           const SizedBox(width: 10),

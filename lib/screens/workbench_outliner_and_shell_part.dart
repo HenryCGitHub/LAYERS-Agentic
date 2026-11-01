@@ -1385,13 +1385,18 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
 
     return Container(
       key: ValueKey('work_area_step_timeline_${node.id}'),
-      color: Colors.transparent,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      decoration: BoxDecoration(
+        color: bgSurface,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: borderSubtle),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Open Canvas STEPS Header Bar (1px Bottom Hairline, Zero Outer Card Box)
+          // Stage 1 Style Card Header Bar (01 STEPS + Done Counter + 1px Hairline)
           Container(
-            padding: const EdgeInsets.fromLTRB(8, 2, 8, 10),
+            padding: const EdgeInsets.only(bottom: 11),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(color: borderSubtle),
@@ -1402,23 +1407,39 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Flexible(
-                  child: Text(
-                    'STEPS',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.7,
-                      color: textMuted,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '01',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: accentCyan,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'STEPS',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.7,
+                            color: textMuted,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '$totalDoneSteps/$totalStepsCount DONE',
+                  '$totalDoneSteps/$totalStepsCount Done',
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                     color: totalDoneSteps > 0 ? accentEmerald : textMuted,
                   ),
@@ -1515,12 +1536,12 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           .where((s) => s.subtask.completed)
                           .length;
                       final totalSubCount = bp.subSteps.length;
-                      final groupTitle = bp.shortTaskTitle.toUpperCase();
+                      final groupTitle = bp.shortTaskTitle;
 
                       return Container(
                         padding: EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: isTaskActive ? 12 : 10,
+                          horizontal: 4,
+                          vertical: isTaskActive ? 11 : 9,
                         ),
                         decoration: BoxDecoration(
                           border: gIdx == 0
@@ -1599,23 +1620,47 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
-                                        child: Text(
-                                          '${isTaskActive ? '▾' : '▸'} $globalNumLabel · $groupTitle',
+                                        child: RichText(
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.4,
-                                            color: task.completed
-                                                ? accentEmerald.withValues(
-                                                    alpha: 0.8,
-                                                  )
-                                                : (isFixTask
-                                                    ? accentCrimson
-                                                    : (isTaskActive
-                                                        ? accentCyan
-                                                        : textSecondary)),
+                                          text: TextSpan(
+                                            children: [
+                                              TextSpan(
+                                                text:
+                                                    '${isTaskActive ? '▾' : '▸'} $globalNumLabel  ',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: task.completed
+                                                      ? accentEmerald
+                                                      : (isFixTask
+                                                          ? accentCrimson
+                                                          : (isTaskActive
+                                                              ? accentCyan
+                                                              : textMuted)),
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: groupTitle,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 12.5,
+                                                  fontWeight: isTaskActive
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w600,
+                                                  color: task.completed
+                                                      ? accentEmerald
+                                                          .withValues(
+                                                          alpha: 0.85,
+                                                        )
+                                                      : (isFixTask
+                                                          ? accentCrimson
+                                                          : (isTaskActive
+                                                              ? textPrimary
+                                                              : textSecondary)),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
@@ -1741,15 +1786,15 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: isStepActive
-                                                      ? (isDark
-                                                          ? Colors.white
-                                                              .withValues(
-                                                              alpha: 0.065,
-                                                            )
-                                                          : bgSurface)
+                                                      ? bgActive
                                                       : Colors.transparent,
                                                   borderRadius:
                                                       BorderRadius.circular(6),
+                                                  border: isStepActive
+                                                      ? Border.all(
+                                                          color: borderSubtle,
+                                                        )
+                                                      : null,
                                                 ),
                                                 child: Row(
                                                   crossAxisAlignment:

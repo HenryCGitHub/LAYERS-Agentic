@@ -354,16 +354,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       required Color activeColor,
     }) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
         decoration: BoxDecoration(
-          color: active
-              ? activeColor.withValues(alpha: 0.12)
-              : bgSurface.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(4),
+          color: active ? bgActive : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
           border: Border.all(
-            color: active
-                ? activeColor.withValues(alpha: 0.42)
-                : borderSubtle,
+            color: active ? borderBright : borderSubtle,
           ),
         ),
         child: Row(
@@ -375,7 +371,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: active
-                    ? activeColor
+                    ? accentCyan
                     : textMuted.withValues(alpha: 0.35),
               ),
             ),
@@ -384,8 +380,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               label,
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 9.5,
-                fontWeight: FontWeight.w700,
-                color: active ? activeColor : textMuted,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                color: active ? textPrimary : textMuted,
               ),
             ),
           ],
@@ -415,11 +411,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 7,
-                  height: 7,
+                  width: 6,
+                  height: 6,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: accentColor,
+                    color: accentCyan,
                   ),
                 ),
                 const SizedBox(width: 7),
@@ -429,7 +425,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
-                    color: accentColor,
+                    color: accentCyan,
                   ),
                 ),
               ],
@@ -439,7 +435,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.03),
+                  color: bgActive,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: borderSubtle),
                 ),
@@ -463,7 +459,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     return Container(
       decoration: BoxDecoration(
         color: bgRecessed,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(9),
         border: Border.all(color: borderSubtle),
       ),
       clipBehavior: Clip.antiAlias,
@@ -477,7 +473,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               vertical: 8,
             ),
             decoration: BoxDecoration(
-              color: bgSurface,
+              color: bgRecessed,
               border: Border(
                 bottom: BorderSide(color: borderSubtle),
               ),

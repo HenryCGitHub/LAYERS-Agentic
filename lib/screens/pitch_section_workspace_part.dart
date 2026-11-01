@@ -4,9 +4,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
   Color get _secT1Primary => isDark ? const Color(0xFFF9FAFB) : textPrimary;
   Color get _secT2Body => isDark ? const Color(0xFFD1D5DB) : textSecondary;
   Color get _secT3Label => isDark ? const Color(0xFF8E95A5) : textMuted;
-  Color get _secT4Muted => isDark ? const Color(0xFF636A78) : textMuted;
+  Color get _secT4Muted => isDark ? const Color(0xFF646D7D) : textMuted;
   Color get _secHairline =>
-      isDark ? Colors.white.withValues(alpha: 0.065) : borderSubtle;
+      isDark ? const Color(0xFF222733) : borderSubtle;
 
   // ── Inline Click-to-Edit Box (Replaces Popup AlertDialogs Across Stage 1) ──
   Widget _buildInlineEditorBox({
@@ -494,7 +494,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return clean;
   }
 
-  // ── 08 Done When: Concise Messaging Verification Sentence ──────────────────
+  // ── 08 Done When: Concise Messaging Verification Sentence (10% Gate Bar) ──
   Widget _buildCalloutStatement(
     String statement, {
     required bool highlightMetrics,
@@ -512,16 +512,39 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       child: InkWell(
         onTap: onEditTap,
         borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Text(
-            statement.trim(),
-            style: GoogleFonts.inter(
-              fontSize: _measureBodyFontSize,
-              fontWeight: FontWeight.w500,
-              height: 1.55,
-              color: _secT1Primary,
+        child: Container(
+          padding: const EdgeInsets.only(left: 12, top: 2, bottom: 2),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: accentEmerald,
+                width: 2.5,
+              ),
             ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'PLAYTEST GATE',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.7,
+                  color: accentEmerald,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                statement.trim(),
+                style: GoogleFonts.inter(
+                  fontSize: _measureBodyFontSize,
+                  fontWeight: FontWeight.w500,
+                  height: 1.55,
+                  color: _secT1Primary,
+                ),
+              ),
+            ],
           ),
         ),
       ),
