@@ -1205,17 +1205,20 @@ void main() {
         expect(find.byKey(const ValueKey('blueprint_twist_pills_bar')),
             findsOneWidget);
 
-        // Verify structured Goal card + 3 Scannable Clause Cards (01, 02, 03) on the Single-Page Blueprint
+        // Verify clean 1-sentence Goal card (no redundant bottom clause rows)
         expect(find.byKey(const ValueKey('stage1_goal_structured_card')),
             findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_goal_clause_card_0')),
-            findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_goal_clause_card_1')),
-            findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_goal_clause_card_2')),
-            findsOneWidget);
+            findsNothing);
 
-        // Verify clicking a Compact Option Pill on Section 01 applies it, and clicking it again unselects it and restores the default Goal
+        // Verify opening the Refine drawer on Section 01 shows option cards, applies an option, and restores the default Goal
+        final refineGoalBtn =
+            find.byKey(const ValueKey('refine_drawer_toggle_btn_0'));
+        await tester.ensureVisible(refineGoalBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(refineGoalBtn);
+        await tester.pumpAndSettle();
+
         final initialGoal = provider.conceptDraft!.goal;
         final goalPill1 = find.byKey(const ValueKey('compact_option_pill_0_1'));
         await tester.ensureVisible(goalPill1);
@@ -1233,9 +1236,20 @@ void main() {
         expect(find.text('ENGINE'), findsOneWidget);
         expect(find.text('PLATFORM'), findsOneWidget);
 
-        // Verify 04 Design Pillars (plain label, never "Load-Bearing") & multi-select compact pills
+        // Verify 04 Design Pillars & multi-select Refine drawer (opening Section 04 closes Section 01 drawer)
         expect(find.text('DESIGN PILLARS'), findsOneWidget);
         expect(find.textContaining('Load-Bearing'), findsNothing);
+        final refinePillarsBtn =
+            find.byKey(const ValueKey('refine_drawer_toggle_btn_3'));
+        await tester.ensureVisible(refinePillarsBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(refinePillarsBtn);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('refine_drawer_container_0')),
+          findsNothing,
+        );
+
         final pillarPill0 =
             find.byKey(const ValueKey('compact_option_pill_3_0'));
         final pillarPill1 =
@@ -1256,8 +1270,7 @@ void main() {
         );
 
         // Verify Full Blueprint Review header & Release Train
-        expect(find.text('STEP 09 · FINAL BLUEPRINT VERIFICATION'),
-            findsOneWidget);
+        expect(find.text('RELEASE TARGET'), findsOneWidget);
         expect(find.text('v0.1: Core Movement & Game Loop - Prototype'),
             findsOneWidget);
         expect(find.text('1. Concept'), findsOneWidget);
@@ -3574,8 +3587,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           findsOneWidget,
         );
 
-        // Compact 1-line AI Option Pill on Section 01 (Goal) updates Goal in 1 click
+        // Opening Refine drawer on Section 01 (Goal) updates Goal in 1 click
         final initialGoal = provider.conceptDraft!.goal;
+        final refineGoalBtn = find.byKey(
+          const ValueKey('refine_drawer_toggle_btn_0'),
+        );
+        await tester.ensureVisible(refineGoalBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(refineGoalBtn);
+        await tester.pumpAndSettle();
+
         final compactGoalPill = find.byKey(
           const ValueKey('compact_option_pill_0_1'),
         );

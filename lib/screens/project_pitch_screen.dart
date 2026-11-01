@@ -20,8 +20,6 @@ final RegExp _prioritizePrefixRegex = RegExp(
 final RegExp _whitespaceRegex = RegExp(r'\s+');
 final RegExp _dotPipeSepRegex = RegExp(r'[·|]');
 final RegExp _dotPipeSplitRegex = RegExp(r'\s*[·|]\s*');
-final RegExp _goalClauseSplitRegex = RegExp(r',\s*and\s+|,\s+');
-final RegExp _nonWordStripRegex = RegExp(r'[^\w\s-]');
 final RegExp _newlineCollapseRegex = RegExp(r'\s*\n\s*');
 
 /// Wraps each line of text at [maxCharsPerLine] (default 80 characters),
@@ -84,14 +82,12 @@ class MaxColumnLineWrapFormatter extends TextInputFormatter {
   }
 }
 
-/// Metadata and Agent guidance for each of the 9 focused sections in Stage 1.
+/// Metadata and Agent guidance for each of the 8 focused sections in Stage 1.
 class _SectionConfig {
   final String numLabel;
   final String optionKey;
   final String shortTitle;
   final String title;
-  final String purpose;
-  final String question;
   final List<String> options;
   final bool isMultiSelect;
 
@@ -100,8 +96,6 @@ class _SectionConfig {
     required this.optionKey,
     required this.shortTitle,
     required this.title,
-    required this.purpose,
-    required this.question,
     required this.options,
     this.isMultiSelect = false,
   });
@@ -165,9 +159,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final Map<int, dynamic> _initialSectionDefaults = {};
   final Map<int, String> _agentNotesBySection = {};
 
-  /// Step 10 Full Review hover & Bento focus state.
+  /// Step 10 Full Review hover, Bento focus, & single-open Refine drawer state.
   int? _hoveredReviewSectionIdx;
   int? _focusedBentoSectionIdx;
+  int? _openRefineDrawerSectionIdx;
+  final TextEditingController _drawerSteerController = TextEditingController();
 
   /// Inline Click-to-Edit state (Upgrade 2: replaces popup AlertDialogs across Stage 1).
   String? _activeInlineEditKey;
@@ -177,29 +173,30 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   @override
   bool get isDark => widget.workbench.isDark;
 
-  // Responsive Typographic Measure & Font Scale:
-  // - Desktop (>= 1024px): 75ch measure (~740px card width) @ 16px body
-  // - Tablet (640–1023px): 65ch measure (~620px card width) @ 15px body
-  // - Mobile (< 640px):    50ch measure (~460px card width) @ 14.5px body
+  // Responsive Bento Grid Container Width vs. Prose Line Measure (<= 72ch):
+  // - Desktop (>= 1024px): 1140px Bento Grid container | 680px (<= 72ch) prose measure
+  // - Tablet (640–1023px): 860px container             | 640px prose measure
+  // - Mobile (< 640px):    460px container             | 460px prose measure
   double get _viewportWidth => MediaQuery.sizeOf(context).width;
   bool get _isMobileMeasure => _viewportWidth < 640;
   bool get _isTabletMeasure => _viewportWidth >= 640 && _viewportWidth < 1024;
   double get _measureColumnMaxWidth =>
-      _isMobileMeasure ? 460.0 : (_isTabletMeasure ? 620.0 : 740.0);
+      _isMobileMeasure ? 460.0 : (_isTabletMeasure ? 860.0 : 1140.0);
+  double get _proseMaxMeasureWidth => 680.0;
   double get _measureBodyFontSize =>
-      _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 16.0);
+      _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 15.5);
   double get _measureLeadFontSize =>
-      _isMobileMeasure ? 16.5 : (_isTabletMeasure ? 17.5 : 19.0);
+      _isMobileMeasure ? 16.5 : (_isTabletMeasure ? 17.5 : 18.0);
   double get _measureTitleFontSize =>
       _isMobileMeasure ? 21.0 : (_isTabletMeasure ? 24.0 : 26.0);
   double get _measureSpecValueSize =>
-      _isMobileMeasure ? 15.0 : (_isTabletMeasure ? 15.5 : 16.5);
+      _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 15.5);
   double get _measureCardPadH =>
-      _isMobileMeasure ? 18.0 : (_isTabletMeasure ? 24.0 : 28.0);
+      _isMobileMeasure ? 18.0 : (_isTabletMeasure ? 22.0 : 24.0);
   double get _measureCardPadV =>
-      _isMobileMeasure ? 16.0 : (_isTabletMeasure ? 20.0 : 22.0);
+      _isMobileMeasure ? 16.0 : (_isTabletMeasure ? 18.0 : 20.0);
   double get _measureCardGap =>
-      _isMobileMeasure ? 14.0 : (_isTabletMeasure ? 16.0 : 18.0);
+      _isMobileMeasure ? 14.0 : (_isTabletMeasure ? 16.0 : 16.0);
 
   void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
 
@@ -210,8 +207,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       optionKey: 'goal',
       shortTitle: 'Goal',
       title: 'Goal',
-      purpose: 'Plain-English statement of what we are building and why.',
-      question: 'How should we frame the core prototype goal for v0.1?',
       options: [],
     ),
     _SectionConfig(
@@ -219,26 +214,28 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       optionKey: 'gameSpec',
       shortTitle: 'Game Spec',
       title: 'Game Spec',
-      purpose: 'Camera view, player controls, mode, and arena layout.',
-      question: 'Which camera perspective and control scheme fits best?',
-      options: [],
+      options: [
+        'Top-Down Twin-Stick Arena: 2D Top-Down · Twin-Stick (WASD + Aim) · Singleplayer · Single-Screen Wave Arena',
+        '3D Isometric Action Roguelite: 3D Isometric · Mouse + WASD · Singleplayer · Procedural Room Grid',
+        '2D Side-Scrolling Platformer: 2D Side-Scrolling · Gamepad / Precision Platformer · Singleplayer · Multi-Room Obstacle Course',
+      ],
     ),
     _SectionConfig(
       numLabel: '03',
       optionKey: 'techSpec',
       shortTitle: 'Tech Spec',
       title: 'Tech Spec',
-      purpose: 'Engine, target platform, asset pipeline, and save/network architecture.',
-      question: 'What engine and technical pipeline are we targeting for v0.1?',
-      options: [],
+      options: [
+        'Godot 4 Fast 2D Stack: Godot 4 (GDScript) · PC Desktop · 2D Sprites + Particles · Offline Local Save',
+        'Unity 6 3D Action Stack: Unity 6 (C#) · PC & Steam Deck · 3D Greybox Meshes · Steam Cloud Save',
+        'Unreal Engine 5 3D Stack: Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Offline Local Save',
+      ],
     ),
     _SectionConfig(
       numLabel: '04',
       optionKey: 'designPillars',
       shortTitle: 'Design Pillars',
       title: 'Design Pillars',
-      purpose: 'Core player experience truths (how the game feels, never a feature list).',
-      question: 'Which player experience truth should anchor our design decisions?',
       isMultiSelect: true,
       options: [],
     ),
@@ -246,9 +243,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       numLabel: '05',
       optionKey: 'tradeOffs',
       shortTitle: 'Trade-Offs',
-      title: 'Trade-Offs (X over Y)',
-      purpose: 'Explicit engineering & design priority rules when mechanics conflict.',
-      question: 'When mechanics conflict during production, what wins?',
+      title: 'Trade-Offs',
       isMultiSelect: true,
       options: [],
     ),
@@ -256,9 +251,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       numLabel: '06',
       optionKey: 'coreLoop',
       shortTitle: 'Core Loop',
-      title: 'In Scope: Core Gameplay Loop',
-      purpose: 'Repeatable player gameplay loop used to define the Epics and Features in Stage 2.',
-      question: 'How should the playable core loop flow from start to reset?',
+      title: 'Core Loop',
       isMultiSelect: true,
       options: [],
     ),
@@ -266,9 +259,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       numLabel: '07',
       optionKey: 'exclusions',
       shortTitle: 'Out of Scope',
-      title: 'Out of Scope (Exclusions)',
-      purpose: 'Hard exclusions cut from the Prototype to prevent scope creep.',
-      question: 'Which scope-creep features should we explicitly cut from the Prototype?',
+      title: 'Out of Scope',
       isMultiSelect: true,
       options: [],
     ),
@@ -277,8 +268,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       optionKey: 'doneWhen',
       shortTitle: 'Done When',
       title: 'Done When',
-      purpose: 'Observable playtest condition that proves the Prototype is complete.',
-      question: 'How will we verify that the Prototype loop is done?',
       options: [],
     ),
   ];
@@ -343,6 +332,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     _sparkController.dispose();
     _agentPromptController.dispose();
     _inlineItemEditController.dispose();
+    _drawerSteerController.dispose();
     _sparkFocusNode.dispose();
     _conceptChatFocusNode.dispose();
     super.dispose();
@@ -807,10 +797,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _agentNotesBySection.clear();
       _hoveredReviewSectionIdx = null;
       _focusedBentoSectionIdx = null;
+      _openRefineDrawerSectionIdx = null;
       _activeInlineEditKey = null;
       _sparkController.clear();
       _sparkUndoStack.clear();
       _agentPromptController.clear();
+      _drawerSteerController.clear();
     }
 
     final draft = widget.workbench.conceptDraft;
