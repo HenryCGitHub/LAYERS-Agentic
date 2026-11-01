@@ -1,6 +1,30 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
+  static final RegExp _sentenceSplitRegex = RegExp(r'\.\s+');
+  static final RegExp _priorReleasesPrefixRegex =
+      RegExp(r'^Prior releases established\s+', caseSensitive: false);
+  static final RegExp _commaAndSplitRegex =
+      RegExp(r',\s*(?:and\s+)?|\s+and\s+');
+  static final RegExp _trailingDotRegex = RegExp(r'\.$');
+  static final RegExp _sentenceLookbehindRegex = RegExp(r'(?<=\.)\s+');
+  static final RegExp _howeverPrefixRegex =
+      RegExp(r'^However,\s*', caseSensitive: false);
+  static final RegExp _beatClauseSplitRegex = RegExp(
+    r',\s*(?=(?:Beat|Epic|E0)\s*\d+)|,\s+and\s+(?=(?:Beat|Epic|E0)\s*\d+)',
+    caseSensitive: false,
+  );
+  static final RegExp _gapBeatPrefixRegex = RegExp(
+    r'^(?:Beat|Epic)[\s\-–—]*0*(\d+)\s*(?:\(([^)]+)\))?\s*[:\-–—]?\s*(.+)$',
+    caseSensitive: false,
+  );
+  static final RegExp _gapECodePrefixRegex =
+      RegExp(r'^(E\d+)\s*[:\-–—]?\s*(.+)$', caseSensitive: false);
+  static final RegExp _recommendedPrefixRegex =
+      RegExp(r'^\(recommended\)\s*', caseSensitive: false);
+  static final RegExp _goalPrefixRegex =
+      _goalPrefixRegex;
+
   Future<void> _showProgressiveNextReleaseModal(BuildContext context) async {
     if (!widget.workbench.isActiveReleaseComplete) {
       final activeRel = widget.workbench.activeRelease;
@@ -49,17 +73,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     final prevRelId = _progressivePrevReleaseId;
     final prevPhase = _progressivePrevPhase ?? widget.workbench.currentPhase;
 
-    if (mounted) {
-      _rebuild(() {
-        _isProgressiveModalOpen = false;
-        _addingFeatureToBeatId = null;
-        if (confirmed) {
-          _manualCheckpointFocusIndex = null;
-          _selectedTaskIndexByCheckpoint.clear();
-          _selectedSubStepIndexByTask.clear();
-        }
-      });
-    } else {
+    void resetState() {
       _isProgressiveModalOpen = false;
       _addingFeatureToBeatId = null;
       if (confirmed) {
@@ -67,6 +81,12 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         _selectedTaskIndexByCheckpoint.clear();
         _selectedSubStepIndexByTask.clear();
       }
+    }
+
+    if (mounted) {
+      _rebuild(resetState);
+    } else {
+      resetState();
     }
 
     if (confirmed) {
@@ -493,21 +513,14 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 bp.lastAgentReply != null &&
                                 bp.lastAgentReply!.trim().isNotEmpty) {
                               final firstSentence = bp.lastAgentReply!
-                                  .split(RegExp(r'\.\s+'))
+                                  .split(_sentenceSplitRegex)
                                   .first
-                                  .replaceFirst(
-                                    RegExp(
-                                      r'^Prior releases established\s+',
-                                      caseSensitive: false,
-                                    ),
-                                    '',
-                                  )
+                                  .replaceFirst(_priorReleasesPrefixRegex, '')
                                   .trim();
-                              for (final part in firstSentence.split(
-                                RegExp(r',\s*(?:and\s+)?|\s+and\s+'),
-                              )) {
+                              for (final part
+                                  in firstSentence.split(_commaAndSplitRegex)) {
                                 final cleanPart = part
-                                    .replaceAll(RegExp(r'\.$'), '')
+                                    .replaceAll(_trailingDotRegex, '')
                                     .trim();
                                 if (cleanPart.isNotEmpty &&
                                     cleanPart.length <= 48) {
@@ -525,28 +538,18 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 bp.lastAgentReply != null &&
                                 bp.lastAgentReply!.trim().isNotEmpty) {
                               final sentences = bp.lastAgentReply!
-                                  .split(RegExp(r'(?<=\.)\s+'));
+                                  .split(_sentenceLookbehindRegex);
                               for (final s in sentences) {
                                 final lower = s.toLowerCase();
                                 if (lower.contains('however') ||
                                     lower.contains('lacks') ||
                                     lower.contains('missing')) {
                                   final cleaned = s
-                                      .replaceFirst(
-                                        RegExp(
-                                          r'^However,\s*',
-                                          caseSensitive: false,
-                                        ),
-                                        '',
-                                      )
-                                      .replaceAll(RegExp(r'\.$'), '')
+                                      .replaceFirst(_howeverPrefixRegex, '')
+                                      .replaceAll(_trailingDotRegex, '')
                                       .trim();
-                                  for (final clause in cleaned.split(
-                                    RegExp(
-                                      r',\s*(?=(?:Beat|Epic|E0)\s*\d+)|,\s+and\s+(?=(?:Beat|Epic|E0)\s*\d+)',
-                                      caseSensitive: false,
-                                    ),
-                                  )) {
+                                  for (final clause
+                                      in cleaned.split(_beatClauseSplitRegex)) {
                                     final c = clause.trim();
                                     if (c.isNotEmpty) rawGaps.add(c);
                                   }
@@ -869,21 +872,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                 rawGaps[gIdx];
                                                             String? epicTag;
                                                             final beatMatch =
-                                                                RegExp(
-                                                              r'^(?:Beat|Epic)[\s\-–—]*0*(\d+)\s*(?:\(([^)]+)\))?\s*[:\-–—]?\s*(.+)$',
-                                                              caseSensitive:
-                                                                  false,
-                                                            ).firstMatch(
-                                                              gapText,
-                                                            );
+                                                                _gapBeatPrefixRegex.firstMatch(gapText);
                                                             final eCodeMatch =
-                                                                RegExp(
-                                                              r'^(E\d+)\s*[:\-–—]?\s*(.+)$',
-                                                              caseSensitive:
-                                                                  false,
-                                                            ).firstMatch(
-                                                              gapText,
-                                                            );
+                                                                _gapECodePrefixRegex.firstMatch(gapText);
                                                             if (beatMatch !=
                                                                 null) {
                                                               final num = int
@@ -1094,12 +1085,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                             final cleanGoal = f
                                                                 .goal
                                                                 .trim()
-                                                                .replaceAll(
-                                                                  RegExp(
-                                                                    r'\.$',
-                                                                  ),
-                                                                  '',
-                                                                );
+                                                                .replaceAll(_trailingDotRegex, '');
                                                             return Padding(
                                                               padding: EdgeInsets.only(
                                                                 bottom: nIdx +
@@ -1543,13 +1529,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 .toLowerCase()
                                                 .startsWith('(recommended)');
                                             final stripped = rawOpt
-                                                .replaceFirst(
-                                                  RegExp(
-                                                    r'^\(recommended\)\s*',
-                                                    caseSensitive: false,
-                                                  ),
-                                                  '',
-                                                )
+                                                .replaceFirst(_recommendedPrefixRegex, '')
                                                 .trim();
                                             final colonIdx =
                                                 stripped.indexOf(':');
@@ -1927,6 +1907,28 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
       }
     }
 
+    Widget buildStatCol(String value, String label, Color color) {
+      return Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 9,
+              color: textMuted,
+            ),
+          ),
+        ],
+      );
+    }
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1972,82 +1974,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    Column(
-                      children: [
-                        Text(
-                          '${beats.length}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: accentEmerald,
-                          ),
-                        ),
-                        Text(
-                          'CORE EPICS',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            color: textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        Text(
-                          '${allFeats.length}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: accentAmber,
-                          ),
-                        ),
-                        Text(
-                          'FEATURES',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            color: textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        Text(
-                          '$totalTasks',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: accentEmerald,
-                          ),
-                        ),
-                        Text(
-                          'BUILD TASKS',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            color: textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        Text(
-                          '$totalStepsDone',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: textPrimary,
-                          ),
-                        ),
-                        Text(
-                          'STEPS DONE',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9,
-                            color: textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
+                    buildStatCol('${beats.length}', 'CORE EPICS', accentEmerald),
+                    buildStatCol('${allFeats.length}', 'FEATURES', accentAmber),
+                    buildStatCol('$totalTasks', 'BUILD TASKS', accentEmerald),
+                    buildStatCol('$totalStepsDone', 'STEPS DONE', textPrimary),
                   ],
                 ),
               ),
@@ -2149,7 +2079,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       ?.split('\n')
                       .first
                       .replaceFirst(
-                        RegExp(r'^Goal:\s*', caseSensitive: false),
+                        _goalPrefixRegex,
                         '',
                       )
                       .trim() ??
@@ -2219,7 +2149,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       .split('\n')
                       .first
                       .replaceFirst(
-                        RegExp(r'^Goal:\s*', caseSensitive: false),
+                        _goalPrefixRegex,
                         '',
                       )
                       .trim(),
