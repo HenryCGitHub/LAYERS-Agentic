@@ -3,6 +3,15 @@ part of 'workbench_provider.dart';
 /// Persistence, Cloud Firestore real-time sync, authentication, and multi-project vault operations
 /// for [WorkbenchProvider].
 extension WorkbenchStorageMixin on WorkbenchProvider {
+  static const Set<String> _legacyPlaceholderIds = {
+    'proj_vanguard',
+    'rel_01',
+    'epic_01',
+    'feat_01',
+    'feat_02',
+  };
+  static const JsonEncoder _prettyJsonEncoder = JsonEncoder.withIndent('  ');
+
   void _onAuthStateChanged() {
     final user = _authService.currentUser;
     if (user != null) {
@@ -138,11 +147,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       final loaded = await LocalVaultService.loadVaultData();
       // Ignore legacy static placeholder docs (`proj_vanguard`) if they don't have a concept_blueprint_json
       for (final doc in loaded.documents.values) {
-        if (doc.id == 'proj_vanguard' ||
-            doc.id == 'rel_01' ||
-            doc.id == 'epic_01' ||
-            doc.id == 'feat_01' ||
-            doc.id == 'feat_02') {
+        if (_legacyPlaceholderIds.contains(doc.id)) {
           continue;
         }
         documents[doc.id] = doc;
@@ -454,30 +459,32 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final proj = documents[targetId];
     if (proj == null) return '';
 
+    final childrenByParent = <String, List<String>>{};
+    for (final doc in documents.values) {
+      if (doc.parentId != null) {
+        childrenByParent.putIfAbsent(doc.parentId!, () => []).add(doc.id);
+      }
+    }
+
     final collectedIds = <String>{proj.id};
-    for (final relId in proj.childrenIds) {
-      collectedIds.add(relId);
-      final relDoc = documents[relId];
-      if (relDoc != null) {
-        for (final beatId in relDoc.childrenIds) {
-          collectedIds.add(beatId);
-          final beatDoc = documents[beatId];
-          if (beatDoc != null) {
-            collectedIds.addAll(beatDoc.childrenIds);
+    final queue = <String>[proj.id, ...proj.childrenIds];
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeLast();
+      collectedIds.add(currentId);
+      final doc = documents[currentId];
+      if (doc != null) {
+        for (final childId in doc.childrenIds) {
+          if (collectedIds.add(childId)) {
+            queue.add(childId);
           }
         }
       }
-    }
-    // Include any detached/superseded Epics or Features belonging to this project
-    bool addedMore = true;
-    while (addedMore) {
-      addedMore = false;
-      for (final doc in documents.values) {
-        if (!collectedIds.contains(doc.id) &&
-            doc.parentId != null &&
-            collectedIds.contains(doc.parentId)) {
-          collectedIds.add(doc.id);
-          addedMore = true;
+      final directChildren = childrenByParent[currentId];
+      if (directChildren != null) {
+        for (final childId in directChildren) {
+          if (collectedIds.add(childId)) {
+            queue.add(childId);
+          }
         }
       }
     }
@@ -495,7 +502,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       'documents': bundleDocs,
     };
 
-    return const JsonEncoder.withIndent('  ').convert(payload);
+    return _prettyJsonEncoder.convert(payload);
   }
 
   /// Imports a `.layers.json` project bundle into the vault, automatically remapping IDs
@@ -613,24 +620,33 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final proj = documents[projectId];
     if (proj == null) return;
 
+    final childrenByParent = <String, List<String>>{};
+    for (final doc in documents.values) {
+      if (doc.parentId != null) {
+        childrenByParent.putIfAbsent(doc.parentId!, () => []).add(doc.id);
+      }
+    }
+
     final idsToRemove = <String>{projectId};
-    for (final relId in proj.childrenIds) {
-      idsToRemove.add(relId);
-      final relDoc = documents[relId];
-      if (relDoc != null) {
-        for (final beatId in relDoc.childrenIds) {
-          idsToRemove.add(beatId);
-          final beatDoc = documents[beatId];
-          if (beatDoc != null) {
-            idsToRemove.addAll(beatDoc.childrenIds);
+    final queue = <String>[projectId, ...proj.childrenIds];
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeLast();
+      idsToRemove.add(currentId);
+      final doc = documents[currentId];
+      if (doc != null) {
+        for (final childId in doc.childrenIds) {
+          if (idsToRemove.add(childId)) {
+            queue.add(childId);
           }
         }
       }
-    }
-    // Also collect any detached/superseded child documents whose parentId belongs to this project
-    for (final doc in documents.values) {
-      if (doc.parentId != null && idsToRemove.contains(doc.parentId)) {
-        idsToRemove.add(doc.id);
+      final directChildren = childrenByParent[currentId];
+      if (directChildren != null) {
+        for (final childId in directChildren) {
+          if (idsToRemove.add(childId)) {
+            queue.add(childId);
+          }
+        }
       }
     }
 
@@ -803,15 +819,27 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       TierDocument? matchedBeat;
       TierDocument? matchedFeat;
       if (candidateFeatId != null) {
-        for (final b in beats) {
-          for (final f in featuresForBeat(b.id)) {
-            if (f.id == candidateFeatId) {
-              matchedBeat = b;
-              matchedFeat = f;
-              break;
-            }
+        final candDoc = documents[candidateFeatId];
+        if (candDoc != null && candDoc.tier == TierType.feature) {
+          final parentBeat = candDoc.parentId != null
+              ? documents[candDoc.parentId]
+              : null;
+          if (parentBeat != null && beats.any((b) => b.id == parentBeat.id)) {
+            matchedBeat = parentBeat;
+            matchedFeat = candDoc;
           }
-          if (matchedFeat != null) break;
+        }
+        if (matchedFeat == null) {
+          for (final b in beats) {
+            for (final f in featuresForBeat(b.id)) {
+              if (f.id == candidateFeatId) {
+                matchedBeat = b;
+                matchedFeat = f;
+                break;
+              }
+            }
+            if (matchedFeat != null) break;
+          }
         }
       }
       if (matchedBeat != null && matchedFeat != null) {
@@ -845,26 +873,18 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       return;
     }
     final rawPhase = (relDoc.sections['phase'] ?? '').trim();
-    if (rawPhase == ProductionPhase.mvp.name) {
-      _currentPhase = ProductionPhase.mvp;
-    } else if (rawPhase == ProductionPhase.verticalSlice.name) {
-      _currentPhase = ProductionPhase.verticalSlice;
-    } else if (rawPhase == ProductionPhase.fullProduction.name) {
-      _currentPhase = ProductionPhase.fullProduction;
-    } else if (rawPhase == ProductionPhase.prototype.name) {
-      _currentPhase = ProductionPhase.prototype;
-    } else {
-      final scope = relDoc.releaseScope;
-      if (scope == ReleaseScope.mvp) {
-        _currentPhase = ProductionPhase.mvp;
-      } else if (scope == ReleaseScope.verticalSlice) {
-        _currentPhase = ProductionPhase.verticalSlice;
-      } else if (scope == ReleaseScope.fullProduction) {
-        _currentPhase = ProductionPhase.fullProduction;
-      } else {
-        _currentPhase = ProductionPhase.prototype;
-      }
-    }
+    _currentPhase = switch (rawPhase) {
+      'mvp' => ProductionPhase.mvp,
+      'verticalSlice' => ProductionPhase.verticalSlice,
+      'fullProduction' => ProductionPhase.fullProduction,
+      'prototype' => ProductionPhase.prototype,
+      _ => switch (relDoc.releaseScope) {
+        ReleaseScope.mvp => ProductionPhase.mvp,
+        ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
+        ReleaseScope.fullProduction => ProductionPhase.fullProduction,
+        _ => ProductionPhase.prototype,
+      },
+    };
   }
 
   void _persistDocument(TierDocument doc, {bool debounce = false}) {
