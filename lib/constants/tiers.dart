@@ -206,17 +206,54 @@ enum ReleaseScope {
     ],
   };
 
-  static String categoryLabel(String cat) {
-    switch (cat) {
-      case 'rd':
-        return 'Prototypes (R&D)';
-      case 'preLaunch':
-        return 'Core Production (MVP & Milestones)';
-      case 'postLaunch':
-        return 'Live Ops & Maintenance';
-      default:
-        return cat;
+  static String categoryLabel(String cat) => switch (cat) {
+        'rd' => 'Prototypes (R&D)',
+        'preLaunch' => 'Core Production (MVP & Milestones)',
+        'postLaunch' => 'Live Ops & Maintenance',
+        _ => cat,
+      };
+
+  static final Map<String, ReleaseScope> _scopeLookup = _buildScopeLookup();
+
+  static Map<String, ReleaseScope> _buildScopeLookup() {
+    final map = <String, ReleaseScope>{
+      'prototype': ReleaseScope.featurePrototype,
+      'preset_prototype': ReleaseScope.featurePrototype,
+      'featureprototype': ReleaseScope.featurePrototype,
+      'rough': ReleaseScope.featurePrototype,
+      'mvp': ReleaseScope.mvp,
+      'preset_mvp': ReleaseScope.mvp,
+      'build': ReleaseScope.mvp,
+      'verticalslice': ReleaseScope.verticalSlice,
+      'vertical_slice': ReleaseScope.verticalSlice,
+      'vertical slice': ReleaseScope.verticalSlice,
+      'preset_verticalslice': ReleaseScope.verticalSlice,
+      'fullproduction': ReleaseScope.fullProduction,
+      'full_production': ReleaseScope.fullProduction,
+      'full production': ReleaseScope.fullProduction,
+      'standard': ReleaseScope.fullProduction,
+      'preset_standard': ReleaseScope.fullProduction,
+      'final': ReleaseScope.fullProduction,
+      'finalpass': ReleaseScope.fullProduction,
+      'patch': ReleaseScope.patch,
+      'hotfix': ReleaseScope.patch,
+      'maintenance': ReleaseScope.patch,
+      'bugfix': ReleaseScope.patch,
+      'contentupdate': ReleaseScope.contentUpdate,
+      'content_update': ReleaseScope.contentUpdate,
+      'content update': ReleaseScope.contentUpdate,
+      'poc': ReleaseScope.firstPlayable,
+      'proof of concept': ReleaseScope.firstPlayable,
+      'proofofconcept': ReleaseScope.firstPlayable,
+      'first playable': ReleaseScope.firstPlayable,
+      'firstplayable': ReleaseScope.firstPlayable,
+    };
+    for (final s in ReleaseScope.values) {
+      map[s.name.toLowerCase()] = s;
+      map[s.label.toLowerCase()] = s;
+      map['preset_${s.name.toLowerCase()}'] = s;
     }
+    return map;
   }
 
   static ReleaseScope fromDocument(dynamic doc) {
@@ -251,41 +288,8 @@ enum ReleaseScope {
     return _fromTitle(title);
   }
 
-  static ReleaseScope? _matchEnum(String val) {
-    final clean = val.trim().toLowerCase();
-    if (clean == 'prototype' ||
-        clean == 'preset_prototype' ||
-        clean == 'featureprototype' ||
-        clean == 'rough') {
-      return ReleaseScope.featurePrototype;
-    }
-    if (clean == 'mvp' || clean == 'preset_mvp' || clean == 'build') {
-      return ReleaseScope.mvp;
-    }
-    if (clean == 'verticalslice' ||
-        clean == 'vertical_slice' ||
-        clean == 'vertical slice' ||
-        clean == 'preset_verticalslice') {
-      return ReleaseScope.verticalSlice;
-    }
-    if (clean == 'fullproduction' ||
-        clean == 'full_production' ||
-        clean == 'full production' ||
-        clean == 'standard' ||
-        clean == 'preset_standard' ||
-        clean == 'final' ||
-        clean == 'finalpass') {
-      return ReleaseScope.fullProduction;
-    }
-    for (final s in ReleaseScope.values) {
-      if (clean == s.name.toLowerCase() ||
-          clean == s.label.toLowerCase() ||
-          clean == 'preset_${s.name.toLowerCase()}') {
-        return s;
-      }
-    }
-    return null;
-  }
+  static ReleaseScope? _matchEnum(String val) =>
+      _scopeLookup[val.trim().toLowerCase()];
 
   static ReleaseScope _fromTitle(String title) {
     final lowerTitle = title.toLowerCase();
