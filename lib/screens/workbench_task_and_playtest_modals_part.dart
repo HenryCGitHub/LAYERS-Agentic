@@ -1,6 +1,8 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
+  static final RegExp _tuningVarDelimiterRegex = RegExp(r'[:=]');
+
   Future<void> _promptEditHowToSubStepDialog(
     TierDocument feat,
     List<FeatureStateNode> states,
@@ -610,8 +612,10 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           ? oldParams.length
           : newParams.length;
       for (int i = 0; i < pairCount; i++) {
-        final oldId = oldParams[i].split(':').first.trim();
-        final newId = newParams[i].split(':').first.trim();
+        final oldId =
+            oldParams[i].split(_tuningVarDelimiterRegex).first.trim();
+        final newId =
+            newParams[i].split(_tuningVarDelimiterRegex).first.trim();
         if (oldId.isNotEmpty && newId.isNotEmpty && oldId != newId) {
           final count = widget.workbench.propagateVariableRenameAcrossProject(
             oldId,
