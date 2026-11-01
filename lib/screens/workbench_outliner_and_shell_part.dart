@@ -1,6 +1,9 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
+  static final RegExp _explicitHoursRegex =
+      RegExp(r'\(\d+\s*h\)', caseSensitive: false);
+
   void _startStage2InlineEdit(String key, String initialText) {
     _rebuild(() {
       _activeStage2InlineEditKey = key;
@@ -148,8 +151,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
   ) {
     final trimmed = rawTitle.trim();
     if (trimmed.isEmpty || cpIdx < 0 || cpIdx >= states.length) return;
-    final hasExplicitHours = RegExp(r'\(\d+\s*h\)', caseSensitive: false)
-        .hasMatch(trimmed);
+    final hasExplicitHours = _explicitHoursRegex.hasMatch(trimmed);
     final taskText = hasExplicitHours ? trimmed : '$trimmed (2h)';
     final cpNode = states[cpIdx];
     final newTask = Subtask(
@@ -1934,8 +1936,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       final s = states[i];
       if (s.releaseVersion != activeVer) continue;
       final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
-      if (activeFocusIndex == -1 && (!s.isCompleted || awaitingPlaytest)) {
+      if (!s.isCompleted || awaitingPlaytest) {
         activeFocusIndex = i;
+        break;
       }
     }
     // 2. Otherwise prefer the last checkpoint belonging to the active release
@@ -1948,8 +1951,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       for (int i = 0; i < states.length; i++) {
         final s = states[i];
         final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
-        if (activeFocusIndex == -1 && (!s.isCompleted || awaitingPlaytest)) {
+        if (!s.isCompleted || awaitingPlaytest) {
           activeFocusIndex = i;
+          break;
         }
       }
     }
