@@ -2,14 +2,20 @@
 /// Contains zero hardcoded genre archetypes, zero hardcoded feature names,
 /// and zero fallback scaffolds.
 class MechanicArchetypeProfile {
+  const MechanicArchetypeProfile._();
+
   /// Strips trailing `: description` or `— description` from an Epic/Beat title
   /// without ever substituting a hardcoded genre beat name.
   static String concreteBeatDisplayTitle(
     String rawBeatTitle, {
     int beatIndex = 0,
   }) {
-    final cleaned =
-        rawBeatTitle.split(':').first.split('—').first.trim();
+    var cleaned = rawBeatTitle;
+    final colonIdx = cleaned.indexOf(':');
+    if (colonIdx >= 0) cleaned = cleaned.substring(0, colonIdx);
+    final dashIdx = cleaned.indexOf('—');
+    if (dashIdx >= 0) cleaned = cleaned.substring(0, dashIdx);
+    cleaned = cleaned.trim();
     return cleaned.isNotEmpty ? cleaned : rawBeatTitle.trim();
   }
 
@@ -28,19 +34,20 @@ class MechanicArchetypeProfile {
     int beatIndex = 0,
   }) {
     var trimmed = rawTitle.trim();
-    if (trimmed.contains(':')) {
-      final colonIdx = trimmed.indexOf(':');
+    final colonIdx = trimmed.indexOf(':');
+    if (colonIdx >= 0) {
       final afterColon = trimmed.substring(colonIdx + 1).trim();
       if (afterColon.isNotEmpty) {
         trimmed = afterColon;
       }
     }
-    if (trimmed.contains(' — ')) {
-      trimmed = trimmed.split(' — ').first.trim();
+    final emDashIdx = trimmed.indexOf(' — ');
+    if (emDashIdx > 0) {
+      trimmed = trimmed.substring(0, emDashIdx).trim();
     }
-    while (_trailingTechSuffixRegex.hasMatch(trimmed)) {
+    while (true) {
       final stripped = trimmed.replaceFirst(_trailingTechSuffixRegex, '').trim();
-      if (stripped.isEmpty) break;
+      if (stripped == trimmed || stripped.isEmpty) break;
       trimmed = stripped;
     }
     return trimmed;
