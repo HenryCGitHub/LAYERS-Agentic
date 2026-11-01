@@ -161,6 +161,18 @@ class WorkbenchProvider extends ChangeNotifier {
 
   static final RegExp _mvpEpicLabelRegex =
       RegExp(r'MVP Epic\s*\d+(?:\s*\([^)]+\))?', caseSensitive: false);
+  static final RegExp _versionBoilerplateRegex =
+      RegExp(r'^v\d+\.\d+(?:\.\d+)?\s*[:\-–—]?\s*', caseSensitive: false);
+  static final RegExp _scopeSuffixRegex = RegExp(
+    r'\s*[\-–—]\s*(?:Feature\s+Prototype|Prototype|MVP|Vertical\s+Slice|Full\s+Production)\s*$',
+    caseSensitive: false,
+  );
+  static final RegExp _mvpParenRegex =
+      RegExp(r'^MVP\s+Epic\s*\d+\s*\(([^)]+)\)$', caseSensitive: false);
+  static final RegExp _protoPartRegex =
+      RegExp(r'^Prototype\s*[\-–—]\s*Part\s*\d+\s*:\s*(.+)$', caseSensitive: false);
+  static final RegExp _mvpEpicExactRegex =
+      RegExp(r'^mvp\s+epic\s*\d+$', caseSensitive: false);
 
   WorkbenchProvider({this.enableAutoLoad = false}) {
     _authService.addListener(_onAuthStateChanged);
@@ -388,68 +400,46 @@ class WorkbenchProvider extends ChangeNotifier {
   /// Resolves the canonical `ProductionPhase` (`prototype`, `mvp`, `verticalSlice`, `fullProduction`) for a Release document.
   ProductionPhase releasePhaseFor(TierDocument relDoc) {
     final rawPhase = (relDoc.sections['phase'] ?? '').trim();
-    if (rawPhase == ProductionPhase.fullProduction.name ||
-        relDoc.releaseScope == ReleaseScope.fullProduction) {
-      return ProductionPhase.fullProduction;
-    }
-    if (rawPhase == ProductionPhase.verticalSlice.name ||
-        relDoc.releaseScope == ReleaseScope.verticalSlice) {
-      return ProductionPhase.verticalSlice;
-    }
-    if (rawPhase == ProductionPhase.mvp.name ||
-        relDoc.releaseScope == ReleaseScope.mvp) {
-      return ProductionPhase.mvp;
-    }
-    return ProductionPhase.prototype;
+    return switch (rawPhase) {
+      'fullProduction' => ProductionPhase.fullProduction,
+      'verticalSlice' => ProductionPhase.verticalSlice,
+      'mvp' => ProductionPhase.mvp,
+      'prototype' => ProductionPhase.prototype,
+      _ => switch (relDoc.releaseScope) {
+        ReleaseScope.fullProduction => ProductionPhase.fullProduction,
+        ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
+        ReleaseScope.mvp => ProductionPhase.mvp,
+        _ => ProductionPhase.prototype,
+      },
+    };
   }
 
   /// Short uppercase phase badge (`PROTO`, `MVP`, `SLICE`, `PROD`) for compact header pills.
-  String releasePhaseShortBadge(TierDocument relDoc) {
-    switch (releasePhaseFor(relDoc)) {
-      case ProductionPhase.prototype:
-        return 'PROTO';
-      case ProductionPhase.mvp:
-        return 'MVP';
-      case ProductionPhase.verticalSlice:
-        return 'SLICE';
-      case ProductionPhase.fullProduction:
-        return 'PROD';
-    }
-  }
+  String releasePhaseShortBadge(TierDocument relDoc) =>
+      switch (releasePhaseFor(relDoc)) {
+        ProductionPhase.prototype => 'PROTO',
+        ProductionPhase.mvp => 'MVP',
+        ProductionPhase.verticalSlice => 'SLICE',
+        ProductionPhase.fullProduction => 'PROD',
+      };
 
   /// Resolves a clean, descriptive human-readable name for a Release in the Release Selector Dropdown and Header Pill.
   /// Strips version/scope boilerplate and, if the stored title is generic (e.g. `"Prototype"`, `"MVP Epic 1"`),
   /// synthesizes a 2–4 word focus name from the actual Features built or upgraded in that release.
   String releaseDisplayName(TierDocument relDoc) {
-    var clean = relDoc.title.trim();
-    clean = clean
-        .replaceFirst(
-          RegExp(r'^v\d+\.\d+(?:\.\d+)?\s*[:\-–—]?\s*', caseSensitive: false),
-          '',
-        )
-        .trim();
-    clean = clean
-        .replaceFirst(
-          RegExp(
-            r'\s*[\-–—]\s*(?:Feature\s+Prototype|Prototype|MVP|Vertical\s+Slice|Full\s+Production)\s*$',
-            caseSensitive: false,
-          ),
-          '',
-        )
+    var clean = relDoc.title
+        .trim()
+        .replaceFirst(_versionBoilerplateRegex, '')
+        .trim()
+        .replaceFirst(_scopeSuffixRegex, '')
         .trim();
 
-    final mvpParenMatch = RegExp(
-      r'^MVP\s+Epic\s*\d+\s*\(([^)]+)\)$',
-      caseSensitive: false,
-    ).firstMatch(clean);
+    final mvpParenMatch = _mvpParenRegex.firstMatch(clean);
     if (mvpParenMatch != null) {
       clean = mvpParenMatch.group(1)!.trim();
     }
 
-    final protoPartMatch = RegExp(
-      r'^Prototype\s*[\-–—]\s*Part\s*\d+\s*:\s*(.+)$',
-      caseSensitive: false,
-    ).firstMatch(clean);
+    final protoPartMatch = _protoPartRegex.firstMatch(clean);
     if (protoPartMatch != null) {
       clean = protoPartMatch.group(1)!.trim();
     }
@@ -467,33 +457,38 @@ class WorkbenchProvider extends ChangeNotifier {
         lower == 'full production' ||
         lower == 'core loop' ||
         (projTitleLower.isNotEmpty && lower == '$projTitleLower core loop') ||
-        RegExp(r'^mvp\s+epic\s*\d+$', caseSensitive: false).hasMatch(clean);
+        _mvpEpicExactRegex.hasMatch(clean);
 
     if (!isGeneric) {
       return clean;
     }
 
     final rVer = releaseVersionTagFor(relDoc).toLowerCase();
-    final versionFeatTitles = <String>[];
+    final versionFeatTitles = <String>{};
     for (final beatId in relDoc.childrenIds) {
       for (final feat in featuresForBeat(beatId)) {
         final states = FeatureStateNode.getStatesForDocument(feat);
         final touchedInRel = states.any(
           (s) => s.releaseVersion.toLowerCase() == rVer,
         );
-        if (touchedInRel && !versionFeatTitles.contains(feat.title)) {
+        if (touchedInRel) {
           versionFeatTitles.add(feat.title);
+          if (versionFeatTitles.length >= 2) break;
         }
       }
+      if (versionFeatTitles.length >= 2) break;
     }
     if (versionFeatTitles.isNotEmpty) {
       return versionFeatTitles.take(2).join(' & ');
     }
 
-    if (_releaseBlueprint != null &&
-        _releaseBlueprint!.releaseDocId == relDoc.id) {
+    final targetBp = (_releaseBlueprint != null &&
+            _releaseBlueprint!.releaseDocId == relDoc.id)
+        ? _releaseBlueprint
+        : releaseBlueprintFor(relDoc.id);
+    if (targetBp != null) {
       final bpTitles = <String>[
-        for (final b in _releaseBlueprint!.beats)
+        for (final b in targetBp.beats)
           for (final f in b.features)
             if (f.included && f.lifecycle != FeatureLifecycleStatus.stable)
               f.title,
@@ -503,26 +498,13 @@ class WorkbenchProvider extends ChangeNotifier {
       }
     }
 
-    final savedBp = releaseBlueprintFor(relDoc.id);
-    if (savedBp != null) {
-      final savedTitles = <String>[
-        for (final b in savedBp.beats)
-          for (final f in b.features)
-            if (f.included && f.lifecycle != FeatureLifecycleStatus.stable)
-              f.title,
-      ];
-      if (savedTitles.isNotEmpty) {
-        return savedTitles.take(2).join(' & ');
-      }
-    }
-
-    final fallbackFeatTitles = <String>[];
+    final fallbackFeatTitles = <String>{};
     for (final beatId in relDoc.childrenIds) {
       for (final feat in featuresForBeat(beatId)) {
-        if (!fallbackFeatTitles.contains(feat.title)) {
-          fallbackFeatTitles.add(feat.title);
-        }
+        fallbackFeatTitles.add(feat.title);
+        if (fallbackFeatTitles.length >= 2) break;
       }
+      if (fallbackFeatTitles.length >= 2) break;
     }
     if (fallbackFeatTitles.isNotEmpty) {
       return fallbackFeatTitles.take(2).join(' & ');
@@ -635,18 +617,16 @@ class WorkbenchProvider extends ChangeNotifier {
       final states = FeatureStateNode.getStatesForDocument(doc);
       if (states.isEmpty) return doc.isCompleted ? 100 : 0;
       final activeVer = activeReleaseVersionTag;
-      final activeStates =
-          states.where((s) => s.releaseVersion == activeVer).toList();
-      final effectiveStates =
-          activeStates.isNotEmpty ? activeStates : states;
+      final hasActiveVer = states.any((s) => s.releaseVersion == activeVer);
       int total = 0;
       int done = 0;
-      for (final s in effectiveStates) {
-        total += s.totalChecklistCount;
-        done += s.completedChecklistCount;
+      for (final s in states) {
+        if (!hasActiveVer || s.releaseVersion == activeVer) {
+          total += s.totalChecklistCount;
+          done += s.completedChecklistCount;
+        }
       }
-      if (total == 0) return 0;
-      return ((done / total) * 100).round();
+      return total == 0 ? 0 : ((done / total) * 100).round();
     }
 
     if (doc.childrenIds.isEmpty) return doc.isCompleted ? 100 : 0;
@@ -672,39 +652,42 @@ class WorkbenchProvider extends ChangeNotifier {
           return ((relDone / relTotal) * 100).round();
         }
       }
-      final activeBeatIds = doc.childrenIds.where((beatId) {
-        final feats = featuresForBeat(beatId);
-        return feats.any((f) => isFeatureActiveInRelease(f));
-      }).toList();
-      final targetBeatIds =
-          activeBeatIds.isNotEmpty ? activeBeatIds : doc.childrenIds;
-      int sum = 0;
-      int count = 0;
-      for (final childId in targetBeatIds) {
-        if (documents.containsKey(childId)) {
-          sum += getDocumentProgress(childId);
-          count++;
+      int activeSum = 0;
+      int activeCount = 0;
+      int allSum = 0;
+      int allCount = 0;
+      for (final beatId in doc.childrenIds) {
+        if (!documents.containsKey(beatId)) continue;
+        final prog = getDocumentProgress(beatId);
+        allSum += prog;
+        allCount++;
+        if (featuresForBeat(beatId).any(isFeatureActiveInRelease)) {
+          activeSum += prog;
+          activeCount++;
         }
       }
-      return count == 0 ? 0 : (sum / count).round();
+      if (activeCount > 0) return (activeSum / activeCount).round();
+      return allCount == 0 ? 0 : (allSum / allCount).round();
     }
 
     if (doc.tier == TierType.epic) {
-      final activeFeatIds = doc.childrenIds.where((featId) {
+      int activeSum = 0;
+      int activeCount = 0;
+      int allSum = 0;
+      int allCount = 0;
+      for (final featId in doc.childrenIds) {
         final f = documents[featId];
-        return f != null && isFeatureActiveInRelease(f);
-      }).toList();
-      final targetFeatIds =
-          activeFeatIds.isNotEmpty ? activeFeatIds : doc.childrenIds;
-      int sum = 0;
-      int count = 0;
-      for (final childId in targetFeatIds) {
-        if (documents.containsKey(childId)) {
-          sum += getDocumentProgress(childId);
-          count++;
+        if (f == null) continue;
+        final prog = getDocumentProgress(featId);
+        allSum += prog;
+        allCount++;
+        if (isFeatureActiveInRelease(f)) {
+          activeSum += prog;
+          activeCount++;
         }
       }
-      return count == 0 ? 0 : (sum / count).round();
+      if (activeCount > 0) return (activeSum / activeCount).round();
+      return allCount == 0 ? 0 : (allSum / allCount).round();
     }
 
     int sum = 0;
@@ -813,26 +796,26 @@ class WorkbenchProvider extends ChangeNotifier {
       }
       return 'Ship & Plan $nextVer ✦';
     }
-    switch (_currentPhase) {
-      case ProductionPhase.prototype:
-        if (rel?.sections['prototypePart'] == '1') {
-          return 'Ship & Plan v0.2 (Prototype Part 2) ✦';
-        }
-        return 'Ship & Unlock Phase 2 (MVP Epic 1) ✦';
-      case ProductionPhase.mvp:
+    return switch (_currentPhase) {
+      ProductionPhase.prototype => rel?.sections['prototypePart'] == '1'
+          ? 'Ship & Plan v0.2 (Prototype Part 2) ✦'
+          : 'Ship & Unlock Phase 2 (MVP Epic 1) ✦',
+      ProductionPhase.mvp => () {
         final explicitIdx =
             int.tryParse(rel?.sections['targetEpicIndex'] ?? '') ?? 0;
-        final explicitTotal = int.tryParse(rel?.sections['mvpEpicTotal'] ?? '') ??
-            (activeReleaseBeats.isNotEmpty ? activeReleaseBeats.length : 1);
+        final explicitTotal =
+            int.tryParse(rel?.sections['mvpEpicTotal'] ?? '') ??
+                (activeReleaseBeats.isNotEmpty ? activeReleaseBeats.length : 1);
         if ((explicitIdx + 1) < explicitTotal) {
           final nextVer = 'v0.${releases.length + 1}';
           return 'Ship & Plan $nextVer (MVP Epic ${explicitIdx + 2}) ✦';
         }
         return 'Ship & Unlock Phase 3 (Vertical Slice) ✦';
-      case ProductionPhase.verticalSlice:
-        return 'Ship & Unlock Phase 4 (Full Production) ✦';
-      case ProductionPhase.fullProduction:
-        return 'Ship & Plan Next Full Production Pass ✦';
-    }
+      }(),
+      ProductionPhase.verticalSlice =>
+        'Ship & Unlock Phase 4 (Full Production) ✦',
+      ProductionPhase.fullProduction =>
+        'Ship & Plan Next Full Production Pass ✦',
+    };
   }
 }
