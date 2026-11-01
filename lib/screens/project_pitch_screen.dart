@@ -14,7 +14,27 @@ final RegExp _overSplitRegex = RegExp(
   caseSensitive: false,
 );
 final RegExp _prioritizePrefixRegex = RegExp(
-  r'^Prioritize\s+',
+  r'^(?:Prioritize|Prefer|Favor|Choose|Focus\s+on)\s+',
+  caseSensitive: false,
+);
+final RegExp _versionSuffixNoiseRegex = RegExp(
+  r'\s+(?:in|for|from|during|until)\s+(?:v\d+(?:\.\d+)?|prototype|mvp)\.?$',
+  caseSensitive: false,
+);
+final RegExp _tradeOffFillerWordRegex = RegExp(
+  r'\b(?:immediate|instant|complex|realistic|heavy|detailed|elaborate|multi-bone|waiting\s+on|60\s*fps|clean|transparent|responsive|fast)\b\s*',
+  caseSensitive: false,
+);
+final RegExp _exclusionLeadVerbRegex = RegExp(
+  r'^(?:Cut|Defer|Exclude|Omit|Skip|Remove)\s+',
+  caseSensitive: false,
+);
+final RegExp _leadInFillerVerbRegex = RegExp(
+  r'^(?:Prioritize|Focus\s+on|Ensure)\s+',
+  caseSensitive: false,
+);
+final RegExp _offlineOnlyPrefixRegex = RegExp(
+  r'^Offline(?:-Only)?\s+',
   caseSensitive: false,
 );
 final RegExp _whitespaceRegex = RegExp(r'\s+');

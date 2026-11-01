@@ -166,11 +166,11 @@ Return ONLY valid JSON:
   "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
   "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
   "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
-  "designPillars": ["2-3 Word Pillar Name: Experiential player feeling 1", "2-3 Word Pillar Name: Experiential player feeling 2", "2-3 Word Pillar Name: Experiential player feeling 3"],
-  "tradeOffs": ["Concrete X over Y rule tailored to $cleanSpark", "Concrete X over Y rule 2", "Concrete X over Y rule 3"],
-  "coreLoopBeats": ["Beat Name: Literal action and response", "..."],
-  "exclusions": ["Specific prototype exclusion for $cleanSpark", "Specific prototype exclusion 2", "Specific prototype exclusion 3"],
-  "doneWhen": "Concrete playtest completion condition",
+  "designPillars": ["2-3 Word Pillar Name: Concise 1-sentence player feeling 1", "2-3 Word Pillar Name: Concise 1-sentence player feeling 2", "2-3 Word Pillar Name: Concise 1-sentence player feeling 3"],
+  "tradeOffs": ["2-3 word priority over 2-3 word alternative", "2-3 word priority 2 over 2-3 word alternative 2", "2-3 word priority 3 over 2-3 word alternative 3"],
+  "coreLoopBeats": ["Beat Name: Concise 1-sentence action and response", "..."],
+  "exclusions": ["No 2-4 word prototype cut 1", "No 2-4 word prototype cut 2", "No 2-4 word prototype cut 3"],
+  "doneWhen": "Concise 1-sentence playtest completion condition without FPS targets",
   "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"]$optionsSchemaTail
 }
 ''';

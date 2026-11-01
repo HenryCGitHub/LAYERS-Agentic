@@ -172,7 +172,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   child: Text(
                     focusedSec != null
                         ? '${focusedSec.numLabel} ${focusedSec.shortTitle} ×'
-                        : '✦ AI CO-DESIGNER',
+                        : '✦ AI Ready',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -239,7 +239,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                           child: Text(
                             widget.workbench.isAgentBusy
                                 ? '...'
-                                : 'Update Blueprint',
+                                : 'Update',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
@@ -414,7 +414,87 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 08 Done When: Open Playtest Gate Statement ─────────────────────────────
+  // ── Telegraphic & Semi-Telegraphic Display Formatters ──────────────────────
+  String _capitalizeFirst(String input) {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return trimmed;
+    return '${trimmed[0].toUpperCase()}${trimmed.substring(1)}';
+  }
+
+  /// Compresses a verbose Trade-Off rule into Strict Telegraphic Style (2–4 words per side).
+  ({String win, String lose}) _formatTelegraphicTradeOff(String rawRule) {
+    var clean = rawRule.trim();
+    final colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < clean.length - 1) {
+      final afterColon = clean.substring(colonIdx + 1).trim();
+      if (afterColon.toLowerCase().contains(' over ')) {
+        clean = afterColon;
+      }
+    }
+    clean = clean
+        .replaceFirst(_prioritizePrefixRegex, '')
+        .replaceFirst(_versionSuffixNoiseRegex, '')
+        .trim();
+
+    String compressHalf(String half) {
+      var s = half
+          .replaceFirst(_prioritizePrefixRegex, '')
+          .replaceFirst(_versionSuffixNoiseRegex, '')
+          .trim();
+      if (s.endsWith('.')) s = s.substring(0, s.length - 1).trim();
+      final rawWords = s.split(_whitespaceRegex).where((w) => w.isNotEmpty).toList();
+      if (rawWords.length > 3) {
+        final stripped = s.replaceAll(_tradeOffFillerWordRegex, '').trim();
+        final filteredWords =
+            stripped.split(_whitespaceRegex).where((w) => w.isNotEmpty).toList();
+        if (filteredWords.length >= 2) {
+          s = filteredWords.take(4).join(' ');
+        } else {
+          s = rawWords.take(4).join(' ');
+        }
+      }
+      return _capitalizeFirst(s);
+    }
+
+    final parts = clean.split(_overSplitRegex);
+    final winText = parts.isNotEmpty ? compressHalf(parts[0]) : compressHalf(clean);
+    final loseText = parts.length > 1
+        ? compressHalf(parts.sublist(1).join(' over '))
+        : 'Secondary complexity';
+    return (win: winText, lose: loseText);
+  }
+
+  /// Formats an Out of Scope item into Strict Telegraphic Style (concise exclusion phrase).
+  String _formatTelegraphicExclusion(String raw) {
+    var clean = raw.trim();
+    final colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx <= 32 && colonIdx < clean.length - 1) {
+      clean = clean.substring(colonIdx + 1).trim();
+    }
+    clean = clean.replaceFirst(_versionSuffixNoiseRegex, '').trim();
+    if (_exclusionLeadVerbRegex.hasMatch(clean)) {
+      clean = 'No ${clean.replaceFirst(_exclusionLeadVerbRegex, '').replaceAll(' and ', ' or ')}';
+    }
+    if (clean.endsWith('.')) {
+      clean = clean.substring(0, clean.length - 1).trim();
+    }
+    return _capitalizeFirst(clean);
+  }
+
+  /// Formats a 02 Game Spec or 03 Tech Spec cell value into a concise telegraphic tag.
+  String _formatTelegraphicSpecValue(String raw) {
+    var clean = raw.trim().replaceFirst(_offlineOnlyPrefixRegex, '');
+    if (clean == 'Twin-Stick (WASD + Mouse Aim)' ||
+        clean == 'Twin-Stick (WASD + Aim)') {
+      return 'WASD + Mouse';
+    }
+    if (clean == 'Single-Screen Wave Arena') {
+      return 'Single-Screen Arena';
+    }
+    return clean;
+  }
+
+  // ── 08 Done When: Concise Messaging Verification Sentence ──────────────────
   Widget _buildCalloutStatement(
     String statement, {
     required bool highlightMetrics,
@@ -435,9 +515,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Text(
-            statement,
+            statement.trim(),
             style: GoogleFonts.inter(
-              fontSize: _measureBodyFontSize + 0.5,
+              fontSize: _measureBodyFontSize,
               fontWeight: FontWeight.w500,
               height: 1.55,
               color: _secT1Primary,
@@ -635,7 +715,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      v.trim().isEmpty ? 'Click to set...' : v,
+                      v.trim().isEmpty
+                          ? 'Click to set...'
+                          : _formatTelegraphicSpecValue(v),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
@@ -670,7 +752,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
   }
 
   /// Splits `"Lead-In Label: Description text"` so the lead-in before `:` is bold & bright
-  /// and the description after `:` is slightly softer for instant greyscale scanability.
+  /// and the description after `:` is semi-telegraphic (stripping leading filler verbs).
   Widget _buildFormattedLeadInText(String rawText) {
     final colonIdx = rawText.indexOf(':');
     if (colonIdx <= 0 || colonIdx >= rawText.length - 1) {
@@ -685,8 +767,11 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       );
     }
 
-    final leadIn = rawText.substring(0, colonIdx);
-    final rest = rawText.substring(colonIdx + 1).trim();
+    final leadIn = rawText.substring(0, colonIdx).trim();
+    final rawRest = rawText.substring(colonIdx + 1).trim();
+    final rest = _capitalizeFirst(
+      rawRest.replaceFirst(_leadInFillerVerbRegex, ''),
+    );
 
     return RichText(
       text: TextSpan(
@@ -764,17 +849,19 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   : null,
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 28,
-                  child: Text(
-                    numBadge,
-                    style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: _secT4Muted,
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: SizedBox(
+                    width: 28,
+                    child: Text(
+                      numBadge,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: _secT4Muted,
+                      ),
                     ),
                   ),
                 ),
@@ -884,17 +971,19 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                         : null,
                   ),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: 28,
-                        child: Text(
-                          (i + 1).toString().padLeft(2, '0'),
-                          style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: _secT4Muted,
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: SizedBox(
+                          width: 28,
+                          child: Text(
+                            (i + 1).toString().padLeft(2, '0'),
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: _secT4Muted,
+                            ),
                           ),
                         ),
                       ),
@@ -1040,12 +1129,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     VoidCallback? onTap,
     VoidCallback? onDelete,
   }) {
-    final clean = rawRule.replaceFirst(_prioritizePrefixRegex, '');
-    final parts = clean.split(_overSplitRegex);
-    final winText = parts.isNotEmpty ? parts[0].trim() : clean;
-    final loseText = parts.length > 1
-        ? parts.sublist(1).join(' over ').trim()
-        : 'secondary complexity';
+    final telegraphic = _formatTelegraphicTradeOff(rawRule);
     final numBadge = (index + 1).toString().padLeft(2, '0');
 
     return Material(
@@ -1065,17 +1149,19 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 : null,
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 28,
-                child: Text(
-                  numBadge,
-                  style: GoogleFonts.inter(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: _secT4Muted,
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: SizedBox(
+                  width: 28,
+                  child: Text(
+                    numBadge,
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: _secT4Muted,
+                    ),
                   ),
                 ),
               ),
@@ -1088,38 +1174,21 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     ),
                     children: [
                       TextSpan(
-                        text: winText,
+                        text: telegraphic.win,
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: _secT1Primary,
                         ),
                       ),
-                      WidgetSpan(
-                        alignment: PlaceholderAlignment.middle,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 1.5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: bgRecessed,
-                            borderRadius: BorderRadius.circular(99),
-                            border: Border.all(color: borderSubtle),
-                          ),
-                          child: Text(
-                            'OVER',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                              color: _secT3Label,
-                            ),
-                          ),
+                      TextSpan(
+                        text: '  over  ',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: _secT4Muted,
                         ),
                       ),
                       TextSpan(
-                        text: loseText,
+                        text: telegraphic.lose,
                         style: TextStyle(
                           fontWeight: FontWeight.w400,
                           color: _secT3Label,
@@ -1157,7 +1226,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 07 Out of Scope: Aligned Hairline Exclusion Rows (— Index) ─────────────
+  // ── 07 Out of Scope: Aligned Telegraphic Exclusion Rows (— Index) ──────────
   Widget _buildCutGuardrailChips(
     List<String> exclusions, {
     void Function(int index, String newValue)? onEditItem,
@@ -1194,23 +1263,25 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   : null,
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 28,
-                  child: Text(
-                    '—',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _secT4Muted,
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: SizedBox(
+                    width: 28,
+                    child: Text(
+                      '—',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _secT4Muted,
+                      ),
                     ),
                   ),
                 ),
                 Expanded(
                   child: Text(
-                    exclusions[idx],
+                    _formatTelegraphicExclusion(exclusions[idx]),
                     style: GoogleFonts.inter(
                       fontSize: _measureBodyFontSize,
                       fontWeight: FontWeight.w400,

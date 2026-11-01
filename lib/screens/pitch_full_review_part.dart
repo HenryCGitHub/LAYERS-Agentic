@@ -351,12 +351,16 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           ),
         ),
 
-        // Strict 50% | 50% Center-Spine Grid on desktop (>= 900px), or Vertical Stack on narrower viewports
+        // 4-Row Grid on desktop (>= 900px):
+        // Row 1 (100%): 01 GOAL
+        // Row 2 (50% | 50%): 02 GAME SPEC | 03 TECH SPEC
+        // Row 3 (50% | 50%): 04 DESIGN PILLARS | 05 TRADE-OFFS
+        // Row 4 (50% | 50%): 06 CORE LOOP (Left) | Triple Stack 07 OUT OF SCOPE > 08 DONE WHEN > 09 RELEASE TARGET (Right)
         if (_viewportWidth >= 900) ...[
-          // Row 1: 01 GOAL (100% Full-Width Banner)
+          // Row 1 (Double Width 100%): 01 GOAL
           sectionCard(0),
           SizedBox(height: _measureCardGap),
-          // Row 2: 02 GAME SPEC (50% Left) | 03 TECH SPEC (50% Right)
+          // Row 2 (Half Width 50% | 50%): 02 GAME SPEC | 03 TECH SPEC
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -368,7 +372,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             ),
           ),
           SizedBox(height: _measureCardGap),
-          // Row 3: 04 DESIGN PILLARS (50% Left) | 05 TRADE-OFFS (50% Right)
+          // Row 3 (Half Width 50% | 50%): 04 DESIGN PILLARS | 05 TRADE-OFFS
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -380,26 +384,26 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             ),
           ),
           SizedBox(height: _measureCardGap),
-          // Row 4: 06 CORE LOOP (50% Left) | 07 OUT OF SCOPE (50% Right)
+          // Row 4 (Half Width 50% | 50%): 06 CORE LOOP (Left) | Triple Stack: 07 OUT OF SCOPE > 08 DONE WHEN > 09 RELEASE TARGET (Right)
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(child: sectionCard(5)),
                 SizedBox(width: _measureCardGap),
-                Expanded(child: sectionCard(6)),
-              ],
-            ),
-          ),
-          SizedBox(height: _measureCardGap),
-          // Row 5: 08 DONE WHEN (50% Left) | 09 RELEASE TARGET (50% Right)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: sectionCard(7)),
-                SizedBox(width: _measureCardGap),
-                Expanded(child: launchpadCard),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      sectionCard(6),
+                      SizedBox(height: _measureCardGap),
+                      sectionCard(7),
+                      SizedBox(height: _measureCardGap),
+                      launchpadCard,
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -485,8 +489,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                     ),
                     child: Text(
                       isPrewarmed
-                          ? '● v0.1 Outline Ready'
-                          : '⟳ Pre-warming v0.1...',
+                          ? '● v0.1 Ready'
+                          : '⟳ Drafting v0.1...',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -614,8 +618,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
       ),
       child: Text(
         widget.workbench.isAgentBusy
-            ? 'Building v0.1 Workbench...'
-            : 'Approve & Build v0.1 Workbench →',
+            ? 'Building v0.1...'
+            : 'Approve & Build v0.1 →',
         style: GoogleFonts.inter(
           fontSize: 15.5,
           fontWeight: FontWeight.w800,
@@ -904,7 +908,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                           ),
                         ),
                         child: Text(
-                          '↺ Restore Original',
+                          '↺ Restore',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -1006,37 +1010,19 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       ? (isSelected ? '✓ Added' : '+ Add')
                       : (isSelected ? '● Active' : 'Swap →');
 
-                  // Section 05 (Trade-Offs): format option card as Priority X OVER Priority Y
+                  // Section 05 (Trade-Offs): format option card in telegraphic style (over losePart)
                   Widget descriptionWidget;
                   if (sectionIdx == 4 &&
                       rawOpt.toLowerCase().contains(' over ')) {
-                    final clean =
-                        rawOpt.replaceFirst(_prioritizePrefixRegex, '');
-                    final overParts = clean.split(_overSplitRegex);
-                    final losePart = overParts.length > 1
-                        ? overParts.sublist(1).join(' over ').trim()
-                        : split.description;
-                    descriptionWidget = RichText(
+                    final telegraphic = _formatTelegraphicTradeOff(rawOpt);
+                    descriptionWidget = Text(
+                      'over ${telegraphic.lose}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      text: TextSpan(
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          height: 1.4,
-                          color: _gsT3Label,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: 'OVER ',
-                            style: GoogleFonts.inter(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
-                              color: _gsT4Muted,
-                            ),
-                          ),
-                          TextSpan(text: losePart),
-                        ],
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        height: 1.4,
+                        color: _gsT3Label,
                       ),
                     );
                   } else {
@@ -1087,7 +1073,12 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    split.title,
+                                    sectionIdx == 4 &&
+                                            rawOpt
+                                                .toLowerCase()
+                                                .contains(' over ')
+                                        ? _formatTelegraphicTradeOff(rawOpt).win
+                                        : split.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.inter(
@@ -1119,8 +1110,9 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                   );
                 }
 
-                // 3-across option cards for full-width Section 01 on desktop (>= 900px)
-                if (sectionIdx == 0 &&
+                // 3-across option cards for Double-Width Section 01 (Goal) on desktop (>= 900px)
+                final isDoubleWidthCard = sectionIdx == 0;
+                if (isDoubleWidthCard &&
                     _viewportWidth >= 900 &&
                     options.length <= 3) {
                   return IntrinsicHeight(
@@ -1136,7 +1128,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                   );
                 }
 
-                // Vertical stack inside 50%-width cards (02..08) or narrow screens
+                // Vertical stack inside Half-Width (50%) cards (02..08) or narrow screens
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
