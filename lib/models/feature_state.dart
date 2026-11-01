@@ -160,6 +160,12 @@ class FeatureStateNode {
     return trimmed;
   }
 
+  static List<String> _extractStringList(dynamic primary, [dynamic secondary]) {
+    if (primary is List) return primary.map((e) => e.toString()).toList();
+    if (secondary is List) return secondary.map((e) => e.toString()).toList();
+    return <String>[];
+  }
+
   /// Creates a [FeatureStateNode] from a [Subtask], intelligently decomposing
   /// structured metadata (trigger, guard, feedback, parameters) from specNotes and
   /// preserving nested child substeps.
@@ -186,21 +192,18 @@ class FeatureStateNode {
                 (k, v) => MapEntry(k.toString(), v.toString()),
               );
             }
-            if (decoded['coveredScope'] is List) {
-              coveredScope = (decoded['coveredScope'] as List).map((e) => e.toString()).toList();
-            } else if (decoded['covers_scope'] is List) {
-              coveredScope = (decoded['covers_scope'] as List).map((e) => e.toString()).toList();
-            }
-            if (decoded['tuningParams'] is List) {
-              tuningParams = (decoded['tuningParams'] as List).map((e) => e.toString()).toList();
-            } else if (decoded['tuning'] is List) {
-              tuningParams = (decoded['tuning'] as List).map((e) => e.toString()).toList();
-            }
-            if (decoded['edgeCases'] is List) {
-              edgeCases = (decoded['edgeCases'] as List).map((e) => e.toString()).toList();
-            } else if (decoded['edge_cases'] is List) {
-              edgeCases = (decoded['edge_cases'] as List).map((e) => e.toString()).toList();
-            }
+            coveredScope = _extractStringList(
+              decoded['coveredScope'],
+              decoded['covers_scope'],
+            );
+            tuningParams = _extractStringList(
+              decoded['tuningParams'],
+              decoded['tuning'],
+            );
+            edgeCases = _extractStringList(
+              decoded['edgeCases'],
+              decoded['edge_cases'],
+            );
           }
         } catch (_) {}
       }
@@ -285,21 +288,6 @@ class FeatureStateNode {
       );
     }).toList();
 
-    final rawScope = json['coveredScope'] as List<dynamic>? ??
-        json['covers_scope'] as List<dynamic>? ??
-        [];
-    final coveredScope = rawScope.map((e) => e.toString()).toList();
-
-    final rawTuning = json['tuningParams'] as List<dynamic>? ??
-        json['tuning'] as List<dynamic>? ??
-        [];
-    final tuningParams = rawTuning.map((e) => e.toString()).toList();
-
-    final rawEdge = json['edgeCases'] as List<dynamic>? ??
-        json['edge_cases'] as List<dynamic>? ??
-        [];
-    final edgeCases = rawEdge.map((e) => e.toString()).toList();
-
     return FeatureStateNode(
       id: json['id'] as String? ?? generateUniqueId('state'),
       name: json['name'] as String? ?? 'State',
@@ -309,9 +297,18 @@ class FeatureStateNode {
       feedback: json['feedback'] as String?,
       checklist: checklistItems,
       order: json['order'] as int? ?? 0,
-      coveredScope: coveredScope,
-      tuningParams: tuningParams,
-      edgeCases: edgeCases,
+      coveredScope: _extractStringList(
+        json['coveredScope'],
+        json['covers_scope'],
+      ),
+      tuningParams: _extractStringList(
+        json['tuningParams'],
+        json['tuning'],
+      ),
+      edgeCases: _extractStringList(
+        json['edgeCases'],
+        json['edge_cases'],
+      ),
     );
   }
 
@@ -365,17 +362,47 @@ class FeatureStateNode {
   static final Map<String, ({int signature, List<FeatureStateNode> states})>
       _statesCache = {};
 
-  static int _computeDocStatesSignature(TierDocument doc) {
-    final rawJson = doc.sections['states'] ?? '';
-    var hash = Object.hash(doc.id, doc.title, rawJson, doc.subtasks.length);
-    void hashSubs(List<Subtask> items) {
-      for (final it in items) {
-        hash = Object.hash(hash, it.id, it.completed, it.children.length);
-        hashSubs(it.children);
+  static void clearCache() => _statesCache.clear();
+
+  static void _putCache(
+    String docId,
+    int signature,
+    List<FeatureStateNode> states,
+  ) {
+    if (_statesCache.length > 512) {
+      _statesCache.clear();
+    }
+    _statesCache[docId] = (signature: signature, states: states);
+  }
+
+  static int _hashSubtasks(int initialHash, List<Subtask> items) {
+    var hash = initialHash;
+    for (final it in items) {
+      hash = Object.hash(hash, it.id, it.completed, it.children.length);
+      if (it.children.isNotEmpty) {
+        hash = _hashSubtasks(hash, it.children);
       }
     }
-    hashSubs(doc.subtasks);
     return hash;
+  }
+
+  static void _collectSubtaskMap(
+    List<Subtask> items,
+    Map<String, Subtask> out,
+  ) {
+    for (final it in items) {
+      out[it.id] = it;
+      if (it.children.isNotEmpty) {
+        _collectSubtaskMap(it.children, out);
+      }
+    }
+  }
+
+  static int _computeDocStatesSignature(TierDocument doc) {
+    final rawJson = doc.sections['states'] ?? '';
+    final baseHash =
+        Object.hash(doc.id, doc.title, rawJson, doc.subtasks.length);
+    return _hashSubtasks(baseHash, doc.subtasks);
   }
 
   /// Extracts the dynamic state nodes for a given feature document.
@@ -393,19 +420,12 @@ class FeatureStateNode {
         if (decoded is List) {
           final nodes = decoded
               .whereType<Map<String, dynamic>>()
-              .map((j) => FeatureStateNode.fromJson(j))
+              .map(FeatureStateNode.fromJson)
               .toList();
           if (nodes.isNotEmpty) {
             // Reconcile checklist completed states with doc.subtasks if available
             final subtaskMap = <String, Subtask>{};
-            void collectSubtasks(List<Subtask> items) {
-              for (final it in items) {
-                subtaskMap[it.id] = it;
-                collectSubtasks(it.children);
-              }
-            }
-
-            collectSubtasks(doc.subtasks);
+            _collectSubtaskMap(doc.subtasks, subtaskMap);
             for (final node in nodes) {
               for (final check in node.checklist) {
                 if (subtaskMap.containsKey(check.id)) {
@@ -418,10 +438,7 @@ class FeatureStateNode {
                 }
               }
             }
-            _statesCache[doc.id] = (
-              signature: sig,
-              states: nodes,
-            );
+            _putCache(doc.id, sig, nodes);
             return nodes;
           }
         }
@@ -434,10 +451,7 @@ class FeatureStateNode {
       final nodes = doc.subtasks.map((st) {
         return FeatureStateNode.fromSubtask(st, order: orderIdx++);
       }).toList();
-      _statesCache[doc.id] = (
-        signature: sig,
-        states: nodes,
-      );
+      _putCache(doc.id, sig, nodes);
       return nodes;
     }
 
@@ -450,10 +464,7 @@ class FeatureStateNode {
         order: 0,
       )
     ];
-    _statesCache[doc.id] = (
-      signature: sig,
-      states: fallback,
-    );
+    _putCache(doc.id, sig, fallback);
     return fallback;
   }
 
@@ -483,9 +494,6 @@ class FeatureStateNode {
         specNotes: jsonEncode(meta),
       );
     }).toList();
-    _statesCache[doc.id] = (
-      signature: _computeDocStatesSignature(doc),
-      states: states,
-    );
+    _putCache(doc.id, _computeDocStatesSignature(doc), states);
   }
 }
