@@ -1,5 +1,8 @@
 part of '../main.dart';
 
+final RegExp _slugInvalidCharRegex = RegExp(r'[^a-z0-9]+');
+final RegExp _slugTrimRegex = RegExp(r'^_+|_+$');
+
 extension _ShellExportersExt on WorkbenchShell {
   Future<void> _exportFullProjectSpec(BuildContext context) async {
     final draft = workbench.conceptDraft;
@@ -100,6 +103,7 @@ extension _ShellExportersExt on WorkbenchShell {
     );
     if (!context.mounted) return;
     final isDark = workbench.isDark;
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: AppTheme.bgSurfaceFor(isDark),
@@ -127,6 +131,7 @@ extension _ShellExportersExt on WorkbenchShell {
     if (!context.mounted) return;
     final isDark = workbench.isDark;
     final ver = workbench.activeReleaseVersionTag;
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: AppTheme.bgSurfaceFor(isDark),
@@ -149,13 +154,17 @@ extension _ShellExportersExt on WorkbenchShell {
   Future<void> _exportActiveProjectJson(BuildContext context) async {
     final jsonText = workbench.exportProjectToJson();
     await Clipboard.setData(ClipboardData(text: jsonText));
-    final rawTitle = workbench.activeProject?.title ??
-        workbench.conceptDraft?.title ??
-        'project';
+    final projTitle = workbench.activeProject?.title.trim();
+    final draftTitle = workbench.conceptDraft?.title.trim();
+    final rawTitle = (projTitle != null && projTitle.isNotEmpty)
+        ? projTitle
+        : ((draftTitle != null && draftTitle.isNotEmpty)
+            ? draftTitle
+            : 'project');
     final slug = rawTitle
         .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
+        .replaceAll(_slugInvalidCharRegex, '_')
+        .replaceAll(_slugTrimRegex, '');
     final filename = '${slug.isEmpty ? 'project' : slug}.layers.json';
     final downloaded = triggerMarkdownFileDownload(
       filename: filename,
@@ -163,6 +172,7 @@ extension _ShellExportersExt on WorkbenchShell {
     );
     if (!context.mounted) return;
     final isDark = workbench.isDark;
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: AppTheme.bgSurfaceFor(isDark),
@@ -193,127 +203,131 @@ extension _ShellExportersExt on WorkbenchShell {
     final accentGreen = AppTheme.accentGreenFor(isDark);
     final ctrl = TextEditingController();
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        key: const ValueKey('import_project_json_dialog'),
-        backgroundColor: bgSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: borderColor),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.file_upload_outlined, size: 16, color: accentAmber),
-            const SizedBox(width: 8),
-            Text(
-              'Import Project Backup (.layers.json)',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: textPrimary,
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 480,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          key: const ValueKey('import_project_json_dialog'),
+          backgroundColor: bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: borderColor),
+          ),
+          title: Row(
             children: [
+              Icon(Icons.file_upload_outlined, size: 16, color: accentAmber),
+              const SizedBox(width: 8),
               Text(
-                'Paste a previously exported .layers.json backup below to restore the complete Project Concept, Release Blueprint, and Workbench progress.',
+                'Import Project Backup (.layers.json)',
                 style: GoogleFonts.inter(
-                  fontSize: 11.5,
-                  color: textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('import_project_json_input'),
-                controller: ctrl,
-                maxLines: 8,
-                autofocus: true,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                   color: textPrimary,
-                ),
-                decoration: InputDecoration(
-                  hintText: '{\n  "schemaVersion": 1,\n  "project": { ... }\n}',
-                  hintStyle: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    color: textSecondary.withValues(alpha: 0.6),
-                  ),
-                  filled: true,
-                  fillColor: bgElevated,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderColor),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderColor),
-                  ),
                 ),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: textSecondary,
-              ),
-            ),
-          ),
-          ElevatedButton.icon(
-            key: const ValueKey('confirm_import_project_json_btn'),
-            onPressed: () {
-              final raw = ctrl.text.trim();
-              final importedId = workbench.importProjectFromJson(raw);
-              Navigator.of(dialogCtx).pop();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: bgSurface,
-                  behavior: SnackBarBehavior.floating,
-                  content: Text(
-                    importedId != null
-                        ? 'Restored project "${workbench.activeProject?.title ?? 'Imported Project'}" from JSON ✓'
-                        : 'Invalid .layers.json payload — could not import project.',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: importedId != null
-                          ? accentGreen
-                          : AppTheme.accentRedFor(isDark),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Paste a previously exported .layers.json backup below to restore the complete Project Concept, Release Blueprint, and Workbench progress.',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const ValueKey('import_project_json_input'),
+                  controller: ctrl,
+                  maxLines: 8,
+                  autofocus: true,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '{\n  "schemaVersion": 1,\n  "project": { ... }\n}',
+                    hintStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: textSecondary.withValues(alpha: 0.6),
+                    ),
+                    filled: true,
+                    fillColor: bgElevated,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: borderColor),
                     ),
                   ),
-                  duration: const Duration(seconds: 2),
                 ),
-              );
-            },
-            icon: const Icon(Icons.restore_page_outlined, size: 14),
-            label: Text(
-              'Import & Switch',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentAmber,
-              foregroundColor: Colors.black,
+              ],
             ),
           ),
-        ],
-      ),
-    );
-    ctrl.dispose();
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: textSecondary,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              key: const ValueKey('confirm_import_project_json_btn'),
+              onPressed: () {
+                final raw = ctrl.text.trim();
+                final importedId = workbench.importProjectFromJson(raw);
+                Navigator.of(dialogCtx).pop();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).clearSnackBars();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: bgSurface,
+                    behavior: SnackBarBehavior.floating,
+                    content: Text(
+                      importedId != null
+                          ? 'Restored project "${workbench.activeProject?.title ?? 'Imported Project'}" from JSON ✓'
+                          : 'Invalid .layers.json payload — could not import project.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: importedId != null
+                            ? accentGreen
+                            : AppTheme.accentRedFor(isDark),
+                      ),
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.restore_page_outlined, size: 14),
+              label: Text(
+                'Import & Switch',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentAmber,
+                foregroundColor: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      ctrl.dispose();
+    }
   }
 }
