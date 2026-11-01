@@ -105,10 +105,10 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                           ? '00 · PITCH & CONCEPT · ${intake.workingTitle.toUpperCase()}'
                           : '00 · PITCH & CONCEPT',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 0.8,
-                        color: textSecondary,
+                        color: isDark ? const Color(0xFF646D7D) : textMuted,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -156,22 +156,17 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                             ),
                           ),
                       ],
-                      child: Container(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: borderSubtle),
+                          horizontal: 6,
+                          vertical: 4,
                         ),
                         child: Text(
                           'Saved Projects ▾',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11.5,
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: textSecondary,
+                            color: isDark ? const Color(0xFF9CA3AF) : textSecondary,
                           ),
                         ),
                       ),
@@ -340,25 +335,24 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                         ),
                         if (_sparkUndoStack.isNotEmpty && !isBusy) ...[
                           const SizedBox(width: 10),
-                          OutlinedButton(
+                          InkWell(
                             key: const ValueKey('spark_undo_btn'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: textSecondary,
-                              side: BorderSide(color: borderSubtle),
+                            onTap: revertUndo,
+                            borderRadius: BorderRadius.circular(5),
+                            child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
+                                horizontal: 8,
+                                vertical: 6,
                               ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(7),
-                              ),
-                            ),
-                            onPressed: revertUndo,
-                            child: Text(
-                              'Undo',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                              child: Text(
+                                'Undo',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? const Color(0xFF9CA3AF)
+                                      : textSecondary,
+                                ),
                               ),
                             ),
                           ),
@@ -416,7 +410,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
               ),
             ),
 
-            // ── Separated Primary Stage-Gate CTA (Outside & Below the Composer Card) ──
+            // ── Separated Primary Stage-Gate CTA (10% Emerald Primary Action) ──
             Padding(
               padding: const EdgeInsets.only(top: 18),
               child: Align(
@@ -424,8 +418,8 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                 child: ElevatedButton(
                   key: const ValueKey('direct_generate_blueprint_btn'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: textPrimary,
-                    foregroundColor: bgBase,
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: const Color(0xFF06281E),
                     disabledBackgroundColor:
                         textMuted.withValues(alpha: 0.22),
                     disabledForegroundColor:
@@ -435,7 +429,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                       vertical: 15,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     elevation: 0,
                   ),
@@ -447,13 +441,14 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (isBusy) ...[
-                        SizedBox(
+                        const SizedBox(
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(bgBase),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFF06281E),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),

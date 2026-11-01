@@ -166,41 +166,22 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.auto_awesome_rounded,
-                          color: accentCyan,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 7),
                         Text(
                           'PROGRESSIVE RELEASE CO-PILOT · ${nextVer.toUpperCase()}',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 0.7,
-                            color: accentCyan,
+                            color: textMuted,
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accentEmerald.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: accentEmerald.withValues(alpha: 0.45),
-                            ),
-                          ),
-                          child: Text(
-                            '$prevVer 100% SHIPPED ✓',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: accentEmerald,
-                            ),
+                        Text(
+                          '·  $prevVer 100% SHIPPED ✓',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: textSecondary,
                           ),
                         ),
                       ],
@@ -220,7 +201,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                     ),
                     const SizedBox(height: 8),
                     Wrap(
-                      spacing: 6,
+                      spacing: 8,
                       runSpacing: 6,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
@@ -228,7 +209,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                           'TARGET PHASE:',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 0.7,
                             color: textMuted,
                           ),
@@ -251,7 +232,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 key: ValueKey(
                                   'progressive_phase_pill_${phase.name}',
                                 ),
-                                borderRadius: BorderRadius.circular(5),
+                                borderRadius: BorderRadius.circular(4),
                                 onTap: widget.workbench.isAgentBusy
                                     ? null
                                     : () async {
@@ -262,18 +243,17 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                       },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                                    horizontal: 6,
+                                    vertical: 3,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? accentCyan.withValues(alpha: 0.14)
-                                        : bgRecessed,
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? accentCyan.withValues(alpha: 0.55)
-                                          : borderSubtle,
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: isSelected
+                                            ? textPrimary
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
                                     ),
                                   ),
                                   child: Text(
@@ -281,10 +261,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 9.5,
                                       fontWeight: isSelected
-                                          ? FontWeight.w800
-                                          : FontWeight.w600,
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
                                       color: isSelected
-                                          ? accentCyan
+                                          ? textPrimary
                                           : textSecondary,
                                     ),
                                   ),
@@ -297,27 +277,20 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             final activePhase = widget.workbench.currentPhase;
                             if (activePhase == ProductionPhase.mvp) {
                               final cov = widget.workbench.mvpBeatCoverage();
-                              return Container(
+                              return Padding(
                                 key: const ValueKey(
                                   'progressive_phase_coverage_badge',
                                 ),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: accentAmber.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: accentAmber.withValues(alpha: 0.45),
-                                  ),
+                                  horizontal: 6,
+                                  vertical: 2,
                                 ),
                                 child: Text(
                                   'MVP COVERAGE: ${cov.coveredBeats}/${cov.totalBeats} EPICS',
                                   style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: accentAmber,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
                                   ),
                                 ),
                               );
@@ -325,27 +298,20 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 ProductionPhase.verticalSlice) {
                               final cov =
                                   widget.workbench.verticalSliceBeatCoverage();
-                              return Container(
+                              return Padding(
                                 key: const ValueKey(
                                   'progressive_phase_coverage_badge',
                                 ),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: accentCyan.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: accentCyan.withValues(alpha: 0.45),
-                                  ),
+                                  horizontal: 6,
+                                  vertical: 2,
                                 ),
                                 child: Text(
                                   'SLICE COVERAGE: ${cov.polishedBeats}/${cov.totalBeats} EPICS',
                                   style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: accentCyan,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
                                   ),
                                 ),
                               );
@@ -361,26 +327,15 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (bp != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bgRecessed,
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(color: borderSubtle),
-                        ),
-                        child: Text(
-                          '${bp.totalIncludedHours}h in $nextVer · ${upgradeCount + newCount} Active Features',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: accentEmerald,
-                          ),
+                      Text(
+                        '${bp.totalIncludedHours}h in $nextVer · ${upgradeCount + newCount} Active Features',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                     ],
                     TextButton(
                       onPressed: () =>
@@ -399,7 +354,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       key: const ValueKey('confirm_progressive_release_btn'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: accentEmerald,
-                        foregroundColor: const Color(0xFF052E16),
+                        foregroundColor: isDark
+                            ? const Color(0xFF06281E)
+                            : Colors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -415,7 +372,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                         'Approve & Build $nextVer →',
                         style: GoogleFonts.inter(
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -443,7 +400,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             color: bgSurface,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: accentCyan.withValues(alpha: 0.45),
+                              color: borderBright,
                             ),
                           ),
                           child: Column(
@@ -456,7 +413,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                     height: 16,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: accentCyan,
+                                      color: textPrimary,
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -467,7 +424,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
-                                        color: accentCyan,
+                                        color: textPrimary,
                                       ),
                                     ),
                                   ),
@@ -618,54 +575,24 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         MainAxisAlignment.spaceBetween,
                                     children: [
                                       Flexible(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Container(
-                                              width: 7,
-                                              height: 7,
-                                              decoration: BoxDecoration(
-                                                color: accentCyan,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Flexible(
-                                              child: Text(
-                                                'AGENT ARCHITECTURAL RECOMMENDATION · ${nextVer.toUpperCase()} (${widget.workbench.activePhaseBadgeLabel})',
-                                                overflow: TextOverflow.ellipsis,
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w800,
-                                                  letterSpacing: 0.6,
-                                                  color: textSecondary,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                        child: Text(
+                                          'AGENT ARCHITECTURAL RECOMMENDATION · ${nextVer.toUpperCase()} (${widget.workbench.activePhaseBadgeLabel})',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.6,
+                                            color: textMuted,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: bgRecessed,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border:
-                                              Border.all(color: borderSubtle),
-                                        ),
-                                        child: Text(
-                                          '${upgradeCount + newCount} Active Changes · ${bp.totalIncludedHours}h',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                            color: textPrimary,
-                                          ),
+                                      Text(
+                                        '${upgradeCount + newCount} Active Changes · ${bp.totalIncludedHours}h',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: textSecondary,
                                         ),
                                       ),
                                     ],
@@ -690,8 +617,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           '✓ DONE WHEN → ',
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: accentEmerald,
+                                            fontWeight: FontWeight.w700,
+                                            color: textSecondary,
                                           ),
                                         ),
                                         Expanded(
@@ -737,28 +664,14 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                         const EdgeInsets.only(
                                                           top: 2,
                                                         ),
-                                                    child: RichText(
-                                                      text: TextSpan(
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: textMuted,
-                                                        ),
-                                                        children: [
-                                                          TextSpan(
-                                                            text: '✓ ',
-                                                            style: TextStyle(
-                                                              color:
-                                                                  accentEmerald,
-                                                            ),
-                                                          ),
-                                                          TextSpan(
-                                                            text:
-                                                                'BUILT (≤$prevVer)',
-                                                          ),
-                                                        ],
+                                                    child: Text(
+                                                      '✓ BUILT (≤$prevVer)',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: textMuted,
                                                       ),
                                                     ),
                                                   ),
@@ -766,37 +679,18 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                   child: Wrap(
-                                                    spacing: 6,
+                                                    spacing: 10,
                                                     runSpacing: 6,
                                                     children: [
                                                       for (final chip
                                                           in builtChips.take(8))
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 3,
-                                                              ),
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: bgSurface,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  4,
-                                                                ),
-                                                            border: Border.all(
-                                                              color:
-                                                                  borderSubtle,
-                                                            ),
-                                                          ),
-                                                          child: Text(
-                                                            '✓ $chip',
-                                                            style: GoogleFonts
-                                                                .inter(
-                                                              fontSize: 11.5,
-                                                              color:
-                                                                  textSecondary,
-                                                            ),
+                                                        Text(
+                                                          '✓ $chip',
+                                                          style: GoogleFonts
+                                                              .inter(
+                                                            fontSize: 11.5,
+                                                            color:
+                                                                textSecondary,
                                                           ),
                                                         ),
                                                     ],
@@ -828,27 +722,14 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                         const EdgeInsets.only(
                                                           top: 2,
                                                         ),
-                                                    child: RichText(
-                                                      text: TextSpan(
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: textMuted,
-                                                        ),
-                                                        children: [
-                                                          TextSpan(
-                                                            text: '⚠ ',
-                                                            style: TextStyle(
-                                                              color:
-                                                                  accentAmber,
-                                                            ),
-                                                          ),
-                                                          const TextSpan(
-                                                            text: 'LACKING NOW',
-                                                          ),
-                                                        ],
+                                                    child: Text(
+                                                      'LACKING NOW',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: textMuted,
                                                       ),
                                                     ),
                                                   ),
@@ -932,38 +813,16 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                 children: [
                                                                   if (epicTag !=
                                                                       null) ...[
-                                                                    Container(
-                                                                      padding: const EdgeInsets.symmetric(
-                                                                        horizontal:
-                                                                            5,
-                                                                        vertical:
-                                                                            1.5,
-                                                                      ),
-                                                                      decoration:
-                                                                          BoxDecoration(
+                                                                    Text(
+                                                                      epicTag,
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight.w700,
                                                                         color:
-                                                                            bgSurface,
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              3,
-                                                                            ),
-                                                                        border: Border.all(
-                                                                          color:
-                                                                              borderSubtle,
-                                                                        ),
-                                                                      ),
-                                                                      child:
-                                                                          Text(
-                                                                        epicTag,
-                                                                        style: GoogleFonts
-                                                                            .jetBrainsMono(
-                                                                          fontSize:
-                                                                              9.5,
-                                                                          fontWeight:
-                                                                              FontWeight.w700,
-                                                                          color:
-                                                                              textMuted,
-                                                                        ),
+                                                                            textMuted,
                                                                       ),
                                                                     ),
                                                                     const SizedBox(
@@ -1030,27 +889,14 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                         const EdgeInsets.only(
                                                           top: 5,
                                                         ),
-                                                    child: RichText(
-                                                      text: TextSpan(
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.w800,
-                                                          color: textPrimary,
-                                                        ),
-                                                        children: [
-                                                          TextSpan(
-                                                            text: '✦ ',
-                                                            style: TextStyle(
-                                                              color: accentCyan,
-                                                            ),
-                                                          ),
-                                                          TextSpan(
-                                                            text:
-                                                                'NEXT IN ${nextVer.toUpperCase()}',
-                                                          ),
-                                                        ],
+                                                    child: Text(
+                                                      'NEXT IN ${nextVer.toUpperCase()}',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: textPrimary,
                                                       ),
                                                     ),
                                                   ),
@@ -1077,11 +923,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                     .upgrade;
                                                             final isInc =
                                                                 f.included;
-                                                            final badgeColor = !isInc
-                                                                ? textMuted
-                                                                : (isUpg
-                                                                    ? accentAmber
-                                                                    : accentEmerald);
                                                             final cleanGoal = f
                                                                 .goal
                                                                 .trim()
@@ -1159,38 +1000,14 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                         child:
                                                                             Row(
                                                                           children: [
-                                                                            Container(
-                                                                              padding: const EdgeInsets.symmetric(
-                                                                                horizontal:
-                                                                                    5,
-                                                                                vertical:
-                                                                                    1.5,
-                                                                              ),
-                                                                              decoration:
-                                                                                  BoxDecoration(
-                                                                                color: badgeColor.withValues(
-                                                                                  alpha: 0.14,
-                                                                                ),
-                                                                                borderRadius:
-                                                                                    BorderRadius.circular(
-                                                                                      3,
-                                                                                    ),
-                                                                                border: Border.all(
-                                                                                  color: badgeColor.withValues(
-                                                                                    alpha: 0.35,
-                                                                                  ),
-                                                                                ),
-                                                                              ),
-                                                                              child:
-                                                                                  Text(
-                                                                                !isInc
-                                                                                    ? 'DEFERRED'
-                                                                                    : (isUpg ? '↻ UPGRADE' : '+ NEW'),
-                                                                                style: GoogleFonts.jetBrainsMono(
-                                                                                  fontSize: 9,
-                                                                                  fontWeight: FontWeight.w800,
-                                                                                  color: badgeColor,
-                                                                                ),
+                                                                            Text(
+                                                                              !isInc
+                                                                                  ? 'DEFERRED'
+                                                                                  : (isUpg ? '↻ UPGRADE' : '+ NEW'),
+                                                                              style: GoogleFonts.jetBrainsMono(
+                                                                                fontSize: 9.5,
+                                                                                fontWeight: FontWeight.w700,
+                                                                                color: isInc ? textSecondary : textMuted,
                                                                               ),
                                                                             ),
                                                                             const SizedBox(
@@ -1347,18 +1164,18 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                                 child: Container(
                                                                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                                                   decoration: BoxDecoration(
-                                                                                    color: isSelBeat ? accentCyan.withValues(alpha: 0.16) : bgSurface,
+                                                                                    color: isSelBeat ? bgRecessed : bgSurface,
                                                                                     borderRadius: BorderRadius.circular(4),
                                                                                     border: Border.all(
-                                                                                      color: isSelBeat ? accentCyan.withValues(alpha: 0.55) : borderSubtle,
+                                                                                      color: isSelBeat ? textPrimary.withValues(alpha: 0.45) : borderSubtle,
                                                                                     ),
                                                                                   ),
                                                                                   child: Text(
                                                                                     '$code · ${b.title}',
                                                                                     style: GoogleFonts.jetBrainsMono(
                                                                                       fontSize: 9.5,
-                                                                                      fontWeight: isSelBeat ? FontWeight.w800 : FontWeight.w600,
-                                                                                      color: isSelBeat ? accentCyan : textMuted,
+                                                                                      fontWeight: isSelBeat ? FontWeight.w700 : FontWeight.w500,
+                                                                                      color: isSelBeat ? textPrimary : textMuted,
                                                                                     ),
                                                                                   ),
                                                                                 ),
@@ -1479,7 +1296,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                               FontWeight
                                                                                   .w700,
                                                                           color:
-                                                                              accentCyan,
+                                                                              textPrimary,
                                                                         ),
                                                                       ),
                                                                     ),
@@ -1594,9 +1411,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                         ),
                                                     border: Border.all(
                                                       color: isSelected
-                                                          ? accentCyan
+                                                          ? textPrimary
                                                               .withValues(
-                                                                alpha: 0.65,
+                                                                alpha: 0.55,
                                                               )
                                                           : borderSubtle,
                                                     ),
@@ -1619,9 +1436,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                               .jetBrainsMono(
                                                             fontSize: 11,
                                                             fontWeight:
-                                                                FontWeight.w800,
+                                                                FontWeight.w700,
                                                             color: isSelected
-                                                                ? accentCyan
+                                                                ? textPrimary
                                                                 : textMuted,
                                                           ),
                                                         ),
@@ -1655,35 +1472,16 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                   const SizedBox(
                                                                     width: 8,
                                                                   ),
-                                                                  Container(
-                                                                    padding: const EdgeInsets.symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                      vertical:
-                                                                          1.5,
-                                                                    ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: accentCyan.withValues(
-                                                                        alpha:
-                                                                            0.14,
-                                                                      ),
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                            4,
-                                                                          ),
-                                                                    ),
-                                                                    child: Text(
-                                                                      'Recommended',
-                                                                      style: GoogleFonts
-                                                                          .jetBrainsMono(
-                                                                        fontSize:
-                                                                            9,
-                                                                        fontWeight:
-                                                                            FontWeight.w700,
-                                                                        color:
-                                                                            accentCyan,
-                                                                      ),
+                                                                  Text(
+                                                                    '(Recommended)',
+                                                                    style: GoogleFonts
+                                                                        .jetBrainsMono(
+                                                                      fontSize:
+                                                                          9.5,
+                                                                      fontWeight:
+                                                                          FontWeight.w600,
+                                                                      color:
+                                                                          textMuted,
                                                                     ),
                                                                   ),
                                                                 ],
@@ -1764,10 +1562,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                     'progressive_release_ask_agent_btn',
                                   ),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: accentCyan,
+                                    foregroundColor: textPrimary,
                                     backgroundColor: bgRecessed,
                                     side: BorderSide(
-                                      color: accentCyan.withValues(alpha: 0.5),
+                                      color: borderBright,
                                     ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 14,
@@ -1849,17 +1647,15 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             borderRadius:
                                                 BorderRadius.circular(5),
                                             border: Border.all(
-                                              color: accentAmber.withValues(
-                                                alpha: 0.45,
-                                              ),
+                                              color: borderSubtle,
                                             ),
                                           ),
                                           child: Text(
                                             '+ Promote: ${bp.explicitExclusions[eIdx]}',
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 10.5,
-                                              fontWeight: FontWeight.w700,
-                                              color: accentAmber,
+                                              fontWeight: FontWeight.w600,
+                                              color: textSecondary,
                                             ),
                                           ),
                                         ),
@@ -1935,11 +1731,11 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
         backgroundColor: bgSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: accentEmerald.withValues(alpha: 0.6)),
+          side: BorderSide(color: borderBright),
         ),
         title: Row(
           children: [
-            Icon(Icons.rocket_launch_rounded, color: accentEmerald, size: 18),
+            Icon(Icons.rocket_launch_rounded, color: textPrimary, size: 18),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -1974,9 +1770,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    buildStatCol('${beats.length}', 'CORE EPICS', accentEmerald),
-                    buildStatCol('${allFeats.length}', 'FEATURES', accentAmber),
-                    buildStatCol('$totalTasks', 'BUILD TASKS', accentEmerald),
+                    buildStatCol('${beats.length}', 'CORE EPICS', textPrimary),
+                    buildStatCol('${allFeats.length}', 'FEATURES', textPrimary),
+                    buildStatCol('$totalTasks', 'BUILD TASKS', textPrimary),
                     buildStatCol('$totalStepsDone', 'STEPS DONE', textPrimary),
                   ],
                 ),
@@ -1996,8 +1792,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       'AGENT RETROSPECTIVE · PLAYTEST HARDENING & CARRYOVER',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: accentAmber,
+                        fontWeight: FontWeight.w700,
+                        color: textMuted,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -2016,7 +1812,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                           style: GoogleFonts.inter(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: accentAmber,
+                            color: textPrimary,
                           ),
                         ),
                       ),
@@ -2036,8 +1832,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: focalAccent,
-              foregroundColor: focalAccentFg,
+              backgroundColor: accentEmerald,
+              foregroundColor:
+                  isDark ? const Color(0xFF06281E) : Colors.white,
               elevation: 0,
             ),
             onPressed: () {
@@ -2047,7 +1844,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
             icon: const Icon(Icons.auto_awesome_rounded, size: 15),
             label: Text(
               '+ New Release (${widget.workbench.nextProgressiveVersionLabel}) ✦',
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -2172,23 +1969,12 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: bgRecessed,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: borderSubtle),
-                      ),
-                      child: Text(
-                        '$phaseBadge · $verTag',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          color: accentCyan,
-                        ),
+                    Text(
+                      '$phaseBadge · $verTag',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: textMuted,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -2197,7 +1983,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                         '$verTag Release Plan — $displayName',
                         style: GoogleFonts.inter(
                           fontSize: 15,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           color: textPrimary,
                         ),
                       ),
@@ -2207,7 +1993,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                 if (selectableReleases.length > 1) ...[
                   const SizedBox(height: 10),
                   Wrap(
-                    spacing: 6,
+                    spacing: 8,
                     runSpacing: 6,
                     children: [
                       for (final r in selectableReleases)
@@ -2220,7 +2006,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             final isSel = r.id == rel.id;
                             return InkWell(
                               key: ValueKey('saved_plan_tab_${r.id}'),
-                              borderRadius: BorderRadius.circular(5),
+                              borderRadius: BorderRadius.circular(4),
                               onTap: () {
                                 setModalState(() {
                                   selectedRel = r;
@@ -2228,18 +2014,17 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
+                                  horizontal: 6,
+                                  vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: isSel
-                                      ? accentCyan.withValues(alpha: 0.14)
-                                      : bgRecessed,
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: isSel
-                                        ? accentCyan.withValues(alpha: 0.55)
-                                        : borderSubtle,
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: isSel
+                                          ? textPrimary
+                                          : Colors.transparent,
+                                      width: 2,
+                                    ),
                                   ),
                                 ),
                                 child: Text(
@@ -2247,9 +2032,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9.5,
                                     fontWeight: isSel
-                                        ? FontWeight.w800
-                                        : FontWeight.w600,
-                                    color: isSel ? accentCyan : textSecondary,
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isSel ? textPrimary : textSecondary,
                                   ),
                                 ),
                               ),
@@ -2431,10 +2216,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                           row.badge,
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: row.badge.startsWith('+')
-                                ? accentEmerald
-                                : accentAmber,
+                            fontWeight: FontWeight.w600,
+                            color: textSecondary,
                           ),
                         ),
                       ],

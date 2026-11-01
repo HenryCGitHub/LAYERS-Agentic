@@ -351,7 +351,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     Widget buildAreaPill({
       required String label,
       required bool active,
-      required Color activeColor,
     }) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -369,7 +368,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     Widget buildSectionHeader({
       required String title,
       required String whereBadge,
-      required Color accentColor,
     }) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -421,7 +419,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top Bar: 3 Engine-Specific Area Status Pills + 1-Click Copy / Edit
+          // Top Bar: 3 Engine-Specific Area Status Labels + 1-Click Copy / Edit
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 14,
@@ -445,17 +443,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       buildAreaPill(
                         label: '1. $area1Title',
                         active: hasComp,
-                        activeColor: accentCyan,
                       ),
                       buildAreaPill(
                         label: '2. $area2Title',
                         active: hasInsp,
-                        activeColor: accentViolet,
                       ),
                       buildAreaPill(
                         label: '3. $area3Title',
                         active: hasCode,
-                        activeColor: accentEmerald,
                       ),
                     ],
                   ),
@@ -464,46 +459,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Tooltip(
-                      message:
-                          'On-demand gemini-flash-latest pass: adapt 3-Area Hierarchy, Inspector & Code to exact project variables and prior checkpoints',
-                      child: InkWell(
-                        key: const ValueKey('ai_adapt_three_area_btn'),
-                        onTap: widget.workbench.isSynthesizingFeatureSteps(feat.id)
-                            ? null
-                            : () {
-                                widget.workbench.synthesizeFeatureHowToStepsWithAi(
-                                  feat.id,
-                                  forceRefresh: true,
-                                  unrealCppMode: _unrealCppMode,
-                                );
-                              },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 2,
-                          ),
-                          child: Text(
-                            widget.workbench.isSynthesizingFeatureSteps(feat.id)
-                                ? '✦ Adapting...'
-                                : '✦ AI Adapt',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: accentAmber,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '·',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        color: textMuted,
-                      ),
-                    ),
                     InkWell(
                       key: ValueKey(
                         'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
@@ -523,8 +478,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           '⧉ Copy',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: accentCyan,
+                            fontWeight: FontWeight.w600,
+                            color: textSecondary,
                           ),
                         ),
                       ),
@@ -602,7 +557,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   buildSectionHeader(
                     title: area1Title,
                     whereBadge: compWhere ?? stepPath,
-                    accentColor: accentCyan,
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -645,7 +599,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   buildSectionHeader(
                     title: area2Title,
                     whereBadge: inspWhere,
-                    accentColor: accentViolet,
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -765,7 +718,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 buildSectionHeader(
                   title: area3Title,
                   whereBadge: codeWhere ?? stepPath,
-                  accentColor: accentEmerald,
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(

@@ -10,9 +10,6 @@ extension _ShellDialogsExt on WorkbenchShell {
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
-    final focalAccent = AppTheme.focalAccentFor(isDark);
-    final focalAccentFg = AppTheme.focalAccentFgFor(isDark);
-    final accentEmerald = AppTheme.accentGreenFor(isDark);
     final accentAmber = AppTheme.accentAmberFor(isDark);
 
     final collabEmailCtrl = TextEditingController();
@@ -41,7 +38,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                       Icon(
                         isSynced ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
                         size: 18,
-                        color: isSynced ? accentEmerald : textSecondary,
+                        color: isSynced ? textPrimary : textSecondary,
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -100,9 +97,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                           color: bgRecessed,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: isSynced
-                                ? accentEmerald.withValues(alpha: 0.45)
-                                : borderSubtle,
+                            color: isSynced ? borderBright : borderSubtle,
                           ),
                         ),
                         child: Row(
@@ -112,7 +107,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                               height: 8,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: isSynced ? accentEmerald : accentAmber,
+                                color: isSynced ? textPrimary : textMuted,
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -185,7 +180,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w700,
-                                  color: accentEmerald,
+                                  color: textSecondary,
                                 ),
                               ),
                             ),
@@ -228,7 +223,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                                               : Icons.folder_outlined,
                                           size: 13,
                                           color: p.id == workbench.activeProjectId
-                                              ? accentEmerald
+                                              ? textPrimary
                                               : textMuted,
                                         ),
                                         const SizedBox(width: 7),
@@ -377,8 +372,8 @@ extension _ShellDialogsExt on WorkbenchShell {
                             ElevatedButton(
                               key: const ValueKey('invite_collaborator_btn'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: focalAccent,
-                                foregroundColor: focalAccentFg,
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: const Color(0xFF06281E),
                                 elevation: 0,
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 minimumSize: Size.zero,
@@ -397,7 +392,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                                 'Invite',
                                 style: GoogleFonts.inter(
                                   fontSize: 11.5,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
@@ -461,8 +456,8 @@ extension _ShellDialogsExt on WorkbenchShell {
                   ElevatedButton.icon(
                     key: const ValueKey('google_sign_in_modal_btn'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: focalAccent,
-                      foregroundColor: focalAccentFg,
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: const Color(0xFF06281E),
                       elevation: 0,
                     ),
                     onPressed: () async {
@@ -496,8 +491,6 @@ extension _ShellDialogsExt on WorkbenchShell {
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
-    final focalAccent = AppTheme.focalAccentFor(isDark);
-    final focalAccentFg = AppTheme.focalAccentFgFor(isDark);
     final accentAmber = AppTheme.accentAmberFor(isDark);
 
     final keyController = TextEditingController(text: workbench.apiKey);
@@ -516,26 +509,13 @@ extension _ShellDialogsExt on WorkbenchShell {
                 borderRadius: BorderRadius.circular(8),
                 side: BorderSide(color: borderBright),
               ),
-              title: Row(
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: accentAmber,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Antigravity Dual-Model AI Settings',
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: textPrimary,
-                    ),
-                  ),
-                ],
+              title: Text(
+                'Antigravity Dual-Model AI Settings',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: textPrimary,
+                ),
               ),
               content: SizedBox(
                 width: 480,
@@ -712,8 +692,8 @@ extension _ShellDialogsExt on WorkbenchShell {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: focalAccent,
-                    foregroundColor: focalAccentFg,
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: const Color(0xFF06281E),
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                     shape: RoundedRectangleBorder(
@@ -756,9 +736,6 @@ extension _ShellDialogsExt on WorkbenchShell {
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
-    final focalAccent = AppTheme.focalAccentFor(isDark);
-    final focalAccentFg = AppTheme.focalAccentFgFor(isDark);
-    final accentEmerald = AppTheme.accentGreenFor(isDark);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 7),
@@ -777,28 +754,13 @@ extension _ShellDialogsExt on WorkbenchShell {
           ),
           child: Row(
             children: [
-              Container(
-                width: 15,
-                height: 15,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? focalAccent : Colors.transparent,
-                  border: Border.all(
-                    color: isSelected ? focalAccent : textMuted,
-                    width: 1.4,
-                  ),
+              Text(
+                isSelected ? '●' : '○',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? textPrimary : textMuted,
                 ),
-                child: isSelected
-                    ? Container(
-                        width: 5,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: focalAccentFg,
-                        ),
-                      )
-                    : null,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -826,20 +788,12 @@ extension _ShellDialogsExt on WorkbenchShell {
               ),
               if (isRecommended) ...[
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: accentEmerald.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: accentEmerald.withValues(alpha: 0.42)),
-                  ),
-                  child: Text(
-                    'RECOMMENDED',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w700,
-                      color: accentEmerald,
-                    ),
+                Text(
+                  'RECOMMENDED',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: textSecondary,
                   ),
                 ),
               ],
@@ -857,6 +811,7 @@ extension _ShellDialogsExt on WorkbenchShell {
     final isDark = workbench.isDark;
     final bgSurface = AppTheme.bgSurfaceFor(isDark);
     final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
     final ctrl = TextEditingController(text: proj.title);
     final newTitle = await showDialog<String>(
       context: context,
@@ -879,11 +834,22 @@ extension _ShellDialogsExt on WorkbenchShell {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(rCtx).pop(),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: const Color(0xFF06281E),
+              elevation: 0,
+            ),
             onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
-            child: const Text('Save'),
+            child: Text(
+              'Save',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),

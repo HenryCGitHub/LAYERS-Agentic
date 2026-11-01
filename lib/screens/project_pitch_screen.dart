@@ -141,7 +141,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final TextEditingController _sparkController = TextEditingController();
   final TextEditingController _agentPromptController = TextEditingController();
   final FocusNode _sparkFocusNode = FocusNode();
-  final FocusNode _conceptChatFocusNode = FocusNode();
   final List<String> _sparkUndoStack = <String>[];
 
   KeyEventResult _handleMultilinePitchKeyEvent(
@@ -177,13 +176,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final Map<int, int?> _selectedOptionBySection = {};
   final Map<int, Set<int>> _selectedOptionsBySection = {};
   final Map<int, dynamic> _initialSectionDefaults = {};
-  final Map<int, String> _agentNotesBySection = {};
 
   /// Step 10 Full Review hover, Bento focus, & single-open Refine drawer state.
   int? _hoveredReviewSectionIdx;
   int? _focusedBentoSectionIdx;
   int? _openRefineDrawerSectionIdx;
-  final TextEditingController _drawerSteerController = TextEditingController();
 
   /// Inline Click-to-Edit state (Upgrade 2: replaces popup AlertDialogs across Stage 1).
   String? _activeInlineEditKey;
@@ -351,9 +348,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     _sparkController.dispose();
     _agentPromptController.dispose();
     _inlineItemEditController.dispose();
-    _drawerSteerController.dispose();
     _sparkFocusNode.dispose();
-    _conceptChatFocusNode.dispose();
     super.dispose();
   }
 
@@ -457,8 +452,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         setState(() {
           _selectedOptionsBySection.remove(sectionIdx);
           _selectedOptionBySection.remove(sectionIdx);
-          _agentNotesBySection[sectionIdx] =
-              'Cleared selections — restored default ${sec.title}.';
         });
         return;
       }
@@ -473,11 +466,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
         currentSet,
         opts,
       );
-      if (!mounted) return;
-      setState(() {
-        _agentNotesBySection[sectionIdx] =
-            'Combined ${currentSet.length} selected option(s) into ${sec.title} ✓';
-      });
       return;
     }
 
@@ -486,8 +474,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _restoreSectionDefault(draft, sectionIdx);
       setState(() {
         _selectedOptionBySection.remove(sectionIdx);
-        _agentNotesBySection[sectionIdx] =
-            'Unselected option — restored default ${sec.title}.';
       });
       return;
     }
@@ -498,8 +484,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     if (!mounted) return;
     setState(() {
       _selectedOptionBySection[sectionIdx] = optIdx;
-      _agentNotesBySection[sectionIdx] =
-          'Agent updated ${sec.title}: Applied "$optionText".';
     });
   }
 
@@ -674,73 +658,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     await widget.workbench.sendConceptChatMessage(
       '[Section ${sec.numLabel} ${sec.title}] $text',
     );
-    if (!mounted) return;
-    setState(() {
-      _agentNotesBySection[sectionIdx] =
-          'Agent updated ${sec.title} based on your direction: "$text"';
-    });
-  }
-
-  Future<void> _copyBlueprintAsMarkdown(ProjectConceptBlueprint draft) async {
-    final buf = StringBuffer()
-      ..writeln('# ${draft.title} — Project Concept Blueprint')
-      ..writeln()
-      ..writeln('## 01. Goal')
-      ..writeln('> ${draft.goal}')
-      ..writeln()
-      ..writeln('## 02. Game Spec')
-      ..writeln('- **Camera View:** ${draft.gameSpec.isNotEmpty ? draft.gameSpec[0] : "—"}')
-      ..writeln('- **Controls:** ${draft.gameSpec.length > 1 ? draft.gameSpec[1] : "—"}')
-      ..writeln('- **Player Mode:** ${draft.gameSpec.length > 2 ? draft.gameSpec[2] : "—"}')
-      ..writeln('- **Arena Structure:** ${draft.gameSpec.length > 3 ? draft.gameSpec[3] : "—"}')
-      ..writeln()
-      ..writeln('## 03. Tech Spec')
-      ..writeln('- **Engine:** ${draft.techSpec.isNotEmpty ? draft.techSpec[0] : "—"}')
-      ..writeln('- **Platform:** ${draft.techSpec.length > 1 ? draft.techSpec[1] : "—"}')
-      ..writeln('- **Asset Pipeline:** ${draft.techSpec.length > 2 ? draft.techSpec[2] : "—"}')
-      ..writeln('- **Network / Save:** ${draft.techSpec.length > 3 ? draft.techSpec[3] : "—"}')
-      ..writeln()
-      ..writeln('## 04. Design Pillars');
-    for (int i = 0; i < draft.designPillars.length; i++) {
-      buf.writeln('- **P·${(i + 1).toString().padLeft(2, '0')}:** ${draft.designPillars[i]}');
-    }
-    buf
-      ..writeln()
-      ..writeln('## 05. Trade-Offs (X over Y)');
-    for (final t in draft.tradeOffs) {
-      buf.writeln('- ✓ $t');
-    }
-    buf
-      ..writeln()
-      ..writeln('## 06. In Scope: Core Loop Beats');
-    for (int i = 0; i < draft.coreLoopBeats.length; i++) {
-      buf.writeln('- **BEAT·${(i + 1).toString().padLeft(2, '0')}:** ${draft.coreLoopBeats[i]}');
-    }
-    buf
-      ..writeln()
-      ..writeln('## 07. Out of Scope (Exclusions)');
-    for (final c in draft.exclusions) {
-      buf.writeln('- [CUT] $c');
-    }
-    buf
-      ..writeln()
-      ..writeln('## 08. Done When')
-      ..writeln('> ${draft.doneWhen}')
-      ..writeln()
-      ..writeln('## 09. Progressive Releases (v0.1 → v0.2+)');
-    for (final r in draft.releaseTrainTitles) {
-      buf.writeln('- $r');
-    }
-
-    await Clipboard.setData(ClipboardData(text: buf.toString()));
-    if (!mounted) return;
-    AppToast.show(
-      context,
-      'Copied Project Concept Blueprint as Markdown',
-      icon: Icons.check_circle_outline,
-      isDark: isDark,
-      accentColor: accentEmerald,
-    );
   }
 
   List<String> _kvPresetsForCell(bool isGameSpec, int cellIndex) {
@@ -813,7 +730,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _selectedOptionBySection.clear();
       _selectedOptionsBySection.clear();
       _initialSectionDefaults.clear();
-      _agentNotesBySection.clear();
       _hoveredReviewSectionIdx = null;
       _focusedBentoSectionIdx = null;
       _openRefineDrawerSectionIdx = null;
@@ -821,7 +737,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       _sparkController.clear();
       _sparkUndoStack.clear();
       _agentPromptController.clear();
-      _drawerSteerController.clear();
     }
 
     final draft = widget.workbench.conceptDraft;

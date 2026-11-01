@@ -77,18 +77,14 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
             key: ValueKey('stage1_inline_save_btn_$editKey'),
             onTap: commitSave,
             borderRadius: BorderRadius.circular(5),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: _secT1Primary,
-                borderRadius: BorderRadius.circular(5),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Text(
                 '✓ Save',
                 style: GoogleFonts.inter(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
-                  color: bgBase,
+                  color: _secT1Primary,
                 ),
               ),
             ),
@@ -150,24 +146,17 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           constraints: BoxConstraints(maxWidth: _measureColumnMaxWidth),
           child: Row(
             children: [
-              // Active Scope Badge (All 01–09 or Focused Section)
+              // Active Scope Badge (All 01–09 or Focused Section) — Plain Borderless Text
               InkWell(
                 key: const ValueKey('bento_dock_scope_badge'),
                 onTap: focusedSec == null
                     ? null
                     : () => _rebuild(() => _focusedBentoSectionIdx = null),
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
+                borderRadius: BorderRadius.circular(5),
+                child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: focusedSec != null ? _secT1Primary : bgSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: focusedSec != null ? _secT1Primary : borderSubtle,
-                    ),
+                    horizontal: 8,
+                    vertical: 6,
                   ),
                   child: Text(
                     focusedSec != null
@@ -175,8 +164,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                         : '✦ AI Ready',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: focusedSec != null ? bgBase : _secT3Label,
+                      fontWeight:
+                          focusedSec != null ? FontWeight.w700 : FontWeight.w500,
+                      color: focusedSec != null ? _secT1Primary : _secT3Label,
                     ),
                   ),
                 ),
@@ -262,19 +252,16 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
   // ── Tailored Single-Column Section Content (01..08) ────────────────────────
   Widget _buildSectionContentWidget(
     ProjectConceptBlueprint draft,
-    int sectionIdx, {
-    bool isReadOnlySummary = false,
-  }) {
+    int sectionIdx,
+  ) {
     switch (sectionIdx) {
       case 0: // 01 Goal — Lead Sentence + Aligned 2-Column Verb Clauses
         return _buildStructuredGoalSection(
           draft,
-          onEditTap: isReadOnlySummary
-              ? null
-              : () => _startInlineEdit(
-                    'goal',
-                    ProjectConceptBlueprint.sanitizeGoalText(draft.goal),
-                  ),
+          onEditTap: () => _startInlineEdit(
+            'goal',
+            ProjectConceptBlueprint.sanitizeGoalText(draft.goal),
+          ),
         );
       case 1: // 02 Game Spec — 4-Across Open Spec Strip
         return _buildKvSpecGrid(
@@ -289,7 +276,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           values: draft.techSpec,
         );
       case 3: // 04 Design Pillars — 2-Column Split (Bold Left Title | Right Description)
-        return _buildDesignPillarCards(draft, isReadOnlySummary: isReadOnlySummary);
+        return _buildDesignPillarCards(draft);
       case 4: // 05 Trade-Offs — Aligned 3-Column Comparison (Priority X | OVER | Priority Y)
         return _buildTradeOffSplitBars(
           draft.tradeOffs,
@@ -298,17 +285,15 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
             next[i] = val;
             d.tradeOffs = next;
           }),
-          onDeleteItem: (!isReadOnlySummary && draft.tradeOffs.length > 1)
+          onDeleteItem: draft.tradeOffs.length > 1
               ? (i) => widget.workbench.updateConceptDraft((d) {
                     final next = List<String>.from(d.tradeOffs)..removeAt(i);
                     d.tradeOffs = next;
                   })
               : null,
-          onAddSave: isReadOnlySummary
-              ? null
-              : (val) => widget.workbench.updateConceptDraft((d) {
-                    d.tradeOffs = [...d.tradeOffs, val];
-                  }),
+          onAddSave: (val) => widget.workbench.updateConceptDraft((d) {
+            d.tradeOffs = [...d.tradeOffs, val];
+          }),
         );
       case 5: // 06 Core Loop — Aligned E01..E0N Open Beat Rows
         return _buildIndexedRows(
@@ -320,7 +305,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
             next[i] = val;
             d.coreLoopBeats = next;
           }),
-          onReorderItem: (!isReadOnlySummary && draft.coreLoopBeats.length > 1)
+          onReorderItem: draft.coreLoopBeats.length > 1
               ? (oldIdx, newIdx) => widget.workbench.updateConceptDraft((d) {
                     if (newIdx < 0 || newIdx >= d.coreLoopBeats.length) return;
                     final next = List<String>.from(d.coreLoopBeats);
@@ -329,17 +314,15 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     d.coreLoopBeats = next;
                   })
               : null,
-          onDeleteItem: (!isReadOnlySummary && draft.coreLoopBeats.length > 1)
+          onDeleteItem: draft.coreLoopBeats.length > 1
               ? (i) => widget.workbench.updateConceptDraft((d) {
                     final next = List<String>.from(d.coreLoopBeats)..removeAt(i);
                     d.coreLoopBeats = next;
                   })
               : null,
-          onAddSave: isReadOnlySummary
-              ? null
-              : (val) => widget.workbench.updateConceptDraft((d) {
-                    d.coreLoopBeats = [...d.coreLoopBeats, val];
-                  }),
+          onAddSave: (val) => widget.workbench.updateConceptDraft((d) {
+            d.coreLoopBeats = [...d.coreLoopBeats, val];
+          }),
         );
       case 6: // 07 Out of Scope — 2-Column Grid of Open Exclusions
         return _buildCutGuardrailChips(
@@ -349,23 +332,20 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
             next[i] = val;
             d.exclusions = next;
           }),
-          onDeleteItem: (!isReadOnlySummary && draft.exclusions.length > 1)
+          onDeleteItem: draft.exclusions.length > 1
               ? (i) => widget.workbench.updateConceptDraft((d) {
                     final next = List<String>.from(d.exclusions)..removeAt(i);
                     d.exclusions = next;
                   })
               : null,
-          onAddSave: isReadOnlySummary
-              ? null
-              : (val) => widget.workbench.updateConceptDraft((d) {
-                    d.exclusions = [...d.exclusions, val];
-                  }),
+          onAddSave: (val) => widget.workbench.updateConceptDraft((d) {
+            d.exclusions = [...d.exclusions, val];
+          }),
         );
       case 7: // 08 Done When — Open Playtest Gate Statement
       default:
         return _buildCalloutStatement(
           draft.doneWhen,
-          highlightMetrics: true,
           onEditTap: () => _startInlineEdit('done_when', draft.doneWhen),
         );
     }
@@ -494,10 +474,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return clean;
   }
 
-  // ── 08 Done When: Concise Messaging Verification Sentence (10% Gate Bar) ──
+  // ── 08 Done When: Concise Messaging Verification Sentence ──
   Widget _buildCalloutStatement(
     String statement, {
-    required bool highlightMetrics,
     VoidCallback? onEditTap,
   }) {
     if (_activeInlineEditKey == 'done_when') {
@@ -823,10 +802,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
   }
 
   // ── 04 Design Pillars: Aligned Indexed Hairline Rows (01..0N) ─────────────
-  Widget _buildDesignPillarCards(
-    ProjectConceptBlueprint draft, {
-    bool isReadOnlySummary = false,
-  }) {
+  Widget _buildDesignPillarCards(ProjectConceptBlueprint draft) {
     final pillars = draft.designPillars;
 
     Widget buildPillarRow(int idx) {
@@ -891,7 +867,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 Expanded(
                   child: _buildFormattedLeadInText('$title: $body'),
                 ),
-                if (!isReadOnlySummary && pillars.length > 1) ...[
+                if (pillars.length > 1) ...[
                   const SizedBox(width: 8),
                   InkWell(
                     onTap: () => widget.workbench.updateConceptDraft((d) {
@@ -927,7 +903,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < pillars.length; i++) buildPillarRow(i),
-        if (!isReadOnlySummary && _activeInlineEditKey == 'add_pillar') ...[
+        if (_activeInlineEditKey == 'add_pillar') ...[
           const SizedBox(height: 10),
           _buildInlineEditorBox(
             editKey: 'add_pillar',

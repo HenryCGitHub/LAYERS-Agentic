@@ -45,7 +45,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         color: bgRecessed,
         borderRadius: BorderRadius.circular(5),
         border: Border.all(
-          color: accentCyan.withValues(alpha: 0.7),
+          color: textPrimary.withValues(alpha: 0.65),
           width: 1.2,
         ),
       ),
@@ -84,19 +84,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             key: saveBtnKey,
             onTap: commitSave,
             borderRadius: BorderRadius.circular(4),
-            child: Container(
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: accentEmerald.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: accentEmerald.withValues(alpha: 0.6)),
-              ),
               child: Text(
                 '✓',
                 style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: accentEmerald,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: textPrimary,
                 ),
               ),
             ),
@@ -287,8 +282,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   '${displayReleases.length} Shipped',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: accentEmerald.withValues(alpha: 0.85),
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
                                   ),
                                 ),
                               ],
@@ -357,8 +352,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.w700,
                                       color: hasActiveInGroup
-                                          ? accentCyan
-                                          : accentEmerald.withValues(alpha: 0.8),
+                                          ? textPrimary
+                                          : textMuted,
                                     ),
                                   ),
                                 ],
@@ -391,16 +386,12 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     borderRadius: BorderRadius.circular(5),
                                     border: isCurrent
                                         ? Border.all(
-                                            color: accentCyan.withValues(
-                                              alpha: 0.65,
-                                            ),
+                                            color: borderBright,
                                           )
                                         : Border(
                                             left: BorderSide(
                                               color: hasActiveInGroup
-                                                  ? accentCyan.withValues(
-                                                      alpha: 0.35,
-                                                    )
+                                                  ? borderBright
                                                   : borderSubtle,
                                               width: 2,
                                             ),
@@ -418,12 +409,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                               isCurrent ? '● ' : '✓ ',
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 10.5,
-                                                fontWeight: FontWeight.w800,
+                                                fontWeight: FontWeight.w700,
                                                 color: isCurrent
-                                                    ? accentCyan
-                                                    : accentEmerald.withValues(
-                                                        alpha: 0.85,
-                                                      ),
+                                                    ? textPrimary
+                                                    : textMuted,
                                               ),
                                             ),
                                             Text(
@@ -431,10 +420,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 11,
                                                 fontWeight: isCurrent
-                                                    ? FontWeight.w800
-                                                    : FontWeight.w700,
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w600,
                                                 color: isCurrent
-                                                    ? accentCyan
+                                                    ? textPrimary
                                                     : textSecondary,
                                               ),
                                             ),
@@ -462,8 +451,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           '$relProgress% · $releaseRemHoursStr left',
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                            color: accentEmerald,
+                                            fontWeight: FontWeight.w600,
+                                            color: textSecondary,
                                           ),
                                         )
                                       else
@@ -523,7 +512,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   'Saved Ledger',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: textMuted,
                                   ),
                                 ),
@@ -540,15 +529,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                 vertical: 7,
                               ),
                               decoration: BoxDecoration(
-                                color: isRelComplete
-                                    ? accentEmerald.withValues(alpha: 0.12)
-                                    : bgRecessed,
+                                color: bgRecessed,
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: isRelComplete
-                                      ? accentEmerald.withValues(alpha: 0.45)
-                                      : borderSubtle,
-                                ),
+                                border: Border.all(color: borderSubtle),
                               ),
                               child: Row(
                                 mainAxisAlignment:
@@ -562,9 +545,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.inter(
                                         fontSize: 12,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w700,
                                         color: isRelComplete
-                                            ? accentEmerald
+                                            ? const Color(0xFF10B981)
                                             : textMuted,
                                       ),
                                     ),
@@ -574,10 +557,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     isRelComplete ? 'AI Co-Pilot ✦' : 'LOCKED',
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 9.5,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w600,
                                       color: isRelComplete
-                                          ? accentEmerald
-                                          : accentAmber,
+                                          ? const Color(0xFF10B981)
+                                          : textMuted,
                                     ),
                                   ),
                                 ],
@@ -611,13 +594,18 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     text: '$activeVer ',
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: accentCyan,
+                                      fontWeight: FontWeight.w700,
+                                      color: textPrimary,
                                     ),
                                   ),
                                   TextSpan(
                                     text:
                                         '${widget.workbench.releaseDisplayName(rel)} ▾',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textSecondary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -628,25 +616,12 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             return Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 1.5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: bgSurface,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: borderSubtle),
-                                  ),
-                                  child: Text(
-                                    widget.workbench.releasePhaseShortBadge(
-                                      rel,
-                                    ),
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      color: textMuted,
-                                    ),
+                                Text(
+                                  widget.workbench.releasePhaseShortBadge(rel),
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textMuted,
                                   ),
                                 ),
                                 const SizedBox(width: 6),
@@ -668,8 +643,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         text: TextSpan(
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: isReleaseDone ? accentEmerald : textPrimary,
+                            fontWeight: FontWeight.w500,
+                            color: isReleaseDone ? textPrimary : textMuted,
                           ),
                           children: [
                             TextSpan(text: '$releaseRemHoursStr Left '),
@@ -677,8 +652,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               text: '$relProgress%',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: accentEmerald,
+                                fontWeight: FontWeight.w600,
+                                color: isReleaseDone
+                                    ? textPrimary
+                                    : textSecondary,
                               ),
                             ),
                           ],
@@ -739,25 +716,17 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           ),
         ),
         if (widget.workbench.backgroundStepSynthesisRemainingCount > 0)
-          Container(
+          Padding(
             key: const ValueKey('outliner_background_synthesis_banner'),
-            margin: const EdgeInsets.fromLTRB(12, 8, 12, 2),
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: accentCyan.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(
-                color: accentCyan.withValues(alpha: 0.35),
-              ),
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
             child: Row(
               children: [
                 Text(
                   '⟳',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: accentCyan,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -768,8 +737,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: accentCyan,
+                      fontWeight: FontWeight.w500,
+                      color: textMuted,
                     ),
                   ),
                 ),
@@ -787,7 +756,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     'ARCHIVED TESTBEDS (${archivedFeats.length})',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: textMuted,
                     ),
                   ),
@@ -805,8 +774,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       '← Active',
                       style: GoogleFonts.inter(
                         fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: accentEmerald,
+                        fontWeight: FontWeight.w600,
+                        color: textSecondary,
                       ),
                     ),
                   ),
@@ -894,13 +863,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         maxLines: 2,
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 9.5,
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight: FontWeight.w600,
                                           letterSpacing: 0.8,
                                           height: 1.25,
                                           color: allBeatDone
-                                              ? accentEmerald.withValues(
-                                                  alpha: 0.75,
-                                                )
+                                              ? textMuted.withValues(alpha: 0.65)
                                               : (isBeatActive
                                                   ? textSecondary
                                                   : textMuted),
@@ -916,10 +883,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         '$doneBeatCount/${beatFeats.length}',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 9.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: allBeatDone
-                                              ? accentEmerald
-                                              : textMuted,
+                                          fontWeight: FontWeight.w500,
+                                          color: textMuted,
                                         ),
                                       ),
                                     ],
@@ -942,8 +907,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           '+',
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: accentCyan,
+                                            fontWeight: FontWeight.w600,
+                                            color: textSecondary,
                                           ),
                                         ),
                                       ),
@@ -1036,10 +1001,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           '▶ Playtest Sheet ($verifiedFeats/$totalActiveFeats)',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: accentCyan,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: textSecondary,
                           ),
                         ),
                       ),
@@ -1048,11 +1013,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         'GATE',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: verifiedFeats == totalActiveFeats &&
-                                  totalActiveFeats > 0
-                              ? accentEmerald
-                              : accentAmber,
+                          fontWeight: FontWeight.w600,
+                          color: textMuted,
                         ),
                       ),
                     ],
@@ -1086,10 +1048,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               : '🔒 Complete $activeVer ($relProgress%) → $nextVerLabel',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: isRelComplete ? accentEmerald : textMuted,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: isRelComplete
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: isRelComplete
+                                ? const Color(0xFF10B981)
+                                : textMuted,
                           ),
                         ),
                       ),
@@ -1098,8 +1064,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         isRelComplete ? '✦ AI' : 'LOCKED',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: isRelComplete ? accentCyan : accentAmber,
+                          fontWeight: FontWeight.w600,
+                          color: isRelComplete
+                              ? const Color(0xFF10B981)
+                              : textMuted,
                         ),
                       ),
                     ],
@@ -1151,12 +1119,15 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
         decoration: BoxDecoration(
-          color: isSelected
-              ? (isDark
-                  ? Colors.white.withValues(alpha: 0.065)
-                  : bgSurface)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          color: Colors.transparent,
+          border: isSelected
+              ? Border(
+                  left: BorderSide(
+                    color: textPrimary,
+                    width: 2.5,
+                  ),
+                )
+              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1196,16 +1167,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           height: 18,
                           child: Center(
                             child: Text(
-                                isDone
-                                    ? '✓'
-                                    : (isSelected ? '●' : '·'),
+                              isDone ? '✓' : (isSelected ? '●' : '·'),
                               textAlign: TextAlign.center,
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10.5,
-                                fontWeight: FontWeight.w800,
-                                color: isDone
-                                    ? accentEmerald
-                                    : (isSelected ? accentCyan : textMuted),
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: isSelected ? textPrimary : textMuted,
                               ),
                             ),
                           ),
@@ -1242,8 +1211,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     fontSize: 12.5,
                                     height: 1.25,
                                     fontWeight: isSelected
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
                                     color: isDone
                                         ? textMuted.withValues(alpha: 0.6)
                                         : (isSelected
@@ -1306,11 +1275,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           key: ValueKey('rail_queued_badge_${feat.id}'),
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: widget.workbench
-                                    .isSynthesizingFeatureSteps(feat.id)
-                                ? accentCyan
-                                : textMuted,
+                            fontWeight: FontWeight.w600,
+                            color: textMuted,
                           ),
                         ),
                       ),
@@ -1321,12 +1287,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         isDone ? 'DONE' : featRemLabel,
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
-                          fontWeight: isSelected || isDone
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: isDone
-                              ? accentEmerald
-                              : (isSelected ? accentCyan : textMuted),
+                          fontWeight:
+                              isSelected ? FontWeight.w500 : FontWeight.w400,
+                          color: isSelected ? textSecondary : textMuted,
                         ),
                       ),
                     ),
@@ -1470,7 +1433,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 ),
               ),
               child: Wrap(
-                spacing: 6,
+                spacing: 12,
                 runSpacing: 6,
                 children: [
                   for (int cpIdx = 0; cpIdx < states.length; cpIdx++)
@@ -1484,30 +1447,29 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: 4,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: cpIdx == checkpointIndex
-                              ? accentCyan.withValues(alpha: 0.14)
-                              : bgSurface,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: cpIdx == checkpointIndex
-                                ? accentCyan.withValues(alpha: 0.55)
-                                : borderSubtle,
-                          ),
+                          border: cpIdx == checkpointIndex
+                              ? Border(
+                                  bottom: BorderSide(
+                                    color: textPrimary,
+                                    width: 2,
+                                  ),
+                                )
+                              : null,
                         ),
                         child: Text(
                           'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}${states[cpIdx].isCompleted ? ' ✓' : ''}',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: cpIdx == checkpointIndex
+                                ? FontWeight.w700
+                                : FontWeight.w400,
                             color: cpIdx == checkpointIndex
-                                ? accentCyan
-                                : (states[cpIdx].isCompleted
-                                    ? accentEmerald
-                                    : textSecondary),
+                                ? textPrimary
+                                : textMuted,
                           ),
                         ),
                       ),
@@ -2088,7 +2050,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       decoration: BoxDecoration(
         color: bgSurface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderBright),
+        border: Border.all(color: borderSubtle),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2098,7 +2060,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               children: [
                 Icon(
                   Icons.check_circle_rounded,
-                  color: accentEmerald,
+                  color: textPrimary,
                   size: 18,
                 ),
                 const SizedBox(width: 10),
@@ -2119,8 +2081,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           ElevatedButton.icon(
             key: const ValueKey('continue_to_next_feature_btn'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: focalAccent,
-              foregroundColor: focalAccentFg,
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: const Color(0xFF06281E),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(6),
@@ -2132,7 +2094,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               'Continue to $nextTitle →',
               style: GoogleFonts.inter(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -2149,9 +2111,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         key: const ValueKey('release_complete_banner'),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: accentEmerald.withValues(alpha: 0.12),
+          color: bgSurface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: accentEmerald.withValues(alpha: 0.45)),
+          border: Border.all(color: borderSubtle),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2159,7 +2121,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             Expanded(
               child: Row(
                 children: [
-                  Icon(Icons.verified_rounded, color: accentEmerald, size: 18),
+                  Icon(Icons.verified_rounded, color: textPrimary, size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -2168,7 +2130,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
                         fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: textPrimary,
                       ),
                     ),
@@ -2183,8 +2145,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 OutlinedButton.icon(
                   key: const ValueKey('release_shipped_summary_btn'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: accentEmerald,
-                    side: BorderSide(color: accentEmerald.withValues(alpha: 0.5)),
+                    foregroundColor: textSecondary,
+                    side: BorderSide(color: borderSubtle),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -2195,7 +2157,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     'Release Summary',
                     style: GoogleFonts.inter(
                       fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -2205,8 +2167,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   child: ElevatedButton.icon(
                     key: const ValueKey('ship_and_plan_next_release_btn'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: focalAccent,
-                      foregroundColor: focalAccentFg,
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: const Color(0xFF06281E),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(6),
@@ -2218,7 +2180,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       '+ New Release ($nextVer) ✦',
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),

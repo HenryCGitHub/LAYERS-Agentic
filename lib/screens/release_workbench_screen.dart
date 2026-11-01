@@ -241,7 +241,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.2,
-                      color: accentAmber,
+                      color: textPrimary,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -267,7 +267,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                       Icon(
                         Icons.auto_awesome_rounded,
                         size: 14,
-                        color: accentCyan,
+                        color: textSecondary,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -276,7 +276,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: accentCyan,
+                            color: textSecondary,
                           ),
                         ),
                       ),
@@ -288,7 +288,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle, size: 14, color: accentEmerald),
+                      Icon(Icons.check_circle, size: 14, color: textMuted),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(

@@ -73,8 +73,6 @@ class WorkbenchShell extends StatelessWidget {
 
     final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
-    final accentAmber = AppTheme.accentAmberFor(isDark);
-    final accentEmerald = AppTheme.accentGreenFor(isDark);
 
     final draft = workbench.conceptDraft;
     final bp = workbench.releaseBlueprint;
@@ -197,7 +195,7 @@ class WorkbenchShell extends StatelessWidget {
                                     : Icons.folder_outlined,
                                 size: 13,
                                 color: p.id == workbench.activeProjectId
-                                    ? accentAmber
+                                    ? textPrimary
                                     : textSecondary,
                               ),
                               const SizedBox(width: 8),
@@ -274,14 +272,14 @@ class WorkbenchShell extends StatelessWidget {
                         value: _actionNewProject,
                         child: Row(
                           children: [
-                            Icon(Icons.add_circle_outline_rounded, size: 13, color: accentEmerald),
+                            Icon(Icons.add_circle_outline_rounded, size: 13, color: textPrimary),
                             const SizedBox(width: 8),
                             Text(
                               '+ New Project',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: accentEmerald,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimary,
                               ),
                             ),
                           ],
@@ -299,8 +297,8 @@ class WorkbenchShell extends StatelessWidget {
                               'Export Project (.json)',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimary,
+                                fontWeight: FontWeight.w500,
+                                color: textSecondary,
                               ),
                             ),
                           ],
@@ -311,27 +309,22 @@ class WorkbenchShell extends StatelessWidget {
                         value: _actionImportJson,
                         child: Row(
                           children: [
-                            Icon(Icons.file_upload_outlined, size: 13, color: accentAmber),
+                            Icon(Icons.file_upload_outlined, size: 13, color: textSecondary),
                             const SizedBox(width: 8),
                             Text(
                               'Import Project (.json)',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: accentAmber,
+                                fontWeight: FontWeight.w500,
+                                color: textSecondary,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: bgSurface,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: borderColor),
-                      ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -340,7 +333,7 @@ class WorkbenchShell extends StatelessWidget {
                               activeProjectLabel,
                               key: const ValueKey('top_bar_project_title'),
                               style: AppTheme.displayFont(
-                                fontSize: 10.5,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: -0.2,
                                 color: textPrimary,
@@ -350,15 +343,15 @@ class WorkbenchShell extends StatelessWidget {
                             Text(
                               'Projects',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w600,
                                 color: textSecondary,
                               ),
                             ),
-                          const SizedBox(width: 2),
+                          const SizedBox(width: 3),
                           Icon(
                             Icons.keyboard_arrow_down_rounded,
-                            size: 12,
+                            size: 13,
                             color: textMuted,
                           ),
                         ],
@@ -369,12 +362,7 @@ class WorkbenchShell extends StatelessWidget {
               ),
               Container(
                 key: const ValueKey('connected_pipeline_track'),
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: bgSurface,
-                  borderRadius: BorderRadius.circular(7),
-                  border: Border.all(color: borderColor),
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -386,11 +374,11 @@ class WorkbenchShell extends StatelessWidget {
                       onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Text(
                         '▸',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9,
+                          fontSize: 10,
                           color: textMuted,
                         ),
                       ),
@@ -412,184 +400,149 @@ class WorkbenchShell extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Compact unified Studio Utility Pill Cluster (Export · Cloud Vault · AI Models · Theme)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: bgSurface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (draft != null) ...[
-                          PopupMenuButton<String>(
-                            key: const ValueKey('global_export_spec_btn'),
-                            tooltip:
-                                'Export Project Spec or AI Coding Agent Context (AGENTS.md)',
-                            color: bgSurface,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              side: BorderSide(color: borderColor),
-                            ),
-                            onSelected: (val) {
-                              if (val == 'spec') {
-                                _exportFullProjectSpec(context);
-                              } else if (val == 'agents_md') {
-                                _exportActiveReleaseAgentsMd(context);
-                              }
-                            },
-                            itemBuilder: (ctx) => [
-                              PopupMenuItem<String>(
-                                value: 'spec',
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.copy_rounded,
-                                      size: 13,
-                                      color: textSecondary,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Copy Full Project Spec (.md)',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'agents_md',
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.terminal_rounded,
-                                      size: 13,
-                                      color: accentAmber,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Export AI Agent Context (AGENTS.md)',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 3,
-                              ),
+                  // Clean borderless Studio Utility Strip (Export · Cloud Vault · AI Models · Theme)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (draft != null) ...[
+                        PopupMenuButton<String>(
+                          key: const ValueKey('global_export_spec_btn'),
+                          tooltip:
+                              'Export Project Spec or AI Coding Agent Context (AGENTS.md)',
+                          color: bgSurface,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            side: BorderSide(color: borderColor),
+                          ),
+                          onSelected: (val) {
+                            if (val == 'spec') {
+                              _exportFullProjectSpec(context);
+                            } else if (val == 'agents_md') {
+                              _exportActiveReleaseAgentsMd(context);
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem<String>(
+                              value: 'spec',
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    Icons.ios_share_rounded,
-                                    size: 11,
+                                    Icons.copy_rounded,
+                                    size: 13,
                                     color: textSecondary,
                                   ),
-                                  const SizedBox(width: 3),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    'Export ▾',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 8.5,
-                                      fontWeight: FontWeight.w700,
+                                    'Copy Full Project Spec (.md)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                       color: textPrimary,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
-                          const SizedBox.shrink(
-                            key: ValueKey('global_export_agents_md_btn'),
-                          ),
-                          Container(width: 1, height: 12, color: borderColor),
-                        ],
-                        Tooltip(
-                          message: workbench.isCloudSynced
-                              ? 'Synced to Firebase Cloud (${workbench.userEmail ?? "Signed In"})'
-                              : 'Project Vault & Google Cloud Sync',
-                          child: InkWell(
-                            key: const ValueKey('cloud_sync_auth_btn'),
-                            onTap: () => _showCloudSyncDialog(context),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              child: Icon(
-                                workbench.isCloudSynced
-                                    ? Icons.cloud_done_rounded
-                                    : Icons.cloud_upload_outlined,
-                                size: 13,
-                                color: workbench.isCloudSynced ? accentEmerald : textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(width: 1, height: 12, color: borderColor),
-                        Tooltip(
-                          message: workbench.aiLastErrorStatus != null
-                              ? 'AI API Key Notice (${workbench.aiLastErrorStatus}) — Click to update key'
-                              : 'AI Model Routing & API Key Settings',
-                          child: InkWell(
-                            key: const ValueKey('ai_settings_btn'),
-                            onTap: () => _showAiSettingsDialog(context),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            PopupMenuItem<String>(
+                              value: 'agents_md',
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Container(
-                                    width: 5.5,
-                                    height: 5.5,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: workbench.hasLiveAiKey
-                                          ? accentEmerald
-                                          : accentAmber,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 3),
                                   Icon(
-                                    Icons.tune_rounded,
-                                    size: 12,
+                                    Icons.terminal_rounded,
+                                    size: 13,
                                     color: textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Export AI Agent Context (AGENTS.md)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
-                        ),
-                        Container(width: 1, height: 12, color: borderColor),
-                        Tooltip(
-                          message: 'Toggle Theme',
-                          child: InkWell(
-                            onTap: workbench.toggleTheme,
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              child: Icon(
-                                isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                                size: 13,
-                                color: textSecondary,
+                          ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              'Export ▾',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: textMuted,
                               ),
                             ),
                           ),
                         ),
+                        const SizedBox.shrink(
+                          key: ValueKey('global_export_agents_md_btn'),
+                        ),
+                        const SizedBox(width: 4),
                       ],
-                    ),
+                      Tooltip(
+                        message: workbench.isCloudSynced
+                            ? 'Synced to Firebase Cloud (${workbench.userEmail ?? "Signed In"})'
+                            : 'Project Vault & Google Cloud Sync',
+                        child: InkWell(
+                          key: const ValueKey('cloud_sync_auth_btn'),
+                          onTap: () => _showCloudSyncDialog(context),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            child: Icon(
+                              workbench.isCloudSynced
+                                  ? Icons.cloud_done_rounded
+                                  : Icons.cloud_upload_outlined,
+                              size: 14,
+                              color: workbench.isCloudSynced ? textPrimary : textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Tooltip(
+                        message: workbench.aiLastErrorStatus != null
+                            ? 'AI API Key Notice (${workbench.aiLastErrorStatus}) — Click to update key'
+                            : 'AI Model Routing & API Key Settings',
+                        child: InkWell(
+                          key: const ValueKey('ai_settings_btn'),
+                          onTap: () => _showAiSettingsDialog(context),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            child: Icon(
+                              Icons.tune_rounded,
+                              size: 13.5,
+                              color: textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Tooltip(
+                        message: 'Toggle Theme',
+                        child: InkWell(
+                          onTap: workbench.toggleTheme,
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            child: Icon(
+                              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                              size: 14,
+                              color: textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -692,51 +645,23 @@ class WorkbenchShell extends StatelessWidget {
   }) {
     final isDark = workbench.isDark;
     final isActive = stage == workbench.currentStage;
-    final isCheckBadge = badge == '✓';
-    final activeDotColor = AppTheme.focalAccentFor(isDark);
-    final completedColor = AppTheme.accentGreenFor(isDark);
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
-    final bgActive = AppTheme.bgSurfaceHoverFor(isDark);
-    final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
-    final borderSubtle = AppTheme.borderSubtleFor(isDark);
-    final borderBright = AppTheme.borderBrightFor(isDark);
 
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(5),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4.5),
-        decoration: BoxDecoration(
-          color: isActive ? bgActive : Colors.transparent,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(
-            color: isActive ? borderBright : Colors.transparent,
-            width: 0.9,
-          ),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isActive
-                    ? activeDotColor
-                    : (isCompleted
-                        ? completedColor
-                        : textMuted.withValues(alpha: 0.35)),
-              ),
-            ),
-            const SizedBox(width: 5),
             Text(
               label,
               style: AppTheme.displayFont(
-                fontSize: 11.5,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 letterSpacing: -0.1,
                 color: isActive
                     ? textPrimary
@@ -745,27 +670,12 @@ class WorkbenchShell extends StatelessWidget {
             ),
             if (badge != null) ...[
               const SizedBox(width: 5),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isCheckBadge
-                      ? completedColor.withValues(alpha: 0.14)
-                      : bgRecessed,
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: isCheckBadge
-                        ? completedColor.withValues(alpha: 0.4)
-                        : borderSubtle,
-                    width: 0.8,
-                  ),
-                ),
-                child: Text(
-                  badge,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w700,
-                    color: isCheckBadge ? completedColor : textSecondary,
-                  ),
+              Text(
+                badge,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10.5,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? textPrimary : textMuted,
                 ),
               ),
             ],

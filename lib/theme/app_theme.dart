@@ -434,11 +434,6 @@ class AppToast {
 /// Shared DRY theme color getters and rich-text helpers for screen State classes
 /// (`ProjectPitchScreen`, `ReleasePlanGateScreen`, `ReleaseWorkbenchScreen`).
 mixin WorkbenchThemeMixin {
-  static final RegExp _metricHighlightRegex = RegExp(
-    r'\b(\d+(?:[\.\-]\d+)?(?:\s*(?:minute|minutes|min|second|seconds|sec|s|FPS|fps|key|keys|waves|wave|enemies|enemy|rooms|room|players|player|times|time|ms|%))?)\b',
-    caseSensitive: false,
-  );
-
   bool get isDark;
 
   Color get bgBase => AppTheme.bgBaseFor(isDark);
@@ -458,89 +453,4 @@ mixin WorkbenchThemeMixin {
   Color get accentAmber => AppTheme.accentAmberFor(isDark);
   Color get accentCyan => AppTheme.accentCyanFor(isDark);
   Color get accentViolet => AppTheme.accentPurpleFor(isDark);
-
-  /// Highlights quantitative playtest metrics (e.g., `10-minute`, `3 escalating waves`, `60 FPS`)
-  /// using a pre-compiled static regex so zero regex compilation occurs during widget builds.
-  Widget buildMetricHighlightedRichText(
-    String statement, {
-    bool usePill = false,
-    double fontSize = 13.5,
-    double height = 1.48,
-  }) {
-    if (!_metricHighlightRegex.hasMatch(statement)) {
-      return Text(
-        statement,
-        style: GoogleFonts.inter(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w500,
-          height: height,
-          color: textPrimary,
-        ),
-      );
-    }
-
-    final spans = <InlineSpan>[];
-    int lastEnd = 0;
-
-    for (final match in _metricHighlightRegex.allMatches(statement)) {
-      if (match.start > lastEnd) {
-        spans.add(TextSpan(text: statement.substring(lastEnd, match.start)));
-      }
-      final metricText = match.group(0)!;
-      if (usePill) {
-        spans.add(
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-              decoration: BoxDecoration(
-                color: accentEmerald.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: accentEmerald.withValues(alpha: 0.42),
-                ),
-              ),
-              child: Text(
-                metricText,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: textPrimary,
-                ),
-              ),
-            ),
-          ),
-        );
-      } else {
-        spans.add(
-          TextSpan(
-            text: metricText,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              color: accentEmerald,
-            ),
-          ),
-        );
-      }
-      lastEnd = match.end;
-    }
-
-    if (lastEnd < statement.length) {
-      spans.add(TextSpan(text: statement.substring(lastEnd)));
-    }
-
-    return RichText(
-      text: TextSpan(
-        style: GoogleFonts.inter(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w500,
-          height: height,
-          color: textPrimary,
-        ),
-        children: spans,
-      ),
-    );
-  }
 }

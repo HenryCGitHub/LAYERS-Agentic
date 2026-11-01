@@ -112,8 +112,8 @@ extension _ShellExportersExt on WorkbenchShell {
           'Copied full Project & Release Spec to clipboard ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.accentGreenFor(isDark),
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimaryFor(isDark),
           ),
         ),
         duration: const Duration(seconds: 2),
@@ -142,8 +142,8 @@ extension _ShellExportersExt on WorkbenchShell {
               : 'Copied Active Release ($ver) AGENTS.md / .cursorrules for AI Coding Agent ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.accentGreenFor(isDark),
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimaryFor(isDark),
           ),
         ),
         duration: const Duration(seconds: 2),
@@ -183,8 +183,8 @@ extension _ShellExportersExt on WorkbenchShell {
               : 'Copied Project JSON Backup ($filename) to clipboard ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.accentGreenFor(isDark),
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimaryFor(isDark),
           ),
         ),
         duration: const Duration(seconds: 2),
@@ -199,8 +199,6 @@ extension _ShellExportersExt on WorkbenchShell {
     final borderColor = AppTheme.borderFor(isDark);
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
-    final accentAmber = AppTheme.accentAmberFor(isDark);
-    final accentGreen = AppTheme.accentGreenFor(isDark);
     final ctrl = TextEditingController();
 
     try {
@@ -215,7 +213,7 @@ extension _ShellExportersExt on WorkbenchShell {
           ),
           title: Row(
             children: [
-              Icon(Icons.file_upload_outlined, size: 16, color: accentAmber),
+              Icon(Icons.file_upload_outlined, size: 16, color: textSecondary),
               const SizedBox(width: 8),
               Text(
                 'Import Project Backup (.layers.json)',
@@ -300,9 +298,9 @@ extension _ShellExportersExt on WorkbenchShell {
                           : 'Invalid .layers.json payload — could not import project.',
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: importedId != null
-                            ? accentGreen
+                            ? textPrimary
                             : AppTheme.accentRedFor(isDark),
                       ),
                     ),
@@ -319,8 +317,9 @@ extension _ShellExportersExt on WorkbenchShell {
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: accentAmber,
-                foregroundColor: Colors.black,
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: const Color(0xFF06281E),
+                elevation: 0,
               ),
             ),
           ],

@@ -407,9 +407,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     '${howToBlueprints[tIdx].numLabel} · ${howToBlueprints[tIdx].shortTaskTitle.toUpperCase()}',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 9.5,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: tIdx == selectedTaskIdx
+                          ? FontWeight.w700
+                          : FontWeight.w600,
                       letterSpacing: 0.4,
-                      color: tIdx == selectedTaskIdx ? accentCyan : textMuted,
+                      color: tIdx == selectedTaskIdx ? textPrimary : textMuted,
                     ),
                   ),
                 ),
@@ -435,13 +437,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                   : FontWeight.w500,
                               color: tIdx == selectedTaskIdx &&
                                       sIdx == activeSubStepIdx
-                                  ? accentCyan
+                                  ? textPrimary
                                   : (howToBlueprints[tIdx]
                                           .subSteps[sIdx]
                                           .subtask
                                           .completed
                                       ? textMuted
-                                      : textPrimary),
+                                      : textSecondary),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -454,13 +456,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               : '~${howToBlueprints[tIdx].subSteps[sIdx].etaLabel}',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: howToBlueprints[tIdx]
-                                    .subSteps[sIdx]
-                                    .subtask
-                                    .completed
-                                ? accentEmerald
-                                : textSecondary,
+                            fontWeight: FontWeight.w600,
+                            color: textMuted,
                           ),
                         ),
                       ],
@@ -671,46 +668,32 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               states,
                               node,
                             ),
-                            borderRadius: BorderRadius.circular(6),
-                            child: Container(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: accentAmber.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: accentAmber.withValues(alpha: 0.55),
-                                ),
+                                horizontal: 6,
+                                vertical: 4,
                               ),
                               child: Text(
                                 '▶ Next Incomplete',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: accentAmber,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: textSecondary,
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                         ],
                         InkWell(
                           key: ValueKey('copy_feature_ai_prompt_btn_${feat.id}'),
                           onTap: () => _copyActiveFeaturePrompt(feat),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: bgSurface,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: borderSubtle,
-                              ),
+                              horizontal: 6,
+                              vertical: 4,
                             ),
                             child: Text(
                               '⧉ AI Prompt',
@@ -723,7 +706,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                         if (!node.isCompleted) ...[
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           InkWell(
                             key: ValueKey(
                               'fast_track_checkpoint_btn_${node.id}',
@@ -738,25 +721,18 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                 node.checklist.last.children.length - 1,
                               );
                             },
-                            borderRadius: BorderRadius.circular(6),
-                            child: Container(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: accentEmerald.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: accentEmerald.withValues(alpha: 0.35),
-                                ),
+                                horizontal: 6,
+                                vertical: 4,
                               ),
                               child: Text(
                                 '✓ Complete Feature',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: accentEmerald,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: textSecondary,
                                 ),
                               ),
                             ),
@@ -797,7 +773,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         Icons.menu_rounded,
                                         size: 14,
                                         color: _isHalfScreenOutlinerOpen
-                                            ? accentCyan
+                                            ? textPrimary
                                             : textSecondary,
                                       ),
                                       const SizedBox(width: 6),
@@ -857,8 +833,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         '⧉ AI',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 10,
-                                          fontWeight: FontWeight.w800,
-                                          color: accentCyan,
+                                          fontWeight: FontWeight.w600,
+                                          color: textSecondary,
                                         ),
                                       ),
                                     ),
@@ -945,8 +921,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                           '✓ Done',
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 10.5,
-                                            fontWeight: FontWeight.w800,
-                                            color: accentEmerald,
+                                            fontWeight: FontWeight.w600,
+                                            color: textSecondary,
                                           ),
                                         ),
                                       ),
@@ -1091,31 +1067,30 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     },
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 7,
-                                        vertical: 2.5,
+                                        horizontal: 6,
+                                        vertical: 3,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: cpIdx == index
-                                            ? accentCyan.withValues(alpha: 0.14)
-                                            : bgSurface,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: cpIdx == index
-                                              ? accentCyan.withValues(
-                                                  alpha: 0.55,
-                                                )
-                                              : borderSubtle,
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: cpIdx == index
+                                                ? textPrimary
+                                                : Colors.transparent,
+                                            width: 2,
+                                          ),
                                         ),
                                       ),
                                       child: Text(
                                         'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}${states[cpIdx].isCompleted ? ' ✓' : ''}',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 9,
-                                          fontWeight: FontWeight.w700,
+                                          fontWeight: cpIdx == index
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
                                           color: cpIdx == index
-                                              ? accentCyan
+                                              ? textPrimary
                                               : (states[cpIdx].isCompleted
-                                                  ? accentEmerald
+                                                  ? textMuted
                                                   : textSecondary),
                                         ),
                                       ),
@@ -1224,32 +1199,20 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             .isSynthesizingFeatureSteps(
                                           feat.id,
                                         )) ...[
-                                          Container(
+                                          Padding(
                                             key: ValueKey(
                                               'synthesizing_steps_badge_${feat.id}',
                                             ),
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 3,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: accentCyan.withValues(
-                                                alpha: 0.12,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              border: Border.all(
-                                                color: accentCyan.withValues(
-                                                  alpha: 0.35,
-                                                ),
-                                              ),
+                                              horizontal: 4,
+                                              vertical: 2,
                                             ),
                                             child: Text(
                                               '✦ Synthesizing Engine Steps...',
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 9.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: accentCyan,
+                                                fontWeight: FontWeight.w500,
+                                                color: textSecondary,
                                               ),
                                             ),
                                           ),
@@ -1500,8 +1463,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                           borderRadius:
                                               BorderRadius.circular(5),
                                           border: Border.all(
-                                            color: accentCyan.withValues(
-                                              alpha: 0.65,
+                                            color: textPrimary.withValues(
+                                              alpha: 0.45,
                                             ),
                                           ),
                                         ),
@@ -1569,31 +1532,19 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(4),
-                                              child: Container(
+                                              child: Padding(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: accentCyan.withValues(
-                                                    alpha: 0.16,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                    color: accentCyan.withValues(
-                                                      alpha: 0.6,
-                                                    ),
-                                                  ),
+                                                  horizontal: 6,
+                                                  vertical: 3,
                                                 ),
                                                 child: Text(
                                                   '✓ Save',
                                                   style:
                                                       GoogleFonts.jetBrainsMono(
-                                                    fontSize: 9.5,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: accentCyan,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: textPrimary,
                                                   ),
                                                 ),
                                               ),
@@ -1847,7 +1798,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: accentEmerald,
                                             foregroundColor: isDark
-                                                ? const Color(0xFF052E16)
+                                                ? const Color(0xFF06281E)
                                                 : Colors.white,
                                             elevation: 0,
                                             padding: const EdgeInsets.symmetric(
@@ -1888,7 +1839,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 : 'Complete & Next →',
                                             style: GoogleFonts.inter(
                                               fontSize: 12,
-                                              fontWeight: FontWeight.w800,
+                                              fontWeight: FontWeight.w700,
                                             ),
                                           ),
                                         ),
@@ -1983,10 +1934,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               '✦ Tailor',
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 10.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: accentCyan.withValues(
-                                                  alpha: 0.9,
-                                                ),
+                                                fontWeight: FontWeight.w600,
+                                                color: textSecondary,
                                               ),
                                             ),
                                           ),
@@ -2004,37 +1953,29 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 BorderSide(color: borderBright),
                                           ),
                                           onSelected: (action) {
-                                            if (action == 'edit') {
-                                              _promptEditHowToSubStepDialog(
-                                                feat,
-                                                states,
-                                                node,
-                                                selectedTaskIdx,
-                                                activeSubStepIdx,
-                                              );
-                                            } else if (action == 'copy_all') {
+                                            if (action == 'copy_all') {
                                               _copyAllTaskCode(selectedHowTo);
                                             } else if (action == 'sync_code') {
                                               _showSyncFeatureFromCodeDialog(
                                                 feat,
                                                 node,
                                               );
+                                            } else if (action ==
+                                                'regenerate_3area') {
+                                              if (!widget.workbench
+                                                  .isSynthesizingFeatureSteps(
+                                                feat.id,
+                                              )) {
+                                                widget.workbench
+                                                    .synthesizeFeatureHowToStepsWithAi(
+                                                  feat.id,
+                                                  forceRefresh: true,
+                                                  unrealCppMode: _unrealCppMode,
+                                                );
+                                              }
                                             }
                                           },
                                           itemBuilder: (ctx) => [
-                                            PopupMenuItem<String>(
-                                              value: 'edit',
-                                              height: 34,
-                                              child: Text(
-                                                '✎ Edit Step',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: textPrimary,
-                                                ),
-                                              ),
-                                            ),
                                             PopupMenuItem<String>(
                                               value: 'copy_all',
                                               height: 34,
@@ -2056,8 +1997,29 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: accentEmerald,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textPrimary,
+                                                ),
+                                              ),
+                                            ),
+                                            PopupMenuItem<String>(
+                                              key: const ValueKey(
+                                                'ai_adapt_three_area_btn',
+                                              ),
+                                              value: 'regenerate_3area',
+                                              height: 34,
+                                              child: Text(
+                                                widget.workbench
+                                                        .isSynthesizingFeatureSteps(
+                                                      feat.id,
+                                                    )
+                                                    ? '✦ Adapting 3-Area Steps...'
+                                                    : '✦ Regenerate 3-Area Steps',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textPrimary,
                                                 ),
                                               ),
                                             ),
@@ -2099,7 +2061,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 10.5,
                                                 fontWeight: FontWeight.w600,
-                                                color: accentAmber,
+                                                color: textSecondary,
                                               ),
                                             ),
                                           ),

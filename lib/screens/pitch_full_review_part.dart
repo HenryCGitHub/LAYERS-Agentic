@@ -2,7 +2,6 @@ part of 'project_pitch_screen.dart';
 
 extension _PitchFullReviewExt on _ProjectPitchScreenState {
   Color get _gsT1Primary => isDark ? const Color(0xFFF9FAFB) : textPrimary;
-  Color get _gsT2Body => isDark ? const Color(0xFFD1D5DB) : textSecondary;
   Color get _gsT3Label => isDark ? const Color(0xFF8E95A5) : textMuted;
   Color get _gsT4Muted => isDark ? const Color(0xFF646D7D) : textMuted;
   Color get _gsCardBg => isDark ? const Color(0xFF13161D) : bgSurface;
@@ -109,7 +108,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           child: _buildSectionContentWidget(
             draft,
             idx,
-            isReadOnlySummary: false,
           ),
         );
 
@@ -190,60 +188,24 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                         ),
                     ],
                   ),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        key: const ValueKey('new_spark_reset_btn'),
-                        onPressed: () => widget.workbench.resetConceptToSpark(),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _gsT2Body,
-                          backgroundColor: Colors.transparent,
-                          side: BorderSide(color: _gsCardBorder),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          minimumSize: const Size(0, 36),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                        ),
-                        child: Text(
-                          '+ New Project',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                  InkWell(
+                    key: const ValueKey('new_spark_reset_btn'),
+                    onTap: () => widget.workbench.resetConceptToSpark(),
+                    borderRadius: BorderRadius.circular(5),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Text(
+                        '+ New Project',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: _gsT3Label,
                         ),
                       ),
-                      OutlinedButton.icon(
-                        onPressed: () => _copyBlueprintAsMarkdown(draft),
-                        icon: const Icon(Icons.copy_rounded, size: 14),
-                        label: Text(
-                          'Copy Markdown',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _gsT2Body,
-                          backgroundColor: Colors.transparent,
-                          side: BorderSide(color: _gsCardBorder),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          minimumSize: const Size(0, 36),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -252,7 +214,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 Container(
                   key: const ValueKey('blueprint_twist_pills_bar'),
                   child: Wrap(
-                    spacing: 8,
+                    spacing: 14,
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
@@ -260,8 +222,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                         '✦ OPTIONAL TWISTS:',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: _gsT3Label,
+                          fontWeight: FontWeight.w600,
+                          color: _gsT4Muted,
                         ),
                       ),
                       for (int i = 0; i < expansionCards.length; i++)
@@ -307,22 +269,11 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                                           }
                                         });
                                       },
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? _gsT1Primary.withValues(alpha: 0.12)
-                                        : _gsCardBg,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? _gsT1Primary.withValues(alpha: 0.65)
-                                          : _gsCardBorder,
-                                    ),
+                                    horizontal: 4,
+                                    vertical: 3,
                                   ),
                                   child: Text(
                                     isSelected
@@ -331,11 +282,11 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                                     style: GoogleFonts.inter(
                                       fontSize: 12.5,
                                       fontWeight: isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
                                       color: isSelected
                                           ? _gsT1Primary
-                                          : _gsT2Body,
+                                          : _gsT3Label,
                                     ),
                                   ),
                                 ),
@@ -476,32 +427,13 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                   ),
                 ),
                 if (isPrewarming || isPrewarmed)
-                  Container(
+                  Text(
+                    isPrewarmed ? '● v0.1 Ready' : '⟳ Drafting v0.1...',
                     key: const ValueKey('blueprint_prewarm_status_badge'),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isPrewarmed
-                          ? accentEmerald.withValues(alpha: 0.12)
-                          : _gsCardBg,
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                        color: isPrewarmed
-                            ? accentEmerald.withValues(alpha: 0.4)
-                            : _gsCardBorder,
-                      ),
-                    ),
-                    child: Text(
-                      isPrewarmed
-                          ? '● v0.1 Ready'
-                          : '⟳ Drafting v0.1...',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: isPrewarmed ? accentEmerald : _gsT2Body,
-                      ),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isPrewarmed ? _gsT3Label : _gsT4Muted,
                     ),
                   ),
               ],
@@ -542,31 +474,27 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           if (canRebuildInitialV01) ...[
             Tooltip(
               message: 'Regenerate v0.1 Workbench from scratch',
-              child: OutlinedButton(
+              child: InkWell(
                 key: const ValueKey('rebuild_v01_from_concept_btn'),
-                onPressed: widget.workbench.isAgentBusy
+                onTap: widget.workbench.isAgentBusy
                     ? null
                     : () => widget.workbench.approveConceptAndBuildRelease(
                           releaseId:
                               widget.workbench.projectReleases.firstOrNull?.id,
                         ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _gsT2Body,
-                  backgroundColor: Colors.transparent,
-                  side: BorderSide(color: _gsCardBorder),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
+                    horizontal: 10,
+                    vertical: 10,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  '↻ Rebuild v0.1',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                  child: Text(
+                    '↻ Rebuild v0.1',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _gsT3Label,
+                    ),
                   ),
                 ),
               ),
@@ -582,7 +510,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                   : () => widget.workbench.setStage(WorkbenchStage.releaseWorkbench),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF10B981),
-                foregroundColor: const Color(0xFF051B11),
+                foregroundColor: const Color(0xFF06281E),
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 22,
@@ -596,7 +524,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 '✓ Return to Workbench →',
                 style: GoogleFonts.inter(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -612,7 +540,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           : () => widget.workbench.approveConceptAndBuildRelease(),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF10B981),
-        foregroundColor: const Color(0xFF051B11),
+        foregroundColor: const Color(0xFF06281E),
         elevation: 0,
         padding: const EdgeInsets.symmetric(
           horizontal: 24,
@@ -628,7 +556,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             : 'Approve & Build v0.1 →',
         style: GoogleFonts.inter(
           fontSize: 15.5,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -640,16 +568,19 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
   }
 
   Widget? _buildHeaderAddActionForSection(int sectionIdx) {
-    Widget buildBtn(String keyName, String editKey, String label) =>
-        OutlinedButton(
+    Widget buildBtn(String keyName, String editKey, String label) => InkWell(
           key: ValueKey(keyName),
-          onPressed: () => _startInlineEdit(editKey, ''),
-          style: _headerNeutralButtonStyle(),
-          child: Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
+          onTap: () => _startInlineEdit(editKey, ''),
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: _gsT3Label,
+              ),
             ),
           ),
         );
@@ -665,19 +596,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
       6 => buildBtn('section_6_add_cut_btn', 'add_exclusion', '+ Add'),
       _ => null,
     };
-  }
-
-  ButtonStyle _headerNeutralButtonStyle({bool isActive = false}) {
-    return OutlinedButton.styleFrom(
-      foregroundColor: isActive ? _gsCardBg : _gsT2Body,
-      backgroundColor: isActive ? _gsT1Primary : Colors.transparent,
-      side: BorderSide(color: _gsCardBorder),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      minimumSize: const Size(0, 28),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
-      ),
-    );
   }
 
   Widget _buildFullReviewBlock({
@@ -717,11 +635,9 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             color: _gsCardBg,
             borderRadius: BorderRadius.circular(13),
             border: Border.all(
-              color: isDrawerOpen
-                  ? accentEmerald.withValues(alpha: 0.45)
-                  : (isFocused
-                      ? _gsT1Primary.withValues(alpha: 0.75)
-                      : (isHovered ? _gsCardHoverBorder : _gsCardBorder)),
+              color: (isFocused || isDrawerOpen)
+                  ? _gsT1Primary.withValues(alpha: 0.75)
+                  : (isHovered ? _gsCardHoverBorder : _gsCardBorder),
               width: 1.0,
             ),
           ),
@@ -772,45 +688,33 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       children: [
                         if (headerAddBtn != null) ...[
                           headerAddBtn,
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                         ],
-                        OutlinedButton(
+                        InkWell(
                           key: ValueKey('refine_drawer_toggle_btn_$sectionIdx'),
-                          onPressed: () {
+                          onTap: () {
                             _rebuild(() {
                               if (_openRefineDrawerSectionIdx == sectionIdx) {
                                 _openRefineDrawerSectionIdx = null;
                               } else {
                                 _openRefineDrawerSectionIdx = sectionIdx;
-                                _drawerSteerController.clear();
+                                _focusedBentoSectionIdx = sectionIdx;
                               }
                             });
                           },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                isDrawerOpen ? accentEmerald : _gsT2Body,
-                            backgroundColor: isDrawerOpen
-                                ? accentEmerald.withValues(alpha: 0.1)
-                                : Colors.transparent,
-                            side: BorderSide(
-                              color: isDrawerOpen
-                                  ? accentEmerald.withValues(alpha: 0.45)
-                                  : _gsCardBorder,
-                            ),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
+                              horizontal: 6,
+                              vertical: 3,
                             ),
-                            minimumSize: const Size(0, 28),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          child: Text(
-                            isDrawerOpen ? 'Refine ▴' : 'Refine ▾',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                            child: Text(
+                              isDrawerOpen ? 'Refine ▴' : 'Refine ▾',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: isDrawerOpen ? _gsT1Primary : _gsT3Label,
+                              ),
                             ),
                           ),
                         ),
@@ -844,18 +748,9 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     final hasActiveSingleSelect =
         !sec.isMultiSelect && _selectedOptionBySection[sectionIdx] != null;
 
-    Future<void> triggerRefreshOrSteer() async {
+    Future<void> triggerRefreshOptions() async {
       if (widget.workbench.isAgentBusy) return;
-      final steerText = _drawerSteerController.text.trim();
-      if (steerText.isNotEmpty) {
-        await _submitSectionPrompt(
-          draft,
-          sectionIdx,
-          controller: _drawerSteerController,
-        );
-      } else {
-        await widget.workbench.regenerateStage1SectionOptions(sec.optionKey);
-      }
+      await widget.workbench.regenerateStage1SectionOptions(sec.optionKey);
     }
 
     return Container(
@@ -870,128 +765,78 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
-            runSpacing: 8,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    sec.isMultiSelect
-                        ? 'PICK TO ADD TO ${sec.title.toUpperCase()}'
-                        : 'PICK AN ALTERNATIVE ${sec.title.toUpperCase()}',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                      color: _gsT3Label,
-                    ),
-                  ),
-                  if (hasActiveSingleSelect) ...[
-                    const SizedBox(width: 8),
-                    InkWell(
-                      key: ValueKey('restore_original_section_btn_$sectionIdx'),
-                      onTap: () {
-                        _restoreSectionDefault(draft, sectionIdx);
-                        _rebuild(() {
-                          _selectedOptionBySection.remove(sectionIdx);
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(5),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: accentEmerald.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: accentEmerald.withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: Text(
-                          '↺ Restore',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: accentEmerald,
-                          ),
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        sec.isMultiSelect
+                            ? 'PICK TO ADD TO ${sec.title.toUpperCase()}'
+                            : 'PICK AN ALTERNATIVE ${sec.title.toUpperCase()}',
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: _gsT3Label,
                         ),
                       ),
                     ),
-                  ],
-                ],
-              ),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 2, 4, 2),
-                  decoration: BoxDecoration(
-                    color: bgBase,
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: _gsCardBorder),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: TextField(
-                          key: ValueKey('refine_drawer_steer_input_$sectionIdx'),
-                          controller: _drawerSteerController,
-                          style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            color: _gsT1Primary,
-                          ),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            hintText: 'Steer ${sec.shortTitle} options...',
-                            hintStyle: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: _gsT4Muted,
-                            ),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 6),
-                          ),
-                          onSubmitted: (_) => triggerRefreshOrSteer(),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
+                    if (hasActiveSingleSelect) ...[
+                      const SizedBox(width: 10),
                       InkWell(
                         key: ValueKey(
-                          'compact_shuffle_options_btn_$sectionIdx',
+                          'restore_original_section_btn_$sectionIdx',
                         ),
-                        onTap: widget.workbench.isAgentBusy
-                            ? null
-                            : triggerRefreshOrSteer,
-                        borderRadius: BorderRadius.circular(5),
-                        child: Container(
+                        onTap: () {
+                          _restoreSectionDefault(draft, sectionIdx);
+                          _rebuild(() {
+                            _selectedOptionBySection.remove(sectionIdx);
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _gsCardBg,
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: _gsCardBorder),
+                            horizontal: 4,
+                            vertical: 2,
                           ),
                           child: Text(
-                            '↻ Refresh',
+                            '↺ Restore',
                             style: GoogleFonts.inter(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
-                              color: _gsT2Body,
+                              color: _gsT1Primary,
                             ),
                           ),
                         ),
                       ),
                     ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                key: ValueKey('compact_shuffle_options_btn_$sectionIdx'),
+                onTap: widget.workbench.isAgentBusy
+                    ? null
+                    : triggerRefreshOptions,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  child: Text(
+                    '↻ Refresh',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: _gsT3Label,
+                    ),
                   ),
                 ),
               ),
@@ -1061,14 +906,11 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? accentEmerald.withValues(alpha: 0.08)
-                              : _gsCardBg,
+                          color: _gsCardBg,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isSelected
-                                ? accentEmerald.withValues(alpha: 0.55)
-                                : _gsCardBorder,
+                            color: isSelected ? _gsT1Primary : _gsCardBorder,
+                            width: isSelected ? 1.4 : 1.0,
                           ),
                         ),
                         child: Column(
@@ -1101,7 +943,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                     color: isSelected
-                                        ? accentEmerald
+                                        ? _gsT1Primary
                                         : _gsT4Muted,
                                   ),
                                 ),

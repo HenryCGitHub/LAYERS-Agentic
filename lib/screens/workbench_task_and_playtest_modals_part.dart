@@ -185,8 +185,9 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: focalAccent,
-              foregroundColor: focalAccentFg,
+              backgroundColor: accentEmerald,
+              foregroundColor:
+                  isDark ? const Color(0xFF06281E) : Colors.white,
               elevation: 0,
             ),
             onPressed: () => Navigator.of(ctx).pop('save'),
@@ -194,7 +195,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
               'Save Sub-Step',
               style: GoogleFonts.inter(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -237,8 +238,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           'Copied Step ${pIdx + 1}.${sIdx + 1} code formula to clipboard ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: accentEmerald,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
           ),
         ),
         duration: const Duration(seconds: 2),
@@ -267,8 +268,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           'Copied all ${howTo.subSteps.length} step code blocks for Task ${howTo.numLabel} ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: accentEmerald,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
           ),
         ),
         duration: const Duration(seconds: 2),
@@ -356,8 +357,9 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           ElevatedButton(
             key: const ValueKey('confirm_tailor_howto_btn'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: focalAccent,
-              foregroundColor: focalAccentFg,
+              backgroundColor: accentEmerald,
+              foregroundColor:
+                  isDark ? const Color(0xFF06281E) : Colors.white,
               elevation: 0,
             ),
             onPressed: () => Navigator.of(ctx).pop('tailor'),
@@ -365,7 +367,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
               '✦ Tailor Sub-Steps',
               style: GoogleFonts.inter(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -393,8 +395,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           'Tailored Task ${(pIdx + 1).toString().padLeft(2, '0')} How-To sub-steps to "$contextText" ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: accentEmerald,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
           ),
         ),
         duration: const Duration(seconds: 2),
@@ -511,8 +513,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                 'TUNING PARAMETERS (COMMA SEPARATED)',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  color: accentViolet,
+                  fontWeight: FontWeight.w700,
+                  color: textSecondary,
                 ),
               ),
               const SizedBox(height: 5),
@@ -538,8 +540,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                 'EDGE-CASE GUARDS (1 PER LINE)',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  color: accentAmber,
+                  fontWeight: FontWeight.w700,
+                  color: textSecondary,
                 ),
               ),
               const SizedBox(height: 5),
@@ -576,13 +578,14 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             key: const ValueKey('save_stage3_tuning_guards_btn'),
             style: ElevatedButton.styleFrom(
               backgroundColor: accentEmerald,
-              foregroundColor: Colors.white,
+              foregroundColor:
+                  isDark ? const Color(0xFF06281E) : Colors.white,
               elevation: 0,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(
               'Save Spec',
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -636,8 +639,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
               'Propagated variable rename (${renames.join(', ')}) across $totalFeaturesPropagated project feature(s) ✓',
               style: GoogleFonts.inter(
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: accentEmerald,
+                fontWeight: FontWeight.w600,
+                color: textPrimary,
               ),
             ),
             duration: const Duration(seconds: 2),
@@ -716,14 +719,15 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           ElevatedButton(
             key: const ValueKey('confirm_workbench_log_playtest_issue_btn'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: accentAmber,
-              foregroundColor: const Color(0xFF1F1300),
+              backgroundColor: accentEmerald,
+              foregroundColor:
+                  isDark ? const Color(0xFF06281E) : Colors.white,
               elevation: 0,
             ),
             onPressed: () => Navigator.of(ctx).pop(ctrl.text),
             child: Text(
               '+ Add [FIX] Task & Guard',
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800),
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -828,9 +832,9 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                   'PLAYTEST RUN SHEET · ${activeVer.toUpperCase()} GATE VERIFICATION',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                     letterSpacing: 0.7,
-                                    color: accentCyan,
+                                    color: textMuted,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -838,40 +842,25 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                   rel?.title ?? '$activeVer Playtest Checklist',
                                   style: GoogleFonts.inter(
                                     fontSize: 16,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                     color: textPrimary,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          Container(
+                          Padding(
                             key: const ValueKey('playtest_sheet_summary_badge'),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: passedFeats == totalFeats && totalFeats > 0
-                                  ? accentEmerald.withValues(alpha: 0.14)
-                                  : accentAmber.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color:
-                                    passedFeats == totalFeats && totalFeats > 0
-                                        ? accentEmerald.withValues(alpha: 0.4)
-                                        : accentAmber.withValues(alpha: 0.4),
-                              ),
+                              horizontal: 6,
+                              vertical: 4,
                             ),
                             child: Text(
                               '$passedFeats/$totalFeats GATES PASSED',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10.5,
-                                fontWeight: FontWeight.w800,
-                                color:
-                                    passedFeats == totalFeats && totalFeats > 0
-                                        ? accentEmerald
-                                        : accentAmber,
+                                fontWeight: FontWeight.w600,
+                                color: textSecondary,
                               ),
                             ),
                           ),
@@ -941,11 +930,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                         color: bgRecessed,
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
-                                          color: isPassed
-                                              ? accentEmerald.withValues(
-                                                  alpha: 0.45,
-                                                )
-                                              : borderSubtle,
+                                          color: borderSubtle,
                                         ),
                                       ),
                                       child: Column(
@@ -967,7 +952,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                               .radio_button_unchecked_rounded,
                                                       size: 16,
                                                       color: isPassed
-                                                          ? accentEmerald
+                                                          ? textSecondary
                                                           : textMuted,
                                                     ),
                                                     const SizedBox(width: 8),
@@ -994,9 +979,9 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                           .jetBrainsMono(
                                                         fontSize: 10.5,
                                                         fontWeight:
-                                                            FontWeight.w800,
+                                                            FontWeight.w600,
                                                         color: isPassed
-                                                            ? accentEmerald
+                                                            ? textSecondary
                                                             : textMuted,
                                                       ),
                                                     ),
@@ -1044,19 +1029,12 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                         decoration:
                                                             BoxDecoration(
                                                           color: isPassed
-                                                              ? accentEmerald
-                                                                  .withValues(
-                                                                  alpha: 0.16,
-                                                                )
-                                                              : bgSurface,
+                                                              ? Colors
+                                                                  .transparent
+                                                              : accentEmerald,
                                                           borderRadius:
                                                               BorderRadius
                                                                   .circular(5),
-                                                          border: Border.all(
-                                                            color: isPassed
-                                                                ? accentEmerald
-                                                                : borderSubtle,
-                                                          ),
                                                         ),
                                                         child: Text(
                                                           isPassed
@@ -1066,15 +1044,20 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                               .jetBrainsMono(
                                                             fontSize: 10,
                                                             fontWeight:
-                                                                FontWeight.w800,
+                                                                FontWeight.w700,
                                                             color: isPassed
-                                                                ? accentEmerald
-                                                                : textPrimary,
+                                                                ? textSecondary
+                                                                : (isDark
+                                                                    ? const Color(
+                                                                        0xFF06281E,
+                                                                      )
+                                                                    : Colors
+                                                                        .white),
                                                           ),
                                                         ),
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 6),
+                                                    const SizedBox(width: 8),
                                                     InkWell(
                                                       key: ValueKey(
                                                         'playtest_sheet_flag_btn_${feat.id}',
@@ -1089,28 +1072,12 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                           BorderRadius.circular(
                                                         5,
                                                       ),
-                                                      child: Container(
+                                                      child: Padding(
                                                         padding:
                                                             const EdgeInsets
                                                                 .symmetric(
-                                                          horizontal: 9,
-                                                          vertical: 5,
-                                                        ),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: accentAmber
-                                                              .withValues(
-                                                            alpha: 0.12,
-                                                          ),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(5),
-                                                          border: Border.all(
-                                                            color: accentAmber
-                                                                .withValues(
-                                                              alpha: 0.4,
-                                                            ),
-                                                          ),
+                                                          horizontal: 6,
+                                                          vertical: 4,
                                                         ),
                                                         child: Text(
                                                           '🐞 Flag Issue',
@@ -1118,8 +1085,9 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                               .jetBrainsMono(
                                                             fontSize: 10,
                                                             fontWeight:
-                                                                FontWeight.w700,
-                                                            color: accentAmber,
+                                                                FontWeight.w600,
+                                                            color:
+                                                                textSecondary,
                                                           ),
                                                         ),
                                                       ),
@@ -1141,33 +1109,17 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                             if (cpNode.edgeCases.isNotEmpty) ...[
                                               const SizedBox(height: 6),
                                               Wrap(
-                                                spacing: 6,
+                                                spacing: 12,
                                                 runSpacing: 4,
                                                 children: [
                                                   for (final g
                                                       in cpNode.edgeCases)
-                                                    Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 7,
-                                                        vertical: 3,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: bgSurface,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(4),
-                                                        border: Border.all(
-                                                          color: borderSubtle,
-                                                        ),
-                                                      ),
-                                                      child: Text(
-                                                        g,
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 9.5,
-                                                          color: textMuted,
-                                                        ),
+                                                    Text(
+                                                      '• $g',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 9.5,
+                                                        color: textMuted,
                                                       ),
                                                     ),
                                                 ],
@@ -1272,7 +1224,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             key: const ValueKey('confirm_sync_from_code_btn'),
             style: ElevatedButton.styleFrom(
               backgroundColor: accentEmerald,
-              foregroundColor: const Color(0xFF04131D),
+              foregroundColor:
+                  isDark ? const Color(0xFF06281E) : Colors.white,
               elevation: 0,
             ),
             onPressed: () => Navigator.of(ctx).pop(codeCtrl.text),
@@ -1280,7 +1233,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
               'Sync Tuning & Guards',
               style: GoogleFonts.inter(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
