@@ -1,6 +1,8 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
+  static final RegExp _varDelimiterRegex = RegExp(r'[:=]');
+
   /// Renders the Engine-Specific 3-Area Step Card (`COMPONENTS & OUTLINER` / `HIERARCHY & COMPONENTS` /
   /// `SCENE TREE DOCK (.tscn)`, `DETAILS PANEL` / `INSPECTOR WINDOW` / `INSPECTOR DOCK`, and
   /// `EVENT GRAPH` / `C++ SOURCE` / `C# MONOBEHAVIOUR` / `GDSCRIPT`), showing only the sections
@@ -46,7 +48,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     final stepPath = activeSubStep.stepPath.isNotEmpty
         ? activeSubStep.stepPath
         : selectedHowTo.whereLocation;
-    final primaryVarName = primaryTuningLabel.split(':').first.trim();
+    final primaryVarName =
+        primaryTuningLabel.split(_varDelimiterRegex).first.trim();
 
     // Strip any leading C++/C# comment line ("// ...") when displaying a pure hierarchy/setup block
     final rawLines = rawCode.split('\n');
@@ -103,7 +106,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         !isCodeVariableStep;
 
     final matchedTunings = tuningItems.where((t) {
-      final key = t.split(':').first.trim().toLowerCase();
+      final key = t.split(_varDelimiterRegex).first.trim().toLowerCase();
       return key.isNotEmpty &&
           (rawCode.toLowerCase().contains(key) ||
               activeSubStep.instruction.toLowerCase().contains(key));
@@ -171,7 +174,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         }
       }
       for (final t in tuningItems.take(2)) {
-        final parts = t.split(':');
+        final parts = t.split(_varDelimiterRegex);
         final k = parts.first.trim();
         final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
         if (k.isNotEmpty) {
@@ -313,10 +316,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         final cleanEntry = rawEntry.trim();
         if (cleanEntry.isEmpty) continue;
         final colonIdx = cleanEntry.indexOf(':');
-        if (colonIdx > 0 && colonIdx < cleanEntry.length - 1) {
+        final eqIdx = cleanEntry.indexOf('=');
+        final delimIdx = colonIdx != -1 ? colonIdx : eqIdx;
+        if (delimIdx > 0 && delimIdx < cleanEntry.length - 1) {
           parsedAiRows.add((
-            key: cleanEntry.substring(0, colonIdx).trim(),
-            value: cleanEntry.substring(colonIdx + 1).trim(),
+            key: cleanEntry.substring(0, delimIdx).trim(),
+            value: cleanEntry.substring(delimIdx + 1).trim(),
           ));
         } else {
           parsedAiRows.add((key: 'Inspector Binding', value: cleanEntry));
@@ -855,7 +860,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         final trimmed = rawTune.trim();
         if (trimmed.isNotEmpty) {
           baseMap[trimmed] = 'tune';
-          final varName = trimmed.split(':').first.trim();
+          final varName = trimmed.split(_varDelimiterRegex).first.trim();
           if (varName.length >= 3) {
             baseMap[varName] = 'tune';
           }
