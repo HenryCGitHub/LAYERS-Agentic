@@ -18,15 +18,15 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
 ) async {
   // 1. Stage 1A: refreshSparkExpansionCards
   if (prompt.contains('proposing 3 NEW gameplay expansion / twist cards')) {
-    final titleMatch =
-        RegExp(r'Working Title: "([^"]+)"').firstMatch(prompt);
+    final titleMatch = RegExp(r'Working Title: "([^"]+)"').firstMatch(prompt);
     final wTitle = titleMatch?.group(1) ?? 'Game Concept';
     return {
       'expansionCards': [
         {
           'badge': '01 · CORE MECHANIC TWIST',
           'title': 'Chain Combo Surge',
-          'description': 'Chain rapid actions inside $wTitle for a speed boost.',
+          'description':
+              'Chain rapid actions inside $wTitle for a speed boost.',
           'additionSummary': 'chain combo surge for $wTitle',
         },
         {
@@ -113,7 +113,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
         ],
       };
     }
-    if (prompt.contains('Selected Idea Additions to Fold In: Wall-Run Chain & Vault Boost')) {
+    if (prompt.contains(
+        'Selected Idea Additions to Fold In: Wall-Run Chain & Vault Boost')) {
       return {
         'workingTitle': 'Metropolis Cargo Parkour',
         'baseSummary':
@@ -198,7 +199,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
           {
             'badge': '02 · RISK / REWARD HOOK',
             'title': 'Overtime Zone Bounty',
-            'description': 'Stay longer in hostile zones for higher credit bounties.',
+            'description':
+                'Stay longer in hostile zones for higher credit bounties.',
             'additionSummary': 'overtime zone bounty',
           },
           {
@@ -230,7 +232,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
           {
             'badge': '02 · RISK / REWARD HOOK',
             'title': 'Spicy Cauldron Rush',
-            'description': 'Double-brew volatile toppings in Cozy Pizza Alchemy.',
+            'description':
+                'Double-brew volatile toppings in Cozy Pizza Alchemy.',
             'additionSummary': 'spicy cauldron rush',
           },
           {
@@ -349,7 +352,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
       };
     }
     return {
-      'reply': 'Updated Concept Blueprint to 2D Side-Scrolling Precision Platformer.',
+      'reply':
+          'Updated Concept Blueprint to 2D Side-Scrolling Precision Platformer.',
       'updatedFields': ['Goal'],
       'goal':
           '2D Side-Scrolling Precision Platformer: Build a responsive 2D Side-Scrolling Precision Platformer prototype with grappling hook swing and wall-run chains.',
@@ -357,13 +361,16 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
   }
 
   // 6. Stage 1B: startConceptInterview
-  if (prompt.contains('creating a Stage 1 Concept Blueprint for this spark idea:')) {
+  if (prompt
+      .contains('creating a Stage 1 Concept Blueprint for this spark idea:')) {
     final isFarm = prompt.toLowerCase().contains('cozy alchemy shop');
     final isCourier = prompt.toLowerCase().contains('supply courier');
     return {
       'title': isFarm
           ? 'Cozy Alchemy Shop'
-          : (isCourier ? 'Settlement Supply Courier' : 'Grapple Parkour Roguelite'),
+          : (isCourier
+              ? 'Settlement Supply Courier'
+              : 'Grapple Parkour Roguelite'),
       'goal': isFarm
           ? 'Core Shop & Garden Loop: Build a playable Cozy Alchemy Shop prototype where you harvest herbs, brew potions, and sell to customers.'
           : 'Core Grapple Loop: Build a playable Grapple Parkour Roguelite prototype where you swing across arena gaps, clear enemy waves, and reset cleanly.',
@@ -555,11 +562,13 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
   if (prompt.contains('planning Release:')) {
     final isPart1 = prompt.contains('PHASE 1 SPLIT PROTOTYPE (PART 1 OF 2');
     final isPart2 = prompt.contains('Prototype — Part 2');
-    final isMvp = prompt.contains('PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC ') &&
-        !prompt.contains('Grapple Momentum Release');
+    final isMvp =
+        prompt.contains('PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC ') &&
+            !prompt.contains('Grapple Momentum Release');
     final isVerticalSlice = prompt.contains('PHASE 3 VERTICAL SLICE');
     final isFullProd = prompt.contains('PHASE 4 FULL PRODUCTION');
-    final isFirstRelease = prompt.contains('First Release (v0.1): No prior features exist yet.');
+    final isFirstRelease =
+        prompt.contains('First Release (v0.1): No prior features exist yet.');
 
     if (isPart1 || isPart2 || isMvp || isVerticalSlice || isFullProd) {
       final fourBeatTitles = [
@@ -701,7 +710,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
             'checkpoints': [
               {
                 'title': '$bTitle Core',
-                'playtestCriteria': 'Press input -> actor responds within 100ms',
+                'playtestCriteria':
+                    'Press input -> actor responds within 100ms',
                 'tasks': [
                   'Actor Setup (2h)',
                   'State Logic (1h)',
@@ -727,7 +737,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
             'checkpoints': [
               {
                 'title': 'Release Impulse',
-                'playtestCriteria': 'Detach mid-swing -> player launches forward',
+                'playtestCriteria':
+                    'Detach mid-swing -> player launches forward',
                 'tasks': [
                   'Release Input (2h)',
                   'Impulse Math (1h)',
@@ -763,7 +774,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
                 ? [
                     {
                       'title': '$bTitle v0.2 Upgrade',
-                      'playtestCriteria': 'Chain movement -> speed bonus active',
+                      'playtestCriteria':
+                          'Chain movement -> speed bonus active',
                       'tasks': [
                         'Upgrade Logic (2h)',
                         'VFX Hook (2h)',
@@ -860,18 +872,23 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
     };
   }
 
-  if (prompt.contains('Choose 1 to 3 surgical workspace tool calls to fulfill the directive.')) {
-    final activeIdMatch = RegExp(r'Active Feature: "[^"]+" \(id: ([^)]+)\)').firstMatch(prompt);
+  if (prompt.contains(
+      'Choose 1 to 3 surgical workspace tool calls to fulfill the directive.')) {
+    final activeIdMatch =
+        RegExp(r'Active Feature: "[^"]+" \(id: ([^)]+)\)').firstMatch(prompt);
     final activeId = activeIdMatch?.group(1) ?? 'feat_1_1';
-    final sibIdMatch = RegExp(r'Sibling Features in Release: ([^\s]+)').firstMatch(prompt);
+    final sibIdMatch =
+        RegExp(r'Sibling Features in Release: ([^\s]+)').firstMatch(prompt);
     final sibId = sibIdMatch?.group(1) ?? activeId;
     return {
-      'reasoning': 'Synchronized tuning parameters across active and coupled sibling features.',
+      'reasoning':
+          'Synchronized tuning parameters across active and coupled sibling features.',
       'toolCalls': [
         {
           'toolName': 'rebalance_tuning_params',
           'targetTitle': 'Active Feature',
-          'summary': 'Injected coyote_time_ms and response_window_ms tuning variables',
+          'summary':
+              'Injected coyote_time_ms and response_window_ms tuning variables',
           'args': {
             'targetFeatureId': activeId,
             'tuningParams': [
@@ -883,7 +900,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
         {
           'toolName': 'rebalance_tuning_params',
           'targetTitle': 'Sibling Feature',
-          'summary': 'Synchronized coupled_sync_window_ms: 90 ms on sibling feature',
+          'summary':
+              'Synchronized coupled_sync_window_ms: 90 ms on sibling feature',
           'args': {
             'targetFeatureId': sibId,
             'tuningParams': [
@@ -895,14 +913,16 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
     };
   }
 
-  if (prompt.contains('Synthesize concrete, beginner-friendly 3-Area Engine How-To steps')) {
+  if (prompt.contains(
+      'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps')) {
     return null;
   }
 
   if (prompt.contains('Tailor this newly added Feature')) {
     return {
       'goal': 'Build zipline anchor attach and momentum release mechanics.',
-      'doneWhen': 'Player attaches to zipline and detaches cleanly in playtest.',
+      'doneWhen':
+          'Player attaches to zipline and detaches cleanly in playtest.',
       'checkpointTitle': 'Zipline Attach & Detach',
       'playtestGate': 'Press interact near zipline -> slide and detach cleanly',
       'tasks': [
@@ -964,7 +984,9 @@ void main() {
       },
     );
 
-    test('ProjectConceptAgent seeds turn-by-turn chat and updates Live Concept Blueprint on each turn', () async {
+    test(
+        'ProjectConceptAgent seeds turn-by-turn chat and updates Live Concept Blueprint on each turn',
+        () async {
       final draft = await ProjectConceptAgent.startConceptInterview(
         'High-speed grappling hook parkour roguelite',
       );
@@ -1020,8 +1042,10 @@ void main() {
       expect(vehicleUpdatedOk, isTrue);
       expect(crabDraft.title, contains('Vehicle'));
       expect(crabDraft.goal, contains('vehicles'));
-      expect(crabDraft.goal.toLowerCase(), isNot(contains('instead of a crab')));
-      expect(crabDraft.coreLoopBeats.first.toLowerCase(), isNot(contains('instead of a crab')));
+      expect(
+          crabDraft.goal.toLowerCase(), isNot(contains('instead of a crab')));
+      expect(crabDraft.coreLoopBeats.first.toLowerCase(),
+          isNot(contains('instead of a crab')));
     });
 
     testWidgets(
@@ -1038,15 +1062,20 @@ void main() {
         await tester.pumpAndSettle();
 
         // ── Stage 1A: Single-Input 80-Character Word Document Composer (00 · PITCH & CONCEPT) ──
-        expect(find.byKey(const ValueKey('connected_pipeline_track')), findsOneWidget);
+        expect(find.byKey(const ValueKey('connected_pipeline_track')),
+            findsOneWidget);
         expect(find.text('00 · PITCH & CONCEPT'), findsOneWidget);
-        expect(find.byKey(const ValueKey('spark_composer_card')), findsOneWidget);
+        expect(
+            find.byKey(const ValueKey('spark_composer_card')), findsOneWidget);
         // Only ONE TextField is rendered in Step 1A
         expect(find.byType(TextField), findsOneWidget);
         expect(find.byKey(const ValueKey('spark_input_field')), findsOneWidget);
-        expect(find.byKey(const ValueKey('ingest_idea_summary_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('direct_generate_blueprint_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('spark_committed_pitch_text')), findsNothing);
+        expect(find.byKey(const ValueKey('ingest_idea_summary_btn')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('direct_generate_blueprint_btn')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_committed_pitch_text')),
+            findsNothing);
         expect(find.byKey(const ValueKey('spark_undo_btn')), findsNothing);
 
         // Verify dynamic tooltip & hint when empty ('Input your game idea...')
@@ -1100,8 +1129,10 @@ void main() {
         await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
         await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
         await tester.pump();
-        expect(sparkField.controller!.text, equals('High-speed grappling hook\n'));
-        expect(find.byKey(const ValueKey('spark_committed_pitch_text')), findsNothing);
+        expect(
+            sparkField.controller!.text, equals('High-speed grappling hook\n'));
+        expect(find.byKey(const ValueKey('spark_committed_pitch_text')),
+            findsNothing);
 
         // Submit initial game idea via Return icon (↵) -> displays clean document text above
         // and switches the SAME single input area to 'Input to refine...'
@@ -1113,7 +1144,8 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
         await tester.pumpAndSettle();
 
-        expect(find.byKey(const ValueKey('spark_committed_pitch_text')), findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_committed_pitch_text')),
+            findsOneWidget);
         expect(find.byType(TextField), findsOneWidget);
         expect(sparkField.controller!.text, isEmpty);
         final refineTooltip = tester.widget<Tooltip>(
@@ -1146,27 +1178,42 @@ void main() {
         expect(find.byKey(const ValueKey('spark_undo_btn')), findsNothing);
 
         // Explicitly click "Generate Concept Blueprint →" to launch Stage 1B (Sections 01–08)
-        await tester.tap(find.byKey(const ValueKey('direct_generate_blueprint_btn')));
+        await tester
+            .tap(find.byKey(const ValueKey('direct_generate_blueprint_btn')));
         await tester.pumpAndSettle();
 
         // ── Stage 1B: Full-Width Single-Page Concept Blueprint (All 9 Sections Together, Zero Left Stepper Rail) ──
-        expect(find.byKey(const ValueKey('project_blueprint_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_left_outliner_rail')), findsNothing);
-        expect(find.byKey(const ValueKey('top_bar_project_title')), findsOneWidget);
-        expect(find.byKey(const ValueKey('project_switcher_dropdown_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('cloud_sync_auth_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('global_export_spec_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('concept_interview_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')), findsOneWidget);
-        expect(find.byKey(const ValueKey('new_spark_reset_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('project_blueprint_card')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_left_outliner_rail')),
+            findsNothing);
+        expect(find.byKey(const ValueKey('top_bar_project_title')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('project_switcher_dropdown_btn')),
+            findsOneWidget);
+        expect(
+            find.byKey(const ValueKey('cloud_sync_auth_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('global_export_spec_btn')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('concept_interview_card')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('concept_sticky_bottom_dock')),
+            findsOneWidget);
+        expect(
+            find.byKey(const ValueKey('new_spark_reset_btn')), findsOneWidget);
         expect(find.text('+ New Project'), findsOneWidget);
-        expect(find.byKey(const ValueKey('blueprint_twist_pills_bar')), findsOneWidget);
+        expect(find.byKey(const ValueKey('blueprint_twist_pills_bar')),
+            findsOneWidget);
 
         // Verify structured Goal card + 3 Scannable Clause Cards (01, 02, 03) on the Single-Page Blueprint
-        expect(find.byKey(const ValueKey('stage1_goal_structured_card')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_goal_clause_card_0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_goal_clause_card_1')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_goal_clause_card_2')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_goal_structured_card')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_goal_clause_card_0')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_goal_clause_card_1')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_goal_clause_card_2')),
+            findsOneWidget);
 
         // Verify clicking a Compact Option Pill on Section 01 applies it, and clicking it again unselects it and restores the default Goal
         final initialGoal = provider.conceptDraft!.goal;
@@ -1189,8 +1236,10 @@ void main() {
         // Verify 04 Design Pillars (plain label, never "Load-Bearing") & multi-select compact pills
         expect(find.text('DESIGN PILLARS'), findsOneWidget);
         expect(find.textContaining('Load-Bearing'), findsNothing);
-        final pillarPill0 = find.byKey(const ValueKey('compact_option_pill_3_0'));
-        final pillarPill1 = find.byKey(const ValueKey('compact_option_pill_3_1'));
+        final pillarPill0 =
+            find.byKey(const ValueKey('compact_option_pill_3_0'));
+        final pillarPill1 =
+            find.byKey(const ValueKey('compact_option_pill_3_1'));
         await tester.ensureVisible(pillarPill0);
         await tester.pumpAndSettle();
         await tester.tap(pillarPill0);
@@ -1207,14 +1256,17 @@ void main() {
         );
 
         // Verify Full Blueprint Review header & Release Train
-        expect(find.text('STEP 09 · FINAL BLUEPRINT VERIFICATION'), findsOneWidget);
-        expect(find.text('v0.1: Core Movement & Game Loop - Prototype'), findsOneWidget);
+        expect(find.text('STEP 09 · FINAL BLUEPRINT VERIFICATION'),
+            findsOneWidget);
+        expect(find.text('v0.1: Core Movement & Game Loop - Prototype'),
+            findsOneWidget);
         expect(find.text('1. Concept'), findsOneWidget);
         expect(find.text('2. Workbench'), findsOneWidget);
         expect(find.text('2. Release Plan'), findsNothing);
 
         // Clicking "Approve & Build v0.1 →" builds v0.1 and jumps directly into 2. Workbench (2-Stage Workflow)
-        final approveConceptBtn = find.byKey(const ValueKey('approve_concept_plan_release_btn'));
+        final approveConceptBtn =
+            find.byKey(const ValueKey('approve_concept_plan_release_btn'));
         await tester.ensureVisible(approveConceptBtn);
         await tester.pumpAndSettle();
         await tester.tap(approveConceptBtn);
@@ -1225,7 +1277,8 @@ void main() {
         expect(provider.releaseBlueprint!.beats.length, 7);
         expect(provider.releaseBlueprint!.totalIncludedFeatures, 8);
         expect(provider.releaseBlueprint!.totalDeferredFeatures, 0);
-        final firstProposedFeat = provider.releaseBlueprint!.beats.first.features.first;
+        final firstProposedFeat =
+            provider.releaseBlueprint!.beats.first.features.first;
         expect(firstProposedFeat.checkpoints.first.tasks.length, 3);
 
         // Verify Singular-Focused Feature Titles & Progressive AI Release button in 2. Workbench
@@ -1243,18 +1296,25 @@ void main() {
 
         // ── Stage 2 (Workbench): Active Release Workbench (Left Outliner + Open-Canvas Workspace) ──
         expect(find.text('OUTLINE', skipOffstage: false), findsOneWidget);
-        expect(find.byKey(const ValueKey('outline_release_eta_summary')), findsOneWidget);
+        expect(find.byKey(const ValueKey('outline_release_eta_summary')),
+            findsOneWidget);
         final firstBeatId = provider.activeReleaseBeats.first.id;
         expect(find.byKey(ValueKey('rail_beat_$firstBeatId')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage3_active_feature_sheet')), findsOneWidget);
-        expect(find.byKey(const ValueKey('checkpoint_single_col_0')), findsOneWidget);
-        expect(find.textContaining('Arena Entry & Traversal Mechanics & Controls'), findsWidgets);
+        expect(find.byKey(const ValueKey('stage3_active_feature_sheet')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('checkpoint_single_col_0')),
+            findsOneWidget);
+        expect(
+            find.textContaining('Arena Entry & Traversal Mechanics & Controls'),
+            findsWidgets);
 
         // The Pinned Active Step Window is always visible at the top of the work area in Single-Panel mode
         final activeFeat0 = provider.selectedFeature!;
         final cp0NodeId = provider.documents[activeFeat0.id]!.subtasks.first.id;
-        expect(find.byKey(ValueKey('pinned_active_step_window_$cp0NodeId')), findsOneWidget);
-        expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')), findsOneWidget);
+        expect(find.byKey(ValueKey('pinned_active_step_window_$cp0NodeId')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')),
+            findsOneWidget);
 
         // Verify clicking Feature 2 in the Left Outline and marking Step 1.1 done preserves focus on Feature 2
         final allFeatsInOrder = <String>[
@@ -1266,18 +1326,21 @@ void main() {
         await tester.pumpAndSettle();
         final secondFeat = provider.selectedFeature!;
         expect(secondFeat.id, isNot(equals(activeFeat0.id)));
-        final secondCp0NodeId = provider.documents[secondFeat.id]!.subtasks.first.id;
+        final secondCp0NodeId =
+            provider.documents[secondFeat.id]!.subtasks.first.id;
         // Verify Single-Row Outliner Header live Release ETA summary ("12h Left #%")
-        expect(find.byKey(const ValueKey('outline_release_eta_summary')), findsOneWidget);
+        expect(find.byKey(const ValueKey('outline_release_eta_summary')),
+            findsOneWidget);
 
         // Verify Next → starts locked (onTap == null) while Step 1 is unchecked
-        final secondTask0Steps =
-            provider.documents[secondFeat.id]!.subtasks.first.children.first.children.length;
+        final secondTask0Steps = provider.documents[secondFeat.id]!.subtasks
+            .first.children.first.children.length;
         final nextBtnBefore = tester.widget<InkWell>(
           find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
         );
         expect(nextBtnBefore.onTap, isNull);
-        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'),
+            findsOneWidget);
         expect(find.text('✓ VERIFY BEFORE CHECKING [✓]'), findsOneWidget);
         expect(
           find.byKey(ValueKey('one_click_complete_next_btn_$secondCp0NodeId')),
@@ -1299,7 +1362,8 @@ void main() {
         await tester.tap(markDoneFinder);
         await tester.pumpAndSettle();
         expect(provider.selectedFeature!.id, equals(secondFeat.id));
-        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'),
+            findsOneWidget);
         final nextBtnAfter = tester.widget<InkWell>(
           find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
         );
@@ -1313,7 +1377,8 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(nextBtnFinder);
         await tester.pumpAndSettle();
-        expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'),
+            findsOneWidget);
 
         // Verify clicking the task chevron in the Outliner expands Task 02 for peeking without losing Step 2 in the workspace
         final task1ChevronFinder = find.byKey(
@@ -1322,7 +1387,8 @@ void main() {
         if (task1ChevronFinder.evaluate().isNotEmpty) {
           await tester.tap(task1ChevronFinder);
           await tester.pumpAndSettle();
-          expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'), findsOneWidget);
+          expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'),
+              findsOneWidget);
         }
 
         // Verify the compact Previous Step (←) button steps back to Step 1
@@ -1334,7 +1400,8 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(prevBtnFinder);
         await tester.pumpAndSettle();
-        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'), findsOneWidget);
+        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'),
+            findsOneWidget);
 
         // Verify the Left Outline stops cleanly at the Task level (no duplicate 4th-level step rows)
         expect(
@@ -1356,14 +1423,16 @@ void main() {
         // Verify 1-Click "Copy" on the active How-To sub-step copies the code formula
         final activeFeat = provider.selectedFeature!;
         final cp0Id = provider.documents[activeFeat.id]!.subtasks.first.id;
-        final copyCodeBtn = find.byKey(ValueKey('copy_howto_code_${cp0Id}_0_0'));
+        final copyCodeBtn =
+            find.byKey(ValueKey('copy_howto_code_${cp0Id}_0_0'));
         await tester.ensureVisible(copyCodeBtn);
         await tester.pumpAndSettle();
         await tester.tap(copyCodeBtn);
         await tester.pumpAndSettle();
 
         // Verify 1-Click "⧉ Copy All Code" in the Task Sheet header copies all task code snippets
-        final copyAllCodeBtn = find.byKey(ValueKey('copy_all_task_code_btn_${cp0Id}_0'));
+        final copyAllCodeBtn =
+            find.byKey(ValueKey('copy_all_task_code_btn_${cp0Id}_0'));
         await tester.ensureVisible(copyAllCodeBtn);
         await tester.pumpAndSettle();
         await tester.tap(copyAllCodeBtn);
@@ -1379,7 +1448,8 @@ void main() {
           find.byKey(const ValueKey('tailor_howto_context_input')),
           'CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual',
         );
-        await tester.tap(find.byKey(const ValueKey('confirm_tailor_howto_btn')));
+        await tester
+            .tap(find.byKey(const ValueKey('confirm_tailor_howto_btn')));
         await tester.pumpAndSettle();
         expect(find.textContaining('HookRay'), findsWidgets);
         expect(find.textContaining('RopeVisual'), findsWidgets);
@@ -1561,7 +1631,8 @@ void main() {
       'Evolving from Release v0.1 to v0.2 preserves STABLE features (0h delta) and appends v0.2 checkpoints to UPGRADE features',
       () async {
         final provider = WorkbenchProvider();
-        await provider.startConceptInterview('High-speed grappling hook parkour roguelite');
+        await provider.startConceptInterview(
+            'High-speed grappling hook parkour roguelite');
         expect(provider.conceptDraft!.designPillars, isNotEmpty);
         expect(provider.conceptDraft!.tradeOffs, isNotEmpty);
         expect(provider.conceptDraft!.techSpec, isNotEmpty);
@@ -1608,7 +1679,8 @@ void main() {
         // All 7 Stage 1 Core Loop Beats carry into Stage 2 & Stage 3!
         expect(v1Beats.length, provider.conceptDraft!.coreLoopBeats.length);
         final v1FirstFeat = provider.featuresForBeat(v1Beats.first.id).first;
-        expect(v1FirstFeat.title, 'Arena Entry & Traversal Mechanics & Controls');
+        expect(
+            v1FirstFeat.title, 'Arena Entry & Traversal Mechanics & Controls');
 
         // Advance to v0.2 Plan Gate
         await provider.advanceToNextRelease();
@@ -1754,14 +1826,17 @@ void main() {
         for (final beat in liveBeats) {
           for (final feat in provider.featuresForBeat(beat.id)) {
             final st = FeatureStateNode.getStatesForDocument(feat);
-            if (!st.any((s) => s.releaseVersion == 'v0.2' || s.releaseVersion == 'v0.3')) {
+            if (!st.any((s) =>
+                s.releaseVersion == 'v0.2' || s.releaseVersion == 'v0.3')) {
               st.add(
                 FeatureStateNode(
                   id: '${feat.id}_v0.3_mvp',
                   name: 'Checkpoint 2: ${feat.title} MVP',
                   trigger: 'Playtest MVP',
                   order: st.length,
-                  checklist: [Subtask(id: 'm1', text: 'MVP Task (2h)', completed: true)],
+                  checklist: [
+                    Subtask(id: 'm1', text: 'MVP Task (2h)', completed: true)
+                  ],
                   parameters: const {'releaseVersion': 'v0.3'},
                 ),
               );
@@ -1782,46 +1857,46 @@ void main() {
           existingFeatIdsBefore.toSet().length,
           existingFeatIdsBefore.length,
         );
-        final v4Reconciled = ReleasePlannerAgent
-            .reconcileReleaseBlueprintWithPhaseRules(
-              parsed: ReleaseBlueprint(
-                releaseDocId: 'rel_v0_4',
-                releaseTitle: 'v0.4: Boss & Projectile Pass',
-                releaseVersionTag: 'v0.4',
-                preset: ReleaseScope.mvp,
-                goal: 'Add enemy projectile fire without overwriting v0.1 cards.',
-                doneWhen: 'Boss fires projectiles and v0.1 cards remain intact.',
-                questions: const [],
-                beats: [
-                  ProposedBeatBlueprint(
-                    id: firstEpic.id,
-                    title: firstEpic.title,
-                    goal: 'Expand first epic with a new feature at index 0.',
-                    doneWhen: 'Both existing and new features exist distinctly.',
-                    features: [
-                      ProposedFeatureBlueprint(
-                        id: 'feat_1',
-                        title: 'Enemy Projectile Fire',
-                        goal: 'Spawn aimed projectiles from ranged enemies.',
-                        doneWhen: 'Projectiles travel and deal damage on hit.',
-                        estimatedHours: 6,
-                        included: true,
-                        lifecycle: FeatureLifecycleStatus.newFeature,
-                        originVersion: 'v0.4',
-                      ),
-                    ],
+        final v4Reconciled =
+            ReleasePlannerAgent.reconcileReleaseBlueprintWithPhaseRules(
+          parsed: ReleaseBlueprint(
+            releaseDocId: 'rel_v0_4',
+            releaseTitle: 'v0.4: Boss & Projectile Pass',
+            releaseVersionTag: 'v0.4',
+            preset: ReleaseScope.mvp,
+            goal: 'Add enemy projectile fire without overwriting v0.1 cards.',
+            doneWhen: 'Boss fires projectiles and v0.1 cards remain intact.',
+            questions: const [],
+            beats: [
+              ProposedBeatBlueprint(
+                id: firstEpic.id,
+                title: firstEpic.title,
+                goal: 'Expand first epic with a new feature at index 0.',
+                doneWhen: 'Both existing and new features exist distinctly.',
+                features: [
+                  ProposedFeatureBlueprint(
+                    id: 'feat_1',
+                    title: 'Enemy Projectile Fire',
+                    goal: 'Spawn aimed projectiles from ranged enemies.',
+                    doneWhen: 'Projectiles travel and deal damage on hit.',
+                    estimatedHours: 6,
+                    included: true,
+                    lifecycle: FeatureLifecycleStatus.newFeature,
+                    originVersion: 'v0.4',
                   ),
                 ],
               ),
-              releaseDoc: provider.activeRelease!,
-              preset: ReleaseScope.mvp,
-              versionTag: 'v0.4',
-              existingBeats: liveBeats,
-              existingFeaturesByBeat: existingFeatsMap,
-              deferredByBeatIndex: const {},
-              projectExclusions: const [],
-              allCoreLoopItems: provider.conceptDraft!.coreLoopBeats,
-            );
+            ],
+          ),
+          releaseDoc: provider.activeRelease!,
+          preset: ReleaseScope.mvp,
+          versionTag: 'v0.4',
+          existingBeats: liveBeats,
+          existingFeaturesByBeat: existingFeatsMap,
+          deferredByBeatIndex: const {},
+          projectExclusions: const [],
+          allCoreLoopItems: provider.conceptDraft!.coreLoopBeats,
+        );
         // Existing features stay first, followed by the + NEW feature with a non-colliding ID
         final reconciledBeat = v4Reconciled.beats.first;
         expect(
@@ -1862,7 +1937,8 @@ void main() {
       'Blueprint JSON serialization & Multi-Project Vault Manager (Switch, Rename, Deep 4-Tier Duplicate, Collaborators, Delete) preserve Stage 1, 2, and 3 state',
       () async {
         final provider = WorkbenchProvider();
-        await provider.startConceptInterview('Tactical Mecha Extraction Shooter');
+        await provider
+            .startConceptInterview('Tactical Mecha Extraction Shooter');
         await provider.openReleasePlanGate();
         await provider.approveAndExecuteReleasePlan();
 
@@ -1903,7 +1979,8 @@ void main() {
         expect(provider.conceptDraft, isNull);
         expect(provider.currentStage, WorkbenchStage.projectPitch);
 
-        await provider.startConceptInterview('Cozy Alchemy Shop & Dungeon Forager');
+        await provider
+            .startConceptInterview('Cozy Alchemy Shop & Dungeon Forager');
         final proj3Id = provider.activeProjectId!;
         expect(provider.savedProjects.length, 3);
 
@@ -1914,7 +1991,8 @@ void main() {
         // Switch back to Project 1 and verify Stage 1, 2, and 3 state restored from JSON metadata
         provider.switchProject(proj1Id);
         expect(provider.activeProjectId, proj1Id);
-        expect(provider.conceptDraft!.sparkIdea, 'Tactical Mecha Extraction Shooter');
+        expect(provider.conceptDraft!.sparkIdea,
+            'Tactical Mecha Extraction Shooter');
         expect(provider.releaseBlueprint, isNotNull);
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
         expect(provider.activeReleaseBeats, isNotEmpty);
@@ -1950,7 +2028,8 @@ void main() {
         expect(godotBp.engineLabel, 'GODOT 4');
         expect(godotBp.subSteps.length, 6);
         expect(godotBp.whereLocation, contains('_physics_process'));
-        expect(godotBp.subSteps[4].codeFormula, contains('Input.is_action_pressed'));
+        expect(godotBp.subSteps[4].codeFormula,
+            contains('Input.is_action_pressed'));
         expect(godotBp.subSteps[4].codeFormula, contains('move_toward'));
 
         final unityTask = Subtask(
@@ -1968,7 +2047,8 @@ void main() {
         expect(unityBp.subSteps.length, 6);
         expect(unityBp.whereLocation, contains('MonoBehaviour'));
         expect(unityBp.subSteps[4].codeFormula, contains('Input.GetButton'));
-        expect(unityBp.subSteps[4].codeFormula, contains('Time.fixedDeltaTime'));
+        expect(
+            unityBp.subSteps[4].codeFormula, contains('Time.fixedDeltaTime'));
 
         final unrealTask = Subtask(
           id: 't_unreal',
@@ -1986,10 +2066,13 @@ void main() {
         expect(unrealBp.subSteps.length, 6);
         expect(unrealBp.whereLocation, contains('ActorComponent'));
         expect(unrealBp.subSteps[0].stepPath, contains('/Game/Blueprints/'));
-        expect(unrealBp.subSteps[0].codeFormula, contains('EMechanicState::Active'));
+        expect(unrealBp.subSteps[0].codeFormula,
+            contains('EMechanicState::Active'));
         expect(unrealBp.subSteps[0].explainConcept, contains('BP_'));
-        expect(unrealBp.subSteps[0].specChips, contains('Next: ${unrealBp.subSteps[1].shortTitle}'));
-        expect(unrealBp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
+        expect(unrealBp.subSteps[0].specChips,
+            contains('Next: ${unrealBp.subSteps[1].shortTitle}'));
+        expect(unrealBp.subSteps[4].codeFormula,
+            contains('FMath::FInterpConstantTo'));
 
         final unrealCpp = TaskHowToBlueprint.resolve(
           parentTask: unrealTask,
@@ -2000,9 +2083,12 @@ void main() {
         );
         expect(unrealCpp.engineLabel, 'UNREAL 5');
         expect(unrealCpp.whereLocation, contains('ActorComponent'));
-        expect(unrealCpp.subSteps[0].explainConcept, contains('AWasdMovementDash'));
-        expect(unrealCpp.subSteps[3].codeFormula, contains('UPROPERTY(EditAnywhere'));
-        expect(unrealCpp.subSteps[4].codeFormula, contains('FMath::FInterpConstantTo'));
+        expect(unrealCpp.subSteps[0].explainConcept,
+            contains('AWasdMovementDash'));
+        expect(unrealCpp.subSteps[3].codeFormula,
+            contains('UPROPERTY(EditAnywhere'));
+        expect(unrealCpp.subSteps[4].codeFormula,
+            contains('FMath::FInterpConstantTo'));
 
         // Verify Task 01 (Setup), Task 02 (State Logic), and Task 03 (Input/Raycast) have non-repeating step titles
         final t0 = TaskHowToBlueprint.resolve(
@@ -2023,16 +2109,23 @@ void main() {
           checkpointNode: cp,
           engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
         );
-        expect(t0.subSteps[0].shortTitle, isNot(equals(t1.subSteps[0].shortTitle)));
-        expect(t1.subSteps[0].shortTitle, isNot(equals(t2.subSteps[0].shortTitle)));
-        expect(t0.subSteps[1].shortTitle, isNot(equals(t1.subSteps[1].shortTitle)));
-        expect(t1.subSteps[1].shortTitle, isNot(equals(t2.subSteps[1].shortTitle)));
-        expect(t0.subSteps[2].shortTitle, isNot(equals(t1.subSteps[2].shortTitle)));
-        expect(t1.subSteps[2].shortTitle, isNot(equals(t2.subSteps[2].shortTitle)));
+        expect(t0.subSteps[0].shortTitle,
+            isNot(equals(t1.subSteps[0].shortTitle)));
+        expect(t1.subSteps[0].shortTitle,
+            isNot(equals(t2.subSteps[0].shortTitle)));
+        expect(t0.subSteps[1].shortTitle,
+            isNot(equals(t1.subSteps[1].shortTitle)));
+        expect(t1.subSteps[1].shortTitle,
+            isNot(equals(t2.subSteps[1].shortTitle)));
+        expect(t0.subSteps[2].shortTitle,
+            isNot(equals(t1.subSteps[2].shortTitle)));
+        expect(t1.subSteps[2].shortTitle,
+            isNot(equals(t2.subSteps[2].shortTitle)));
 
         // Verify dynamic step scaling (compact 3-step guard, 4-step feel, 5-step single-clause extension, and 10+ step complex mechanic)
         expect(t0.subSteps.length, 6);
-        expect(t1.subSteps.length, 7); // 4h heavy task includes extra tuning parameter step
+        expect(t1.subSteps.length,
+            7); // 4h heavy task includes extra tuning parameter step
         expect(t2.subSteps.length, 5); // 2h single-clause extension task
 
         final tGuard = TaskHowToBlueprint.resolve(
@@ -2132,7 +2225,8 @@ void main() {
       '2-Stage Release Plan Chat & Custom Mechanic Breakdown synthesizes domain-specific tuning variables, edge guards, and playable checkpoints',
       () async {
         final provider = WorkbenchProvider();
-        await provider.startConceptInterview('High-speed grappling hook parkour roguelite');
+        await provider.startConceptInterview(
+            'High-speed grappling hook parkour roguelite');
         await provider.openReleasePlanGate();
 
         final firstBeat = provider.releaseBlueprint!.beats.first;
@@ -2145,23 +2239,38 @@ void main() {
           included: true,
           lifecycle: FeatureLifecycleStatus.newFeature,
           originVersion: 'v0.1',
-          tuningParams: const ['hookMaxRange: 18.0 m', 'hookPullSpeed: 28.0 m/s'],
-          edgeCases: const ['[LOS BREAK GUARD] Detach when line-of-sight breaks'],
+          tuningParams: const [
+            'hookMaxRange: 18.0 m',
+            'hookPullSpeed: 28.0 m/s'
+          ],
+          edgeCases: const [
+            '[LOS BREAK GUARD] Detach when line-of-sight breaks'
+          ],
           checkpoints: [
             ProposedCheckpointBlueprint(
               title: 'Grapple Anchor & Swing',
               playtestCriteria: 'Fire hook -> swing across gap',
               tasks: const ['Hook Raycast (2h)', 'Swing Arc (2h)'],
-              tuningParams: const ['hookMaxRange: 18.0 m', 'hookPullSpeed: 28.0 m/s'],
-              edgeCases: const ['[LOS BREAK GUARD] Detach when line-of-sight breaks'],
+              tuningParams: const [
+                'hookMaxRange: 18.0 m',
+                'hookPullSpeed: 28.0 m/s'
+              ],
+              edgeCases: const [
+                '[LOS BREAK GUARD] Detach when line-of-sight breaks'
+              ],
               releaseVersion: 'v0.1',
             ),
             ProposedCheckpointBlueprint(
               title: 'Release Boost & Cooldown',
               playtestCriteria: 'Release hook -> launch with momentum',
               tasks: const ['Release Impulse (2h)'],
-              tuningParams: const ['hookMaxRange: 18.0 m', 'hookPullSpeed: 28.0 m/s'],
-              edgeCases: const ['[LOS BREAK GUARD] Detach when line-of-sight breaks'],
+              tuningParams: const [
+                'hookMaxRange: 18.0 m',
+                'hookPullSpeed: 28.0 m/s'
+              ],
+              edgeCases: const [
+                '[LOS BREAK GUARD] Detach when line-of-sight breaks'
+              ],
               releaseVersion: 'v0.1',
             ),
           ],
@@ -2178,12 +2287,14 @@ void main() {
         );
 
         // Also verify Release Plan chat command "Add Ore Smelting Furnace to Beat 2" adds a tailored economy feature
-        await provider.sendReleasePlanChatMessage('Add Ore Smelting Furnace to Beat 2');
+        await provider
+            .sendReleasePlanChatMessage('Add Ore Smelting Furnace to Beat 2');
         final secondBeat = provider.releaseBlueprint!.beats[1];
         final furnaceBp = secondBeat.features.last;
         expect(furnaceBp.title, 'Ore Smelting Furnace');
         expect(furnaceBp.checkpoints.length, 2);
-        expect(furnaceBp.tuningParams, contains('transactionCostBase: 25 gold'));
+        expect(
+            furnaceBp.tuningParams, contains('transactionCostBase: 25 gold'));
 
         // Execute into 2. Workbench and verify the custom Grapple Hook Swing feature carries its 2 checkpoints & tuning into the Workbench
         await provider.approveAndExecuteReleasePlan();
@@ -2309,7 +2420,8 @@ void main() {
         );
         final afterFixStates = FeatureStateNode.getStatesForDocument(firstFeat);
         expect(
-          afterFixStates.first.edgeCases.any((g) => g.startsWith('[PLAYTEST GUARD]')),
+          afterFixStates.first.edgeCases
+              .any((g) => g.startsWith('[PLAYTEST GUARD]')),
           isTrue,
         );
 
@@ -2317,7 +2429,8 @@ void main() {
         final retro = provider.buildActiveReleaseRetrospective();
         expect(retro.playtestGuardsAdded, greaterThanOrEqualTo(1));
         expect(retro.carryoverFeatureTitles, isNotEmpty);
-        expect(retro.verifiedCheckpoints, lessThanOrEqualTo(retro.totalCheckpoints));
+        expect(retro.verifiedCheckpoints,
+            lessThanOrEqualTo(retro.totalCheckpoints));
         await provider.advanceToNextRelease();
         expect(provider.lastReleaseRetrospective, isNotNull);
       },
@@ -2484,7 +2597,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             provider.releaseConciseLabel(provider.activeRelease!),
             contains('MVP Epic ${epicIdx + 1}'),
           );
-          for (int bIdx = 0; bIdx < provider.activeReleaseBeats.length; bIdx++) {
+          for (int bIdx = 0;
+              bIdx < provider.activeReleaseBeats.length;
+              bIdx++) {
             if (bIdx != epicIdx) {
               final stableBeat = provider.activeReleaseBeats[bIdx];
               for (final feat in provider.featuresForBeat(stableBeat.id)) {
@@ -2594,7 +2709,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isFalse,
         );
         expect(
-          intake.expansionCards.any((c) => c.title.toLowerCase().contains('grapple')),
+          intake.expansionCards
+              .any((c) => c.title.toLowerCase().contains('grapple')),
           isFalse,
         );
         expect(
@@ -2651,8 +2767,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isNot(contains('sonar')),
         );
         expect(
-          afterCourierSearch.mechanics
-              .any((m) => m.toLowerCase().contains('submarine') || m.toLowerCase().contains('sonar')),
+          afterCourierSearch.mechanics.any((m) =>
+              m.toLowerCase().contains('submarine') ||
+              m.toLowerCase().contains('sonar')),
           isFalse,
         );
         expect(
@@ -2675,7 +2792,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           'Monster Order Rush',
         ];
         await provider.shuffleSparkExpansionCards();
-        expect(provider.sparkIntake!.workingTitle, equals('Cozy Pizza Alchemy'));
+        expect(
+            provider.sparkIntake!.workingTitle, equals('Cozy Pizza Alchemy'));
         expect(
           provider.sparkIntake!.baseSummary,
           equals(
@@ -2720,11 +2838,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           expect(parsed.title, isNotEmpty);
           expect(parsed.body, isNotEmpty);
         }
-        final unprefixedParsed = ProjectConceptBlueprint.parsePillarTitleAndBody(
+        final unprefixedParsed =
+            ProjectConceptBlueprint.parsePillarTitleAndBody(
           'Every run feels tense as cargo weight slows your movement',
           0,
         );
-        expect(unprefixedParsed.title.toLowerCase(), isNot(startsWith('pillar ')));
+        expect(
+            unprefixedParsed.title.toLowerCase(), isNot(startsWith('pillar ')));
         expect(unprefixedParsed.title, 'High-Stakes Cargo');
 
         // Item 4: Different game premises generate distinct Trade-Offs (05) and Out of Scope Exclusions (07)
@@ -2816,11 +2936,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await Future<void>.delayed(Duration.zero);
         expect(
           courierProvider.documents[newLiveFeatId!]!.sections['scope'],
-          contains('Goal: Build zipline anchor attach and momentum release mechanics.'),
+          contains(
+              'Goal: Build zipline anchor attach and momentum release mechanics.'),
         );
         expect(
           courierProvider.documents[newLiveFeatId]!.sections['scope'],
-          contains('Done When: Player attaches to zipline and detaches cleanly in playtest.'),
+          contains(
+              'Done When: Player attaches to zipline and detaches cleanly in playtest.'),
         );
         expect(
           courierProvider.featuresForBeat(firstBeatDoc.id).length,
@@ -2884,7 +3006,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         sampleTask.children.first
           ..codeTargetFile = 'custom_snippet'
           ..codeLanguage = 'Scene Dock → PlayerCharacter → Inspector'
-          ..verification = 'Confirm custom AI step verify check passes in Play mode.';
+          ..verification =
+              'Confirm custom AI step verify check passes in Play mode.';
         TaskHowToBlueprint.clearCache();
         final resolvedCustom = TaskHowToBlueprint.resolve(
           parentTask: sampleTask,
@@ -2923,7 +3046,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(
           sampleTask.children[3].completed,
           isTrue,
-          reason: 'Completed sub-step state must be preserved when tuning parameters update',
+          reason:
+              'Completed sub-step state must be preserved when tuning parameters update',
         );
 
         // Round 6: Cancelling Progressive Next Release cleanly rolls back unbuilt v0.2 releases, phase, and blueprint
@@ -3055,7 +3179,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         String? capturedPrompt;
         final prevResponder = GeminiAgentClient.testMockResponder;
         GeminiAgentClient.testMockResponder = (prompt, preferredModel) async {
-          if (prompt.contains('Synthesize concrete, beginner-friendly 3-Area Engine How-To steps')) {
+          if (prompt.contains(
+              'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps')) {
             capturedModel = preferredModel;
             capturedPrompt = prompt;
             return <String, dynamic>{
@@ -3066,7 +3191,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     {
                       'title': 'STEP 1.1 · ATTACH GRAPPLE CABLE COMPONENT',
                       'stepPath': 'Source/Project/GrappleCharacter.cpp',
-                      'instruction': 'Instantiate UCableComponent in C++ constructor.',
+                      'instruction':
+                          'Instantiate UCableComponent in C++ constructor.',
                       'area1Hierarchy':
                           'AGrappleCharacter (Self)\n └─ GrappleCable (UCableComponent)',
                       'area2Inspector':
@@ -3108,9 +3234,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           engineHint: 'Unreal Engine 5',
           unrealCppMode: true,
         );
-        expect(resolvedBp.subSteps.first.area1Hierarchy, contains('GrappleCable'));
-        expect(resolvedBp.subSteps.first.area2Inspector, contains('grappleRange: 1800.0 cm'));
-        expect(resolvedBp.subSteps.first.instruction, equals('Instantiate UCableComponent in C++ constructor.'));
+        expect(
+            resolvedBp.subSteps.first.area1Hierarchy, contains('GrappleCable'));
+        expect(resolvedBp.subSteps.first.area2Inspector,
+            contains('grappleRange: 1800.0 cm'));
+        expect(resolvedBp.subSteps.first.instruction,
+            equals('Instantiate UCableComponent in C++ constructor.'));
 
         // ── Upgrade 3: Engine-Ready Context Export (AGENTS.md / .cursorrules) ──
         final agentsMd = provider.buildActiveReleaseCodingAgentMarkdown(
@@ -3118,8 +3247,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(agentsMd, contains('# AGENTS.md —'));
         expect(agentsMd, contains('UNREAL 5 C++ (.h / .cpp)'));
-        expect(agentsMd, contains('## 3. Canonical Tuning Variables & Inspector Bindings'));
-        expect(agentsMd, contains('## 4. Mandatory Playtest & Edge-Case Guards'));
+        expect(agentsMd,
+            contains('## 3. Canonical Tuning Variables & Inspector Bindings'));
+        expect(
+            agentsMd, contains('## 4. Mandatory Playtest & Edge-Case Guards'));
         expect(agentsMd, contains('Area 1 (Hierarchy)'));
         expect(agentsMd, contains('Area 2 (Inspector)'));
 
@@ -3151,7 +3282,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(
           provider.getDocumentProgress(beat1Feat.id),
           equals(progressBeforeSync),
-          reason: 'Stage 1 -> Stage 2 sync must preserve completed task progress',
+          reason:
+              'Stage 1 -> Stage 2 sync must preserve completed task progress',
         );
         // Beat 3 shifted to index 1 and kept its original Beat ID!
         expect(syncedBeats[1].id, equals(beat3Id));
@@ -3191,7 +3323,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         provider.updateConceptDraft((d) {
           d.title = 'Neon Katana';
           d.goal = 'Build a fast 3D action slasher in Unreal Engine 5.';
-          d.techSpec = ['Engine: Unreal Engine 5', 'Language: C++ & Blueprints'];
+          d.techSpec = [
+            'Engine: Unreal Engine 5',
+            'Language: C++ & Blueprints'
+          ];
         });
         final buildFuture = provider.approveConceptAndBuildRelease();
         await tester.pumpAndSettle();
@@ -3207,10 +3342,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           firstFeat.id,
           unrealCppMode: true,
         );
-        expect(singlePrompt, contains('# AI CODING AGENT TASK PROMPT — ${firstFeat.title}'));
+        expect(singlePrompt,
+            contains('# AI CODING AGENT TASK PROMPT — ${firstFeat.title}'));
         expect(singlePrompt, contains('UNREAL 5 C++ (.h / .cpp)'));
-        expect(singlePrompt, contains('## 2. Canonical Tuning Variables & Sibling Context'));
-        expect(singlePrompt, contains('## 3. Mandatory Edge-Case & Playtest Guards'));
+        expect(singlePrompt,
+            contains('## 2. Canonical Tuning Variables & Sibling Context'));
+        expect(singlePrompt,
+            contains('## 3. Mandatory Edge-Case & Playtest Guards'));
         expect(singlePrompt, contains('## 4. 3-Area Implementation Steps'));
         expect(
           find.byKey(ValueKey('copy_feature_ai_prompt_btn_${firstFeat.id}')),
@@ -3241,16 +3379,19 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isTrue,
         );
         expect(
-          syncedStates.last.tuningParams.any((p) => p.contains('dashCooldown: 0.25')),
+          syncedStates.last.tuningParams
+              .any((p) => p.contains('dashCooldown: 0.25')),
           isTrue,
         );
         expect(
-          syncedStates.last.tuningParams.any((p) => p.contains('comboWindowSec: 0.45')),
+          syncedStates.last.tuningParams
+              .any((p) => p.contains('comboWindowSec: 0.45')),
           isTrue,
         );
         expect(
           syncedStates.last.edgeCases.any(
-            (g) => g.contains('Cancel dash impulse immediately when player hits a solid wall normal'),
+            (g) => g.contains(
+                'Cancel dash impulse immediately when player hits a solid wall normal'),
           ),
           isTrue,
         );
@@ -3317,7 +3458,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         provider.updateFeatureStates(featA.id, statesA);
 
         final statesB = FeatureStateNode.getStatesForDocument(featB);
-        statesB.last.tuningParams = ['grappleSpeed: 650.0', 'releaseBoost: 1.25'];
+        statesB.last.tuningParams = [
+          'grappleSpeed: 650.0',
+          'releaseBoost: 1.25'
+        ];
         statesB.last.edgeCases = [
           '[GUARD] Scale momentum impulse by grappleSpeed on detach',
         ];
@@ -3340,14 +3484,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(updatedCount, greaterThanOrEqualTo(2));
 
         final updatedStatesA = FeatureStateNode.getStatesForDocument(featA);
-        expect(updatedStatesA.last.tuningParams, contains('zipVelocity: 650.0'));
+        expect(
+            updatedStatesA.last.tuningParams, contains('zipVelocity: 650.0'));
         expect(
           updatedStatesA.last.edgeCases.first,
           contains('Clamp zipVelocity when player collides with ceiling'),
         );
 
         final updatedStatesB = FeatureStateNode.getStatesForDocument(featB);
-        expect(updatedStatesB.last.tuningParams, contains('zipVelocity: 650.0'));
+        expect(
+            updatedStatesB.last.tuningParams, contains('zipVelocity: 650.0'));
         expect(
           updatedStatesB.last.edgeCases.first,
           contains('Scale momentum impulse by zipVelocity on detach'),
@@ -3369,7 +3515,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final restoredId = freshProvider.importProjectFromJson(exportedJson);
         expect(restoredId, isNotNull);
         expect(freshProvider.activeProject?.title, equals('Hook Runner'));
-        expect(freshProvider.currentStage, equals(WorkbenchStage.releaseWorkbench));
+        expect(freshProvider.currentStage,
+            equals(WorkbenchStage.releaseWorkbench));
         expect(freshProvider.activeReleaseBeats.length, equals(beats.length));
 
         final restoredFeats = <TierDocument>[
@@ -3379,14 +3526,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final restoredStatesB = FeatureStateNode.getStatesForDocument(
           restoredFeats[1],
         );
-        expect(restoredStatesB.last.tuningParams, contains('zipVelocity: 650.0'));
+        expect(
+            restoredStatesB.last.tuningParams, contains('zipVelocity: 650.0'));
         expect(
           restoredStatesB.last.checklist.first.children.first.codeSnippet,
           contains('zipVelocity * releaseBoost'),
         );
 
         // Import again into the same provider to verify collision-safe ID remapping
-        final duplicateImportId = freshProvider.importProjectFromJson(exportedJson);
+        final duplicateImportId =
+            freshProvider.importProjectFromJson(exportedJson);
         expect(duplicateImportId, isNotNull);
         expect(duplicateImportId, isNot(equals(restoredId)));
         expect(
@@ -3543,7 +3692,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await tester.tap(copyNextBtn);
         await tester.pumpAndSettle();
 
-        final afterCopyNextStates = FeatureStateNode.getStatesForDocument(feat0);
+        final afterCopyNextStates =
+            FeatureStateNode.getStatesForDocument(feat0);
         expect(
           afterCopyNextStates.first.checklist.first.children.first.completed,
           isTrue,
@@ -3909,23 +4059,30 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
 
         // Task 1 (Pawn Setup) creates BP_LocomotionCharacter as ACharacter with Capsule + Camera + CharacterMovement
-        expect(bp0.subSteps[0].shortTitle, equals('Create BP_LocomotionCharacter'));
+        expect(bp0.subSteps[0].shortTitle,
+            equals('Create BP_LocomotionCharacter'));
         expect(bp0.subSteps[0].codeFormula, contains('Character (ACharacter'));
         expect(bp0.subSteps[1].codeFormula, contains('CapsuleComponent'));
         expect(bp0.subSteps[1].codeFormula, contains('FirstPersonCamera'));
         expect(bp0.subSteps[1].codeFormula, contains('CharacterMovement'));
 
         // Task 2 (Input Mapping) sets up IA_Move & IMC_Default and wires to AddMovementInput on the SAME BP_LocomotionCharacter
-        expect(bp1.subSteps[0].shortTitle, equals('Create IA_Move & IMC_Default'));
-        expect(bp1.subSteps[0].codeFormula, contains('BP_LocomotionCharacter (Reuse from Task 01)'));
+        expect(
+            bp1.subSteps[0].shortTitle, equals('Create IA_Move & IMC_Default'));
+        expect(bp1.subSteps[0].codeFormula,
+            contains('BP_LocomotionCharacter (Reuse from Task 01)'));
         expect(bp1.subSteps[1].shortTitle, equals('Register Mapping Context'));
-        expect(bp1.subSteps[2].shortTitle, equals('Wire IA_Move to AddMovementInput'));
+        expect(bp1.subSteps[2].shortTitle,
+            equals('Wire IA_Move to AddMovementInput'));
 
         // Task 3 (Physics Tuning) tunes CharacterMovement speed, acceleration & velocity on the SAME BP_LocomotionCharacter
         expect(bp2.subSteps[0].shortTitle, equals('Select Movement Component'));
-        expect(bp2.subSteps[0].codeFormula, contains('BP_LocomotionCharacter (Reuse from Task 01)'));
-        expect(bp2.subSteps[1].shortTitle, equals('Configure Walk Speed & Gravity'));
-        expect(bp2.subSteps[2].shortTitle, equals('Wire Physics Momentum Curve'));
+        expect(bp2.subSteps[0].codeFormula,
+            contains('BP_LocomotionCharacter (Reuse from Task 01)'));
+        expect(bp2.subSteps[1].shortTitle,
+            equals('Configure Walk Speed & Gravity'));
+        expect(
+            bp2.subSteps[2].shortTitle, equals('Wire Physics Momentum Curve'));
 
         // ── 2. AI Step Synthesis: 1-Based taskIndex (1, 2, 3) Maps Cleanly to checklist[0], [1], [2] with Zero Shift ──
         final prevResponder = GeminiAgentClient.testMockResponder;
@@ -3941,10 +4098,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                   'taskIndex': 1,
                   'subSteps': [
                     {
-                      'title': 'STEP 1.1 · CREATE CHARACTER BLUEPRINT BP_ROOFRUNNER',
-                      'stepPath': 'Content Browser → /Game/Blueprints/BP_RoofRunner',
-                      'instruction': 'Create BP_RoofRunner inheriting from Character.',
-                      'area1Hierarchy': 'BP_RoofRunner (ACharacter)\n └─ CapsuleComponent',
+                      'title':
+                          'STEP 1.1 · CREATE CHARACTER BLUEPRINT BP_ROOFRUNNER',
+                      'stepPath':
+                          'Content Browser → /Game/Blueprints/BP_RoofRunner',
+                      'instruction':
+                          'Create BP_RoofRunner inheriting from Character.',
+                      'area1Hierarchy':
+                          'BP_RoofRunner (ACharacter)\n └─ CapsuleComponent',
                       'area2Inspector': 'walkSpeed: 600 cm/s',
                       'codeFormula': 'Parent Class: Character (ACharacter)',
                       'verifyResult': 'BP_RoofRunner compiles cleanly.',
@@ -3957,7 +4118,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     {
                       'title': 'STEP 2.1 · SETUP ENHANCED INPUT MAPPING',
                       'stepPath': 'BP_RoofRunner → Event Graph',
-                      'instruction': 'Bind IA_Move and IMC_Default inside BP_RoofRunner.',
+                      'instruction':
+                          'Bind IA_Move and IMC_Default inside BP_RoofRunner.',
                       'area1Hierarchy': '',
                       'area2Inspector': 'walkSpeed: 600 cm/s',
                       'codeFormula': '[IA_Move] ──► [AddMovementInput]',
@@ -3969,13 +4131,18 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                   'taskIndex': 3,
                   'subSteps': [
                     {
-                      'title': 'STEP 3.1 · TUNE VELOCITY, GRAVITY & COLLISION GUARD',
+                      'title':
+                          'STEP 3.1 · TUNE VELOCITY, GRAVITY & COLLISION GUARD',
                       'stepPath': 'BP_RoofRunner → CharacterMovement Details',
-                      'instruction': 'Set Max Walk Speed = 600 and Jump Z Velocity = 450.',
+                      'instruction':
+                          'Set Max Walk Speed = 600 and Jump Z Velocity = 450.',
                       'area1Hierarchy': '',
-                      'area2Inspector': 'walkSpeed: 600 cm/s | jumpForce: 450 cm/s',
-                      'codeFormula': 'CharacterMovement->MaxWalkSpeed = walkSpeed;',
-                      'verifyResult': 'BP_RoofRunner sprints and jumps without roof clipping.',
+                      'area2Inspector':
+                          'walkSpeed: 600 cm/s | jumpForce: 450 cm/s',
+                      'codeFormula':
+                          'CharacterMovement->MaxWalkSpeed = walkSpeed;',
+                      'verifyResult':
+                          'BP_RoofRunner sprints and jumps without roof clipping.',
                     },
                   ],
                 },
@@ -4149,7 +4316,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               trigger: 'Playtest v0.2 upgrade',
               order: 1,
               checklist: [
-                Subtask(id: 'u_1', text: 'Upgrade tuning (2h)', completed: false),
+                Subtask(
+                    id: 'u_1', text: 'Upgrade tuning (2h)', completed: false),
               ],
               parameters: const {'releaseVersion': 'v0.2'},
             ),
@@ -4171,8 +4339,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         final activeProjId = provider.activeProjectId!;
         provider.switchProject(activeProjId);
-        final statesAfterReloadOnV01 =
-            FeatureStateNode.getStatesForDocument(provider.documents[featA.id]!);
+        final statesAfterReloadOnV01 = FeatureStateNode.getStatesForDocument(
+            provider.documents[featA.id]!);
         expect(
           statesAfterReloadOnV01.any((s) => s.releaseVersion == 'v0.2'),
           isTrue,
@@ -4238,7 +4406,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     'taskIndex': 0,
                     'subSteps': [
                       {
-                        'title': 'STEP 1.1 · EXTEND BP_PLAYERCHARACTER RELEASE IMPULSE',
+                        'title':
+                            'STEP 1.1 · EXTEND BP_PLAYERCHARACTER RELEASE IMPULSE',
                         'stepPath': '/Game/Blueprints/BP_PlayerCharacter',
                         'instruction':
                             'Extend BP_PlayerCharacter with releaseBoostSpeed.',
