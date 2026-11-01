@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
@@ -5,9 +6,11 @@ class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
 
+  StreamSubscription<User?>? _authSubscription;
+
   AuthService._internal() {
     try {
-      FirebaseAuth.instance.authStateChanges().listen((user) {
+      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
         _currentUser = user;
         notifyListeners();
       });
@@ -50,10 +53,27 @@ class AuthService extends ChangeNotifier {
       debugPrint('Google Sign-In Error: $e');
       _lastError = e.toString();
       return null;
+    } finally {
+      notifyListeners();
     }
   }
 
   Future<void> signOut() async {
-    await FirebaseAuth.instance.signOut();
+    try {
+      await FirebaseAuth.instance.signOut();
+      _currentUser = null;
+      _lastError = null;
+    } catch (e) {
+      debugPrint('Google Sign-Out Error: $e');
+      _lastError = e.toString();
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 }
