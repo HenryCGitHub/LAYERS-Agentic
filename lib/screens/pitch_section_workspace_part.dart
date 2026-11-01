@@ -491,10 +491,13 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
               ? formattedClause
               : '$formattedClause.';
           String title = _deriveShortClauseLabel(rawClause, i);
-          if (i < coreLoopBeats.length && coreLoopBeats[i].contains(':')) {
-            final beatTitle = coreLoopBeats[i].split(':').first.trim();
-            if (beatTitle.isNotEmpty && beatTitle.length <= 24) {
-              title = beatTitle;
+          if (i < coreLoopBeats.length) {
+            final colonIdx = coreLoopBeats[i].indexOf(':');
+            if (colonIdx > 0) {
+              final beatTitle = coreLoopBeats[i].substring(0, colonIdx).trim();
+              if (beatTitle.isNotEmpty && beatTitle.length <= 24) {
+                title = beatTitle;
+              }
             }
           }
           return (title: title, body: body);
@@ -585,9 +588,11 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     required List<String> keys,
     required List<String> values,
   }) {
-    final pairs = List.generate(keys.length, (i) {
+    final totalCells = keys.length < 4 ? 4 : keys.length;
+    final pairs = List.generate(totalCells, (i) {
+      final k = i < keys.length ? keys[i] : '—';
       final val = i < values.length ? values[i] : '—';
-      return MapEntry(keys[i], val);
+      return MapEntry(k, val);
     });
 
     return LayoutBuilder(
