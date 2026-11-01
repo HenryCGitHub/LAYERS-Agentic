@@ -353,38 +353,15 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       required bool active,
       required Color activeColor,
     }) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-        decoration: BoxDecoration(
-          color: active ? bgActive : Colors.transparent,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(
-            color: active ? borderBright : borderSubtle,
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Text(
+          label,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 9.5,
+            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+            color: active ? textPrimary : textMuted,
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: active
-                    ? accentCyan
-                    : textMuted.withValues(alpha: 0.35),
-              ),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9.5,
-                fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                color: active ? textPrimary : textMuted,
-              ),
-            ),
-          ],
         ),
       );
     }
@@ -407,47 +384,25 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: accentCyan,
-                  ),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  title,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                    color: accentCyan,
-                  ),
-                ),
-              ],
+            Text(
+              title,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+                color: textMuted,
+              ),
             ),
             const SizedBox(width: 10),
             Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: bgActive,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: borderSubtle),
-                ),
-                child: Text(
-                  whereBadge,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: textSecondary,
-                  ),
+              child: Text(
+                whereBadge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w400,
+                  color: textMuted,
                 ),
               ),
             ),
@@ -758,7 +713,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               inspRows[rIdx].key,
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.w600,
+                                                fontWeight: FontWeight.w400,
                                                 color: textSecondary,
                                               ),
                                             ),
@@ -771,8 +726,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                 baseStyle:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: textPrimary,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: accentCyan,
                                                 ),
                                                 tuningItems: tuningItems,
                                                 edgeItems: edgeItems,
@@ -785,7 +740,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             '✎',
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 10,
-                                              color: accentViolet.withValues(
+                                              color: accentCyan.withValues(
                                                 alpha: 0.75,
                                               ),
                                             ),
@@ -929,17 +884,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         );
       }
       final matchedText = match.group(0)!;
-      final kind = tokenKindByLiteral[matchedText] ?? 'asset';
-      final Color tokenColor = kind == 'tune'
-          ? accentViolet
-          : (kind == 'guard' ? accentAmber : accentCyan);
       spans.add(
         TextSpan(
           text: matchedText,
           style: GoogleFonts.jetBrainsMono(
             fontSize: monoSize,
-            fontWeight: FontWeight.w700,
-            color: tokenColor,
+            fontWeight: FontWeight.w500,
+            color: accentCyan,
             height: baseStyle.height,
           ),
         ),

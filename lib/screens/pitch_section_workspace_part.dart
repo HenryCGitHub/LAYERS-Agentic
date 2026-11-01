@@ -233,7 +233,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                             vertical: 7,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2563EB),
+                            color: const Color(0xFF10B981),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -243,7 +243,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: const Color(0xFF052E16),
                             ),
                           ),
                         ),
@@ -517,7 +517,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: accentEmerald,
+                color: _secT4Muted,
                 width: 2.5,
               ),
             ),
@@ -529,9 +529,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 'PLAYTEST GATE',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0.7,
-                  color: accentEmerald,
+                  color: _secT3Label,
                 ),
               ),
               const SizedBox(height: 4),
@@ -539,9 +539,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 statement.trim(),
                 style: GoogleFonts.inter(
                   fontSize: _measureBodyFontSize,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w400,
                   height: 1.55,
-                  color: _secT1Primary,
+                  color: _secT2Body,
                 ),
               ),
             ],
@@ -731,9 +731,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 0.5,
-                        color: _secT3Label,
+                        color: _secT4Muted,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -747,8 +747,8 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                         fontSize: _measureSpecValueSize,
                         height: 1.3,
                         fontWeight: v.trim().isEmpty
-                            ? FontWeight.w500
-                            : FontWeight.w700,
+                            ? FontWeight.w400
+                            : FontWeight.w600,
                         fontStyle: v.trim().isEmpty
                             ? FontStyle.italic
                             : FontStyle.normal,
@@ -806,7 +806,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           TextSpan(
             text: '$leadIn — ',
             style: TextStyle(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
               color: _secT1Primary,
             ),
           ),
@@ -1199,14 +1199,14 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                       TextSpan(
                         text: telegraphic.win,
                         style: TextStyle(
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w600,
                           color: _secT1Primary,
                         ),
                       ),
                       TextSpan(
                         text: '  over  ',
                         style: TextStyle(
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w400,
                           color: _secT4Muted,
                         ),
                       ),

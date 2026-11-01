@@ -75,7 +75,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(
                   fontSize: _measureLeadFontSize,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: _gsT1Primary,
                 ),
               ),
@@ -434,7 +434,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
         color: _gsCardLaunchBg,
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color: accentEmerald.withValues(alpha: 0.45),
+          color: _gsCardBorder,
         ),
       ),
       child: Column(
@@ -455,8 +455,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                         '09',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: accentCyan,
+                          fontWeight: FontWeight.w600,
+                          color: _gsT4Muted,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -466,7 +466,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 0.8,
                             color: _gsT3Label,
                           ),
@@ -746,8 +746,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                             sec.numLabel,
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: isFocused ? _gsT1Primary : accentCyan,
+                              fontWeight: FontWeight.w600,
+                              color: isFocused ? _gsT1Primary : _gsT4Muted,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -757,7 +757,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
                                 fontSize: 13,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 letterSpacing: 0.7,
                                 color: isFocused ? _gsT1Primary : _gsT3Label,
                               ),

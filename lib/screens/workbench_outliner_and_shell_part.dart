@@ -1414,8 +1414,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         '01',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: accentCyan,
+                          fontWeight: FontWeight.w600,
+                          color: textMuted,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1426,7 +1426,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             letterSpacing: 0.7,
                             color: textMuted,
                           ),
@@ -1440,8 +1440,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   '$totalDoneSteps/$totalStepsCount Done',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: totalDoneSteps > 0 ? accentEmerald : textMuted,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
                   ),
                 ),
               ],
@@ -1631,14 +1631,12 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: task.completed
-                                                      ? accentEmerald
-                                                      : (isFixTask
-                                                          ? accentCrimson
-                                                          : (isTaskActive
-                                                              ? accentCyan
-                                                              : textMuted)),
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isFixTask
+                                                      ? accentCrimson
+                                                      : (isTaskActive
+                                                          ? textPrimary
+                                                          : textMuted),
                                                 ),
                                               ),
                                               TextSpan(
@@ -1646,18 +1644,13 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 style: GoogleFonts.inter(
                                                   fontSize: 12.5,
                                                   fontWeight: isTaskActive
-                                                      ? FontWeight.w700
-                                                      : FontWeight.w600,
-                                                  color: task.completed
-                                                      ? accentEmerald
-                                                          .withValues(
-                                                          alpha: 0.85,
-                                                        )
-                                                      : (isFixTask
-                                                          ? accentCrimson
-                                                          : (isTaskActive
-                                                              ? textPrimary
-                                                              : textSecondary)),
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
+                                                  color: isFixTask
+                                                      ? accentCrimson
+                                                      : (isTaskActive
+                                                          ? textPrimary
+                                                          : textSecondary),
                                                 ),
                                               ),
                                             ],
@@ -1683,7 +1676,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                             Icons.edit_outlined,
                                             size: 11,
                                             color: isTaskActive
-                                                ? accentCyan
+                                                ? textSecondary
                                                 : textMuted,
                                           ),
                                         ),
@@ -1711,14 +1704,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 : '$doneSubCount/$totalSubCount',
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: task.completed
-                                                  ? accentEmerald.withValues(
-                                                      alpha: 0.85,
-                                                    )
-                                                  : (isTaskActive
-                                                      ? accentCyan
-                                                      : textMuted),
+                                              fontWeight: FontWeight.w600,
+                                              color: isTaskActive
+                                                  ? textSecondary
+                                                  : textMuted,
                                             ),
                                           ),
                                         ),
@@ -1785,14 +1774,13 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                   vertical: 7,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: isStepActive
-                                                      ? bgActive
-                                                      : Colors.transparent,
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
+                                                  color: Colors.transparent,
                                                   border: isStepActive
-                                                      ? Border.all(
-                                                          color: borderSubtle,
+                                                      ? Border(
+                                                          left: BorderSide(
+                                                            color: textPrimary,
+                                                            width: 2.5,
+                                                          ),
                                                         )
                                                       : null,
                                                 ),
@@ -1806,24 +1794,24 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                         isStepDone &&
                                                                 !isStepActive
                                                             ? '✓'
-                                                            : (isStepActive
-                                                                ? '●'
-                                                                : (sIdx + 1)
-                                                                    .toString()
-                                                                    .padLeft(
-                                                                      2,
-                                                                      '0',
-                                                                    )),
+                                                            : (sIdx + 1)
+                                                                .toString()
+                                                                .padLeft(
+                                                                  2,
+                                                                  '0',
+                                                                ),
                                                         style: GoogleFonts
                                                             .jetBrainsMono(
                                                           fontSize: 10,
                                                           fontWeight:
-                                                              FontWeight.w700,
+                                                              isStepActive
+                                                                  ? FontWeight
+                                                                      .w600
+                                                                  : FontWeight
+                                                                      .w400,
                                                           color: isStepActive
-                                                              ? accentCyan
-                                                              : (isStepDone
-                                                                  ? accentEmerald
-                                                                  : textMuted),
+                                                              ? textPrimary
+                                                              : textMuted,
                                                         ),
                                                       ),
                                                     ),
@@ -1841,9 +1829,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                           fontWeight:
                                                               isStepActive
                                                                   ? FontWeight
-                                                                      .w700
+                                                                      .w600
                                                                   : FontWeight
-                                                                      .w500,
+                                                                      .w400,
                                                           color: isStepActive
                                                               ? textPrimary
                                                               : textSecondary,
@@ -1866,11 +1854,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                           fontWeight:
                                                               isStepActive
                                                                   ? FontWeight
-                                                                      .w700
+                                                                      .w500
                                                                   : FontWeight
-                                                                      .w500,
+                                                                      .w400,
                                                           color: isStepActive
-                                                              ? accentCyan
+                                                              ? textSecondary
                                                               : textMuted,
                                                         ),
                                                       ),
@@ -1942,8 +1930,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         '+ Add Build Task...',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: accentCyan.withValues(alpha: 0.85),
+                          fontWeight: FontWeight.w500,
+                          color: textSecondary,
                         ),
                       ),
                     ),

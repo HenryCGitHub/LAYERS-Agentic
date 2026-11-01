@@ -475,8 +475,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   '02',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: accentCyan,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -485,11 +485,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
                     style: GoogleFonts.inter(
                       fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0.6,
-                      color: activeSubStep.subtask.completed
-                          ? accentEmerald
-                          : textMuted,
+                      color: textMuted,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -499,9 +497,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 14,
-                  color: activeSubStep.subtask.completed
-                      ? accentEmerald
-                      : textMuted,
+                  color: textMuted,
                 ),
               ],
             ),
@@ -567,7 +563,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         text: TextSpan(
                                           style: GoogleFonts.inter(
                                             fontSize: 16,
-                                            fontWeight: FontWeight.w800,
+                                            fontWeight: FontWeight.w700,
                                             letterSpacing: -0.2,
                                             color: textPrimary,
                                           ),
@@ -577,8 +573,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                   '$epicShortCode · $epicDisplayTitle',
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                color: accentCyan,
+                                                fontWeight: FontWeight.w600,
+                                                color: textMuted,
                                               ),
                                             ),
                                             TextSpan(
@@ -1485,7 +1481,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       style: GoogleFonts.inter(
                                         fontSize:
                                             isHalfScreenOverlayMode ? 17 : 19,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w700,
                                         letterSpacing: -0.3,
                                         height: 1.2,
                                         color: textPrimary,
@@ -1708,32 +1704,20 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             }),
                                             borderRadius:
                                                 BorderRadius.circular(4),
-                                            child: Container(
+                                            child: Padding(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                horizontal: 7,
+                                                horizontal: 2,
                                                 vertical: 2,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: accentCyan.withValues(
-                                                  alpha: 0.1,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                  color: accentCyan.withValues(
-                                                    alpha: 0.35,
-                                                  ),
-                                                ),
                                               ),
                                               child: Text(
                                                 primaryTuningLabel.isNotEmpty
-                                                    ? '⚡ $primaryTuningLabel ✎'
-                                                    : '⚡ + Tuning ✎',
+                                                    ? '$primaryTuningLabel ✎'
+                                                    : '+ Tuning ✎',
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w500,
                                                   color: accentCyan,
                                                 ),
                                               ),
@@ -1748,7 +1732,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       'HOW TO BUILD · ${selectedHowTo.engineLabel == 'UNREAL 5' ? (_unrealCppMode ? 'UNREAL 5 C++' : 'UNREAL 5 BLUEPRINT') : selectedHowTo.engineLabel}',
                                       style: GoogleFonts.inter(
                                         fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w700,
                                         letterSpacing: 0.7,
                                         color: textMuted,
                                       ),
@@ -1785,7 +1769,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     ),
                                     const SizedBox(height: 16),
 
-                                    // 3. VERIFY Callout (2.5px Emerald Left Accent Bar at Bottom of Card Body)
+                                    // 3. VERIFY Callout (2.5px 20% Accent Bar at Bottom of Card Body)
                                     Container(
                                       padding: const EdgeInsets.only(
                                         left: 12,
@@ -1795,7 +1779,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       decoration: BoxDecoration(
                                         border: Border(
                                           left: BorderSide(
-                                            color: accentEmerald,
+                                            color: accentCyan,
                                             width: 2.5,
                                           ),
                                         ),
@@ -1808,9 +1792,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             'VERIFY',
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 10,
-                                              fontWeight: FontWeight.w800,
+                                              fontWeight: FontWeight.w700,
                                               letterSpacing: 0.6,
-                                              color: accentEmerald,
+                                              color: accentCyan,
                                             ),
                                           ),
                                           const SizedBox(height: 3),
