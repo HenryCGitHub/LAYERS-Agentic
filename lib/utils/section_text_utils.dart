@@ -1,5 +1,7 @@
 /// Utility for parsing and resolving 3-part Scope & Goal sections across documents.
 class SectionTextUtils {
+  SectionTextUtils._();
+
   // ── Centralized 3-Part Scope Parsers (DRY — Project / Release / Epic / Feature) ──
 
   static final RegExp _goalMatchRegex =
@@ -30,6 +32,23 @@ class SectionTextUtils {
     r',\s*(?:and\s+|or\s+)?|;\s*|\band\s+',
     caseSensitive: false,
   );
+  static final RegExp _doneWhenSplitRegex = RegExp(
+    r'Done When:\s*',
+    caseSensitive: false,
+  );
+
+  static String _firstNonEmptyLine(String text) {
+    int start = 0;
+    while (start < text.length) {
+      final idx = text.indexOf('\n', start);
+      final line = idx == -1 ? text.substring(start) : text.substring(start, idx);
+      final trimmed = line.trim();
+      if (trimmed.isNotEmpty) return trimmed;
+      if (idx == -1) break;
+      start = idx + 1;
+    }
+    return '';
+  }
 
   /// Resolves the single-sentence Goal from a document's `sections`.
   static String resolveGoal(Map<String, String> sections) {
@@ -42,9 +61,7 @@ class SectionTextUtils {
       if (match != null && match.group(1)!.trim().isNotEmpty) {
         return match.group(1)!.trim();
       }
-      final firstLine = raw
-          .split('\n')
-          .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
+      final firstLine = _firstNonEmptyLine(raw);
       if (firstLine.isNotEmpty) {
         return firstLine
             .replaceAll(_headingCleanRegex, '')
@@ -164,11 +181,6 @@ class SectionTextUtils {
     return result.isNotEmpty ? result : [text];
   }
 
-  static final RegExp _doneWhenSplitRegex = RegExp(
-    r'Done When:\s*',
-    caseSensitive: false,
-  );
-
   /// Resolves the `Done When:` condition from a document's `sections`.
   static String resolveDoneWhen(Map<String, String> sections) {
     final raw = sections['scope'] ?? sections['pass'] ?? sections['doneWhen'];
@@ -178,12 +190,13 @@ class SectionTextUtils {
         return match.group(1)!.replaceAll(_bulletPrefixStripRegex, '').trim();
       }
       if (raw.toLowerCase().contains('done when:')) {
-        final after = raw.split(_doneWhenSplitRegex)[1].trim();
-        final firstLine = after
-            .split('\n')
-            .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
-        if (firstLine.isNotEmpty) {
-          return firstLine.replaceAll(_bulletPrefixStripRegex, '').trim();
+        final parts = raw.split(_doneWhenSplitRegex);
+        if (parts.length > 1) {
+          final after = parts[1].trim();
+          final firstLine = _firstNonEmptyLine(after);
+          if (firstLine.isNotEmpty) {
+            return firstLine.replaceAll(_bulletPrefixStripRegex, '').trim();
+          }
         }
       }
     }
