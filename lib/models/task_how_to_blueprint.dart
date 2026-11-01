@@ -1,3 +1,4 @@
+import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
 
@@ -674,6 +675,7 @@ class TaskHowToBlueprint {
     required FeatureStateNode checkpointNode,
     required String? engineHint,
     required bool unrealCppMode,
+    required ProductionPhase effectivePhase,
   }) {
     var hash = Object.hash(
       parentTask.id,
@@ -687,6 +689,7 @@ class TaskHowToBlueprint {
       checkpointNode.edgeCases.join('|'),
       engineHint ?? '',
       unrealCppMode,
+      effectivePhase.name,
     );
     for (final c in parentTask.children) {
       hash = Object.hash(
@@ -702,6 +705,47 @@ class TaskHowToBlueprint {
       );
     }
     return hash;
+  }
+
+  /// Infers the `ProductionPhase` (`prototype`, `mvp`, `verticalSlice`, `fullProduction`, `postLaunch`)
+  /// for a `FeatureStateNode` checkpoint when an explicit `phase` is not passed.
+  static ProductionPhase inferCheckpointPhase(
+    FeatureStateNode checkpointNode, {
+    ProductionPhase? explicitPhase,
+  }) {
+    if (explicitPhase != null) return explicitPhase;
+    final rawParamPhase = (checkpointNode.parameters['phase'] ?? '').trim();
+    for (final p in ProductionPhase.values) {
+      if (p.name == rawParamPhase) return p;
+    }
+    final ver = checkpointNode.releaseVersion.toLowerCase().trim();
+    final nameLower = checkpointNode.name.toLowerCase();
+    if (ver.startsWith('v1.') && ver != 'v1.0') {
+      return ProductionPhase.postLaunch;
+    }
+    if (nameLower.contains('post-launch') ||
+        nameLower.contains('live ops') ||
+        nameLower.contains('patch')) {
+      return ProductionPhase.postLaunch;
+    }
+    if (ver == 'v1.0' ||
+        nameLower.contains('full production') ||
+        nameLower.contains('data table') ||
+        nameLower.contains('roster')) {
+      return ProductionPhase.fullProduction;
+    }
+    if (ver == 'v0.3' ||
+        nameLower.contains('vertical slice') ||
+        nameLower.contains('polish')) {
+      return ProductionPhase.verticalSlice;
+    }
+    if ((ver.isNotEmpty && ver != 'v0.1') ||
+        checkpointNode.order > 0 ||
+        nameLower.contains('mvp') ||
+        nameLower.contains('upgrade')) {
+      return ProductionPhase.mvp;
+    }
+    return ProductionPhase.prototype;
   }
 
   static List<String> extractActionClauses(String cleanTitle) {
@@ -850,15 +894,21 @@ class TaskHowToBlueprint {
     required FeatureStateNode checkpointNode,
     String? engineHint,
     bool unrealCppMode = false,
+    ProductionPhase? phase,
   }) {
+    final effectivePhase = inferCheckpointPhase(
+      checkpointNode,
+      explicitPhase: phase,
+    );
     final cacheKey =
-        '${checkpointNode.id}_${parentTask.id}_${taskIndex}_${engineHint ?? ''}_${unrealCppMode ? 'cpp' : 'bp'}';
+        '${checkpointNode.id}_${parentTask.id}_${taskIndex}_${engineHint ?? ''}_${unrealCppMode ? 'cpp' : 'bp'}_${effectivePhase.name}';
     if (parentTask.children.isNotEmpty) {
       final sig = _computeTaskSignature(
         parentTask: parentTask,
         checkpointNode: checkpointNode,
         engineHint: engineHint,
         unrealCppMode: unrealCppMode,
+        effectivePhase: effectivePhase,
       );
       final cached = _blueprintCache[cacheKey];
       if (cached != null && cached.signature == sig) {
@@ -1710,6 +1760,26 @@ class TaskHowToBlueprint {
             ? '$pascalAsset.cs'
             : '$snakeAsset.tscn');
 
+    final phaseFocusNote = switch (effectivePhase) {
+      ProductionPhase.prototype =>
+        'Greybox foundation pass: prove raw controls, collision, and immediate feel before adding polish.',
+      ProductionPhase.mvp =>
+        'MVP delta upgrade: extend your existing v0.1 $targetAssetName node and script with full loop state transitions and cooldowns.',
+      ProductionPhase.verticalSlice =>
+        'Vertical Slice polish pass: bind production meshes/sprites, SFX/VFX particle cues, camera shake/hit-stop, and HUD feedback on $targetAssetName.',
+      ProductionPhase.fullProduction =>
+        'Full Production scaling pass: connect data-driven Resource / ScriptableObject / DataTable rosters and save/load state serialization to $targetAssetName.',
+      ProductionPhase.postLaunch =>
+        'Post-Launch Live Ops pass: apply non-breaking tuning balance updates, content entries, and regression guards while preserving v1.0 save compatibility.',
+    };
+    final phaseBadgeChip = switch (effectivePhase) {
+      ProductionPhase.prototype => 'Phase: 01 Prototype',
+      ProductionPhase.mvp => 'Phase: 02 MVP Delta',
+      ProductionPhase.verticalSlice => 'Phase: 03 Vertical Slice Polish',
+      ProductionPhase.fullProduction => 'Phase: 04 Full Production Data',
+      ProductionPhase.postLaunch => 'Phase: 05 Post-Launch Live Ops',
+    };
+
     ({
       String explain,
       String primaryChip,
@@ -1719,7 +1789,7 @@ class TaskHowToBlueprint {
         case 0:
           return (
             explain:
-                'Every step in this task builds inside $targetAssetName so ${checkpointNode.cleanStageTitle} stays modular and reusable across the level.',
+                '$phaseFocusNote Every step in this task builds inside $targetAssetName so ${checkpointNode.cleanStageTitle} stays modular and reusable across the level.',
             primaryChip: 'Asset: $targetAssetName',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Choose Actor (AActor) as the parent class so you can attach components and place $targetAssetName in the level.'
@@ -1730,7 +1800,7 @@ class TaskHowToBlueprint {
         case 1:
           return (
             explain:
-                'Gives $targetAssetName both its visible shape and the collision trigger sensor needed for core logic.',
+                '$phaseFocusNote Gives $targetAssetName both its visible shape and the collision trigger sensor needed for core logic.',
             primaryChip: 'Asset: $targetAssetName',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably.'
@@ -1741,7 +1811,7 @@ class TaskHowToBlueprint {
         case 2:
           return (
             explain:
-                'Places a live $targetAssetName instance in the level so you can test "${checkpointNode.playtestCondition}" on screen.',
+                '$phaseFocusNote Places a live $targetAssetName instance in the level so you can test "${checkpointNode.playtestCondition}" on screen.',
             primaryChip: 'Instance: $targetAssetName',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Click Compile & Save before dragging $targetAssetName into the viewport so the new mesh and collision box appear.'
@@ -1752,7 +1822,7 @@ class TaskHowToBlueprint {
         case 3:
           return (
             explain:
-                'Exposes $primaryVarName on $targetAssetName so you can tune gameplay feel live in the editor without recompiling.',
+                '$phaseFocusNote Exposes $primaryVarName on $targetAssetName so you can tune gameplay feel live in the editor without recompiling.',
             primaryChip: 'Spec Param: $primaryVar',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Click the Eye icon (Instance Editable) next to $primaryVarName so it appears in the Level Details panel.'
@@ -1763,7 +1833,7 @@ class TaskHowToBlueprint {
         case 4:
           return (
             explain:
-                'Connects player trigger input on $targetAssetName to $primaryVarName so the active state updates smoothly every frame.',
+                '$phaseFocusNote Connects player trigger input on $targetAssetName to $primaryVarName so the active state updates smoothly every frame.',
             primaryChip: 'Drives: $primaryVar',
             pitfall: engineLabel == 'UNREAL 5'
                 ? 'Connect the white execution wire from the Branch (True) pin into your state update node.'
@@ -1774,7 +1844,7 @@ class TaskHowToBlueprint {
         default:
           return (
             explain:
-                'Enforces $primaryGuard on $targetAssetName and completes playable verification for "${checkpointNode.cleanStageTitle}".',
+                '$phaseFocusNote Enforces $primaryGuard on $targetAssetName and completes playable verification for "${checkpointNode.cleanStageTitle}".',
             primaryChip: 'Guard: $primaryGuard',
             pitfall:
                 'Place the guard check at the very top of your function so blocked or cooldown inputs exit immediately ($primaryGuard).',
@@ -2068,6 +2138,7 @@ class TaskHowToBlueprint {
 
       final isLastStep = i == parentTask.children.length - 1;
       final chips = <String>[
+        phaseBadgeChip,
         spec.primaryChip,
         isLastStep
             ? 'Goal: ${checkpointNode.cleanStageTitle}'
@@ -2093,7 +2164,7 @@ class TaskHowToBlueprint {
             customVerify.isNotEmpty
                 ? customVerify
                 : (hasDynamicSpec
-                    ? spec.verify
+                     ? spec.verify
                     : 'Verify "$shortTitle" responds cleanly in the active viewport.'),
           ),
           stepPath: customPath.isNotEmpty
@@ -2102,7 +2173,7 @@ class TaskHowToBlueprint {
           codeFormula: code,
           explainConcept: (!isCustomSnippet && hasDynamicSpec)
               ? spec.explain
-              : 'Connects "$shortTitle" to "$primaryVar" and "$primaryGuard".',
+              : '$phaseFocusNote Connects "$shortTitle" to "$primaryVar" and "$primaryGuard".',
           specChips: chips,
           quickFixPitfall: spec.pitfall,
           estimatedMinutes: stepMins,
@@ -2133,6 +2204,7 @@ class TaskHowToBlueprint {
         checkpointNode: checkpointNode,
         engineHint: engineHint,
         unrealCppMode: unrealCppMode,
+        effectivePhase: effectivePhase,
       ),
       blueprint: result,
     );

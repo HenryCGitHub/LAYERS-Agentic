@@ -397,10 +397,11 @@ class WorkbenchProvider extends ChangeNotifier {
     return releaseVersionTagFor(rel);
   }
 
-  /// Resolves the canonical `ProductionPhase` (`prototype`, `mvp`, `verticalSlice`, `fullProduction`) for a Release document.
+  /// Resolves the canonical `ProductionPhase` (`prototype`, `mvp`, `verticalSlice`, `fullProduction`, `postLaunch`) for a Release document.
   ProductionPhase releasePhaseFor(TierDocument relDoc) {
     final rawPhase = (relDoc.sections['phase'] ?? '').trim();
     return switch (rawPhase) {
+      'postLaunch' => ProductionPhase.postLaunch,
       'fullProduction' => ProductionPhase.fullProduction,
       'verticalSlice' => ProductionPhase.verticalSlice,
       'mvp' => ProductionPhase.mvp,
@@ -414,13 +415,14 @@ class WorkbenchProvider extends ChangeNotifier {
     };
   }
 
-  /// Short uppercase phase badge (`PROTO`, `MVP`, `SLICE`, `PROD`) for compact header pills.
+  /// Short uppercase phase badge (`PROTO`, `MVP`, `SLICE`, `PROD`, `LIVE`) for compact header pills.
   String releasePhaseShortBadge(TierDocument relDoc) =>
       switch (releasePhaseFor(relDoc)) {
         ProductionPhase.prototype => 'PROTO',
         ProductionPhase.mvp => 'MVP',
         ProductionPhase.verticalSlice => 'SLICE',
         ProductionPhase.fullProduction => 'PROD',
+        ProductionPhase.postLaunch => 'LIVE',
       };
 
   /// Resolves a clean, descriptive human-readable name for a Release in the Release Selector Dropdown and Header Pill.
@@ -455,6 +457,8 @@ class WorkbenchProvider extends ChangeNotifier {
         lower == 'mvp' ||
         lower == 'vertical slice' ||
         lower == 'full production' ||
+        lower == 'post-launch' ||
+        lower == 'post-launch & live ops' ||
         lower == 'core loop' ||
         (projTitleLower.isNotEmpty && lower == '$projTitleLower core loop') ||
         _mvpEpicExactRegex.hasMatch(clean);
@@ -566,6 +570,12 @@ class WorkbenchProvider extends ChangeNotifier {
         return 'Vertical Slice (Pass ${passIdx + 1})';
       }
       return 'Vertical Slice';
+    }
+    if (phase == ProductionPhase.postLaunch.name) {
+      final pass = relDoc.sections['postLaunchPass'] ??
+          relDoc.sections['fullProductionPass'] ??
+          '1';
+      return 'Post-Launch (Pass $pass)';
     }
     if (phase == ProductionPhase.fullProduction.name ||
         relDoc.releaseScope == ReleaseScope.fullProduction) {
@@ -774,6 +784,9 @@ class WorkbenchProvider extends ChangeNotifier {
       case ProductionPhase.fullProduction:
         final pass = rel?.sections['fullProductionPass'] ?? '1';
         return 'PHASE 4 · FULL PRODUCTION (PASS $pass)';
+      case ProductionPhase.postLaunch:
+        final pass = rel?.sections['postLaunchPass'] ?? '1';
+        return 'PHASE 5 · POST-LAUNCH & LIVE OPS (PASS $pass)';
     }
   }
 
@@ -815,7 +828,9 @@ class WorkbenchProvider extends ChangeNotifier {
       ProductionPhase.verticalSlice =>
         'Ship & Unlock Phase 4 (Full Production) ✦',
       ProductionPhase.fullProduction =>
-        'Ship & Plan Next Full Production Pass ✦',
+        'Ship & Unlock Phase 5 (Post-Launch & Live Ops) ✦',
+      ProductionPhase.postLaunch =>
+        'Ship & Plan Next Post-Launch Pass ✦',
     };
   }
 }

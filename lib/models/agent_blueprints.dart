@@ -50,7 +50,7 @@ class AgentQuestion {
 }
 
 /// Sequential production phase tracks in the Rolling Phase Release model:
-/// 1. Prototype -> 2. MVP Track (1 Release per Beat) -> 3. Vertical Slice -> 4. Full Production.
+/// 1. Prototype -> 2. MVP Track -> 3. Vertical Slice -> 4. Full Production -> 5. Post-Launch & Live Ops.
 enum ProductionPhase {
   prototype(
     label: 'PHASE 1 · PROTOTYPE',
@@ -75,6 +75,12 @@ enum ProductionPhase {
     shortName: 'Full Production',
     summary: 'Reuse the Rough → Polish release pattern across the remaining world and content.',
     unlockCondition: 'Unlocks after Vertical Slice completes',
+  ),
+  postLaunch(
+    label: 'PHASE 5 · POST-LAUNCH & LIVE OPS',
+    shortName: 'Post-Launch',
+    summary: 'Ship post-launch content packs (v1.1+), balance tuning patches (v1.0.1), and playtest fixes without breaking v1.0 save compatibility.',
+    unlockCondition: 'Unlocks after v1.0 Full Production completes',
   );
 
   final String label;
@@ -778,6 +784,75 @@ class ReleaseBlueprint {
     return out;
   }
 
+  /// Determines whether an `07 Out of Scope` exclusion string is actively blocking features
+  /// in the given [phase].
+  /// - Permanent boundaries (`[NEVER]`, `[CUT]`, or unqualified exclusions like `"No multiplayer"`)
+  ///   remain active (`true`) across all phases.
+  /// - Early-phase deferred exclusions (e.g. `"No save/load in v0.1"`, `"No custom audio in greybox"`,
+  ///   `"[DEFERRED] Skill tree until Vertical Slice"`) only block during their specified early phase(s)
+  ///   and unlock (`false`) in later phases so they can be promoted into active scope.
+  static bool isExclusionActiveForPhase(
+    String exclusion,
+    ProductionPhase phase,
+  ) {
+    final lower = exclusion.toLowerCase().trim();
+    if (lower.isEmpty) return false;
+    if (lower.contains('[never]') ||
+        lower.contains('[cut]') ||
+        lower.contains('permanently out') ||
+        lower.contains('never in scope')) {
+      return true;
+    }
+
+    final isPrototypeOnly = lower.contains('in v0.1') ||
+        lower.contains('for v0.1') ||
+        lower.contains('in prototype') ||
+        lower.contains('for prototype') ||
+        lower.contains('in greybox') ||
+        lower.contains('for greybox') ||
+        lower.contains('during prototype') ||
+        lower.contains('during greybox');
+    if (isPrototypeOnly) {
+      return phase == ProductionPhase.prototype;
+    }
+
+    final isUntilVerticalSlice = lower.contains('until vertical slice') ||
+        lower.contains('after mvp') ||
+        lower.contains('in mvp') ||
+        lower.contains('for v0.2') ||
+        lower.contains('in v0.2');
+    if (isUntilVerticalSlice) {
+      return phase == ProductionPhase.prototype || phase == ProductionPhase.mvp;
+    }
+
+    final isUntilFullProduction = lower.contains('until full production') ||
+        lower.contains('until v1.0') ||
+        lower.contains('in vertical slice') ||
+        lower.contains('for v1.0');
+    if (isUntilFullProduction) {
+      return phase == ProductionPhase.prototype ||
+          phase == ProductionPhase.mvp ||
+          phase == ProductionPhase.verticalSlice;
+    }
+
+    if (lower.startsWith('[deferred]') || lower.contains('(deferred')) {
+      return phase == ProductionPhase.prototype || phase == ProductionPhase.mvp;
+    }
+
+    return true;
+  }
+
+  /// Returns `true` when [exclusion] was a phase-deferred exclusion that has now unlocked in [phase].
+  static bool isDeferredExclusionUnlockedInPhase(
+    String exclusion,
+    ProductionPhase phase,
+  ) {
+    final lower = exclusion.toLowerCase().trim();
+    if (lower.isEmpty) return false;
+    return isExclusionActiveForPhase(exclusion, ProductionPhase.prototype) &&
+        !isExclusionActiveForPhase(exclusion, phase);
+  }
+
   Map<String, dynamic> toJson() => {
         'releaseDocId': releaseDocId,
         'releaseTitle': releaseTitle,
@@ -821,6 +896,8 @@ class ReleaseBlueprint {
     );
   }
 }
+
+typedef ReleasePlanBlueprint = ReleaseBlueprint;
 
 /// Holds the Post-Release Retrospective & Auto-Carryover Summary (`v0.1` -> `v0.2`+).
 class ReleaseRetrospectiveSummary {

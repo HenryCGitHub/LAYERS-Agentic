@@ -1092,6 +1092,42 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                         ),
                                                       ),
                                                     ),
+                                                    const SizedBox(width: 6),
+                                                    InkWell(
+                                                      key: ValueKey(
+                                                        'playtest_sheet_pivot_btn_${feat.id}',
+                                                      ),
+                                                      onTap: () {
+                                                        widget.workbench
+                                                            .toggleSupersedeFeature(
+                                                          feat.id,
+                                                          pivotReason:
+                                                              'Pivoted during $activeVer playtest',
+                                                        );
+                                                      },
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        5,
+                                                      ),
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 4,
+                                                        ),
+                                                        child: Text(
+                                                          '⊗ Pivot',
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 10,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: textMuted,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
                                                   ],
                                                 ],
                                               ),

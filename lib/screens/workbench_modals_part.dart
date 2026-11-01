@@ -227,7 +227,11 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           : (phase ==
                                                   ProductionPhase.verticalSlice
                                               ? '03 · Vertical Slice'
-                                              : '04 · Full Production'));
+                                              : (phase ==
+                                                      ProductionPhase
+                                                          .fullProduction
+                                                  ? '04 · Full Production'
+                                                  : '05 · Post-Launch')));
                               return InkWell(
                                 key: ValueKey(
                                   'progressive_phase_pill_${phase.name}',
@@ -308,6 +312,48 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 ),
                                 child: Text(
                                   'SLICE COVERAGE: ${cov.polishedBeats}/${cov.totalBeats} EPICS',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              );
+                            } else if (activePhase ==
+                                ProductionPhase.fullProduction) {
+                              final cov =
+                                  widget.workbench.fullProductionCoverage();
+                              return Padding(
+                                key: const ValueKey(
+                                  'progressive_phase_coverage_badge',
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  'PRODUCTION COVERAGE: ${cov.coveredBeats}/${cov.totalBeats} EPICS · ${cov.remainingDeferredCount} DEFERRED',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              );
+                            } else if (activePhase ==
+                                ProductionPhase.postLaunch) {
+                              final cov =
+                                  widget.workbench.fullProductionCoverage();
+                              return Padding(
+                                key: const ValueKey(
+                                  'progressive_phase_coverage_badge',
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  'LIVE OPS · ${cov.openFixCount} OPEN FIXES',
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w600,
@@ -1061,6 +1107,44 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                                 FontWeight.w600,
                                                                             color:
                                                                                 textMuted,
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              8,
+                                                                        ),
+                                                                        InkWell(
+                                                                          key: ValueKey(
+                                                                            'progressive_supersede_feat_${f.id}',
+                                                                          ),
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(
+                                                                                4,
+                                                                              ),
+                                                                          onTap: () {
+                                                                            widget
+                                                                                .workbench
+                                                                                .toggleProposedFeatureSuperseded(
+                                                                              row.beatId,
+                                                                              f.id,
+                                                                            );
+                                                                            _rebuild(
+                                                                              () {},
+                                                                            );
+                                                                          },
+                                                                          child: Padding(
+                                                                            padding: const EdgeInsets.symmetric(
+                                                                              horizontal: 4,
+                                                                              vertical: 2,
+                                                                            ),
+                                                                            child: Text(
+                                                                              '⊗ Pivot',
+                                                                              style: GoogleFonts.jetBrainsMono(
+                                                                                fontSize: 9.5,
+                                                                                fontWeight: FontWeight.w600,
+                                                                                color: textMuted,
+                                                                              ),
+                                                                            ),
                                                                           ),
                                                                         ),
                                                                       ],
@@ -2223,6 +2307,91 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       ],
                     ),
                   ),
+                Builder(
+                  builder: (context) {
+                    final ledger =
+                        widget.workbench.buildCrossReleaseEvolutionLedger();
+                    if (ledger.isEmpty) return const SizedBox.shrink();
+                    return Column(
+                      key: const ValueKey('cross_release_evolution_ledger'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 16),
+                        Text(
+                          '↻ CROSS-RELEASE EVOLUTION & TUNING LEDGER',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        for (final item in ledger)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: bgRecessed,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: borderSubtle),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${item.epicCode} · ${item.featureTitle}',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${item.lifecycle} · ${item.guardCount} GUARDS',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (item.checkpointProgression.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.checkpointProgression.join(' → '),
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ],
+                                if (item.tuningDeltaSummary.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'Vars: ${item.tuningDeltaSummary.join(' · ')}',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),

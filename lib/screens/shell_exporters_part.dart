@@ -95,6 +95,25 @@ extension _ShellExportersExt on WorkbenchShell {
         }
       }
     }
+    final evolutionLedger = workbench.buildCrossReleaseEvolutionLedger();
+    if (evolutionLedger.isNotEmpty) {
+      sb.writeln('\n## Cross-Release Evolution & Tuning Ledger');
+      sb.writeln(
+        '| Epic | Feature | Status | Checkpoint Progression | Tuning Evolution | Guards |',
+      );
+      sb.writeln('| :--- | :--- | :--- | :--- | :--- | :--- |');
+      for (final row in evolutionLedger) {
+        final cpText = row.checkpointProgression.isNotEmpty
+            ? row.checkpointProgression.join(' → ')
+            : row.originVersion;
+        final tuneText = row.tuningDeltaSummary.isNotEmpty
+            ? row.tuningDeltaSummary.join(', ')
+            : '—';
+        sb.writeln(
+          '| ${row.epicCode} | **${row.featureTitle}** | `${row.lifecycle}` | $cpText | `$tuneText` | ${row.guardCount} |',
+        );
+      }
+    }
     final fullMd = sb.toString();
     await Clipboard.setData(ClipboardData(text: fullMd));
     triggerMarkdownFileDownload(

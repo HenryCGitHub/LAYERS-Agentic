@@ -501,9 +501,118 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     );
   }
 
-  /// Infers the natural next `ProductionPhase` (`prototype` -> multi-release `mvp` -> multi-release `verticalSlice` -> `fullProduction`)
-  /// based on the live game tree's Epic & Feature coverage so progressive releases complete all MVP Epics and
-  /// all Vertical Slice polish passes before graduating to `v1.0` Full Production.
+  /// Evaluates `04 · Full Production` launch readiness across all Core Loop Epics,
+  /// remaining promotable deferred exclusions, and open `[FIX]` tasks.
+  ({
+    int coveredBeats,
+    int totalBeats,
+    int remainingDeferredCount,
+    int openFixCount,
+    List<String> uncoveredBeatTitles,
+    List<String> remainingDeferredExclusions,
+    bool isReadyForLaunch,
+  }) fullProductionCoverage() {
+    final builtReleases =
+        projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
+    final prodOrVsVerTags = <String>{
+      for (final r in builtReleases)
+        if (releasePhaseFor(r) == ProductionPhase.fullProduction ||
+            releasePhaseFor(r) == ProductionPhase.verticalSlice ||
+            releasePhaseFor(r) == ProductionPhase.postLaunch)
+          releaseVersionTagFor(r).toLowerCase(),
+    };
+    final beats = activeReleaseBeats;
+    int coveredBeats = 0;
+    int openFixCount = 0;
+    final uncoveredBeatTitles = <String>[];
+    final activeFeatTitlesLower = <String>{};
+
+    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+      final b = beats[bIdx];
+      final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+      final feats = featuresForBeat(b.id)
+          .where(
+            (f) =>
+                f.sections['lifecycle'] !=
+                FeatureLifecycleStatus.superseded.name,
+          )
+          .toList();
+      bool beatCovered = false;
+      for (final f in feats) {
+        activeFeatTitlesLower.add(f.title.toLowerCase().trim());
+        final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
+        final states = FeatureStateNode.getStatesForDocument(f);
+        final hasProdOrVsCp = prodOrVsVerTags.contains(originVer) ||
+            states.any(
+              (s) => prodOrVsVerTags.contains(s.releaseVersion.toLowerCase()),
+            );
+        if (hasProdOrVsCp || getDocumentProgress(f.id) >= 100) {
+          beatCovered = true;
+        }
+        for (final s in states) {
+          for (final t in s.checklist) {
+            if (t.text.startsWith('[FIX]') && !t.completed) {
+              openFixCount++;
+            }
+          }
+        }
+      }
+      if (beatCovered) {
+        coveredBeats++;
+      } else {
+        uncoveredBeatTitles.add('$eTag · ${b.title}');
+      }
+    }
+
+    final remainingDeferredExclusions = <String>[];
+    final proj = activeProject;
+    final rawEx = (proj?.sections['exclusions'] ?? '').trim();
+    if (rawEx.isNotEmpty) {
+      for (final line in rawEx.split('\n')) {
+        final clean = _stripExclusionPrefixes(line, stripNoPrefix: false);
+        if (clean.isEmpty) continue;
+        // Permanent exclusions stay excluded; deferred exclusions unlocked by Full Production count if not yet promoted
+        if (ReleaseBlueprint.isDeferredExclusionUnlockedInPhase(
+          clean,
+          ProductionPhase.fullProduction,
+        )) {
+          final shortTitle = _stripExclusionPrefixes(clean)
+              .split('—')
+              .first
+              .split(':')
+              .first
+              .toLowerCase()
+              .trim();
+          final alreadyPromoted = shortTitle.isNotEmpty &&
+              activeFeatTitlesLower.any(
+                (ft) => ft.contains(shortTitle) || shortTitle.contains(ft),
+              );
+          if (!alreadyPromoted) {
+            remainingDeferredExclusions.add(clean);
+          }
+        }
+      }
+    }
+
+    final totalBeats = beats.length;
+    final isReadyForLaunch = totalBeats > 0 &&
+        coveredBeats >= totalBeats &&
+        openFixCount == 0;
+
+    return (
+      coveredBeats: coveredBeats,
+      totalBeats: totalBeats,
+      remainingDeferredCount: remainingDeferredExclusions.length,
+      openFixCount: openFixCount,
+      uncoveredBeatTitles: uncoveredBeatTitles,
+      remainingDeferredExclusions: remainingDeferredExclusions,
+      isReadyForLaunch: isReadyForLaunch,
+    );
+  }
+
+  /// Infers the natural next `ProductionPhase` (`prototype` -> multi-release `mvp` -> multi-release `verticalSlice` -> `fullProduction` -> `postLaunch`)
+  /// based on the live game tree's Epic & Feature coverage so progressive releases complete all MVP Epics,
+  /// all Vertical Slice polish passes, and `v1.0` Full Production before graduating to `v1.1+` Post-Launch & Live Ops.
   ProductionPhase inferNextProgressivePhase() {
     final releases = projectReleases;
     final builtReleases =
@@ -512,8 +621,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       return ProductionPhase.prototype;
     }
     if (builtReleases.any(
-      (r) => releasePhaseFor(r) == ProductionPhase.fullProduction,
+      (r) => releasePhaseFor(r) == ProductionPhase.postLaunch,
     )) {
+      return ProductionPhase.postLaunch;
+    }
+    final builtFullProd = builtReleases
+        .where((r) => releasePhaseFor(r) == ProductionPhase.fullProduction)
+        .toList();
+    if (builtFullProd.isNotEmpty) {
+      final fpCov = fullProductionCoverage();
+      final allFullProdVerified = builtFullProd.every(
+        (r) => getDocumentProgress(r.id) >= 100,
+      );
+      if (allFullProdVerified || fpCov.isReadyForLaunch) {
+        return ProductionPhase.postLaunch;
+      }
       return ProductionPhase.fullProduction;
     }
     final vsCov = verticalSliceBeatCoverage();
@@ -541,11 +663,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       case ProductionPhase.verticalSlice:
         return ReleaseScope.verticalSlice;
       case ProductionPhase.fullProduction:
+      case ProductionPhase.postLaunch:
         return ReleaseScope.fullProduction;
     }
   }
 
-  /// Allows the developer to switch the target `ProductionPhase` (`MVP`, `Vertical Slice`, `Full Production`)
+  /// Allows the developer to switch the target `ProductionPhase` (`MVP`, `Vertical Slice`, `Full Production`, `Post-Launch`)
   /// inside the Progressive Release Co-Pilot modal and re-synthesize the draft blueprint for that phase.
   Future<void> setDraftReleasePhase(ProductionPhase targetPhase) async {
     final relDoc = activeRelease;
@@ -557,7 +680,27 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     relDoc.sections['releaseScope'] = targetScope.name;
     relDoc.sections['agentReasoned'] = 'true';
     relDoc.sections['phaseLockedByUser'] = 'true';
-    if (targetPhase == ProductionPhase.fullProduction) {
+    if (targetPhase == ProductionPhase.postLaunch) {
+      final existingV1Count = projectReleases
+          .where(
+            (r) =>
+                r.id != relDoc.id &&
+                (releasePhaseFor(r) == ProductionPhase.fullProduction ||
+                    releasePhaseFor(r) == ProductionPhase.postLaunch),
+          )
+          .length;
+      final existingPostCount = projectReleases
+          .where(
+            (r) =>
+                r.id != relDoc.id &&
+                releasePhaseFor(r) == ProductionPhase.postLaunch,
+          )
+          .length;
+      final minorNum = existingV1Count > 0 ? existingV1Count : 1;
+      relDoc.sections['versionTag'] = 'v1.$minorNum';
+      relDoc.sections['postLaunchPass'] = '${existingPostCount + 1}';
+    } else if (targetPhase == ProductionPhase.fullProduction) {
+      relDoc.sections.remove('postLaunchPass');
       final existingFullProdCount = projectReleases
           .where(
             (r) =>
@@ -571,6 +714,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       relDoc.sections['fullProductionPass'] = '$pass';
     } else {
       relDoc.sections.remove('fullProductionPass');
+      relDoc.sections.remove('postLaunchPass');
       final idx = proj.childrenIds.indexOf(relDoc.id);
       if (idx >= 0) {
         relDoc.sections['versionTag'] = 'v0.${idx + 1}';
@@ -665,6 +809,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       final currentVerTag = releaseVersionTagFor(relDoc);
       final isFullProdV1 =
           relDoc.sections['phase'] == ProductionPhase.fullProduction.name ||
+          relDoc.sections['phase'] == ProductionPhase.postLaunch.name ||
           relDoc.releaseScope == ReleaseScope.fullProduction ||
           currentVerTag.toLowerCase().startsWith('v1.');
       if (isFullProdV1) continue;
@@ -870,17 +1015,28 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     return (index: nextIndex, id: candidateId);
   }
 
-  /// Next progressive version tag (`v0.2`, `v0.3`, ..., or `v1.0`, `v1.1` in Full Production).
+  /// Next progressive version tag (`v0.2`, `v0.3`, ..., or `v1.0`, `v1.1+` in Full Production / Post-Launch).
   String get nextProgressiveVersionLabel {
     final releases = projectReleases;
     final builtReleases =
         releases.where((r) => r.childrenIds.isNotEmpty).toList();
-    if (builtReleases.isNotEmpty &&
-        inferNextProgressivePhase() == ProductionPhase.fullProduction) {
-      final existingFullProdCount = builtReleases
-          .where((r) => releasePhaseFor(r) == ProductionPhase.fullProduction)
-          .length;
-      return 'v1.$existingFullProdCount';
+    if (builtReleases.isNotEmpty) {
+      final nextPhase = inferNextProgressivePhase();
+      if (nextPhase == ProductionPhase.fullProduction ||
+          nextPhase == ProductionPhase.postLaunch) {
+        final existingV1Count = builtReleases
+            .where(
+              (r) =>
+                  releasePhaseFor(r) == ProductionPhase.fullProduction ||
+                  releasePhaseFor(r) == ProductionPhase.postLaunch,
+            )
+            .length;
+        final minorNum = nextPhase == ProductionPhase.postLaunch &&
+                existingV1Count == 0
+            ? 1
+            : existingV1Count;
+        return 'v1.$minorNum';
+      }
     }
     final builtCount = builtReleases.length;
     final baseCount = builtCount > 0 ? builtCount : releases.length;
@@ -1260,6 +1416,126 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
       }
     }
+  }
+
+  /// Toggles an existing Feature in the Progressive Release Planner between `SUPERSEDED` (archived testbed)
+  /// and `STABLE ✓` / `UPGRADE`.
+  void toggleProposedFeatureSuperseded(
+    String beatId,
+    String featureId,
+  ) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    for (final beat in bp.beats) {
+      if (beat.id == beatId) {
+        for (final feat in beat.features) {
+          if (feat.id == featureId) {
+            if (feat.lifecycle == FeatureLifecycleStatus.superseded) {
+              feat.lifecycle = FeatureLifecycleStatus.stable;
+              feat.included = true;
+              feat.estimatedHours = 0;
+            } else {
+              feat.lifecycle = FeatureLifecycleStatus.superseded;
+              feat.included = false;
+              feat.estimatedHours = 0;
+            }
+            // Sync live document if already built
+            final liveDoc = documents[featureId];
+            if (liveDoc != null && liveDoc.tier == TierType.feature) {
+              liveDoc.sections['lifecycle'] = feat.lifecycle.name;
+              if (feat.lifecycle == FeatureLifecycleStatus.superseded) {
+                liveDoc.sections['supersededInVersion'] = bp.releaseVersionTag;
+              } else {
+                liveDoc.sections.remove('supersededInVersion');
+              }
+              _persistDocument(liveDoc);
+            }
+            _syncActiveProjectMetadata();
+            notifyListeners();
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  /// 1-Click Feature Pivot / Supersede (`01 Prototype` -> `02 MVP`+):
+  /// Archives a live Feature into `Superseded Testbeds Archive` (`FeatureLifecycleStatus.superseded`)
+  /// when a playtest proves the mechanic should be cut/pivoted, or restores an archived Feature back into active scope.
+  bool toggleSupersedeFeature(
+    String featureId, {
+    String? pivotReason,
+  }) {
+    final featDoc = documents[featureId];
+    if (featDoc == null || featDoc.tier != TierType.feature) return false;
+    final activeVer = activeReleaseVersionTag;
+    final wasSuperseded =
+        featDoc.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
+
+    if (wasSuperseded) {
+      final originVer = (featDoc.sections['originVersion'] ?? activeVer).trim();
+      final restoredLifecycle = originVer == activeVer
+          ? FeatureLifecycleStatus.newFeature
+          : FeatureLifecycleStatus.upgrade;
+      featDoc.sections['lifecycle'] = restoredLifecycle.name;
+      featDoc.sections['activeReleaseVersion'] = activeVer;
+      featDoc.sections.remove('supersededInVersion');
+      featDoc.sections.remove('pivotReason');
+      _persistDocument(featDoc);
+
+      final bp = _releaseBlueprint;
+      if (bp != null) {
+        for (final b in bp.beats) {
+          for (final f in b.features) {
+            if (f.id == featureId ||
+                f.title.toLowerCase().trim() ==
+                    featDoc.title.toLowerCase().trim()) {
+              f.lifecycle = restoredLifecycle;
+              f.included = true;
+              if (f.estimatedHours <= 0) f.estimatedHours = 4;
+            }
+          }
+        }
+      }
+
+      if (_releaseViewFilter == 'archived' && supersededFeatures.isEmpty) {
+        _releaseViewFilter = 'active';
+        _selectedFeatureId = featureId;
+        if (featDoc.parentId != null) {
+          _selectedBeatId = featDoc.parentId;
+        }
+      }
+    } else {
+      featDoc.sections['lifecycle'] = FeatureLifecycleStatus.superseded.name;
+      featDoc.sections['supersededInVersion'] = activeVer;
+      if (pivotReason != null && pivotReason.trim().isNotEmpty) {
+        featDoc.sections['pivotReason'] = pivotReason.trim();
+      }
+      _persistDocument(featDoc);
+
+      final bp = _releaseBlueprint;
+      if (bp != null) {
+        for (final b in bp.beats) {
+          for (final f in b.features) {
+            if (f.id == featureId ||
+                f.title.toLowerCase().trim() ==
+                    featDoc.title.toLowerCase().trim()) {
+              f.lifecycle = FeatureLifecycleStatus.superseded;
+              f.included = false;
+              f.estimatedHours = 0;
+            }
+          }
+        }
+      }
+
+      if (_selectedFeatureId == featureId && _releaseViewFilter != 'archived') {
+        _selectFirstIncompleteFeatureInActiveRelease();
+      }
+    }
+
+    _syncActiveProjectMetadata();
+    notifyListeners();
+    return !wasSuperseded;
   }
 
   /// Adds a custom `+ NEW` feature to a Beat inside the Progressive Release Planner (`_releaseBlueprint`).
@@ -2222,6 +2498,7 @@ Return ONLY a JSON object with this schema:
         checkpointNode: cpNode,
         engineHint: engineHint,
         unrealCppMode: unrealCppMode,
+        phase: _currentPhase,
       );
     }
 
@@ -2335,9 +2612,23 @@ Return ONLY a JSON object with this schema:
               ? 'UNITY C# (MonoBehaviour)'
               : 'GODOT 4 (GDScript 2.0)');
 
+      final phaseInstructionBlock = switch (_currentPhase) {
+        ProductionPhase.prototype =>
+          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes, greybox meshes, and direct Inspector/Details variables.\n- Focus strictly on proving the core mechanic feel and playtest loop.',
+        ProductionPhase.mvp =>
+          'ACTIVE PRODUCTION PHASE: 02 · MVP (FUNCTIONAL DELTA UPGRADE)\n- Extend the existing v0.1 prototype script/Actor in-place (NEVER recreate from scratch).\n- Wire cross-system state, HUD counters, or progression loops.',
+        ProductionPhase.verticalSlice =>
+          'ACTIVE PRODUCTION PHASE: 03 · VERTICAL SLICE (GOLD STANDARD POLISH)\n- Attach Animation/VFX/SFX/Camera/UI feedback nodes and polish triggers to the existing mechanic without rewriting core movement/combat math.',
+        ProductionPhase.fullProduction =>
+          'ACTIVE PRODUCTION PHASE: 04 · FULL PRODUCTION (DATA-DRIVEN SCALING)\n- Extract hardcoded constants into reusable DataAssets / ScriptableObjects / Custom Resources, add pooling/save-load hooks, and scale across content waves.',
+        ProductionPhase.postLaunch =>
+          'ACTIVE PRODUCTION PHASE: 05 · POST-LAUNCH & LIVE OPS (PATCH & EXPANSION)\n- Apply surgical balance parameter adjustments, modular DLC/biome hooks, and regression guards without breaking existing save/state schemas.',
+      };
+
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+$phaseInstructionBlock
 $projectBuildStateContext
 ${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Already Built in Earlier Features — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
 ${sameEpicSiblingBoundaryLines.isNotEmpty ? sameEpicSiblingBoundaryLines.join('\n') : ''}
@@ -2637,6 +2928,7 @@ Return ONLY valid JSON:
               checkpointNode: cp,
               engineHint: engineHint,
               unrealCppMode: unrealCppMode,
+              phase: _currentPhase,
             );
             final doneMark = task.completed ? 'x' : ' ';
             sb.writeln(
@@ -2675,7 +2967,139 @@ Return ONLY valid JSON:
       }
     }
 
+    final evolutionLedger = buildCrossReleaseEvolutionLedger();
+    if (evolutionLedger.isNotEmpty) {
+      sb.writeln('\n## 6. Cross-Release Evolution & Tuning History');
+      sb.writeln(
+        '| Epic | Feature | Status | Checkpoint Progression | Tuning Evolution | Guards |',
+      );
+      sb.writeln('| :--- | :--- | :--- | :--- | :--- | :--- |');
+      for (final row in evolutionLedger) {
+        final cpText = row.checkpointProgression.isNotEmpty
+            ? row.checkpointProgression.join(' → ')
+            : row.originVersion;
+        final tuneText = row.tuningDeltaSummary.isNotEmpty
+            ? row.tuningDeltaSummary.join(', ')
+            : '—';
+        sb.writeln(
+          '| ${row.epicCode} | **${row.featureTitle}** | `${row.lifecycle}` | $cpText | `$tuneText` | ${row.guardCount} |',
+        );
+      }
+    }
+
     return sb.toString();
+  }
+
+  /// Builds a structured Cross-Release Evolution & Tuning Delta Ledger across all live and archived
+  /// features in the project (`CP1 (v0.1)` -> `CP2 (v0.2)` -> `CP3 (v0.3)` -> `CP4 (v1.0+)`).
+  List<
+      ({
+        String featureId,
+        String featureTitle,
+        String epicCode,
+        String epicTitle,
+        String lifecycle,
+        String originVersion,
+        String? pivotReason,
+        List<String> checkpointProgression,
+        List<String> tuningDeltaSummary,
+        int guardCount,
+      })> buildCrossReleaseEvolutionLedger() {
+    final beats = activeReleaseBeats;
+    final rows = <
+        ({
+          String featureId,
+          String featureTitle,
+          String epicCode,
+          String epicTitle,
+          String lifecycle,
+          String originVersion,
+          String? pivotReason,
+          List<String> checkpointProgression,
+          List<String> tuningDeltaSummary,
+          int guardCount,
+        })>[];
+
+    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
+      final beat = beats[bIdx];
+      final epicCode = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+      for (final feat in featuresForBeat(beat.id)) {
+        final lcRaw = feat.sections['lifecycle'] ?? 'newFeature';
+        final lcBadge = switch (lcRaw) {
+          'superseded' => 'ARCHIVED',
+          'stable' => 'STABLE ✓',
+          'upgrade' => 'UPGRADING',
+          _ => 'NEW',
+        };
+        final originVer = (feat.sections['originVersion'] ?? 'v0.1').trim();
+        final pivotReason = feat.sections['pivotReason']?.trim();
+        final states = FeatureStateNode.getStatesForDocument(feat);
+        final cpLabels = <String>[];
+        final varHistory = <String, List<String>>{};
+        final uniqueGuards = <String>{};
+
+        for (int cpIdx = 0; cpIdx < states.length; cpIdx++) {
+          final s = states[cpIdx];
+          final ver = s.releaseVersion.trim().isNotEmpty
+              ? s.releaseVersion.trim()
+              : originVer;
+          final checkGlyph = s.isCompleted ? '✓' : '○';
+          cpLabels.add(
+            'CP${cpIdx + 1} ($ver $checkGlyph: ${s.cleanStageTitle})',
+          );
+          for (final g in s.edgeCases) {
+            if (g.trim().isNotEmpty) uniqueGuards.add(g.trim());
+          }
+          for (final param in s.tuningParams) {
+            final colonIdx = param.indexOf(':');
+            if (colonIdx > 0) {
+              final k = param.substring(0, colonIdx).trim();
+              final v = param.substring(colonIdx + 1).trim();
+              if (k.isNotEmpty && v.isNotEmpty) {
+                final list = varHistory.putIfAbsent(k, () => <String>[]);
+                final entry = '$v ($ver)';
+                if (list.isEmpty || list.last != entry) {
+                  // Only append if value changed or first entry
+                  final prevVal = list.isNotEmpty
+                      ? list.last.split(' (').first.trim()
+                      : null;
+                  if (prevVal != v) {
+                    list.add(entry);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        final tuningDeltas = <String>[];
+        for (final entry in varHistory.entries.take(4)) {
+          if (entry.value.length > 1) {
+            tuningDeltas.add('${entry.key}: ${entry.value.join(' → ')}');
+          } else if (entry.value.isNotEmpty) {
+            tuningDeltas.add(
+              '${entry.key}: ${entry.value.first.split(' (').first}',
+            );
+          }
+        }
+
+        rows.add((
+          featureId: feat.id,
+          featureTitle: feat.title,
+          epicCode: epicCode,
+          epicTitle: beat.title,
+          lifecycle: lcBadge,
+          originVersion: originVer,
+          pivotReason:
+              (pivotReason != null && pivotReason.isNotEmpty) ? pivotReason : null,
+          checkpointProgression: cpLabels,
+          tuningDeltaSummary: tuningDeltas,
+          guardCount: uniqueGuards.length,
+        ));
+      }
+    }
+
+    return rows;
   }
 
   /// Generates a focused, single-feature AI Coding Agent prompt (for Cursor, Claude Code, or Antigravity)
@@ -2788,6 +3212,7 @@ Return ONLY valid JSON:
           checkpointNode: cpNode,
           engineHint: engineHint,
           unrealCppMode: unrealCppMode,
+          phase: _currentPhase,
         );
         final doneMark = task.completed ? 'x' : ' ';
         sb.writeln(
@@ -3318,15 +3743,24 @@ Return ONLY valid JSON:
       final existingFullProdCount = releases
           .where((r) => releasePhaseFor(r) == ProductionPhase.fullProduction)
           .length;
+      final existingPostLaunchCount = releases
+          .where((r) => releasePhaseFor(r) == ProductionPhase.postLaunch)
+          .length;
+      final existingV1Count = existingFullProdCount + existingPostLaunchCount;
       final fullProdPass = existingFullProdCount + 1;
-      final effectiveVer = nextPhase == ProductionPhase.fullProduction
-          ? 'v1.${fullProdPass - 1}'
-          : 'v0.$newIndex';
+      final postLaunchPass = existingPostLaunchCount + 1;
+      final effectiveVer = nextPhase == ProductionPhase.postLaunch
+          ? 'v1.${existingV1Count > 0 ? existingV1Count : 1}'
+          : (nextPhase == ProductionPhase.fullProduction
+              ? 'v1.${fullProdPass - 1}'
+              : 'v0.$newIndex');
       final defaultTitle = nextPhase == ProductionPhase.verticalSlice
           ? '$effectiveVer: Gold Standard Polish Pass - Vertical Slice'
           : (nextPhase == ProductionPhase.fullProduction
               ? '$effectiveVer: Content & World Expansion - Full Production'
-              : '$effectiveVer: Progressive Release');
+              : (nextPhase == ProductionPhase.postLaunch
+                  ? '$effectiveVer: Live Ops Balance & Content Drop - Post-Launch'
+                  : '$effectiveVer: Progressive Release'));
       final newRelDoc = TierDocument(
         id: newRelId,
         title: defaultTitle,
@@ -3339,6 +3773,8 @@ Return ONLY valid JSON:
           'agentReasoned': 'true',
           if (nextPhase == ProductionPhase.fullProduction)
             'fullProductionPass': '$fullProdPass',
+          if (nextPhase == ProductionPhase.postLaunch)
+            'postLaunchPass': '$postLaunchPass',
           'scope':
               'Goal: Synthesize the highest-impact $effectiveVer features and upgrades for ${proj.title}.\n\nIn Scope:\n• Agent-recommended $effectiveVer features and upgrades\n\nDone When: All $effectiveVer features pass playtest verification.',
         },
@@ -3423,11 +3859,44 @@ Return ONLY valid JSON:
       return;
     }
 
-    // Phase 4: Full Production content drops (reusing the Rough -> Polish pattern)
-    _currentPhase = ProductionPhase.fullProduction;
+    // Phase 4 / Phase 5: Full Production content drops or Post-Launch Live Ops
     final existingFullProdCount = releases
         .where((r) => r.sections['phase'] == ProductionPhase.fullProduction.name)
         .length;
+    final existingPostLaunchCount = releases
+        .where((r) => r.sections['phase'] == ProductionPhase.postLaunch.name)
+        .length;
+    if (_currentPhase == ProductionPhase.postLaunch ||
+        (existingFullProdCount > 0 && fullProductionCoverage().isReadyForLaunch)) {
+      _currentPhase = ProductionPhase.postLaunch;
+      final postPass = existingPostLaunchCount + 1;
+      final existingV1Count = existingFullProdCount + existingPostLaunchCount;
+      final postVersion = 'v1.${existingV1Count > 0 ? existingV1Count : 1}';
+      final postTitle =
+          '$postVersion: Post-Launch — Live Ops & Content Expansion (Pass $postPass) - Post-Launch';
+      final newRelDoc = TierDocument(
+        id: newRelId,
+        title: postTitle,
+        tier: TierType.release,
+        parentId: proj.id,
+        sections: {
+          'versionTag': postVersion,
+          'releaseScope': ReleaseScope.fullProduction.name,
+          'phase': ProductionPhase.postLaunch.name,
+          'postLaunchPass': '$postPass',
+          'scope':
+              'Goal: Deliver post-launch balance tuning, regression fixes, and modular content expansion for ${proj.title}.\n\nIn Scope:\n• Live telemetry & playtest balance adjustments\n• Post-launch content pack / biome expansion\n\nDone When: All $postVersion balance deltas and expansion features pass playtest verification.',
+        },
+      );
+      documents[newRelId] = newRelDoc;
+      _persistDocument(newRelDoc);
+      proj.childrenIds.add(newRelId);
+      _syncActiveProjectMetadata();
+      await openGateAndRecordRetro(newRelId);
+      return;
+    }
+
+    _currentPhase = ProductionPhase.fullProduction;
     final fullProdPass = existingFullProdCount + 1;
     final fullProdVersion = 'v1.${fullProdPass - 1}';
     final fullProdTitle = fullProdPass == 1

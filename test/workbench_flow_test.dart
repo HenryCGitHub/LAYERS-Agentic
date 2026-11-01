@@ -4563,5 +4563,300 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(epic3CropOrdered[2].title, equals('Tank Seal Depressurize'));
       },
     );
+
+    test(
+      '22. 6 Full-Lifecycle Workflow Upgrades: 1-Click Feature Pivot/Restore, Phase-Aware Exclusions, Phase-Specific 3-Area Steps, Full Production Gate, Phase 5 Post-Launch (v1.1+), and Cross-Release Evolution Ledger',
+      () async {
+        // ── Upgrade 2: Phase-Aware 07 Out of Scope Exclusions ──
+        expect(
+          ReleaseBlueprint.isExclusionActiveForPhase(
+            'No online multiplayer [NEVER]',
+            ProductionPhase.prototype,
+          ),
+          isTrue,
+        );
+        expect(
+          ReleaseBlueprint.isExclusionActiveForPhase(
+            'No online multiplayer [NEVER]',
+            ProductionPhase.fullProduction,
+          ),
+          isTrue,
+        );
+        expect(
+          ReleaseBlueprint.isExclusionActiveForPhase(
+            'No online multiplayer [NEVER]',
+            ProductionPhase.postLaunch,
+          ),
+          isTrue,
+        );
+
+        // Prototype-only exclusion ("in v0.1") blocks in Prototype, unlocks in MVP+
+        expect(
+          ReleaseBlueprint.isExclusionActiveForPhase(
+            'No skill tree in v0.1',
+            ProductionPhase.prototype,
+          ),
+          isTrue,
+        );
+        expect(
+          ReleaseBlueprint.isExclusionActiveForPhase(
+            'No skill tree in v0.1',
+            ProductionPhase.mvp,
+          ),
+          isFalse,
+        );
+        expect(
+          ReleaseBlueprint.isDeferredExclusionUnlockedInPhase(
+            'No skill tree in v0.1',
+            ProductionPhase.mvp,
+          ),
+          isTrue,
+        );
+
+        // Full-production deferred exclusion blocks in Prototype/MVP/Vertical Slice, unlocks in Full Production+
+        expect(
+          ReleaseBlueprint.isExclusionActiveForPhase(
+            'Defer boss rush mode until full production',
+            ProductionPhase.verticalSlice,
+          ),
+          isTrue,
+        );
+        expect(
+          ReleaseBlueprint.isExclusionActiveForPhase(
+            'Defer boss rush mode until full production',
+            ProductionPhase.fullProduction,
+          ),
+          isFalse,
+        );
+        expect(
+          ReleaseBlueprint.isDeferredExclusionUnlockedInPhase(
+            'Defer boss rush mode until full production',
+            ProductionPhase.fullProduction,
+          ),
+          isTrue,
+        );
+
+        // ── Upgrade 3: Phase-Specific 3-Area Step Synthesis ──
+        final testCp = FeatureStateNode(
+          id: 'cp_phase_test',
+          name: 'Checkpoint 1: Dash Core (v0.1)',
+          trigger: 'Press Space -> player dashes forward',
+          order: 0,
+          tuningParams: const ['dashSpeed: 900.0 px/s'],
+          edgeCases: const ['[COOLDOWN GUARD] Prevent dash during cooldown'],
+          checklist: [
+            Subtask(id: 't_1', text: 'Character & Input Setup (2h)'),
+          ],
+          parameters: const {'releaseVersion': 'v0.1'},
+        );
+
+        TaskHowToBlueprint.clearCache();
+        final protoBp = TaskHowToBlueprint.resolve(
+          parentTask: testCp.checklist.first,
+          taskIndex: 0,
+          checkpointNode: testCp,
+          engineHint: 'Godot 4',
+          phase: ProductionPhase.prototype,
+        );
+        expect(protoBp.subSteps.first.specChips, contains('Phase: 01 Prototype'));
+        expect(
+          protoBp.subSteps.first.explainConcept,
+          contains('Greybox foundation pass'),
+        );
+
+        final vsBp = TaskHowToBlueprint.resolve(
+          parentTask: testCp.checklist.first,
+          taskIndex: 0,
+          checkpointNode: testCp,
+          engineHint: 'Godot 4',
+          phase: ProductionPhase.verticalSlice,
+        );
+        expect(
+          vsBp.subSteps.first.specChips,
+          contains('Phase: 03 Vertical Slice Polish'),
+        );
+        expect(
+          vsBp.subSteps.first.explainConcept,
+          contains('Vertical Slice polish pass'),
+        );
+
+        final postBp = TaskHowToBlueprint.resolve(
+          parentTask: testCp.checklist.first,
+          taskIndex: 0,
+          checkpointNode: testCp,
+          engineHint: 'Godot 4',
+          phase: ProductionPhase.postLaunch,
+        );
+        expect(
+          postBp.subSteps.first.specChips,
+          contains('Phase: 05 Post-Launch Live Ops'),
+        );
+        expect(
+          postBp.subSteps.first.explainConcept,
+          contains('Post-Launch Live Ops pass'),
+        );
+
+        // ── Upgrade 1: 1-Click Feature Pivot / Supersede & Restore ──
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await provider.startConceptInterview(
+          'Top-down arena shooter with dash, grapple, and wave survival.',
+        );
+        provider.updateConceptDraft((d) {
+          d.exclusions = [
+            'No online multiplayer [NEVER]',
+            'Defer boss rush mode until full production',
+          ];
+        });
+        await provider.approveConceptAndBuildRelease();
+
+        final beat1 = provider.activeReleaseBeats.first;
+        final beat1Feats = provider.featuresForBeat(beat1.id);
+        expect(beat1Feats, isNotEmpty);
+        final pivotTarget = beat1Feats.first;
+
+        final archivedNow = provider.toggleSupersedeFeature(
+          pivotTarget.id,
+          pivotReason: 'Pivoted during v0.1 playtest',
+        );
+        expect(archivedNow, isTrue);
+        expect(
+          pivotTarget.sections['lifecycle'],
+          equals(FeatureLifecycleStatus.superseded.name),
+        );
+        expect(
+          pivotTarget.sections['pivotReason'],
+          equals('Pivoted during v0.1 playtest'),
+        );
+        expect(provider.isFeatureActiveInRelease(pivotTarget), isFalse);
+        expect(
+          provider.supersededFeatures.map((f) => f.id),
+          contains(pivotTarget.id),
+        );
+
+        // Restore the archived feature back to active scope
+        final archivedAfterRestore =
+            provider.toggleSupersedeFeature(pivotTarget.id);
+        expect(archivedAfterRestore, isFalse);
+        expect(
+          pivotTarget.sections['lifecycle'],
+          equals(FeatureLifecycleStatus.newFeature.name),
+        );
+        expect(provider.isFeatureActiveInRelease(pivotTarget), isTrue);
+
+        // ── Upgrade 6: Cross-Release Evolution & Tuning Delta Ledger ──
+        final targetStates = FeatureStateNode.getStatesForDocument(pivotTarget);
+        targetStates.first.tuningParams = ['dashSpeed: 240.0 px/s'];
+        targetStates.first.edgeCases = ['[COOLDOWN GUARD] Wait 0.4s'];
+        for (final t in targetStates.first.checklist) {
+          t.completed = true;
+          for (final sub in t.children) {
+            sub.completed = true;
+          }
+        }
+        targetStates.add(
+          FeatureStateNode(
+            id: '${pivotTarget.id}_v0.2_cp_2',
+            name: 'Checkpoint 2: Dash Upgrade (v0.2)',
+            trigger: 'Dash chains into shield bash',
+            order: 1,
+            tuningParams: ['dashSpeed: 310.0 px/s'],
+            edgeCases: [
+              '[COOLDOWN GUARD] Wait 0.4s',
+              '[STAMINA GUARD] Require 15 stamina',
+            ],
+            checklist: [
+              Subtask(id: 'u_t1', text: 'Chain Logic (2h)', completed: true),
+            ],
+            parameters: const {'releaseVersion': 'v0.2'},
+          ),
+        );
+        provider.updateFeatureStates(pivotTarget.id, targetStates);
+
+        final evolutionLedger = provider.buildCrossReleaseEvolutionLedger();
+        expect(evolutionLedger, isNotEmpty);
+        final ledgerEntry = evolutionLedger.firstWhere(
+          (r) => r.featureId == pivotTarget.id,
+        );
+        expect(ledgerEntry.checkpointProgression.length, equals(2));
+        expect(
+          ledgerEntry.tuningDeltaSummary.first,
+          contains('dashSpeed: 240.0 px/s (v0.1) → 310.0 px/s (v0.2)'),
+        );
+        expect(ledgerEntry.guardCount, equals(2));
+
+        final agentsMd = provider.buildActiveReleaseCodingAgentMarkdown();
+        expect(
+          agentsMd,
+          contains('## 6. Cross-Release Evolution & Tuning History'),
+        );
+        expect(
+          agentsMd,
+          contains('dashSpeed: 240.0 px/s (v0.1) → 310.0 px/s (v0.2)'),
+        );
+
+        // ── Upgrade 4 & Upgrade 5: Full Production Coverage Gate & Phase 5 Post-Launch (v1.1+) ──
+        // Complete all features in the active release so we can advance to Full Production -> Post-Launch
+        for (final b in provider.activeReleaseBeats) {
+          for (final f in provider.featuresForBeat(b.id)) {
+            final fStates = FeatureStateNode.getStatesForDocument(f);
+            for (final s in fStates) {
+              for (final t in s.checklist) {
+                t.completed = true;
+                for (final sub in t.children) {
+                  sub.completed = true;
+                }
+              }
+            }
+            provider.updateFeatureStates(f.id, fStates);
+          }
+        }
+
+        await provider.prepareProgressiveNextReleaseDraft();
+        await provider.setDraftReleasePhase(ProductionPhase.fullProduction);
+        expect(provider.currentPhase, equals(ProductionPhase.fullProduction));
+        expect(provider.activeReleaseVersionTag, equals('v1.0'));
+        await provider.approveAndExecuteReleasePlan();
+
+        // Mark all v1.0 Full Production checkpoints complete
+        for (final b in provider.activeReleaseBeats) {
+          for (final f in provider.featuresForBeat(b.id)) {
+            final fStates = FeatureStateNode.getStatesForDocument(f);
+            for (final s in fStates) {
+              for (final t in s.checklist) {
+                t.completed = true;
+                for (final sub in t.children) {
+                  sub.completed = true;
+                }
+              }
+            }
+            provider.updateFeatureStates(f.id, fStates);
+          }
+        }
+
+        final fpCov = provider.fullProductionCoverage();
+        expect(fpCov.coveredBeats, equals(fpCov.totalBeats));
+        expect(fpCov.openFixCount, equals(0));
+        expect(fpCov.isReadyForLaunch, isTrue);
+
+        // Once v1.0 Full Production is verified, inferNextProgressivePhase unlocks Phase 5 Post-Launch (v1.1)
+        expect(
+          provider.inferNextProgressivePhase(),
+          equals(ProductionPhase.postLaunch),
+        );
+        expect(provider.nextProgressiveVersionLabel, equals('v1.1'));
+
+        await provider.prepareProgressiveNextReleaseDraft();
+        expect(provider.currentPhase, equals(ProductionPhase.postLaunch));
+        expect(provider.activeReleaseVersionTag, equals('v1.1'));
+        expect(
+          provider.activePhaseBadgeLabel,
+          equals('PHASE 5 · POST-LAUNCH & LIVE OPS (PASS 1)'),
+        );
+        expect(
+          provider.releasePhaseShortBadge(provider.activeRelease!),
+          equals('LIVE'),
+        );
+      },
+    );
   });
 }

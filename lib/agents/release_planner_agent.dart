@@ -195,17 +195,22 @@ class ReleasePlannerAgent {
               '     * Prioritize bringing the next cohesive batch of these unpolished Epics & Features up to Gold Standard polish rather than re-polishing already-polished features.'
           : '';
       final phaseTargetDirective = releasePhase ==
-              ProductionPhase.verticalSlice.name
-          ? '  1. TARGET PHASE IS `"verticalSlice"` (MULTI-RELEASE VERTICAL SLICE POLISH TRACK): Set `"releasePhase": "verticalSlice"` and a descriptive `"releaseTitle"` (`"$versionTag: <Polish & Feel Focus>"`). Focus upgrades on visual/material polish, SFX/VFX & camera/hit-stop feel cues, HUD readability, and state/frame guards across unpolished Core Loop Beats.$vsCoverageHint'
-          : (releasePhase == ProductionPhase.fullProduction.name
-              ? '  1. TARGET PHASE IS `"fullProduction"` (CONTENT & BACKLOG EXPANSION): Set `"releasePhase": "fullProduction"` and a descriptive `"releaseTitle"` (`"$versionTag: <Content & Expansion Focus>"`). Scale content/encounter variety and promote deferred backlog systems while honoring active exclusions.'
-              : '  1. TARGET PHASE IS `"mvp"` (MULTI-RELEASE MVP TRACK): Set `"releasePhase": "mvp"` and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete MVP Focus>"`). Bring the next cohesive group of greybox prototype mechanics up to functional MVP depth across the Core Loop and Design Pillars.$mvpCoverageHint');
+              ProductionPhase.postLaunch.name
+          ? '  1. TARGET PHASE IS `"postLaunch"` (POST-LAUNCH & LIVE OPS — $versionTag): Set `"releasePhase": "postLaunch"` and a descriptive `"releaseTitle"` (`"$versionTag: <Live Ops / Content / Balance Focus>"`). Focus on shipping post-launch content expansions, live tuning balance passes, and playtest `[GUARD]` hardening without breaking `v1.0` save compatibility.'
+          : (releasePhase == ProductionPhase.verticalSlice.name
+              ? '  1. TARGET PHASE IS `"verticalSlice"` (MULTI-RELEASE VERTICAL SLICE POLISH TRACK): Set `"releasePhase": "verticalSlice"` and a descriptive `"releaseTitle"` (`"$versionTag: <Polish & Feel Focus>"`). Focus upgrades on visual/material polish, SFX/VFX & camera/hit-stop feel cues, HUD readability, and state/frame guards across unpolished Core Loop Beats.$vsCoverageHint'
+              : (releasePhase == ProductionPhase.fullProduction.name
+                  ? '  1. TARGET PHASE IS `"fullProduction"` (CONTENT & BACKLOG EXPANSION): Set `"releasePhase": "fullProduction"` and a descriptive `"releaseTitle"` (`"$versionTag: <Content & Expansion Focus>"`). Scale content/encounter variety and promote deferred backlog systems while honoring active exclusions.'
+                  : '  1. TARGET PHASE IS `"mvp"` (MULTI-RELEASE MVP TRACK): Set `"releasePhase": "mvp"` and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete MVP Focus>"`). Bring the next cohesive group of greybox prototype mechanics up to functional MVP depth across the Core Loop and Design Pillars.$mvpCoverageHint'));
       phaseInstruction =
           '- AGENT-REASONED PROGRESSIVE RELEASE ($versionTag): You are the Lead Game Architect deciding what "${projectDoc.title}" needs next in $versionTag by evaluating the Existing Live Game Tree against the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n'
           '$phaseTargetDirective\n'
           '  2. Decide which existing Features need an `"upgrade"` vs. which remain `"stable"`, and what `"new"` Features to introduce across ANY of the Core Loop Beats—with zero artificial count limits: include whatever set of `"upgrade"` and `"new"` Features across whichever Beats are required to make $versionTag a complete, cohesive playable milestone.\n'
           '  3. DELTA-ONLY JSON OUTPUT (DO NOT REPEAT STABLE FEATURES): In `beats`, output ONLY the Beats and Features receiving active work in $versionTag (`"lifecycle": "upgrade"` or `"lifecycle": "new"`). Use the exact Beat `id` (e.g. `"beat_1"`) and Feature `id`/`title` from the Existing Live Game Tree when upgrading. Do NOT output untouched `"stable"` features in JSON—all omitted existing Beats and Features are automatically preserved as `STABLE ✓` (`0h`).\n'
-          '  4. Strictly enforce the Project Exclusions: NEVER include or promote any feature that violates an Exclusion, even if it was previously queued or requested.';
+          '  4. Strictly enforce the Project Exclusions active for this phase: NEVER include or promote any feature that violates a permanent Exclusion (`[NEVER]` / `[CUT]`), while early-phase deferred exclusions (`"in v0.1"`, `"in prototype"`, `"in greybox"`, `[DEFERRED]`) are now unlocked for promotion in Vertical Slice / Full Production.';
+    } else if (releasePhase == ProductionPhase.postLaunch.name) {
+      phaseInstruction =
+          '- PHASE 5 POST-LAUNCH & LIVE OPS ($versionTag): Expand live content rosters, balance tuning parameters, and harden `[PLAYTEST GUARD]` rules on top of the shipped `v1.0` build without breaking save compatibility.';
     } else if (releasePhase == ProductionPhase.mvp.name ||
         targetMvpEpicIndex != null) {
       final epicNum = (targetMvpEpicIndex ?? 0) + 1;
@@ -226,6 +231,17 @@ class ReleasePlannerAgent {
           '- ONE ATOMIC MECHANIC PER FEATURE (MINIMUM 4 FEATURES PER EPIC, 16–20 TOTAL): Audit every verb and clause across `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When`. Every distinct greybox room/corridor layout, player locomotion mechanic, interaction raycast/prompt, valve rotation, canister injection, simulation drift rule, gauge readout, alarm/wilt feedback state, container unsealing/depressurization step, seed planting step, crop growth timer, mature crop harvest, crate loading step, airlock terminal sale, shop purchase, and physical equipment mounting + second-cycle reset MUST be its own separate Feature card (4 to 5 Features per Epic, 16 to 20 Features total across the release). NEVER bundle two distinct devices or sequential steps (like "Valve + Canister", "Growth + Harvest", or "Shop Purchase + Equipment Mounting") into a single Feature!';
     }
 
+    final targetPhase = switch (releasePhase) {
+      'postLaunch' => ProductionPhase.postLaunch,
+      'fullProduction' => ProductionPhase.fullProduction,
+      'verticalSlice' => ProductionPhase.verticalSlice,
+      'mvp' => ProductionPhase.mvp,
+      'prototype' => ProductionPhase.prototype,
+      _ => isSubsequentRelease
+          ? ProductionPhase.mvp
+          : ProductionPhase.prototype,
+    };
+
     bool conflictsWithExclusions(String featureTitle) {
       final cleanFeat = featureTitle
           .toLowerCase()
@@ -233,6 +249,9 @@ class ReleasePlannerAgent {
           .trim();
       if (cleanFeat.isEmpty) return false;
       for (final ex in projectExclusions) {
+        if (!ReleaseBlueprint.isExclusionActiveForPhase(ex, targetPhase)) {
+          continue;
+        }
         final cleanEx = ex
             .toLowerCase()
             .replaceFirst(_cutPrefixRegex, '')
@@ -255,6 +274,14 @@ class ReleasePlannerAgent {
         existingTreeSummary.writeln('- Beat "${b.title}" (${b.id}):');
         final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
         for (final f in feats) {
+          if (f.sections['lifecycle'] ==
+              FeatureLifecycleStatus.superseded.name) {
+            final pivotNote = (f.sections['pivot_reason'] ?? '').trim();
+            existingTreeSummary.writeln(
+              '  * SUPERSEDED / ARCHIVED TESTBED: "${f.title}" [id: ${f.id}${pivotNote.isNotEmpty ? ', reason: $pivotNote' : ''}] — Propose a `"lifecycle": "new"` replacement mechanic in this Beat if needed.',
+            );
+            continue;
+          }
           final states = FeatureStateNode.getStatesForDocument(f);
           final originVer = f.sections['originVersion'] ?? 'v0.1';
           final cpSummaries = <String>[];
@@ -889,7 +916,8 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
     var effectivePreset = preset;
     final currentDocPhase = (releaseDoc.sections['phase'] ?? '').trim();
-    if (currentDocPhase == ProductionPhase.fullProduction.name) {
+    if (currentDocPhase == ProductionPhase.postLaunch.name ||
+        currentDocPhase == ProductionPhase.fullProduction.name) {
       effectivePreset = ReleaseScope.fullProduction;
     } else if (currentDocPhase == ProductionPhase.verticalSlice.name) {
       effectivePreset = ReleaseScope.verticalSlice;
@@ -902,7 +930,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
               .toString()
               .trim()
               .toLowerCase();
-      if (rawPhase.contains('full') || rawPhase.contains('production')) {
+      if (rawPhase.contains('post') ||
+          rawPhase.contains('live') ||
+          rawPhase.contains('patch')) {
+        releaseDoc.sections['phase'] = ProductionPhase.postLaunch.name;
+        releaseDoc.sections['releaseScope'] = ReleaseScope.fullProduction.name;
+        effectivePreset = ReleaseScope.fullProduction;
+      } else if (rawPhase.contains('full') || rawPhase.contains('production')) {
         releaseDoc.sections['phase'] = ProductionPhase.fullProduction.name;
         releaseDoc.sections['releaseScope'] = ReleaseScope.fullProduction.name;
         effectivePreset = ReleaseScope.fullProduction;
@@ -1128,13 +1162,34 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       final isTargetEpic = targetMvpEpicIndex != null
           ? bIdx == targetMvpEpicIndex
           : (releasePhase == ProductionPhase.verticalSlice.name ||
-                  releasePhase == ProductionPhase.fullProduction.name
+                  releasePhase == ProductionPhase.fullProduction.name ||
+                  releasePhase == ProductionPhase.postLaunch.name
               ? true
               : bIdx == defaultMvpBeatIdx);
 
       final proposedFeats = <ProposedFeatureBlueprint>[];
       for (int fIdx = 0; fIdx < existingFeats.length; fIdx++) {
         final ef = existingFeats[fIdx];
+        if (ef.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name) {
+          proposedFeats.add(
+            ProposedFeatureBlueprint(
+              id: ef.id,
+              title: ef.title,
+              goal: SectionTextUtils.resolveGoal(ef.sections),
+              doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
+              estimatedHours: 0,
+              included: false,
+              lifecycle: FeatureLifecycleStatus.superseded,
+              originVersion: ef.sections['originVersion'] ?? 'v0.1',
+              inScope: SectionTextUtils.resolveInScope(ef.sections),
+              outOfScope: const [],
+              tuningParams: const [],
+              edgeCases: const [],
+              checkpoints: const [],
+            ),
+          );
+          continue;
+        }
         final shouldUpgrade = isTargetEpic &&
             (targetMvpEpicIndex != null || fIdx == 0);
         if (shouldUpgrade) {
@@ -1213,6 +1268,19 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
 
     final relGoal = SectionTextUtils.resolveGoal(releaseDoc.sections);
     final relDone = SectionTextUtils.resolveDoneWhen(releaseDoc.sections);
+    final defaultQuestions = releasePhase == ProductionPhase.postLaunch.name
+        ? <AgentQuestion>[
+            AgentQuestion(
+              id: 'rel_q_post_launch',
+              question: 'How should we focus $versionTag Post-Launch Live Ops?',
+              options: const [
+                '(Recommended) Content Expansion Pack: Add new playable roster/encounter variety and upgrade core loop depth',
+                'Balance & Feel Patch: Tighten live tuning variables, resolve playtest [FIX] items, and harden [GUARD] rules',
+                'Endgame Challenge Mode: Add high-intensity loop modifiers and mastery rewards using shipped v1.0 assets',
+              ],
+            ),
+          ]
+        : const <AgentQuestion>[];
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
       releaseTitle: releaseDoc.title,
@@ -1224,7 +1292,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       doneWhen: relDone.isNotEmpty
           ? relDone
           : 'All $versionTag active features pass playtest verification.',
-      questions: const [],
+      questions: defaultQuestions,
       beats: beats,
       explicitExclusions: projectExclusions,
       lastAgentReply:
@@ -1371,10 +1439,12 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         }
       }
 
-      // Preserve canonical existing feature order first (UPGRADE or STABLE ✓), followed by genuinely NEW features
+      // Preserve canonical existing feature order first (UPGRADE, STABLE ✓, or SUPERSEDED), followed by genuinely NEW features
       final orderedFeatures = <ProposedFeatureBlueprint>[];
       for (final ef in existingFeats) {
         final matchedLf = matchedByExistingId[ef.id];
+        final isAlreadySuperseded =
+            ef.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
         if (matchedLf != null) {
           orderedFeatures.add(matchedLf);
         } else {
@@ -1385,8 +1455,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
               goal: SectionTextUtils.resolveGoal(ef.sections),
               doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
               estimatedHours: 0,
-              included: true,
-              lifecycle: FeatureLifecycleStatus.stable,
+              included: !isAlreadySuperseded,
+              lifecycle: isAlreadySuperseded
+                  ? FeatureLifecycleStatus.superseded
+                  : FeatureLifecycleStatus.stable,
               originVersion: ef.sections['originVersion'] ?? 'v0.1',
               inScope: SectionTextUtils.resolveInScope(ef.sections),
               outOfScope: const [],
@@ -1402,6 +1474,15 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
 
       final deferredList = deferredByBeatIndex[ebIdx];
       if (!isAgentReasoned && deferredList != null && deferredList.isNotEmpty) {
+        final rawDocPhase = (releaseDoc.sections['phase'] ?? '').trim();
+        final targetPhase = switch (rawDocPhase) {
+          'postLaunch' => ProductionPhase.postLaunch,
+          'fullProduction' => ProductionPhase.fullProduction,
+          'verticalSlice' => ProductionPhase.verticalSlice,
+          'mvp' => ProductionPhase.mvp,
+          'prototype' => ProductionPhase.prototype,
+          _ => ProductionPhase.mvp,
+        };
         final combinedExclusions = <String>{
           ...projectExclusions,
           ...parsed.explicitExclusions,
@@ -1412,6 +1493,9 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
               .replaceFirst(_noPrefixRegex, '')
               .trim();
           final isExcluded = combinedExclusions.any((ex) {
+            if (!ReleaseBlueprint.isExclusionActiveForPhase(ex, targetPhase)) {
+              return false;
+            }
             final cleanEx = ex
                 .toLowerCase()
                 .replaceFirst(_cutPrefixRegex, '')

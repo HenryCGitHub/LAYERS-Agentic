@@ -259,6 +259,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               return '03 · VERTICAL SLICE (POLISH PASS)';
                             case ProductionPhase.fullProduction:
                               return '04 · FULL PRODUCTION (V1.0 CONTENT)';
+                            case ProductionPhase.postLaunch:
+                              return '05 · POST-LAUNCH & LIVE OPS (V1.1+)';
                           }
                         }
 
@@ -1239,7 +1241,30 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             ),
                     ),
                     const SizedBox(width: 8),
-                    if (isSelected &&
+                    if (feat.sections['lifecycle'] ==
+                        FeatureLifecycleStatus.superseded.name) ...[
+                      InkWell(
+                        key: ValueKey('restore_archived_feat_${feat.id}'),
+                        onTap: () =>
+                            widget.workbench.toggleSupersedeFeature(feat.id),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          child: Text(
+                            '↺ Restore',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ] else if (isSelected &&
                         _activeStage2InlineEditKey !=
                             'rename_rail_feat_${feat.id}') ...[
                       InkWell(
@@ -1256,6 +1281,29 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           ),
                           child: Text(
                             '✎',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      InkWell(
+                        key: ValueKey('rail_supersede_feat_${feat.id}'),
+                        onTap: () => widget.workbench.toggleSupersedeFeature(
+                          feat.id,
+                          pivotReason: 'Archived from Outliner in $activeVer',
+                        ),
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 3,
+                            vertical: 1,
+                          ),
+                          child: Text(
+                            '⊗',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
