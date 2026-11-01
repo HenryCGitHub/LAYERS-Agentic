@@ -323,8 +323,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         existingRel.sections['releaseScope'] = ReleaseScope.prototype.name;
         existingRel.sections['synced_core_loop_sig'] =
             draft.coreLoopBeats.join('||');
-        existingRel.sections['scope'] =
-            'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
+        existingRel.sections['scope'] = draft.toFormattedScopeSection();
       }
       _persistDocument(existingRel);
       releaseIds.add(relId);
@@ -340,8 +339,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           'synced_core_loop_sig': draft.coreLoopBeats.join('||'),
           if (isSplitPrototype) 'prototypePart': '1',
           if (isSplitPrototype) 'splitPrototypePart2Title': trainTitles[1],
-          'scope':
-              'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}',
+          'scope': draft.toFormattedScopeSection(),
         },
       );
       documents[relId] = relDoc;
@@ -387,13 +385,16 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     'from',
     'that',
     'this',
-    'EPIC',
     'epic',
     'beat',
     'loop',
     'player',
     'game',
   };
+  static const List<String> _kSyncStarterTuning = <String>[
+    'responseTime: 0.12 s',
+    'cooldownDuration: 0.50 s',
+  ];
 
   Set<String> _extractBeatKeywords(String text) {
     final lower = text.toLowerCase();
@@ -407,9 +408,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     return tokens;
   }
 
-  double _beatKeywordOverlap(String a, String b) {
-    final setA = _extractBeatKeywords(a);
-    final setB = _extractBeatKeywords(b);
+  static double _keywordSetOverlap(Set<String> setA, Set<String> setB) {
     if (setA.isEmpty || setB.isEmpty) return 0.0;
     final intersection = setA.intersection(setB).length;
     final minLen = setA.length < setB.length ? setA.length : setB.length;
@@ -455,8 +454,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final isSingleV01Release = builtReleaseCount <= 1;
 
     // 1. Sync v0.1 Release Scope (`01 Goal`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`)
-    rel.sections['scope'] =
-        'Goal: ${draft.goal}\n\nIn Scope:\n${draft.coreLoopBeats.map((b) => '• $b').join('\n')}\n\nOut of Scope:\n${draft.exclusions.map((e) => '• $e').join('\n')}\n\nDone When: ${draft.doneWhen}';
+    rel.sections['scope'] = draft.toFormattedScopeSection();
     _persistDocument(rel);
 
     final bp = (_releaseBlueprint != null &&
@@ -500,6 +498,17 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         _parseStage1CoreLoopBeat(draft.coreLoopBeats[i], i),
     ];
 
+    final stage1KeywordSets = [
+      for (final sBeat in parsedStage1Beats)
+        _extractBeatKeywords('${sBeat.title} ${sBeat.description}'),
+    ];
+    final existingBeatKeywordSets = {
+      for (final candidate in existingBeats)
+        candidate.id: _extractBeatKeywords(
+          '${candidate.title} ${candidate.sections['scope'] ?? ''}',
+        ),
+    };
+
     final matchedBeatForStage1Idx = <int, TierDocument>{};
     final claimedBeatIds = <String>{};
 
@@ -507,6 +516,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     // so shifted beats (e.g., when a middle beat is deleted) claim their true Epic first.
     for (int i = 0; i < parsedStage1Beats.length; i++) {
       final sBeat = parsedStage1Beats[i];
+      final sKeywords = stage1KeywordSets[i];
       final normTitle = sBeat.title.toLowerCase().trim();
       TierDocument? bestMatch;
       double bestScore = 0.0;
@@ -522,9 +532,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           bestScore = 1.0;
           break;
         }
-        final overlap = _beatKeywordOverlap(
-          '${sBeat.title} ${sBeat.description}',
-          '${candidate.title} ${candidate.sections['scope'] ?? ''}',
+        final overlap = _keywordSetOverlap(
+          sKeywords,
+          existingBeatKeywordSets[candidate.id] ?? const <String>{},
         );
         if (overlap >= 0.45 && overlap > bestScore) {
           bestScore = overlap;
@@ -555,10 +565,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       if (idx < existingBeats.length) {
         final positionalCandidate = existingBeats[idx];
         if (!claimedBeatIds.contains(positionalCandidate.id)) {
-          final sBeat = parsedStage1Beats[idx];
-          final overlap = _beatKeywordOverlap(
-            '${sBeat.title} ${sBeat.description}',
-            '${positionalCandidate.title} ${positionalCandidate.sections['scope'] ?? ''}',
+          final overlap = _keywordSetOverlap(
+            stage1KeywordSets[idx],
+            existingBeatKeywordSets[positionalCandidate.id] ?? const <String>{},
           );
           if (isSingleInPlaceRename || overlap >= 0.20) {
             matchedBeatForStage1Idx[idx] = positionalCandidate;
@@ -573,6 +582,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final activeVer = activeReleaseVersionTag;
     final newReleaseBeatIds = <String>[];
     final newBlueprintBeats = <ProposedBeatBlueprint>[];
+    final formattedStarterTuning =
+        _kSyncStarterTuning.map((p) => '• $p').join('\n');
 
     for (int i = 0; i < parsedStage1Beats.length; i++) {
       final sBeat = parsedStage1Beats[i];
@@ -619,10 +630,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           'Implement core state transitions and player input for $featTitle (1h)',
           'Hook visual/audio feedback cues and state guard for $featTitle (1h)',
         ];
-        final starterTuning = <String>[
-          'responseTime: 0.12 s',
-          'cooldownDuration: 0.50 s',
-        ];
         final starterGuards = <String>[
           '[STATE GUARD] Block duplicate $featTitle activation while active',
         ];
@@ -640,7 +647,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
               ),
           ],
           coveredScope: [featTitle],
-          tuningParams: starterTuning,
+          tuningParams: List<String>.from(_kSyncStarterTuning),
           edgeCases: starterGuards,
           parameters: {'releaseVersion': activeVer},
         );
@@ -656,8 +663,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             'lifecycle': FeatureLifecycleStatus.newFeature.name,
             'scope':
                 'Goal: Build ${sBeat.description}\n\nIn Scope:\n• $featTitle\n\nDone When: $playtestGate',
-            'tuning': starterTuning.map((p) => '• $p').join('\n'),
-            'variables': starterTuning.map((p) => '• $p').join('\n'),
+            'tuning': formattedStarterTuning,
+            'variables': formattedStarterTuning,
             'edge_cases': starterGuards.map((e) => '• $e').join('\n'),
           },
         );
@@ -700,7 +707,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
                   originVersion: activeVer,
                   inScope: [featTitle],
                   outOfScope: const [],
-                  tuningParams: starterTuning,
+                  tuningParams: List<String>.from(_kSyncStarterTuning),
                   edgeCases: starterGuards,
                   checkpoints: [
                     ProposedCheckpointBlueprint(
@@ -708,7 +715,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
                       playtestCriteria: playtestGate,
                       tasks: starterTasks,
                       coveredScope: [featTitle],
-                      tuningParams: starterTuning,
+                      tuningParams: List<String>.from(_kSyncStarterTuning),
                       edgeCases: starterGuards,
                       releaseVersion: activeVer,
                     ),
