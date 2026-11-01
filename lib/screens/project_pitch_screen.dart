@@ -9,6 +9,21 @@ part 'pitch_spark_and_outliner_part.dart';
 part 'pitch_section_workspace_part.dart';
 part 'pitch_full_review_part.dart';
 
+final RegExp _overSplitRegex = RegExp(
+  r'\s+over\s+',
+  caseSensitive: false,
+);
+final RegExp _prioritizePrefixRegex = RegExp(
+  r'^Prioritize\s+',
+  caseSensitive: false,
+);
+final RegExp _whitespaceRegex = RegExp(r'\s+');
+final RegExp _dotPipeSepRegex = RegExp(r'[·|]');
+final RegExp _dotPipeSplitRegex = RegExp(r'\s*[·|]\s*');
+final RegExp _goalClauseSplitRegex = RegExp(r',\s*and\s+|,\s+');
+final RegExp _nonWordStripRegex = RegExp(r'[^\w\s-]');
+final RegExp _newlineCollapseRegex = RegExp(r'\s*\n\s*');
+
 /// Wraps each line of text at [maxCharsPerLine] (default 80 characters),
 /// breaking cleanly at the last space before column 80 (or at column 80 for
 /// continuous words) while preserving manual `Shift + Enter` newlines.
@@ -143,20 +158,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     onSubmit();
     return KeyEventResult.handled;
   }
-
-  final RegExp _overSplitRegex = RegExp(
-    r'\s+over\s+',
-    caseSensitive: false,
-  );
-  final RegExp _prioritizePrefixRegex = RegExp(
-    r'^Prioritize\s+',
-    caseSensitive: false,
-  );
-  final RegExp _whitespaceRegex = RegExp(r'\s+');
-  final RegExp _dotPipeSepRegex = RegExp(r'[·|]');
-  final RegExp _dotPipeSplitRegex = RegExp(r'\s*[·|]\s*');
-  final RegExp _goalClauseSplitRegex = RegExp(r',\s*and\s+|,\s+');
-  final RegExp _nonWordStripRegex = RegExp(r'[^\w\s-]');
 
   String? _lastTrackedProjectId;
   final Map<int, int?> _selectedOptionBySection = {};
@@ -308,16 +309,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       }
     }
     if (clean.contains('·')) {
-      final dotParts = clean
-          .split('·')
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-      if (dotParts.length >= 2) {
-        return (
-          title: dotParts.first,
-          description: dotParts.sublist(1).join(' · '),
-        );
+      final dotIdx = clean.indexOf('·');
+      final head = clean.substring(0, dotIdx).trim();
+      final tail = clean.substring(dotIdx + 1).trim();
+      if (head.isNotEmpty && tail.isNotEmpty) {
+        return (title: head, description: tail);
       }
     }
     if (clean.toLowerCase().contains(' over ')) {
@@ -660,7 +656,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   }) async {
     final activeController = controller ?? _agentPromptController;
     final text = activeController.text
-        .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+        .replaceAll(_newlineCollapseRegex, ' ')
         .trim();
     if (text.isEmpty || widget.workbench.isAgentBusy) return;
     activeController.clear();
