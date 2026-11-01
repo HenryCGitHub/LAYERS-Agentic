@@ -1,8 +1,6 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
-  static final RegExp _tuningVarDelimiterRegex = RegExp(r'[:=]');
-
   void _completeAllCheckpointTasks(FeatureStateNode node) {
     for (final task in node.checklist) {
       task.completed = true;
@@ -146,8 +144,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     final targetIdx =
         tuningItems.isNotEmpty ? (selectedTaskIdx % tuningItems.length) : 0;
     final oldEntry = tuningItems.isNotEmpty ? tuningItems[targetIdx] : '';
-    final oldVar = oldEntry.split(_tuningVarDelimiterRegex).first.trim();
-    final newVar = trimmed.split(_tuningVarDelimiterRegex).first.trim();
+    final oldVar = oldEntry
+        .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
+        .first
+        .trim();
+    final newVar = trimmed
+        .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
+        .first
+        .trim();
 
     if (tuningItems.isNotEmpty) {
       node.tuningParams[targetIdx] = trimmed;

@@ -868,23 +868,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   }
 
   void _syncCurrentPhaseFromRelease(TierDocument? relDoc) {
-    if (relDoc == null) {
-      _currentPhase = ProductionPhase.prototype;
-      return;
-    }
-    final rawPhase = (relDoc.sections['phase'] ?? '').trim();
-    _currentPhase = switch (rawPhase) {
-      'mvp' => ProductionPhase.mvp,
-      'verticalSlice' => ProductionPhase.verticalSlice,
-      'fullProduction' => ProductionPhase.fullProduction,
-      'prototype' => ProductionPhase.prototype,
-      _ => switch (relDoc.releaseScope) {
-        ReleaseScope.mvp => ProductionPhase.mvp,
-        ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
-        ReleaseScope.fullProduction => ProductionPhase.fullProduction,
-        _ => ProductionPhase.prototype,
-      },
-    };
+    _currentPhase = relDoc != null
+        ? releasePhaseFor(relDoc)
+        : ProductionPhase.prototype;
   }
 
   void _persistDocument(TierDocument doc, {bool debounce = false}) {

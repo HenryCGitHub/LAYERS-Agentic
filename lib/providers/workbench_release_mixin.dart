@@ -3187,7 +3187,7 @@ Return ONLY valid JSON:
       }
 
       for (final key in feat.sections.keys.toList()) {
-        if (key == 'feature_states_json') continue;
+        if (key == 'states' || key == 'feature_states_json') continue;
         final val = feat.sections[key];
         if (val != null && idRegex.hasMatch(val)) {
           feat.sections[key] = val.replaceAll(idRegex, newId);

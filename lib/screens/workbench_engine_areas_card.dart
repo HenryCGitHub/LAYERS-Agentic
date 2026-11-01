@@ -1,8 +1,6 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
-  static final RegExp _varDelimiterRegex = RegExp(r'[:=]');
-
   /// Renders the Engine-Specific 3-Area Step Card (`COMPONENTS & OUTLINER` / `HIERARCHY & COMPONENTS` /
   /// `SCENE TREE DOCK (.tscn)`, `DETAILS PANEL` / `INSPECTOR WINDOW` / `INSPECTOR DOCK`, and
   /// `EVENT GRAPH` / `C++ SOURCE` / `C# MONOBEHAVIOUR` / `GDSCRIPT`), showing only the sections
@@ -48,8 +46,10 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     final stepPath = activeSubStep.stepPath.isNotEmpty
         ? activeSubStep.stepPath
         : selectedHowTo.whereLocation;
-    final primaryVarName =
-        primaryTuningLabel.split(_varDelimiterRegex).first.trim();
+    final primaryVarName = primaryTuningLabel
+        .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
+        .first
+        .trim();
 
     // Strip any leading C++/C# comment line ("// ...") when displaying a pure hierarchy/setup block
     final rawLines = rawCode.split('\n');
@@ -106,7 +106,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         !isCodeVariableStep;
 
     final matchedTunings = tuningItems.where((t) {
-      final key = t.split(_varDelimiterRegex).first.trim().toLowerCase();
+      final key = t
+          .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
+          .first
+          .trim()
+          .toLowerCase();
       return key.isNotEmpty &&
           (rawCode.toLowerCase().contains(key) ||
               activeSubStep.instruction.toLowerCase().contains(key));
@@ -174,7 +178,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         }
       }
       for (final t in tuningItems.take(2)) {
-        final parts = t.split(_varDelimiterRegex);
+        final parts =
+            t.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
         final k = parts.first.trim();
         final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
         if (k.isNotEmpty) {
@@ -860,7 +865,10 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         final trimmed = rawTune.trim();
         if (trimmed.isNotEmpty) {
           baseMap[trimmed] = 'tune';
-          final varName = trimmed.split(_varDelimiterRegex).first.trim();
+          final varName = trimmed
+              .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
+              .first
+              .trim();
           if (varName.length >= 3) {
             baseMap[varName] = 'tune';
           }
