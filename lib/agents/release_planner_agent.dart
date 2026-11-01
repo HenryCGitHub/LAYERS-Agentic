@@ -15,6 +15,27 @@ class ReleasePlannerAgent {
       RegExp(r'(v\d+\.\d+(?:\.\d+)?)', caseSensitive: false);
   static final RegExp _mvpEpicNumRegex =
       RegExp(r'MVP Epic\s*(\d+)', caseSensitive: false);
+  static final RegExp _noPrefixRegex = RegExp(r'^no\s+');
+  static final RegExp _cutPrefixRegex = RegExp(r'^\[cut\]\s*');
+  static final RegExp _durationRegex =
+      RegExp(r'\(\s*\d+(?:\.\d+)?\s*[hm]\s*\)\s*$');
+  static final RegExp _setupWordRegex =
+      RegExp(r'\bsetup\b', caseSensitive: false);
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static final RegExp _nonAlphaNumRegex = RegExp(r'[^a-zA-Z0-9]');
+  static final RegExp _nonAlphaNumSpaceRegex = RegExp(r'[^a-zA-Z0-9\s]');
+  static final RegExp _tagPrefixRegex =
+      RegExp(r'^\[TAG\]\s*', caseSensitive: false);
+  static final RegExp _versionPrefixStripRegex =
+      RegExp(r'^v\d+\.\d+\s*[:\-–—]?\s*', caseSensitive: false);
+
+  static List<String> _parseStringList(dynamic raw) {
+    if (raw is! List) return const <String>[];
+    return raw
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty && s != '...')
+        .toList();
+  }
 
   static String extractReleaseVersionTag(String releaseTitle) {
     final match = _releaseVersionRegex.firstMatch(releaseTitle);
@@ -208,14 +229,14 @@ class ReleasePlannerAgent {
     bool conflictsWithExclusions(String featureTitle) {
       final cleanFeat = featureTitle
           .toLowerCase()
-          .replaceFirst(RegExp(r'^no\s+'), '')
+          .replaceFirst(_noPrefixRegex, '')
           .trim();
       if (cleanFeat.isEmpty) return false;
       for (final ex in projectExclusions) {
         final cleanEx = ex
             .toLowerCase()
-            .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
-            .replaceFirst(RegExp(r'^no\s+'), '')
+            .replaceFirst(_cutPrefixRegex, '')
+            .replaceFirst(_noPrefixRegex, '')
             .trim();
         if (cleanEx.isNotEmpty &&
             (cleanEx.contains(cleanFeat) || cleanFeat.contains(cleanEx))) {
@@ -437,7 +458,6 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
   }) {
     if (rawTasks.length < 2) return rawTasks;
     final tasks = List<String>.from(rawTasks);
-    final durationRe = RegExp(r'\(\s*\d+(?:\.\d+)?\s*[hm]\s*\)\s*$');
 
     bool isPureInputTask(String t) {
       final l = t.toLowerCase();
@@ -502,12 +522,12 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         corpus.contains('parkour') ||
         corpus.contains('jump') ||
         corpus.contains('run');
-    final task0Dur = durationRe.firstMatch(tasks[0])?.group(0)?.trim() ?? '(2h)';
-    final task1Dur = durationRe.firstMatch(tasks[1])?.group(0)?.trim() ?? '(2h)';
+    final task0Dur = _durationRegex.firstMatch(tasks[0])?.group(0)?.trim() ?? '(2h)';
+    final task1Dur = _durationRegex.firstMatch(tasks[1])?.group(0)?.trim() ?? '(2h)';
     final task1Core = tasks[1]
-        .replaceFirst(durationRe, '')
-        .replaceFirst(RegExp(r'\bsetup\b', caseSensitive: false), 'Logic')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceFirst(_durationRegex, '')
+        .replaceFirst(_setupWordRegex, 'Logic')
+        .replaceAll(_whitespaceRegex, ' ')
         .trim();
 
     tasks[0] =
@@ -523,9 +543,9 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     String featureGoal,
   ) {
     final cleanWords = featureTitle
-        .replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), ' ')
+        .replaceAll(_nonAlphaNumSpaceRegex, ' ')
         .trim()
-        .split(RegExp(r'\s+'))
+        .split(_whitespaceRegex)
         .where((w) => w.isNotEmpty)
         .toList();
     final stem = cleanWords.isEmpty
@@ -678,13 +698,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         final item = rawQs[i];
         if (item is Map) {
           final qText = (item['question'] ?? '').toString().trim();
-          final rawOpts = item['options'];
-          final opts = rawOpts is List
-              ? rawOpts
-                  .map((e) => e.toString().trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList()
-              : <String>[];
+          final opts = _parseStringList(item['options']);
           if (qText.isNotEmpty && opts.length >= 2) {
             questions.add(
               AgentQuestion(
@@ -750,26 +764,14 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         final supersedesTitle =
             fMap['supersedesFeatureTitle']?.toString().trim();
 
-        List<String> toStrList(dynamic v) => v is List
-            ? v
-                .map((e) => e.toString().trim())
-                .where((e) => e.isNotEmpty)
-                .toList()
-            : <String>[];
-
-        final inScope = toStrList(fMap['inScope']);
-        final outOfScope = toStrList(fMap['outOfScope']);
-        final rawTuning = toStrList(fMap['tuningParams']);
+        final inScope = _parseStringList(fMap['inScope']);
+        final outOfScope = _parseStringList(fMap['outOfScope']);
+        final rawTuning = _parseStringList(fMap['tuningParams']);
         final tuning = rawTuning.isNotEmpty
             ? rawTuning
             : _defaultTuningParamsForFeature(fTitle, fGoal);
-        final edges = toStrList(fMap['edgeCases'])
-            .map(
-              (e) => e.replaceFirst(
-                RegExp(r'^\[TAG\]\s*', caseSensitive: false),
-                '[STATE GUARD] ',
-              ),
-            )
+        final edges = _parseStringList(fMap['edgeCases'])
+            .map((e) => e.replaceFirst(_tagPrefixRegex, '[STATE GUARD] '))
             .toList();
 
         final checkpoints = <ProposedCheckpointBlueprint>[];
@@ -785,26 +787,23 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                 .trim();
             final cpVer = versionTag;
             final cpTasks = normalizeFoundationFirstTasks(
-              toStrList(cMap['tasks']),
+              _parseStringList(cMap['tasks']),
               featureTitle: fTitle,
               beatTitle: bTitle,
               isFirstFeatureOfRelease: bIdx == 0 && fIdx == 0 && cIdx == 0,
             );
+            final cScope = _parseStringList(cMap['coveredScope']);
+            final cTuning = _parseStringList(cMap['tuningParams']);
+            final cEdges = _parseStringList(cMap['edgeCases']);
             checkpoints.add(
               ProposedCheckpointBlueprint(
                 title: cpTitle,
                 playtestCriteria: cpCriteria,
                 releaseVersion: cpVer,
                 tasks: cpTasks,
-                coveredScope: toStrList(cMap['coveredScope']).isNotEmpty
-                    ? toStrList(cMap['coveredScope'])
-                    : inScope,
-                tuningParams: toStrList(cMap['tuningParams']).isNotEmpty
-                    ? toStrList(cMap['tuningParams'])
-                    : tuning,
-                edgeCases: toStrList(cMap['edgeCases']).isNotEmpty
-                    ? toStrList(cMap['edgeCases'])
-                    : edges,
+                coveredScope: cScope.isNotEmpty ? cScope : inScope,
+                tuningParams: cTuning.isNotEmpty ? cTuning : tuning,
+                edgeCases: cEdges.isNotEmpty ? cEdges : edges,
               ),
             );
           }
@@ -924,7 +923,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     if (rawRelTitle.isNotEmpty) {
       effectiveReleaseTitle = rawRelTitle.startsWith('$versionTag:')
           ? rawRelTitle
-          : '$versionTag: ${rawRelTitle.replaceFirst(RegExp(r'^v\d+\.\d+\s*[:\-–—]?\s*', caseSensitive: false), '')}';
+          : '$versionTag: ${rawRelTitle.replaceFirst(_versionPrefixStripRegex, '')}';
       releaseDoc.title = effectiveReleaseTitle;
     } else if (isAgentReasoned && activeFeatureNames.isNotEmpty) {
       effectiveReleaseTitle =
@@ -1334,7 +1333,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       llmBeat.id = eb.id;
       final matchedByExistingId = <String, ProposedFeatureBlueprint>{};
       final unmatchedNewFeats = <ProposedFeatureBlueprint>[];
-      final cleanVer = versionTag.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final cleanVer = versionTag.replaceAll(_nonAlphaNumRegex, '_');
 
       for (int fIdx = 0; fIdx < llmBeat.features.length; fIdx++) {
         final lf = llmBeat.features[fIdx];
@@ -1410,13 +1409,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         for (final defFeat in deferredList) {
           final cleanDef = defFeat.title
               .toLowerCase()
-              .replaceFirst(RegExp(r'^no\s+'), '')
+              .replaceFirst(_noPrefixRegex, '')
               .trim();
           final isExcluded = combinedExclusions.any((ex) {
             final cleanEx = ex
                 .toLowerCase()
-                .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
-                .replaceFirst(RegExp(r'^no\s+'), '')
+                .replaceFirst(_cutPrefixRegex, '')
+                .replaceFirst(_noPrefixRegex, '')
                 .trim();
             return cleanEx.isNotEmpty &&
                 cleanDef.isNotEmpty &&
@@ -1577,6 +1576,7 @@ Return ONLY valid JSON:
 class ReleaseExecutorAgent {
   static final RegExp _bulletStripRegex = RegExp(r'^[•\-\*\s]+');
   static final RegExp _recommendedPrefixRegex = RegExp(r'^\(Recommended\)\s*');
+  static final RegExp _nonAlphaNumRegex = RegExp(r'[^a-zA-Z0-9]');
   static Future<List<TierDocument>> executeBlueprint({
     required TierDocument releaseDoc,
     required ReleaseBlueprint blueprint,
@@ -1763,7 +1763,7 @@ class ReleaseExecutorAgent {
             featId = defaultId;
           } else {
             final cleanVer =
-                versionTag.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+                versionTag.replaceAll(_nonAlphaNumRegex, '_');
             int seq = fIdx + 1;
             String candidateId = 'feat_${beatId}_${cleanVer}_$seq';
             while (existingDocuments.containsKey(candidateId) ||
