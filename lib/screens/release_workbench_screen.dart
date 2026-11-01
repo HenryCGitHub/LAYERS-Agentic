@@ -335,11 +335,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final states = FeatureStateNode.getStatesForDocument(feat);
     if (states.isEmpty) return 0;
     final activeVer = widget.workbench.activeReleaseVersionTag;
-    final activeStates =
-        states.where((s) => s.releaseVersion == activeVer).toList();
-    final effectiveStates = activeStates.isNotEmpty ? activeStates : states;
     int rem = 0;
-    for (final cp in effectiveStates) {
+    bool foundActive = false;
+    for (final cp in states) {
+      if (cp.releaseVersion == activeVer) {
+        rem += _computeCheckpointRemainingMinutes(cp);
+        foundActive = true;
+      }
+    }
+    if (foundActive) return rem;
+    for (final cp in states) {
       rem += _computeCheckpointRemainingMinutes(cp);
     }
     return rem;
