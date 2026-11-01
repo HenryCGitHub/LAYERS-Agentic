@@ -27,7 +27,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
     Future<void> submitOrRefineIdea() async {
       if (isBusy) return;
       final singleLineInput = _sparkController.text
-          .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+          .replaceAll(_newlineCollapseRegex, ' ')
           .trim();
       if (singleLineInput.isEmpty && !hasSubmittedIdea) return;
 
@@ -55,7 +55,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
     Future<void> generateConceptBlueprint() async {
       if (isBusy) return;
       final unsubmittedInput = _sparkController.text
-          .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+          .replaceAll(_newlineCollapseRegex, ' ')
           .trim();
       if (!hasSubmittedIdea && unsubmittedInput.isEmpty) return;
 
