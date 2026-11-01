@@ -10,6 +10,13 @@ import 'package:http/http.dart' as http;
 class GeminiAgentClient {
   static const String _rawEnvKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String _b64EnvKey = String.fromEnvironment('GEMINI_API_KEY_B64');
+  static String? _cachedDefaultKey;
+
+  static const Map<String, String> _jsonHeaders = {
+    'Content-Type': 'application/json',
+  };
+  static const Duration _heavyModelTimeout = Duration(seconds: 12);
+  static const Duration _standardModelTimeout = Duration(seconds: 20);
 
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~55 tokens vs ~220 tokens).
   static const String compactStyleRules = '''
@@ -32,13 +39,17 @@ RULES:
   )? testMockResponder;
 
   static String resolveDefaultApiKey() {
-    if (_rawEnvKey.trim().isNotEmpty) return _rawEnvKey.trim();
+    if (_cachedDefaultKey != null) return _cachedDefaultKey!;
+    if (_rawEnvKey.trim().isNotEmpty) {
+      return _cachedDefaultKey = _rawEnvKey.trim();
+    }
     if (_b64EnvKey.trim().isNotEmpty) {
       try {
-        return utf8.decode(base64Decode(_b64EnvKey.trim())).trim();
+        return _cachedDefaultKey =
+            utf8.decode(base64Decode(_b64EnvKey.trim())).trim();
       } catch (_) {}
     }
-    return '';
+    return _cachedDefaultKey = '';
   }
 
   static bool hasKey(String apiKey) {
@@ -75,6 +86,13 @@ RULES:
     // do not fall back to their default HIGH thinking budget; retry without if unsupported.
     final thinkingOrder =
         normalizedThinking.isNotEmpty ? const [true, false] : const [false];
+    final contentsPayload = [
+      {
+        'parts': [
+          {'text': prompt},
+        ],
+      },
+    ];
 
     for (final model in modelsToTry) {
       for (final includeThinking in thinkingOrder) {
@@ -100,22 +118,15 @@ RULES:
 
           final isHeavyPlanningModel =
               model.contains('argon') || model.contains('pro');
-          final timeoutDuration = Duration(
-            seconds: isHeavyPlanningModel ? 12 : 20,
-          );
+          final timeoutDuration =
+              isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
 
           final response = await http
               .post(
                 uri,
-                headers: {'Content-Type': 'application/json'},
+                headers: _jsonHeaders,
                 body: jsonEncode({
-                  'contents': [
-                    {
-                      'parts': [
-                        {'text': prompt},
-                      ],
-                    },
-                  ],
+                  'contents': contentsPayload,
                   'generationConfig': genConfig,
                 }),
               )
@@ -164,7 +175,7 @@ RULES:
   }
 
   static final RegExp _jsonFenceStartRegex =
-      RegExp(r'^```json\s*', multiLine: true);
+      RegExp(r'^```json\s*', multiLine: true, caseSensitive: false);
   static final RegExp _genericFenceRegex = RegExp(r'^```\s*', multiLine: true);
 
   static String _extractJsonObject(String raw) {
