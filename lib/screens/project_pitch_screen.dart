@@ -173,16 +173,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   @override
   bool get isDark => widget.workbench.isDark;
 
-  // Responsive Bento Grid Container Width vs. Prose Line Measure (<= 72ch):
-  // - Desktop (>= 1024px): 1140px Bento Grid container | 680px (<= 72ch) prose measure
-  // - Tablet (640–1023px): 860px container             | 640px prose measure
-  // - Mobile (< 640px):    460px container             | 460px prose measure
+  // Responsive Strict 50% | 50% Center-Spine Grid Container Width:
+  // - Desktop (>= 1024px): 1040px container (~512px / ~55ch per 50% half-column)
+  // - Tablet (640–1023px): 860px container
+  // - Mobile (< 640px):    460px container
   double get _viewportWidth => MediaQuery.sizeOf(context).width;
   bool get _isMobileMeasure => _viewportWidth < 640;
   bool get _isTabletMeasure => _viewportWidth >= 640 && _viewportWidth < 1024;
   double get _measureColumnMaxWidth =>
-      _isMobileMeasure ? 460.0 : (_isTabletMeasure ? 860.0 : 1140.0);
-  double get _proseMaxMeasureWidth => 680.0;
+      _isMobileMeasure ? 460.0 : (_isTabletMeasure ? 860.0 : 1040.0);
   double get _measureBodyFontSize =>
       _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 15.5);
   double get _measureLeadFontSize =>

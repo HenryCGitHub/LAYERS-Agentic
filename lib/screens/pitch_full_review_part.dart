@@ -351,45 +351,57 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           ),
         ),
 
-        // Responsive 6-Row Bento Grid on wide screens (>= 960px), or Vertical Stack on narrower viewports
-        if (_viewportWidth >= 960) ...[
-          // Row 1: 01 GOAL (Full Width, Prose <= 72ch)
+        // Strict 50% | 50% Center-Spine Grid on desktop (>= 900px), or Vertical Stack on narrower viewports
+        if (_viewportWidth >= 900) ...[
+          // Row 1: 01 GOAL (100% Full-Width Banner)
           sectionCard(0),
           SizedBox(height: _measureCardGap),
-          // Row 2: 02 GAME SPEC (50%) | 03 TECH SPEC (50%)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: sectionCard(1)),
-              SizedBox(width: _measureCardGap),
-              Expanded(child: sectionCard(2)),
-            ],
+          // Row 2: 02 GAME SPEC (50% Left) | 03 TECH SPEC (50% Right)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: sectionCard(1)),
+                SizedBox(width: _measureCardGap),
+                Expanded(child: sectionCard(2)),
+              ],
+            ),
           ),
           SizedBox(height: _measureCardGap),
-          // Row 3: 04 DESIGN PILLARS (3-Column Pillar Cards)
-          sectionCard(3),
-          SizedBox(height: _measureCardGap),
-          // Row 4: 05 TRADE-OFFS (Wide X OVER Y Comparison Bars)
-          sectionCard(4),
-          SizedBox(height: _measureCardGap),
-          // Row 5: 06 CORE LOOP (62% Left) | 07 OUT OF SCOPE (38% Right)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 16, child: sectionCard(5)),
-              SizedBox(width: _measureCardGap),
-              Expanded(flex: 10, child: sectionCard(6)),
-            ],
+          // Row 3: 04 DESIGN PILLARS (50% Left) | 05 TRADE-OFFS (50% Right)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: sectionCard(3)),
+                SizedBox(width: _measureCardGap),
+                Expanded(child: sectionCard(4)),
+              ],
+            ),
           ),
           SizedBox(height: _measureCardGap),
-          // Row 6: 08 DONE WHEN (55% Left) | 09 RELEASE TARGET (45% Right)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 12, child: sectionCard(7)),
-              SizedBox(width: _measureCardGap),
-              Expanded(flex: 10, child: launchpadCard),
-            ],
+          // Row 4: 06 CORE LOOP (50% Left) | 07 OUT OF SCOPE (50% Right)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: sectionCard(5)),
+                SizedBox(width: _measureCardGap),
+                Expanded(child: sectionCard(6)),
+              ],
+            ),
+          ),
+          SizedBox(height: _measureCardGap),
+          // Row 5: 08 DONE WHEN (50% Left) | 09 RELEASE TARGET (50% Right)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: sectionCard(7)),
+                SizedBox(width: _measureCardGap),
+                Expanded(child: launchpadCard),
+              ],
+            ),
           ),
         ] else ...[
           for (int idx = 0; idx < _sections.length; idx++) ...[
@@ -486,36 +498,17 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             ),
           ),
           const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth < 620 ||
-                  _activeInlineEditKey == 'release_train_0') {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildReleaseTrainPipeline(draft),
-                    const SizedBox(height: 16),
-                    _buildPrimaryApproveButton(
-                      key: const ValueKey('approve_concept_plan_release_btn'),
-                      showRebuildSecondary: true,
-                      expandFullWidth: true,
-                    ),
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: _buildReleaseTrainPipeline(draft)),
-                  const SizedBox(width: 20),
-                  _buildPrimaryApproveButton(
-                    key: const ValueKey('approve_concept_plan_release_btn'),
-                    showRebuildSecondary: true,
-                    expandFullWidth: false,
-                  ),
-                ],
-              );
-            },
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildReleaseTrainPipeline(draft),
+              const SizedBox(height: 16),
+              _buildPrimaryApproveButton(
+                key: const ValueKey('approve_concept_plan_release_btn'),
+                showRebuildSecondary: true,
+                expandFullWidth: true,
+              ),
+            ],
           ),
         ],
       ),
@@ -652,14 +645,14 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
         );
 
     return switch (sectionIdx) {
-      3 => buildBtn('section_3_add_pillar_btn', 'add_pillar', '+ Add Pillar'),
+      3 => buildBtn('section_3_add_pillar_btn', 'add_pillar', '+ Add'),
       4 => buildBtn(
           'section_4_add_guardrail_btn',
           'add_tradeoff',
-          '+ Add Trade-Off',
+          '+ Add',
         ),
-      5 => buildBtn('section_5_add_beat_btn', 'add_beat', '+ Add Beat'),
-      6 => buildBtn('section_6_add_cut_btn', 'add_exclusion', '+ Add Cut'),
+      5 => buildBtn('section_5_add_beat_btn', 'add_beat', '+ Add'),
+      6 => buildBtn('section_6_add_cut_btn', 'add_exclusion', '+ Add'),
       _ => null,
     };
   }
@@ -996,8 +989,8 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           ),
           if (options.isNotEmpty) ...[
             const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
+            Builder(
+              builder: (context) {
                 Widget buildOptionCard(int optIdx) {
                   final rawOpt = options[optIdx];
                   final split = _splitOptionIntoCardTitleAndBody(
@@ -1126,8 +1119,10 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                   );
                 }
 
-                // 3-across option cards when drawer is inside a wide card (>= 680px)
-                if (constraints.maxWidth >= 680 && options.length <= 3) {
+                // 3-across option cards for full-width Section 01 on desktop (>= 900px)
+                if (sectionIdx == 0 &&
+                    _viewportWidth >= 900 &&
+                    options.length <= 3) {
                   return IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1141,7 +1136,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                   );
                 }
 
-                // Vertical stack inside half-width cards (02, 03, 06, 07, 08) or narrow screens
+                // Vertical stack inside 50%-width cards (02..08) or narrow screens
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

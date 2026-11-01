@@ -400,16 +400,13 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
         borderRadius: BorderRadius.circular(6),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: _proseMaxMeasureWidth),
-            child: Text(
-              headline,
-              style: GoogleFonts.inter(
-                fontSize: _measureLeadFontSize,
-                fontWeight: FontWeight.w600,
-                height: 1.5,
-                color: _secT1Primary,
-              ),
+          child: Text(
+            headline,
+            style: GoogleFonts.inter(
+              fontSize: _measureLeadFontSize,
+              fontWeight: FontWeight.w600,
+              height: 1.5,
+              color: _secT1Primary,
             ),
           ),
         ),
@@ -417,7 +414,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 08 Done When: Open Playtest Gate Statement (Prose Capped at <= 72ch) ───
+  // ── 08 Done When: Open Playtest Gate Statement ─────────────────────────────
   Widget _buildCalloutStatement(
     String statement, {
     required bool highlightMetrics,
@@ -437,16 +434,13 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
         borderRadius: BorderRadius.circular(6),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: _proseMaxMeasureWidth),
-            child: Text(
-              statement,
-              style: GoogleFonts.inter(
-                fontSize: _measureBodyFontSize + 1.0,
-                fontWeight: FontWeight.w600,
-                height: 1.5,
-                color: _secT1Primary,
-              ),
+          child: Text(
+            statement,
+            style: GoogleFonts.inter(
+              fontSize: _measureBodyFontSize + 0.5,
+              fontWeight: FontWeight.w500,
+              height: 1.55,
+              color: _secT1Primary,
             ),
           ),
         ),
@@ -467,85 +461,81 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
       return MapEntry(k, val);
     });
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 360) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (int i = 0; i < 4; i++) ...[
-                if (i > 0) Divider(height: 18, thickness: 1, color: _secHairline),
-                _buildKvCell(
-                  isGameSpec: isGameSpec,
-                  cellIndex: i,
-                  k: pairs[i].key,
-                  v: pairs[i].value,
-                  showRightDivider: false,
-                ),
-              ],
-            ],
-          );
-        }
-
-        // Balanced 2x2 Spec Grid on all standard widths
-        return Column(
-          children: [
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _buildKvCell(
-                      isGameSpec: isGameSpec,
-                      cellIndex: 0,
-                      k: pairs[0].key,
-                      v: pairs[0].value,
-                      showRightDivider: true,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildKvCell(
-                      isGameSpec: isGameSpec,
-                      cellIndex: 1,
-                      k: pairs[1].key,
-                      v: pairs[1].value,
-                      showRightDivider: false,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 20, thickness: 1, color: _secHairline),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _buildKvCell(
-                      isGameSpec: isGameSpec,
-                      cellIndex: 2,
-                      k: pairs[2].key,
-                      v: pairs[2].value,
-                      showRightDivider: true,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildKvCell(
-                      isGameSpec: isGameSpec,
-                      cellIndex: 3,
-                      k: pairs[3].key,
-                      v: pairs[3].value,
-                      showRightDivider: false,
-                    ),
-                  ),
-                ],
-              ),
+    if (_viewportWidth < 420) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (int i = 0; i < 4; i++) ...[
+            if (i > 0) Divider(height: 18, thickness: 1, color: _secHairline),
+            _buildKvCell(
+              isGameSpec: isGameSpec,
+              cellIndex: i,
+              k: pairs[i].key,
+              v: pairs[i].value,
+              showRightDivider: false,
             ),
           ],
-        );
-      },
+        ],
+      );
+    }
+
+    // Balanced 2x2 Spec Grid on all standard widths
+    return Column(
+      children: [
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _buildKvCell(
+                  isGameSpec: isGameSpec,
+                  cellIndex: 0,
+                  k: pairs[0].key,
+                  v: pairs[0].value,
+                  showRightDivider: true,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildKvCell(
+                  isGameSpec: isGameSpec,
+                  cellIndex: 1,
+                  k: pairs[1].key,
+                  v: pairs[1].value,
+                  showRightDivider: false,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Divider(height: 20, thickness: 1, color: _secHairline),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _buildKvCell(
+                  isGameSpec: isGameSpec,
+                  cellIndex: 2,
+                  k: pairs[2].key,
+                  v: pairs[2].value,
+                  showRightDivider: true,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildKvCell(
+                  isGameSpec: isGameSpec,
+                  cellIndex: 3,
+                  k: pairs[3].key,
+                  v: pairs[3].value,
+                  showRightDivider: false,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -724,14 +714,14 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 04 Design Pillars: 3-Across Pillar Cards on Wide Grid (~42ch/pillar) ───
+  // ── 04 Design Pillars: Aligned Indexed Hairline Rows (01..0N) ─────────────
   Widget _buildDesignPillarCards(
     ProjectConceptBlueprint draft, {
     bool isReadOnlySummary = false,
   }) {
     final pillars = draft.designPillars;
 
-    Widget buildPillarCard(int idx, {required bool isGridCard}) {
+    Widget buildPillarRow(int idx) {
       final editKey = 'pillar_$idx';
       final raw = pillars[idx];
       final parsedPillar =
@@ -750,88 +740,6 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
               next[idx] = ProjectConceptBlueprint.ensureNamedPillar(val, idx);
               d.designPillars = next;
             }),
-          ),
-        );
-      }
-
-      if (isGridCard) {
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            key: ValueKey('stage1_pillar_row_$idx'),
-            onTap: () => _startInlineEdit(
-              editKey,
-              '${parsedPillar.title}: ${parsedPillar.body}',
-            ),
-            borderRadius: BorderRadius.circular(9),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: bgRecessed,
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: borderSubtle),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        numBadge,
-                        style: GoogleFonts.inter(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: _secT4Muted,
-                        ),
-                      ),
-                      if (!isReadOnlySummary && pillars.length > 1)
-                        InkWell(
-                          onTap: () => widget.workbench.updateConceptDraft((d) {
-                            final next = List<String>.from(d.designPillars)
-                              ..removeAt(idx);
-                            d.designPillars = next;
-                          }),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 1,
-                            ),
-                            child: Text(
-                              '×',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: _secT4Muted,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      height: 1.35,
-                      color: _secT1Primary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    body,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      height: 1.48,
-                      color: _secT2Body,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         );
       }
@@ -864,7 +772,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   child: Text(
                     numBadge,
                     style: GoogleFonts.inter(
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                       color: _secT4Muted,
                     ),
@@ -884,8 +792,8 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
+                        horizontal: 4,
+                        vertical: 1,
                       ),
                       child: Text(
                         '×',
@@ -908,50 +816,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final useGrid = constraints.maxWidth >= 680 &&
-                pillars.length >= 2 &&
-                !pillars.asMap().keys.any(
-                      (i) => _activeInlineEditKey == 'pillar_$i',
-                    );
-            if (!useGrid) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int i = 0; i < pillars.length; i++)
-                    buildPillarCard(i, isGridCard: false),
-                ],
-              );
-            }
-
-            final rows = <Widget>[];
-            for (int start = 0; start < pillars.length; start += 3) {
-              final end =
-                  (start + 3 < pillars.length) ? start + 3 : pillars.length;
-              if (start > 0) rows.add(const SizedBox(height: 12));
-              rows.add(
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (int i = start; i < end; i++) ...[
-                        if (i > start) const SizedBox(width: 12),
-                        Expanded(
-                          child: buildPillarCard(i, isGridCard: true),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: rows,
-            );
-          },
-        ),
+        for (int i = 0; i < pillars.length; i++) buildPillarRow(i),
         if (!isReadOnlySummary && _activeInlineEditKey == 'add_pillar') ...[
           const SizedBox(height: 10),
           _buildInlineEditorBox(
@@ -1123,7 +988,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 05 Trade-Offs: Clean Priority Comparison (Priority X | OVER | Priority Y) ─
+  // ── 05 Trade-Offs: Flowing Inline X [OVER] Y Hairline Rows (Zero Stretched Gap) ─
   Widget _buildTradeOffSplitBars(
     List<String> tradeOffs, {
     void Function(int index, String newValue)? onEditItem,
@@ -1145,6 +1010,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           else
             _buildSingleTradeOffBar(
               tradeOffs[i],
+              index: i,
               isFirst: i == 0,
               isLast: i == tradeOffs.length - 1,
               onTap: onEditItem == null
@@ -1168,6 +1034,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
 
   Widget _buildSingleTradeOffBar(
     String rawRule, {
+    required int index,
     required bool isFirst,
     required bool isLast,
     VoidCallback? onTap,
@@ -1179,10 +1046,12 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     final loseText = parts.length > 1
         ? parts.sublist(1).join(' over ').trim()
         : 'secondary complexity';
+    final numBadge = (index + 1).toString().padLeft(2, '0');
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        key: ValueKey('stage1_tradeoff_row_$index'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
         child: Container(
@@ -1196,50 +1065,67 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 : null,
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              Expanded(
+              SizedBox(
+                width: 28,
                 child: Text(
-                  winText,
+                  numBadge,
                   style: GoogleFonts.inter(
-                    fontSize: _measureBodyFontSize,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    height: 1.4,
-                    color: _secT1Primary,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: bgRecessed,
-                    borderRadius: BorderRadius.circular(99),
-                    border: Border.all(color: borderSubtle),
-                  ),
-                  child: Text(
-                    'OVER',
-                    style: GoogleFonts.inter(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: _secT3Label,
-                    ),
+                    color: _secT4Muted,
                   ),
                 ),
               ),
               Expanded(
-                child: Text(
-                  loseText,
-                  style: GoogleFonts.inter(
-                    fontSize: _measureBodyFontSize - 0.5,
-                    fontWeight: FontWeight.w500,
-                    height: 1.4,
-                    color: _secT3Label,
+                child: RichText(
+                  text: TextSpan(
+                    style: GoogleFonts.inter(
+                      fontSize: _measureBodyFontSize,
+                      height: 1.5,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: winText,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _secT1Primary,
+                        ),
+                      ),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.middle,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(99),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Text(
+                            'OVER',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: _secT3Label,
+                            ),
+                          ),
+                        ),
+                      ),
+                      TextSpan(
+                        text: loseText,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          color: _secT3Label,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1271,18 +1157,18 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     );
   }
 
-  // ── 07 Out of Scope: Clean Recessed Guardrail Pills (Single Typeface) ──────
+  // ── 07 Out of Scope: Aligned Hairline Exclusion Rows (— Index) ─────────────
   Widget _buildCutGuardrailChips(
     List<String> exclusions, {
     void Function(int index, String newValue)? onEditItem,
     void Function(int index)? onDeleteItem,
     ValueChanged<String>? onAddSave,
   }) {
-    Widget buildExclusionPill(int idx) {
+    Widget buildExclusionRow(int idx) {
       final editKey = 'exclusion_$idx';
       if (_activeInlineEditKey == editKey && onEditItem != null) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           child: _buildInlineEditorBox(
             editKey: editKey,
             onSave: (val) => onEditItem(idx, val),
@@ -1296,32 +1182,39 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
           onTap: onEditItem == null
               ? null
               : () => _startInlineEdit(editKey, exclusions[idx]),
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(4),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            padding: EdgeInsets.only(
+              top: idx == 0 ? 2 : 10,
+              bottom: idx == exclusions.length - 1 ? 2 : 10,
+            ),
             decoration: BoxDecoration(
-              color: bgRecessed,
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: borderSubtle),
+              border: idx < exclusions.length - 1
+                  ? Border(bottom: BorderSide(color: _secHairline))
+                  : null,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  '—',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: _secT4Muted,
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '—',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _secT4Muted,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     exclusions[idx],
                     style: GoogleFonts.inter(
-                      fontSize: _measureBodyFontSize - 0.5,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
+                      fontSize: _measureBodyFontSize,
+                      fontWeight: FontWeight.w400,
+                      height: 1.5,
                       color: _secT2Body,
                     ),
                   ),
@@ -1339,7 +1232,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                       child: Text(
                         '×',
                         style: GoogleFonts.inter(
-                          fontSize: 13,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: _secT4Muted,
                         ),
@@ -1357,10 +1250,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (int i = 0; i < exclusions.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          buildExclusionPill(i),
-        ],
+        for (int i = 0; i < exclusions.length; i++) buildExclusionRow(i),
         if (onAddSave != null && _activeInlineEditKey == 'add_exclusion') ...[
           const SizedBox(height: 10),
           _buildInlineEditorBox(
