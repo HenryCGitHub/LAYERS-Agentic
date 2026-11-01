@@ -10,7 +10,7 @@ class FirestoreVaultService {
   FirestoreVaultService._internal();
 
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
-  StreamSubscription? _docsSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _docsSubscription;
 
   /// Starts listening to real-time Firestore changes for the logged-in user.
   void startRealtimeSync({
@@ -24,21 +24,24 @@ class FirestoreVaultService {
           .doc(uid)
           .collection('documents')
           .snapshots()
-          .listen((snapshot) {
-      final docsMap = <String, TierDocument>{};
-      for (final docSnap in snapshot.docs) {
-        try {
-          final data = docSnap.data();
-          final doc = TierDocument.fromJson(data);
-          docsMap[doc.id] = doc;
-        } catch (e) {
-          debugPrint('Error parsing Firestore document ${docSnap.id}: $e');
-        }
-      }
-      onSync(docsMap);
-    }, onError: (e) {
-      debugPrint('Firestore real-time sync error: $e');
-    });
+          .listen(
+        (snapshot) {
+          final docsMap = <String, TierDocument>{};
+          for (final docSnap in snapshot.docs) {
+            try {
+              final data = docSnap.data();
+              final doc = TierDocument.fromJson(data);
+              docsMap[doc.id] = doc;
+            } catch (e) {
+              debugPrint('Error parsing Firestore document ${docSnap.id}: $e');
+            }
+          }
+          onSync(docsMap);
+        },
+        onError: (e) {
+          debugPrint('Firestore real-time sync error: $e');
+        },
+      );
     } catch (e) {
       debugPrint('Firestore startRealtimeSync error: $e');
     }
