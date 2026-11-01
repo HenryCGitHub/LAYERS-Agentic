@@ -283,13 +283,13 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                                             .updateConceptDraft((d) {
                                           final beatEntry =
                                               '${card.title}: ${card.description}';
+                                          final lowerTitle =
+                                              card.title.toLowerCase();
                                           if (card.isSelected) {
                                             if (!d.coreLoopBeats.any(
                                               (b) => b
                                                   .toLowerCase()
-                                                  .startsWith(
-                                                    card.title.toLowerCase(),
-                                                  ),
+                                                  .startsWith(lowerTitle),
                                             )) {
                                               d.coreLoopBeats = [
                                                 ...d.coreLoopBeats,
@@ -301,10 +301,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                                                 .where(
                                                   (b) => !b
                                                       .toLowerCase()
-                                                      .startsWith(
-                                                        card.title
-                                                            .toLowerCase(),
-                                                      ),
+                                                      .startsWith(lowerTitle),
                                                 )
                                                 .toList();
                                           }
@@ -599,62 +596,31 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
   }
 
   Widget? _buildHeaderAddActionForSection(int sectionIdx) {
-    switch (sectionIdx) {
-      case 3: // 04 Design Pillars
-        return OutlinedButton(
-          key: const ValueKey('section_3_add_pillar_btn'),
-          onPressed: () => _startInlineEdit('add_pillar', ''),
+    Widget buildBtn(String keyName, String editKey, String label) =>
+        OutlinedButton(
+          key: ValueKey(keyName),
+          onPressed: () => _startInlineEdit(editKey, ''),
           style: _headerNeutralButtonStyle(),
           child: Text(
-            '+ Add Pillar',
+            label,
             style: GoogleFonts.inter(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
             ),
           ),
         );
-      case 4: // 05 Trade-Offs
-        return OutlinedButton(
-          key: const ValueKey('section_4_add_guardrail_btn'),
-          onPressed: () => _startInlineEdit('add_tradeoff', ''),
-          style: _headerNeutralButtonStyle(),
-          child: Text(
-            '+ Add Trade-Off',
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        );
-      case 5: // 06 Core Loop
-        return OutlinedButton(
-          key: const ValueKey('section_5_add_beat_btn'),
-          onPressed: () => _startInlineEdit('add_beat', ''),
-          style: _headerNeutralButtonStyle(),
-          child: Text(
-            '+ Add Beat',
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        );
-      case 6: // 07 Out of Scope
-        return OutlinedButton(
-          key: const ValueKey('section_6_add_cut_btn'),
-          onPressed: () => _startInlineEdit('add_exclusion', ''),
-          style: _headerNeutralButtonStyle(),
-          child: Text(
-            '+ Add Cut',
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        );
-      default:
-        return null;
-    }
+
+    return switch (sectionIdx) {
+      3 => buildBtn('section_3_add_pillar_btn', 'add_pillar', '+ Add Pillar'),
+      4 => buildBtn(
+          'section_4_add_guardrail_btn',
+          'add_tradeoff',
+          '+ Add Trade-Off',
+        ),
+      5 => buildBtn('section_5_add_beat_btn', 'add_beat', '+ Add Beat'),
+      6 => buildBtn('section_6_add_cut_btn', 'add_exclusion', '+ Add Cut'),
+      _ => null,
+    };
   }
 
   ButtonStyle _headerNeutralButtonStyle({bool isActive = false}) {
