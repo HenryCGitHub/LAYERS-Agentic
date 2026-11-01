@@ -1,6 +1,8 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
+  static final RegExp _tuningVarDelimiterRegex = RegExp(r'[:=]');
+
   void _completeAllCheckpointTasks(FeatureStateNode node) {
     for (final task in node.checklist) {
       task.completed = true;
@@ -67,17 +69,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
     // If all Checkpoints in this Feature are now complete, advance to the next incomplete Feature
     if (states.every((s) => s.isCompleted)) {
-      final allFeats = <TierDocument>[
-        for (final b in widget.workbench.activeReleaseBeats)
-          ...widget.workbench.featuresForBeat(b.id),
-      ];
-      final nextFeat = allFeats.where(
-        (f) =>
-            f.id != feat.id &&
-            widget.workbench.getDocumentProgress(f.id) < 100,
-      );
-      if (nextFeat.isNotEmpty) {
-        widget.workbench.selectFeature(nextFeat.first.id);
+      final nextFeat = widget.workbench.nextIncompleteFeature;
+      if (nextFeat != null) {
+        widget.workbench.selectFeature(nextFeat.id);
       }
     }
   }
@@ -152,8 +146,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     final targetIdx =
         tuningItems.isNotEmpty ? (selectedTaskIdx % tuningItems.length) : 0;
     final oldEntry = tuningItems.isNotEmpty ? tuningItems[targetIdx] : '';
-    final oldVar = oldEntry.split(RegExp(r'[:=]')).first.trim();
-    final newVar = trimmed.split(RegExp(r'[:=]')).first.trim();
+    final oldVar = oldEntry.split(_tuningVarDelimiterRegex).first.trim();
+    final newVar = trimmed.split(_tuningVarDelimiterRegex).first.trim();
 
     if (tuningItems.isNotEmpty) {
       node.tuningParams[targetIdx] = trimmed;

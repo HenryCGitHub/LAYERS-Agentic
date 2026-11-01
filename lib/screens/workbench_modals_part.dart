@@ -23,7 +23,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
   static final RegExp _recommendedPrefixRegex =
       RegExp(r'^\(recommended\)\s*', caseSensitive: false);
   static final RegExp _goalPrefixRegex =
-      _goalPrefixRegex;
+      RegExp(r'^Goal:\s*', caseSensitive: false);
 
   Future<void> _showProgressiveNextReleaseModal(BuildContext context) async {
     if (!widget.workbench.isActiveReleaseComplete) {
