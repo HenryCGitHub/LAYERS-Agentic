@@ -6,53 +6,46 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void _selectFirstIncompleteFeatureInActiveRelease() {
     final beats = activeReleaseBeats;
     if (beats.isEmpty) return;
+    TierDocument? firstActiveIncompleteBeat;
+    TierDocument? firstActiveIncompleteFeat;
     TierDocument? firstActiveBeat;
     TierDocument? firstActiveFeat;
+    TierDocument? firstIncompleteBeat;
+    TierDocument? firstIncompleteFeat;
 
-    // 1st Pass: Prioritize incomplete features active in the current release (`newFeature` or `upgrade`)
     for (final b in beats) {
       for (final f in featuresForBeat(b.id)) {
-        if (isFeatureActiveInRelease(f) && getDocumentProgress(f.id) < 100) {
-          firstActiveBeat = b;
-          firstActiveFeat = f;
+        final isActive = isFeatureActiveInRelease(f);
+        final isIncomplete = getDocumentProgress(f.id) < 100;
+        if (isActive && isIncomplete) {
+          firstActiveIncompleteBeat = b;
+          firstActiveIncompleteFeat = f;
           break;
         }
-      }
-      if (firstActiveFeat != null) break;
-    }
-
-    // 2nd Pass: Any feature active in the current release (even if 100% complete)
-    if (firstActiveFeat == null) {
-      for (final b in beats) {
-        for (final f in featuresForBeat(b.id)) {
-          if (isFeatureActiveInRelease(f)) {
-            firstActiveBeat = b;
-            firstActiveFeat = f;
-            break;
-          }
+        if (isActive && firstActiveFeat == null) {
+          firstActiveBeat = b;
+          firstActiveFeat = f;
         }
-        if (firstActiveFeat != null) break;
-      }
-    }
-
-    // 3rd Pass: Fall back to any incomplete feature
-    if (firstActiveFeat == null) {
-      for (final b in beats) {
-        for (final f in featuresForBeat(b.id)) {
-          if (getDocumentProgress(f.id) < 100) {
-            firstActiveBeat = b;
-            firstActiveFeat = f;
-            break;
-          }
+        if (isIncomplete && firstIncompleteFeat == null) {
+          firstIncompleteBeat = b;
+          firstIncompleteFeat = f;
         }
-        if (firstActiveFeat != null) break;
       }
+      if (firstActiveIncompleteFeat != null) break;
     }
 
-    _selectedBeatId = (firstActiveBeat ?? beats.first).id;
+    final chosenBeat = firstActiveIncompleteBeat ??
+        firstActiveBeat ??
+        firstIncompleteBeat ??
+        beats.first;
+    final chosenFeat = firstActiveIncompleteFeat ??
+        firstActiveFeat ??
+        firstIncompleteFeat;
+
+    _selectedBeatId = chosenBeat.id;
     final feats = featuresForBeat(_selectedBeatId!);
     _selectedFeatureId =
-        (firstActiveFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
+        (chosenFeat ?? (feats.isNotEmpty ? feats.first : null))?.id;
   }
 
   /// Option 4: Builds a Post-Release Retrospective & Auto-Carryover Summary for the active Release.
@@ -283,6 +276,54 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     r'v0\.(\d+)',
     caseSensitive: false,
   );
+  static final RegExp _cutPrefixRegex = RegExp(
+    r'^\[cut\]\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _noPrefixRegex = RegExp(
+    r'^no\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _leadingBulletRegex = RegExp(r'^[•\-\*\s]+');
+  static final RegExp _leadingBracketTagsRegex =
+      RegExp(r'^\s*(?:\[[^\]]+\]\s*)+');
+  static final RegExp _treeGlyphPrefixRegex = RegExp(r'^[├└─│\s]+');
+  static final RegExp _goalPrefixRegex = RegExp(
+    r'^goal:\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _stepHeaderPrefixRegex = RegExp(
+    r'^STEP\s+\d+(?:\.\d+)?\s*[·:\-]\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _trailingSemicolonRegex = RegExp(r';$');
+  static final RegExp _floatSuffixRegex = RegExp(r'^(-?\d+(?:\.\d+)?)[fF]$');
+  static final RegExp _attrFieldRegex = RegExp(
+    r'(?:\[SerializeField[^\]]*\]|UPROPERTY\([^)]*\))\s*(?:(?:private|public|protected|internal|mutable|const)\s+)?[\w<>:*&]+\s+(\w+)\s*=\s*([^;\n]+);',
+    multiLine: true,
+  );
+  static final RegExp _gdVarRegex = RegExp(
+    r'@export(?:_[a-z_]+)?(?:\([^)]*\))?\s+var\s+(\w+)(?:\s*:\s*[\w.]+)?\s*=\s*([^\n#;]+)',
+    multiLine: true,
+  );
+  static final RegExp _guardCommentRegex = RegExp(
+    r'(?://|#)\s*\[?(?:PLAYTEST\s+)?GUARD\]?\s*:?\s*(.+)$',
+    multiLine: true,
+    caseSensitive: false,
+  );
+  static final RegExp _nonAlphaNumRegex = RegExp(r'[^a-z0-9]');
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+
+  static String _stripExclusionPrefixes(
+    String raw, {
+    bool stripNoPrefix = true,
+  }) {
+    var text = raw.replaceFirst(_cutPrefixRegex, '');
+    if (stripNoPrefix) {
+      text = text.replaceFirst(_noPrefixRegex, '');
+    }
+    return text.replaceFirst(_leadingBulletRegex, '').trim();
+  }
 
   void _updateSerializedReleaseBlueprintMetadata(
     TierDocument doc, {
@@ -1228,9 +1269,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String? customGoal,
   }) {
     final bp = _releaseBlueprint;
-    final cleanTitle = rawTitle
-        .replaceFirst(RegExp(r'^No\s+', caseSensitive: false), '')
-        .trim();
+    final cleanTitle = rawTitle.replaceFirst(_noPrefixRegex, '').trim();
     if (bp == null || cleanTitle.isEmpty) return null;
     final verTag = bp.releaseVersionTag;
     for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
@@ -1291,9 +1330,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (bp == null || bp.beats.isEmpty) return null;
     final cleanEx = exclusionText.trim();
     if (cleanEx.isEmpty) return null;
-    final shortTitle = cleanEx
-        .replaceFirst(RegExp(r'^\[CUT\]\s*', caseSensitive: false), '')
-        .replaceFirst(RegExp(r'^No\s+', caseSensitive: false), '')
+    final shortTitle = _stripExclusionPrefixes(cleanEx)
         .split('—')
         .first
         .split(':')
@@ -1312,11 +1349,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final normShort = shortTitle.toLowerCase().trim();
     if (_conceptDraft != null) {
       _conceptDraft!.exclusions.removeWhere((e) {
-        final normE = e
-            .toLowerCase()
-            .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
-            .replaceFirst(RegExp(r'^no\s+'), '')
-            .trim();
+        final normE = _stripExclusionPrefixes(e.toLowerCase());
         return e.toLowerCase().trim() == cleanEx.toLowerCase().trim() ||
             (normShort.isNotEmpty && normE.contains(normShort));
       });
@@ -1326,15 +1359,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       final rawEx = proj.sections['exclusions'] ?? '';
       final currentEx = rawEx
           .split('\n')
-          .map((l) => l.replaceFirst(RegExp(r'^[•\-\*\s]+'), '').trim())
+          .map((l) => _stripExclusionPrefixes(l, stripNoPrefix: false))
           .where((l) => l.isNotEmpty)
           .toList();
       currentEx.removeWhere((e) {
-        final normE = e
-            .toLowerCase()
-            .replaceFirst(RegExp(r'^\[cut\]\s*'), '')
-            .replaceFirst(RegExp(r'^no\s+'), '')
-            .trim();
+        final normE = _stripExclusionPrefixes(e.toLowerCase());
         return e.toLowerCase().trim() == cleanEx.toLowerCase().trim() ||
             (normShort.isNotEmpty && normE.contains(normShort));
       });
@@ -2084,9 +2113,7 @@ Return ONLY a JSON object with this schema:
         if (clean.isNotEmpty) tuningTokens.add(clean);
       }
       for (final g in cp.edgeCases) {
-        final clean = g
-            .replaceAll(RegExp(r'^\s*(?:\[[^\]]+\]\s*)+'), '')
-            .trim();
+        final clean = g.replaceAll(_leadingBracketTagsRegex, '').trim();
         if (clean.isNotEmpty) guardTokens.add(clean);
       }
       for (final task in cp.checklist) {
@@ -2105,7 +2132,7 @@ Return ONLY a JSON object with this schema:
             final rootLine = area1Text
                 .split('\n')
                 .first
-                .replaceAll(RegExp(r'^[├└─│\s]+'), '')
+                .replaceAll(_treeGlyphPrefixRegex, '')
                 .trim();
             if (rootLine.isNotEmpty) {
               assetTokens.add(rootLine);
@@ -2280,7 +2307,7 @@ Return ONLY a JSON object with this schema:
                   (l) => l.toLowerCase().startsWith('goal:'),
                   orElse: () => '',
                 )
-                .replaceFirst(RegExp(r'^goal:\s*', caseSensitive: false), '')
+                .replaceFirst(_goalPrefixRegex, '')
                 .trim();
             final goalSuffix =
                 sibGoalLine.isNotEmpty ? ' ("$sibGoalLine")' : '';
@@ -2298,11 +2325,7 @@ Return ONLY a JSON object with this schema:
       }
 
       final cleanEdgeCases = cpNode.edgeCases
-          .map(
-            (g) => g
-                .replaceAll(RegExp(r'^\s*(?:\[[^\]]+\]\s*)+'), '')
-                .trim(),
-          )
+          .map((g) => g.replaceAll(_leadingBracketTagsRegex, '').trim())
           .where((g) => g.isNotEmpty)
           .toList();
 
@@ -2405,10 +2428,7 @@ Return ONLY valid JSON:
           if (item is! Map) continue;
           final rawTitle = item['title']?.toString().trim() ?? '';
           final strippedTitle = rawTitle
-              .replaceFirst(
-                RegExp(r'^STEP\s+\d+(?:\.\d+)?\s*[·:\-]\s*', caseSensitive: false),
-                '',
-              )
+              .replaceFirst(_stepHeaderPrefixRegex, '')
               .trim();
           final title = strippedTitle.isNotEmpty
               ? 'STEP $taskNum.${sIdx + 1} · $strippedTitle'
@@ -2715,7 +2735,7 @@ Return ONLY valid JSON:
     sb.writeln('- **Feature**: ${feat.title}');
     final rawGoal = (feat.sections['scope'] ?? feat.sections['goal'] ?? '').trim();
     if (rawGoal.isNotEmpty) {
-      sb.writeln('- **Goal**: ${rawGoal.split('\n').first.replaceFirst(RegExp(r'^Goal:\s*', caseSensitive: false), '').trim()}');
+      sb.writeln('- **Goal**: ${rawGoal.split('\n').first.replaceFirst(_goalPrefixRegex, '').trim()}');
     }
     if (cpNode != null && cpNode.playtestCondition.trim().isNotEmpty) {
       sb.writeln('- **Playtest Gate (Done When)**: ${cpNode.playtestCondition.trim()}');
@@ -2897,10 +2917,10 @@ Return ONLY valid JSON:
           .split('#')
           .first
           .trim()
-          .replaceAll(RegExp(r';$'), '')
+          .replaceAll(_trailingSemicolonRegex, '')
           .trim();
       // Strip trailing C#/C++ float 'f' suffix on numeric literals (e.g. 600.0f -> 600.0, 6f -> 6.0)
-      final floatMatch = RegExp(r'^(-?\d+(?:\.\d+)?)[fF]$').firstMatch(val);
+      final floatMatch = _floatSuffixRegex.firstMatch(val);
       if (floatMatch != null) {
         final numPart = floatMatch.group(1)!;
         val = numPart.contains('.') ? numPart : '$numPart.0';
@@ -2909,11 +2929,7 @@ Return ONLY valid JSON:
     }
 
     // 2a. Multi-line Unity [SerializeField] / Unreal UPROPERTY(...) attribute on same or preceding line
-    final attrFieldRegex = RegExp(
-      r'(?:\[SerializeField[^\]]*\]|UPROPERTY\([^)]*\))\s*(?:(?:private|public|protected|internal|mutable|const)\s+)?[\w<>:*&]+\s+(\w+)\s*=\s*([^;\n]+);',
-      multiLine: true,
-    );
-    for (final m in attrFieldRegex.allMatches(trimmedCode)) {
+    for (final m in _attrFieldRegex.allMatches(trimmedCode)) {
       final k = m.group(1)?.trim() ?? '';
       final v = cleanNumericValue(m.group(2) ?? '');
       if (k.isNotEmpty && v.isNotEmpty) {
@@ -2922,11 +2938,7 @@ Return ONLY valid JSON:
     }
 
     // 2b. Godot 4 @export var / typed var declarations
-    final gdVarRegex = RegExp(
-      r'@export(?:_[a-z_]+)?(?:\([^)]*\))?\s+var\s+(\w+)(?:\s*:\s*[\w.]+)?\s*=\s*([^\n#;]+)',
-      multiLine: true,
-    );
-    for (final m in gdVarRegex.allMatches(trimmedCode)) {
+    for (final m in _gdVarRegex.allMatches(trimmedCode)) {
       final k = m.group(1)?.trim() ?? '';
       final v = cleanNumericValue(m.group(2) ?? '');
       if (k.isNotEmpty && v.isNotEmpty) {
@@ -2955,12 +2967,7 @@ Return ONLY valid JSON:
     }
 
     // 2d. Guard comment extraction (// [GUARD] ..., # [GUARD] ..., // GUARD: ...)
-    final guardCommentRegex = RegExp(
-      r'(?://|#)\s*\[?(?:PLAYTEST\s+)?GUARD\]?\s*:?\s*(.+)$',
-      multiLine: true,
-      caseSensitive: false,
-    );
-    for (final m in guardCommentRegex.allMatches(trimmedCode)) {
+    for (final m in _guardCommentRegex.allMatches(trimmedCode)) {
       final gText = m.group(1)?.trim() ?? '';
       if (gText.isNotEmpty) {
         final formatted = gText.startsWith('[') ? gText : '[GUARD] $gText';
@@ -2976,7 +2983,7 @@ Return ONLY valid JSON:
 
     final updatedTuningList = List<String>.from(cpNode.tuningParams);
     String normalizeVarKey(String k) =>
-        k.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        k.toLowerCase().replaceAll(_nonAlphaNumRegex, '');
 
     for (final entry in extractedTuning.entries) {
       final normTarget = normalizeVarKey(entry.key);
@@ -3000,10 +3007,10 @@ Return ONLY valid JSON:
 
     final updatedGuardsList = List<String>.from(cpNode.edgeCases);
     for (final g in extractedGuards) {
-      final normG = g.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final normG = g.toLowerCase().replaceAll(_whitespaceRegex, ' ').trim();
       final alreadyExists = updatedGuardsList.any(
         (existing) =>
-            existing.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim() ==
+            existing.toLowerCase().replaceAll(_whitespaceRegex, ' ').trim() ==
             normG,
       );
       if (!alreadyExists) {
