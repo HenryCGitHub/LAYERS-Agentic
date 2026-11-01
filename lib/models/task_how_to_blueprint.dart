@@ -91,6 +91,109 @@ class TaskHowToBlueprint {
   static final RegExp _trailingGuardSuffixRegex =
       RegExp(r'[\s_]+GUARD$', caseSensitive: false);
   static final RegExp _whitespaceOrUnderscoreRegex = RegExp(r'[\s_]+');
+  static final RegExp _versionTokenRegex =
+      RegExp(r'^v\d+$', caseSensitive: false);
+
+  static const Set<String> _kAssetNameStopWords = <String>{
+    'create',
+    'build',
+    'implement',
+    'implementation',
+    'playtest',
+    'add',
+    'wire',
+    'hook',
+    'up',
+    'setup',
+    'set',
+    'bind',
+    'apply',
+    'enforce',
+    'verify',
+    'test',
+    'the',
+    'and',
+    'for',
+    'with',
+    'in',
+    'on',
+    'to',
+    'of',
+    'a',
+    'an',
+    'core',
+    'state',
+    'player',
+    'interaction',
+    'mechanics',
+    'controls',
+    'logic',
+    'pass',
+    'stage',
+    'checkpoint',
+    'checkpoints',
+    'milestone',
+    'phase',
+    'step',
+    'task',
+    'version',
+    'system',
+    'systems',
+    'controller',
+    'controllers',
+    'mechanic',
+    'manager',
+    'managers',
+    'module',
+    'handler',
+    'service',
+    'feature',
+    'structure',
+    'base',
+    'basic',
+    'initial',
+    'input',
+    'mapping',
+    'tuning',
+    'config',
+    'configuration',
+    'wiring',
+    'pawn',
+    'properties',
+    'actor',
+    'node',
+    'velocity',
+    'friction',
+    'physics',
+    'blend',
+    'animation',
+    'camera',
+    'collision',
+    'capsule',
+  };
+
+  static const Set<String> _kGenericGuardTags = <String>{
+    'GUARD',
+    'STATE GUARD',
+    'INPUT GUARD',
+    'PLAYTEST GUARD',
+    'SIMULATION GUARD',
+  };
+
+  static const Set<String> _kDefaultGuardTokens = <String>{
+    'NOT bSelectionLocked',
+    '!bSelectionLocked',
+    'not selection_locked',
+    'bSelectionLocked = true',
+    'selection_locked = true',
+    'bSelectionLocked',
+    'selection_locked',
+    'NOT bResetInProgress',
+    '!bResetInProgress',
+    'bResetInProgress = true',
+    'bResetInProgress',
+    'reset_in_progress',
+  };
 
   /// Concise 3–4 word task title for the Left Outliner (condensing legacy verbose task sentences).
   String get shortTaskTitle => formatConciseTaskTitle(cleanTitle);
@@ -405,93 +508,15 @@ class TaskHowToBlueprint {
   ) {
     final clean =
         extractCleanTitle(rawText).replaceAll(_anyDurationTagRe, ' ').trim();
-    const stopWords = <String>{
-      'create',
-      'build',
-      'implement',
-      'implementation',
-      'playtest',
-      'add',
-      'wire',
-      'hook',
-      'up',
-      'setup',
-      'set',
-      'bind',
-      'apply',
-      'enforce',
-      'verify',
-      'test',
-      'the',
-      'and',
-      'for',
-      'with',
-      'in',
-      'on',
-      'to',
-      'of',
-      'a',
-      'an',
-      'core',
-      'state',
-      'player',
-      'interaction',
-      'mechanics',
-      'controls',
-      'logic',
-      'pass',
-      'stage',
-      'checkpoint',
-      'checkpoints',
-      'milestone',
-      'phase',
-      'step',
-      'task',
-      'version',
-      'system',
-      'systems',
-      'controller',
-      'controllers',
-      'mechanic',
-      'manager',
-      'managers',
-      'module',
-      'handler',
-      'service',
-      'feature',
-      'structure',
-      'base',
-      'basic',
-      'initial',
-      'input',
-      'mapping',
-      'tuning',
-      'config',
-      'configuration',
-      'wiring',
-      'pawn',
-      'properties',
-      'actor',
-      'node',
-      'velocity',
-      'friction',
-      'physics',
-      'blend',
-      'animation',
-      'camera',
-      'collision',
-      'capsule',
-    };
     final seenLower = <String>{};
     final words = <String>[];
-    final versionTokenRe = RegExp(r'^v\d+$', caseSensitive: false);
     for (final m in _identifierWordRegex.allMatches(clean)) {
       final w = m.group(0)!;
       final lowerW = w.toLowerCase();
       if (w.length > 1 &&
-          !stopWords.contains(lowerW) &&
+          !_kAssetNameStopWords.contains(lowerW) &&
           !_digitsOnlyRegex.hasMatch(w) &&
-          !versionTokenRe.hasMatch(lowerW) &&
+          !_versionTokenRegex.hasMatch(lowerW) &&
           seenLower.add(lowerW)) {
         words.add(w);
       }
@@ -589,14 +614,7 @@ class TaskHowToBlueprint {
     if (tagMatch != null) {
       final rawTag = tagMatch.group(1)!.trim();
       final upperTag = rawTag.toUpperCase();
-      const genericTags = <String>{
-        'GUARD',
-        'STATE GUARD',
-        'INPUT GUARD',
-        'PLAYTEST GUARD',
-        'SIMULATION GUARD',
-      };
-      if (!genericTags.contains(upperTag)) {
+      if (!_kGenericGuardTags.contains(upperTag)) {
         final cleanedTag = rawTag
             .replaceFirst(_trailingGuardSuffixRegex, '')
             .trim();
@@ -691,20 +709,7 @@ class TaskHowToBlueprint {
 
   /// Returns all concrete guard highlight tokens across `edgeItems` for semantic syntax highlighting.
   static List<String> extractGuardHighlightTokens(List<String> edgeItems) {
-    final tokens = <String>{
-      'NOT bSelectionLocked',
-      '!bSelectionLocked',
-      'not selection_locked',
-      'bSelectionLocked = true',
-      'selection_locked = true',
-      'bSelectionLocked',
-      'selection_locked',
-      'NOT bResetInProgress',
-      '!bResetInProgress',
-      'bResetInProgress = true',
-      'bResetInProgress',
-      'reset_in_progress',
-    };
+    final tokens = Set<String>.from(_kDefaultGuardTokens);
     for (final rawGuard in edgeItems) {
       final trimmed = rawGuard.trim();
       if (trimmed.isNotEmpty) {
@@ -1881,16 +1886,13 @@ class TaskHowToBlueprint {
       final isParentCompleted = parentTask.completed;
       parentTask.children = [
         for (int sIdx = 0; sIdx < dynamicSpecs.length; sIdx++)
-          () {
-            final s = dynamicSpecs[sIdx];
-            return Subtask(
-              id: '${parentTask.id}_sub_${sIdx + 1}',
-              text: s.stepHeader,
-              specNotes: s.instruction,
-              codeSnippet: s.code,
-              completed: isParentCompleted,
-            );
-          }(),
+          Subtask(
+            id: '${parentTask.id}_sub_${sIdx + 1}',
+            text: dynamicSpecs[sIdx].stepHeader,
+            specNotes: dynamicSpecs[sIdx].instruction,
+            codeSnippet: dynamicSpecs[sIdx].code,
+            completed: isParentCompleted,
+          ),
       ];
     }
 
