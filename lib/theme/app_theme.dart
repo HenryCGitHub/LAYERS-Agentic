@@ -176,7 +176,10 @@ class AppTheme {
     );
   }
 
-  static ThemeData get darkTheme {
+  static final ThemeData darkTheme = _buildDarkTheme();
+  static final ThemeData lightTheme = _buildLightTheme();
+
+  static ThemeData _buildDarkTheme() {
     return ThemeData.dark().copyWith(
       scaffoldBackgroundColor: bgBase,
       primaryColor: const Color(0xFFEDEDED),
@@ -270,7 +273,7 @@ class AppTheme {
   }
 
   // ── Eggshell Light Theme Data ─────────────────────────────────────────────
-  static ThemeData get lightTheme {
+  static ThemeData _buildLightTheme() {
     return ThemeData.light().copyWith(
       scaffoldBackgroundColor: bgBaseLight,
       primaryColor: const Color(0xFF18181B),
@@ -383,7 +386,7 @@ class AppToast {
     if (messenger == null) return;
 
     final effectiveColor =
-        accentColor ?? (isDark ? const Color(0xFFEDEDED) : const Color(0xFF18181B));
+        accentColor ?? AppTheme.textPrimaryFor(isDark);
 
     messenger.clearSnackBars();
     messenger.showSnackBar(
@@ -463,6 +466,18 @@ mixin WorkbenchThemeMixin {
     double fontSize = 13.5,
     double height = 1.48,
   }) {
+    if (!_metricHighlightRegex.hasMatch(statement)) {
+      return Text(
+        statement,
+        style: GoogleFonts.inter(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w500,
+          height: height,
+          color: textPrimary,
+        ),
+      );
+    }
+
     final spans = <InlineSpan>[];
     int lastEnd = 0;
 
