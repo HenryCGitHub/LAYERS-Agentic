@@ -137,13 +137,17 @@ class Subtask {
 
   /// Whether this task is considered completed, either explicitly or because all its
   /// child subtasks/substeps/leaf checkboxes are completed.
-  bool get isDone =>
-      completed ||
-      (children.isNotEmpty &&
-          (children.every((c) => c.completed) ||
-              (executableSubstepCount > 0 &&
-                  completedExecutableSubstepCount == executableSubstepCount) ||
-              (leafCount > 0 && completedLeafCount == leafCount)));
+  bool get isDone {
+    if (completed) return true;
+    if (children.isEmpty) return false;
+    if (children.every((c) => c.completed)) return true;
+    final execTotal = executableSubstepCount;
+    if (execTotal > 0 && completedExecutableSubstepCount == execTotal) {
+      return true;
+    }
+    final leaves = leafCount;
+    return leaves > 0 && completedLeafCount == leaves;
+  }
 
   static final RegExp _childSplitRegex = RegExp(r',\s*');
   static final RegExp _quotesTrimRegex = RegExp(r'''^["']|["']$''');
@@ -174,15 +178,14 @@ class Subtask {
             nestedChildrenStr.trim().isNotEmpty &&
             childrenList.isEmpty) {
           final childItems = _splitUnpackedChildren(nestedChildrenStr);
-          var idx = 0;
-          final now = DateTime.now().millisecondsSinceEpoch;
-          childrenList = childItems.map((c) {
-            idx++;
-            return Subtask(
-              id: 'st-$now-$idx',
-              text: c,
-            );
-          }).toList();
+          childrenList = childItems
+              .map(
+                (c) => Subtask(
+                  id: generateUniqueId('st'),
+                  text: c,
+                ),
+              )
+              .toList();
         }
       }
       rawText = rawText.replaceAll(_curlyTrimRegex, '').trim();
@@ -192,8 +195,7 @@ class Subtask {
     }
 
     return Subtask(
-      id: json['id'] as String? ??
-          'st-${DateTime.now().millisecondsSinceEpoch}',
+      id: json['id'] as String? ?? generateUniqueId('st'),
       text: rawText,
       completed: json['completed'] as bool? ?? false,
       children: childrenList,
@@ -274,8 +276,7 @@ class TierDocument {
   String assignee;
   String dueDate;
   String? _estimatedDuration;
-  String get estimatedDuration =>
-      DurationHelper.normalizeToHours(_estimatedDuration ?? '');
+  String get estimatedDuration => _estimatedDuration ?? '';
   set estimatedDuration(String val) =>
       _estimatedDuration = DurationHelper.normalizeToHours(val);
   String icon;
