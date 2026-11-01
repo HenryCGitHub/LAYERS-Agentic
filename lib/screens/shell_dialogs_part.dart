@@ -499,7 +499,6 @@ extension _ShellDialogsExt on WorkbenchShell {
     final focalAccent = AppTheme.focalAccentFor(isDark);
     final focalAccentFg = AppTheme.focalAccentFgFor(isDark);
     final accentAmber = AppTheme.accentAmberFor(isDark);
-    final accentEmerald = AppTheme.accentGreenFor(isDark);
 
     final keyController = TextEditingController(text: workbench.apiKey);
     String selectedConversationModel = workbench.conversationModel;
@@ -565,15 +564,6 @@ extension _ShellDialogsExt on WorkbenchShell {
                                   : 'Ultra-lightweight Flash-Lite',
                           isSelected: selectedConversationModel == m,
                           isRecommended: m == 'gemini-flash-latest',
-                          bgSurface: bgRecessed,
-                          bgHover: bgHover,
-                          borderSubtle: borderSubtle,
-                          textPrimary: textPrimary,
-                          textSecondary: textSecondary,
-                          textMuted: textMuted,
-                          focalAccent: focalAccent,
-                          focalAccentFg: focalAccentFg,
-                          accentEmerald: accentEmerald,
                           onTap: () => setModalState(() => selectedConversationModel = m),
                         ),
                       const SizedBox(height: 14),
@@ -597,15 +587,6 @@ extension _ShellDialogsExt on WorkbenchShell {
                                   : 'Gemini 3.8 Flash',
                           isSelected: selectedPlanningModel == m,
                           isRecommended: m == 'gemini-4-argon',
-                          bgSurface: bgRecessed,
-                          bgHover: bgHover,
-                          borderSubtle: borderSubtle,
-                          textPrimary: textPrimary,
-                          textSecondary: textSecondary,
-                          textMuted: textMuted,
-                          focalAccent: focalAccent,
-                          focalAccentFg: focalAccentFg,
-                          accentEmerald: accentEmerald,
                           onTap: () => setModalState(() => selectedPlanningModel = m),
                         ),
                       const SizedBox(height: 14),
@@ -766,17 +747,19 @@ extension _ShellDialogsExt on WorkbenchShell {
     required String subtitle,
     required bool isSelected,
     required bool isRecommended,
-    required Color bgSurface,
-    required Color bgHover,
-    required Color borderSubtle,
-    required Color textPrimary,
-    required Color textSecondary,
-    required Color textMuted,
-    required Color focalAccent,
-    required Color focalAccentFg,
-    required Color accentEmerald,
     required VoidCallback onTap,
   }) {
+    final isDark = workbench.isDark;
+    final bgSurface = AppTheme.bgSurfaceRecessedFor(isDark);
+    final bgHover = AppTheme.bgSurfaceHoverFor(isDark);
+    final borderSubtle = AppTheme.borderSubtleFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final focalAccent = AppTheme.focalAccentFor(isDark);
+    final focalAccentFg = AppTheme.focalAccentFgFor(isDark);
+    final accentEmerald = AppTheme.accentGreenFor(isDark);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 7),
       child: InkWell(
