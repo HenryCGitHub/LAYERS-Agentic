@@ -68,6 +68,57 @@ class SparkIdeaIntakeResult {
 /// Contains zero hardcoded archetypes, zero fallback game templates, and zero minimal scaffolds.
 /// Returns `null` (or `false`) whenever the app is offline or Gemini AI is unreachable.
 class ProjectConceptAgent {
+  static const _kCardAccents = ['amber', 'emerald', 'neutral'];
+
+  static const _kExpansionCardsJsonSchema = '''
+  "expansionCards": [
+    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
+    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
+    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"}
+  ]''';
+
+  static bool _isPlaceholderString(String s) =>
+      s.isEmpty ||
+      s == '...' ||
+      s.toLowerCase().startsWith('only if ');
+
+  static List<String> _parseStringList(
+    dynamic raw, {
+    bool filterPlaceholders = true,
+  }) {
+    if (raw is! List) return const <String>[];
+    return raw
+        .map((e) => e.toString().trim())
+        .where((s) => filterPlaceholders ? !_isPlaceholderString(s) : s.isNotEmpty)
+        .toList();
+  }
+
+  static List<SparkExpansionCard> _parseExpansionCards(dynamic rawCards) {
+    if (rawCards is! List) return const <SparkExpansionCard>[];
+    final cards = <SparkExpansionCard>[];
+    for (int i = 0; i < rawCards.length && i < 3; i++) {
+      final item = rawCards[i];
+      if (item is Map) {
+        cards.add(
+          SparkExpansionCard(
+            badge: (item['badge'] ?? '0${i + 1} · IDEA ADDITION')
+                .toString()
+                .trim(),
+            title: (item['title'] ?? 'Gameplay Twist ${i + 1}')
+                .toString()
+                .trim(),
+            description: (item['description'] ?? '').toString().trim(),
+            additionSummary: (item['additionSummary'] ?? item['title'] ?? '')
+                .toString()
+                .trim(),
+            accentType: _kCardAccents[i % _kCardAccents.length],
+          ),
+        );
+      }
+    }
+    return cards;
+  }
+
   /// Step 1B: Generates the initial 9-section Concept Blueprint from a spark idea via Gemini AI.
   /// Returns `null` if offline or if Gemini AI cannot be reached.
   static Future<ProjectConceptBlueprint?> startConceptInterview(
@@ -137,30 +188,21 @@ Return ONLY valid JSON:
     final aiTitle = json['title']?.toString().trim() ?? '';
     final resolvedTitle = aiTitle.isNotEmpty ? aiTitle : cleanSpark;
     final parsedSectionOptions = _parseSectionOptions(json['sectionOptions']);
-
-    List<String> parseList(dynamic raw) {
-      if (raw is! List) return <String>[];
-      return raw
-          .map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty && s != '...')
-          .toList();
-    }
-
-    final releaseTitles = parseList(json['releaseTrainTitles']);
+    final releaseTitles = _parseStringList(json['releaseTrainTitles']);
 
     return ProjectConceptBlueprint(
       title: resolvedTitle,
       sparkIdea: cleanSpark,
       questions: const <AgentQuestion>[],
       goal: json['goal']?.toString().trim() ?? '',
-      gameSpec: parseList(json['gameSpec']),
-      techSpec: parseList(json['techSpec']),
-      designPillars: parseList(json['designPillars']),
-      tradeOffs: parseList(json['tradeOffs']),
+      gameSpec: _parseStringList(json['gameSpec']),
+      techSpec: _parseStringList(json['techSpec']),
+      designPillars: _parseStringList(json['designPillars']),
+      tradeOffs: _parseStringList(json['tradeOffs']),
       coreLoopBeats: sortBeatsByDeveloperImpact(
-        parseList(json['coreLoopBeats']),
+        _parseStringList(json['coreLoopBeats']),
       ),
-      exclusions: parseList(json['exclusions']),
+      exclusions: _parseStringList(json['exclusions']),
       doneWhen: json['doneWhen']?.toString().trim() ?? '',
       firstReleasePreset: ReleaseScope.featurePrototype,
       releaseTrainTitles: releaseTitles.isNotEmpty
@@ -248,23 +290,15 @@ Return ONLY valid JSON:
 
     if (json == null) return false;
 
-    bool isPlaceholder(String s) =>
-        s.isEmpty ||
-        s == '...' ||
-        s.toLowerCase().startsWith('only if ');
-
     List<String>? cleanList(dynamic raw) {
       if (raw is! List) return null;
-      final list = raw
-          .map((e) => e.toString().trim())
-          .where((s) => !isPlaceholder(s))
-          .toList();
+      final list = _parseStringList(raw);
       return list.isNotEmpty ? list : null;
     }
 
     final updated = <String>[];
     final newTitle = json['title']?.toString().trim() ?? '';
-    if (!isPlaceholder(newTitle) && newTitle != draft.title) {
+    if (!_isPlaceholderString(newTitle) && newTitle != draft.title) {
       draft.title = newTitle;
       updated.add('Title');
     }
@@ -292,7 +326,7 @@ Return ONLY valid JSON:
       updated.add('Trade-Offs');
     }
     final newGoal = json['goal']?.toString().trim() ?? '';
-    if (!isPlaceholder(newGoal) && newGoal != draft.goal) {
+    if (!_isPlaceholderString(newGoal) && newGoal != draft.goal) {
       draft.goal = ProjectConceptBlueprint.sanitizeGoalText(newGoal);
       updated.add('Goal');
     }
@@ -311,7 +345,7 @@ Return ONLY valid JSON:
       updated.add('Exclusions');
     }
     final done = json['doneWhen']?.toString().trim() ?? '';
-    if (!isPlaceholder(done) && done != draft.doneWhen) {
+    if (!_isPlaceholderString(done) && done != draft.doneWhen) {
       draft.doneWhen = done;
       updated.add('Done When');
     }
@@ -391,12 +425,8 @@ Return ONLY valid JSON:
 
     for (final entry in rawSectionOptions.entries) {
       final key = entry.key.toString().trim();
-      final rawList = entry.value;
-      if (key.isNotEmpty && rawList is List) {
-        final cleaned = rawList
-            .map((e) => e.toString().trim())
-            .where((s) => s.isNotEmpty && s != '...')
-            .toList();
+      if (key.isNotEmpty) {
+        final cleaned = _parseStringList(entry.value);
         if (cleaned.isNotEmpty) {
           result[key] = cleaned;
         }
@@ -436,11 +466,7 @@ Return ONLY valid JSON:
     final expansionCardsSchemaTail = includeExpansionCards
         ? ''',
   "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"],
-  "expansionCards": [
-    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
-    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
-    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"}
-  ]'''
+$_kExpansionCardsJsonSchema'''
         : '';
 
     final prompt = '''
@@ -469,39 +495,8 @@ Return ONLY valid JSON:
 
     final wTitle = (json['workingTitle'] ?? '').toString().trim();
     final summary = (json['baseSummary'] ?? '').toString().trim();
-    final rawMechs = json['mechanics'];
-    final mechs = rawMechs is List
-        ? rawMechs
-            .map((e) => e.toString().trim())
-            .where((s) => s.isNotEmpty)
-            .toList()
-        : <String>[];
-    final rawCards = json['expansionCards'];
-    final cards = <SparkExpansionCard>[];
-    if (rawCards is List) {
-      const accents = ['amber', 'emerald', 'neutral'];
-      for (int i = 0; i < rawCards.length && i < 3; i++) {
-        final item = rawCards[i];
-        if (item is Map) {
-          cards.add(
-            SparkExpansionCard(
-              badge: (item['badge'] ?? '0${i + 1} · IDEA ADDITION')
-                  .toString()
-                  .trim(),
-              title: (item['title'] ?? 'Gameplay Twist ${i + 1}')
-                  .toString()
-                  .trim(),
-              description: (item['description'] ?? '').toString().trim(),
-              additionSummary:
-                  (item['additionSummary'] ?? item['title'] ?? '')
-                      .toString()
-                      .trim(),
-              accentType: accents[i % accents.length],
-            ),
-          );
-        }
-      }
-    }
+    final mechs = _parseStringList(json['mechanics']);
+    final cards = _parseExpansionCards(json['expansionCards']);
     if (summary.isEmpty || (includeExpansionCards && cards.isEmpty)) return null;
 
     final updatedRawIdea = existingIntake != null
@@ -553,11 +548,7 @@ ${GeminiAgentClient.compactStyleRules}
 
 Return ONLY valid JSON:
 {
-  "expansionCards": [
-    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences describing the observable mechanic.", "additionSummary": "Concise clause"},
-    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences describing the risk/reward tension.", "additionSummary": "Concise clause"},
-    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences describing the progression payoff.", "additionSummary": "Concise clause"}
-  ]
+$_kExpansionCardsJsonSchema
 }
 ''';
 
@@ -570,32 +561,7 @@ Return ONLY valid JSON:
     );
     if (json == null) return null;
 
-    final rawCards = json['expansionCards'];
-    final cards = <SparkExpansionCard>[];
-    if (rawCards is List) {
-      const accents = ['amber', 'emerald', 'neutral'];
-      for (int i = 0; i < rawCards.length && i < 3; i++) {
-        final item = rawCards[i];
-        if (item is Map) {
-          cards.add(
-            SparkExpansionCard(
-              badge: (item['badge'] ?? '0${i + 1} · IDEA ADDITION')
-                  .toString()
-                  .trim(),
-              title: (item['title'] ?? 'Gameplay Twist ${i + 1}')
-                  .toString()
-                  .trim(),
-              description: (item['description'] ?? '').toString().trim(),
-              additionSummary:
-                  (item['additionSummary'] ?? item['title'] ?? '')
-                      .toString()
-                      .trim(),
-              accentType: accents[i % accents.length],
-            ),
-          );
-        }
-      }
-    }
+    final cards = _parseExpansionCards(json['expansionCards']);
     if (cards.length < 3) return null;
 
     return _preserveSelectedExpansionCards(
@@ -662,11 +628,7 @@ Return ONLY valid JSON:
     );
     final rawList = json?['options'];
     if (rawList is List) {
-      final parsed = rawList
-          .map((e) => e.toString().trim())
-          .where((s) => s.isNotEmpty)
-          .take(3)
-          .toList();
+      final parsed = _parseStringList(rawList).take(3).toList();
       if (parsed.length >= 2) {
         return parsed;
       }
