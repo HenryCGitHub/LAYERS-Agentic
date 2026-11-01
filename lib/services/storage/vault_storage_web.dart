@@ -56,7 +56,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
         themeMode: themeMode,
       );
     } catch (_) {
-      return VaultLoadResult(documents: {});
+      return const VaultLoadResult(documents: {});
     }
   }
 
@@ -102,8 +102,9 @@ class VaultStorageWebImpl implements VaultStorageBackend {
           '$_keyDocPrefix${doc.id}', jsonEncode(doc.toJson()));
 
       final docIds = (prefs.getStringList(_keyDocIds) ?? []).toSet();
-      docIds.add(doc.id);
-      await prefs.setStringList(_keyDocIds, docIds.toList());
+      if (docIds.add(doc.id)) {
+        await prefs.setStringList(_keyDocIds, docIds.toList());
+      }
     } catch (_) {}
   }
 
@@ -114,8 +115,9 @@ class VaultStorageWebImpl implements VaultStorageBackend {
       await prefs.remove('$_keyDocPrefix$id');
 
       final docIds = (prefs.getStringList(_keyDocIds) ?? []).toSet();
-      docIds.remove(id);
-      await prefs.setStringList(_keyDocIds, docIds.toList());
+      if (docIds.remove(id)) {
+        await prefs.setStringList(_keyDocIds, docIds.toList());
+      }
     } catch (_) {}
   }
 }
