@@ -1667,10 +1667,156 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         beat.features.add(created);
         _syncActiveProjectMetadata();
         notifyListeners();
+        if (GeminiAgentClient.hasKey(_apiKey) ||
+            GeminiAgentClient.testMockResponder != null) {
+          _enrichProposedBlueprintFeatureWithAi(
+            beatId: beat.id,
+            featureId: created.id,
+            beatTitle: beat.title,
+            preserveCustomGoal:
+                customGoal != null && customGoal.trim().isNotEmpty,
+          );
+        }
         return created;
       }
     }
     return null;
+  }
+
+  Future<void> _enrichProposedBlueprintFeatureWithAi({
+    required String beatId,
+    required String featureId,
+    required String beatTitle,
+    required bool preserveCustomGoal,
+  }) async {
+    final bp = _releaseBlueprint;
+    if (bp == null) return;
+    ProposedBeatBlueprint? targetBeat;
+    ProposedFeatureBlueprint? targetFeat;
+    for (final b in bp.beats) {
+      if (b.id == beatId) {
+        for (final f in b.features) {
+          if (f.id == featureId) {
+            targetBeat = b;
+            targetFeat = f;
+            break;
+          }
+        }
+      }
+    }
+    if (targetBeat == null || targetFeat == null) return;
+    final projTitle = activeProject?.title ?? 'Game Prototype';
+    final engineLabel = _activeEngineLabel;
+    final gameSpecSummary = (activeProject?.sections['game_spec'] ??
+            activeProject?.sections['gameSpec'] ??
+            _conceptDraft?.gameSpec.join(' · ') ??
+            '')
+        .trim();
+    final techSpecSummary = (activeProject?.sections['tech_spec'] ??
+            activeProject?.sections['techSpec'] ??
+            _conceptDraft?.techSpec.join(' · ') ??
+            '')
+        .trim();
+    final specCorpusLower = '$gameSpecSummary $techSpecSummary'.toLowerCase();
+    final is2d = specCorpusLower.contains('2d') ||
+        specCorpusLower.contains('sprite') ||
+        specCorpusLower.contains('pixel') ||
+        specCorpusLower.contains('tilemap');
+    final dimensionRule = is2d
+        ? 'Dimension Rule: 2D ONLY (use 2D scenes/nodes/colliders/Vector2; NEVER 3D nodes or Vector3).\n'
+        : 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n';
+    final siblingTitles = targetBeat.features
+        .where((s) => s.id != featureId)
+        .map((s) => '"${s.title}"')
+        .toList();
+
+    final prompt = '''
+You are the Systems Designer for "$projTitle" ($engineLabel).
+Enrich this newly proposed Feature ("${targetFeat.title}" inside Epic "$beatTitle" for ${bp.releaseVersionTag}) so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
+${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
+Call `commit_live_feature_enrichment` (or return ONLY a JSON object).''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: _apiKey,
+      preferredModel: _conversationModel,
+      thinkingLevel: _thinkingLevel,
+      temperature: 0.4,
+      functionDeclarations: const [commitLiveFeatureEnrichmentTool],
+    );
+    if (json == null || _releaseBlueprint != bp) return;
+    final aiGoal = json['goal']?.toString().trim() ?? '';
+    final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
+    final aiCpTitle = json['checkpointTitle']?.toString().trim() ?? '';
+    final aiGate = json['playtestGate']?.toString().trim() ?? '';
+    final extractedTasks =
+        ReleasePlannerAgent.extractCheckpointTasksFromMap(json);
+    final rawInScope = json['inScope'];
+    final rawTuning = json['tuningParams'];
+    final rawGuards = json['edgeCases'];
+
+    if (!preserveCustomGoal && aiGoal.isNotEmpty) {
+      targetFeat.goal = aiGoal;
+    }
+    if (aiDoneWhen.isNotEmpty) {
+      targetFeat.doneWhen = aiDoneWhen;
+    }
+    if (rawInScope is List && rawInScope.isNotEmpty) {
+      final scopeItems = rawInScope
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (scopeItems.isNotEmpty) {
+        targetFeat.inScope = scopeItems;
+      }
+    }
+    if (rawTuning is List && rawTuning.isNotEmpty) {
+      final tList = rawTuning
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (tList.isNotEmpty) {
+        targetFeat.tuningParams = tList;
+      }
+    }
+    if (rawGuards is List && rawGuards.isNotEmpty) {
+      final gList = rawGuards
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (gList.isNotEmpty) {
+        targetFeat.edgeCases = gList;
+      }
+    }
+    final normalizedTasks = extractedTasks.isNotEmpty
+        ? ReleasePlannerAgent.normalizeFoundationFirstTasks(
+            extractedTasks,
+            featureTitle: targetFeat.title,
+            beatTitle: beatTitle,
+          )
+        : (targetFeat.checkpoints.isNotEmpty
+            ? targetFeat.checkpoints.first.tasks
+            : <String>[]);
+    targetFeat.checkpoints = [
+      ProposedCheckpointBlueprint(
+        title: aiCpTitle.isNotEmpty ? aiCpTitle : '${targetFeat.title} Core',
+        playtestCriteria: aiGate.isNotEmpty
+            ? aiGate
+            : 'Trigger ${targetFeat.title} in playtest -> responds cleanly on screen',
+        tasks: normalizedTasks,
+        coveredScope: targetFeat.inScope,
+        tuningParams: targetFeat.tuningParams,
+        edgeCases: targetFeat.edgeCases,
+        releaseVersion: bp.releaseVersionTag,
+      ),
+    ];
+    final relDoc = activeRelease;
+    if (relDoc != null) {
+      relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+      _persistDocument(relDoc);
+    }
+    notifyListeners();
   }
 
   /// Promotes an Out-of-Scope exclusion item into a `+ NEW` feature in the Progressive Release Planner.
@@ -1886,17 +2032,34 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         ? const <String>[]
         : featuresForBeat(featDoc.parentId!)
             .where((s) => s.id != featureId)
-            .map((s) => '"${s.title}"')
+            .map((s) {
+              final pAsset = (s.sections['primary_asset'] ?? '').trim();
+              return pAsset.isNotEmpty
+                  ? '"${s.title}" [shared asset: $pAsset]'
+                  : '"${s.title}"';
+            })
             .toList();
+    final specCorpusLower = '$gameSpecSummary $techSpecSummary'.toLowerCase();
+    final is2dLive = specCorpusLower.contains('2d') ||
+        specCorpusLower.contains('sprite') ||
+        specCorpusLower.contains('pixel') ||
+        specCorpusLower.contains('tilemap');
+    final dimensionRule = is2dLive
+        ? 'Dimension Rule: 2D ONLY (use CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
+        : (gameSpecSummary.isNotEmpty || techSpecSummary.isNotEmpty
+            ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
+            : '');
     final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
 Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
-${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate; reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
 - Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
 Return ONLY a JSON object:
 {
   "goal": "<1 plain-English sentence starting with Build/Implement>",
+  "inScope": ["<in-scope deliverable 1>", "<in-scope deliverable 2>"],
   "doneWhen": "<1 observable playtest completion condition>",
+  "primarySharedScriptOrScene": "<Canonical shared $engineLabel script/scene for this feature>",
   "checkpointTitle": "<2-4 word playable checkpoint title>",
   "playtestGate": "<Action -> Observable result>",
   "tasks": [
@@ -1924,13 +2087,28 @@ Return ONLY a JSON object:
       final cp = states.first;
       final aiGoal = json['goal']?.toString().trim() ?? '';
       final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
+      final aiPrimaryAsset =
+          json['primarySharedScriptOrScene']?.toString().trim() ?? '';
+      if (aiPrimaryAsset.isNotEmpty) {
+        featDoc.sections['primary_asset'] = aiPrimaryAsset;
+      }
+      final rawInScope = json['inScope'];
+      final parsedInScope = (rawInScope is List)
+          ? rawInScope
+              .map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : const <String>[];
+      final effectiveInScope =
+          parsedInScope.isNotEmpty ? parsedInScope : <String>[featDoc.title];
+      cp.coveredScope = effectiveInScope;
       final aiTitle = json['checkpointTitle']?.toString().trim() ?? '';
       final aiGate = json['playtestGate']?.toString().trim() ?? '';
       final extractedTasks =
           ReleasePlannerAgent.extractCheckpointTasksFromMap(json);
       final rawTuning = json['tuningParams'];
       final rawGuards = json['edgeCases'];
-      if (aiGoal.isNotEmpty || aiDoneWhen.isNotEmpty) {
+      if (aiGoal.isNotEmpty || aiDoneWhen.isNotEmpty || parsedInScope.isNotEmpty) {
         final effectiveGoal = aiGoal.isNotEmpty
             ? aiGoal
             : 'Build ${featDoc.title} inside $beatTitle.';
@@ -1939,8 +2117,10 @@ Return ONLY a JSON object:
             : (aiGate.isNotEmpty
                 ? aiGate
                 : 'Playtester verifies ${featDoc.title} in the test arena.');
+        final inScopeBullets =
+            effectiveInScope.map((s) => '• $s').join('\n');
         featDoc.sections['scope'] =
-            'Goal: $effectiveGoal\n\nIn Scope:\n• ${featDoc.title}\n\nDone When: $effectiveDoneWhen';
+            'Goal: $effectiveGoal\n\nIn Scope:\n$inScopeBullets\n\nDone When: $effectiveDoneWhen';
         _persistDocument(featDoc);
         final bp = _releaseBlueprint;
         if (bp != null) {
@@ -1948,6 +2128,7 @@ Return ONLY a JSON object:
             for (final f in b.features) {
               if (f.id == featureId) {
                 f.goal = effectiveGoal;
+                f.inScope = List<String>.from(effectiveInScope);
                 f.doneWhen = effectiveDoneWhen;
               }
             }
@@ -1997,8 +2178,26 @@ Return ONLY a JSON object:
             if (f.id == featureId) {
               f.tuningParams = List<String>.from(cp.tuningParams);
               f.edgeCases = List<String>.from(cp.edgeCases);
+              f.checkpoints = [
+                ProposedCheckpointBlueprint(
+                  title: aiTitle.isNotEmpty ? aiTitle : featDoc.title,
+                  playtestCriteria: aiGate.isNotEmpty
+                      ? aiGate
+                      : cp.playtestCondition,
+                  tasks: [for (final t in cp.checklist) t.text],
+                  coveredScope: List<String>.from(cp.coveredScope),
+                  tuningParams: List<String>.from(cp.tuningParams),
+                  edgeCases: List<String>.from(cp.edgeCases),
+                  releaseVersion: cp.releaseVersion,
+                ),
+              ];
             }
           }
+        }
+        final relDoc = activeRelease;
+        if (relDoc != null) {
+          relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+          _persistDocument(relDoc);
         }
       }
       for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
@@ -2012,6 +2211,88 @@ Return ONLY a JSON object:
       updateFeatureStates(featureId, states);
     }
     await synthesizeFeatureHowToStepsWithAi(featureId, forceRefresh: true);
+  }
+
+  /// Appends a single new Build Task to a Checkpoint in `2. Workbench`, resolves its initial
+  /// deterministic sub-steps, syncs `_releaseBlueprint`, and tailors ONLY the newly added task
+  /// via `tailorTaskHowToSubSteps` so existing tasks `1..N-1` are never overwritten.
+  int addBuildTaskToCheckpointWithAi({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required String rawTaskTitle,
+    bool unrealCppMode = false,
+  }) {
+    final trimmed = rawTaskTitle.trim();
+    if (trimmed.isEmpty ||
+        checkpointIndex < 0 ||
+        checkpointIndex >= states.length) {
+      return -1;
+    }
+    final hasExplicitHours =
+        RegExp(r'\(\d+\s*h\)', caseSensitive: false).hasMatch(trimmed);
+    final taskText = hasExplicitHours ? trimmed : '$trimmed (2h)';
+    final cpNode = states[checkpointIndex];
+    final newTask = Subtask(
+      id: 'task_${DateTime.now().millisecondsSinceEpoch}',
+      text: taskText,
+      completed: false,
+    );
+    cpNode.checklist.add(newTask);
+    final newIdx = cpNode.checklist.length - 1;
+    TaskHowToBlueprint.resolve(
+      parentTask: newTask,
+      taskIndex: newIdx,
+      checkpointNode: cpNode,
+      engineHint: _activeEngineHint,
+      unrealCppMode: unrealCppMode,
+      phase: _currentPhase,
+    );
+    updateFeatureStates(featureId, states);
+
+    final bp = _releaseBlueprint;
+    if (bp != null) {
+      for (final b in bp.beats) {
+        for (final f in b.features) {
+          if (f.id == featureId &&
+              checkpointIndex < f.checkpoints.length) {
+            final cpBp = f.checkpoints[checkpointIndex];
+            f.checkpoints[checkpointIndex] = ProposedCheckpointBlueprint(
+              title: cpBp.title,
+              playtestCriteria: cpBp.playtestCriteria,
+              tasks: [for (final t in cpNode.checklist) t.text],
+              coveredScope: cpBp.coveredScope,
+              tuningParams: cpBp.tuningParams,
+              edgeCases: cpBp.edgeCases,
+              releaseVersion: cpBp.releaseVersion,
+            );
+          }
+        }
+      }
+      final relDoc = activeRelease;
+      if (relDoc != null) {
+        relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+        _persistDocument(relDoc);
+      }
+    }
+
+    if (GeminiAgentClient.hasKey(_apiKey) ||
+        GeminiAgentClient.testMockResponder != null) {
+      final featDoc = documents[featureId];
+      final primaryAsset =
+          (featDoc?.sections['primary_asset'] ?? '').trim();
+      final contextDesc = primaryAsset.isNotEmpty
+          ? 'Implement "$taskText" on shared asset $primaryAsset'
+          : 'Implement "$taskText" for ${featDoc?.title ?? cpNode.cleanStageTitle}';
+      tailorTaskHowToSubSteps(
+        featureId: featureId,
+        states: states,
+        checkpointIndex: checkpointIndex,
+        taskIndex: newIdx,
+        userContext: contextDesc,
+      );
+    }
+    return newIdx;
   }
 
   /// Renames an active Feature document directly inside `2. Workbench` and syncs `_releaseBlueprint`.
@@ -2825,7 +3106,12 @@ Return ONLY a JSON object with this schema:
       ],
       'properties': {
         'goal': {'type': 'STRING'},
+        'inScope': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
         'doneWhen': {'type': 'STRING'},
+        'primarySharedScriptOrScene': {'type': 'STRING'},
         'checkpointTitle': {'type': 'STRING'},
         'playtestGate': {'type': 'STRING'},
         'tasks': {
@@ -2920,7 +3206,23 @@ Return ONLY a JSON object with this schema:
         'playtestGate': {'type': 'STRING'},
         'tasks': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'description':
+              'Sequential tasks ordered from entity_and_collision_foundation -> core_action_and_math (1..N) -> feedback_and_boundary_guard.',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['role', 'title'],
+            'properties': {
+              'role': {
+                'type': 'STRING',
+                'enum': [
+                  'entity_and_collision_foundation',
+                  'core_action_and_math',
+                  'feedback_and_boundary_guard',
+                ],
+              },
+              'title': {'type': 'STRING'},
+            },
+          },
         },
         'tuningParams': {
           'type': 'ARRAY',
@@ -2934,6 +3236,30 @@ Return ONLY a JSON object with this schema:
         'futureGoal': {'type': 'STRING'},
         'futurePlaytestGate': {'type': 'STRING'},
         'futureTasks': {
+          'type': 'ARRAY',
+          'description':
+              'Future-phase upgrade tasks ordered from entity_and_collision_foundation -> core_action_and_math (1..N) -> feedback_and_boundary_guard.',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['role', 'title'],
+            'properties': {
+              'role': {
+                'type': 'STRING',
+                'enum': [
+                  'entity_and_collision_foundation',
+                  'core_action_and_math',
+                  'feedback_and_boundary_guard',
+                ],
+              },
+              'title': {'type': 'STRING'},
+            },
+          },
+        },
+        'futureTuningParams': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'futureEdgeCases': {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
         },
@@ -5041,7 +5367,12 @@ Return ONLY valid JSON:
       final feats = featuresForBeat(b.id);
       final featSummary = feats.isEmpty
           ? '(no features yet)'
-          : feats.map((f) => '${f.id}:"${f.title}"').join(', ');
+          : feats.map((f) {
+              final asset = (f.sections['primary_asset'] ?? '').trim();
+              final assetSuffix =
+                  asset.isNotEmpty ? ' [shared asset: $asset]' : '';
+              return '${f.id}:"${f.title}"$assetSuffix';
+            }).join(', ');
       beatCatalogLines.add(
         '- Epic E${(bIdx + 1).toString().padLeft(2, '0')} [id="${b.id}"]: "${b.title}" -> Features: [$featSummary]',
       );
@@ -5057,6 +5388,14 @@ Return ONLY valid JSON:
             draft?.techSpec.join(' · ') ??
             '')
         .trim();
+    final specCorpusLower = '$gameSpecSummary $techSpecSummary'.toLowerCase();
+    final is2dProject = specCorpusLower.contains('2d') ||
+        specCorpusLower.contains('sprite') ||
+        specCorpusLower.contains('pixel') ||
+        specCorpusLower.contains('tilemap');
+    final dimensionRule = is2dProject
+        ? 'Dimension Rule: 2D ONLY (Node2D / CharacterBody2D / Vector2; NEVER 3D nodes or Vector3).\n'
+        : 'Dimension Rule: 3D (Node3D / CharacterBody3D / Vector3).\n';
 
     final pillarsSummary = (proj?.sections['design_pillars'] ??
             proj?.sections['designPillars'] ??
@@ -5081,58 +5420,22 @@ You are the Principal Game Producer & Lead Systems Architect ($engineLabel) for 
 Triage this developer feature request captured in the Feature Inbox across 3 dimensions:
 1. WHEN (Release Timing): Does it belong in the CURRENT release ($activeVer · ${_currentPhase.label}), should it be SPLIT (lean 4h core slice in $activeVer now + deeper upgrade scheduled for a future ProductionPhase), or should it be SCHEDULED entirely for a future ProductionPhase (mvp, verticalSlice, fullProduction, postLaunch)?
 2. WHERE (Single Live Tree Placement): Which existing Epic (or new Epic) owns it, and should it be a standalone NEW feature ("newFeatureInEpic") or an UPGRADE checkpoint on an existing Feature ("upgradeExistingFeature")?
-3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, 3 Build Tasks (4h), Tuning Params, and [STATE GUARD] rules.
+3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, Foundation-First Build Tasks (entity_and_collision_foundation -> core_action_and_math -> feedback_and_boundary_guard), Tuning Params, and [STATE GUARD] rules.
 
 Developer Request: "${item.rawIdea}"
 Active Release: $activeVer (${_currentPhase.label})
 Game Spec: $gameSpecSummary
 Tech Spec: $techSpecSummary
-Design Pillars: $pillarsSummary
+${dimensionRule}Design Pillars: $pillarsSummary
 Trade-Offs: $tradeOffsSummary
 Out of Scope Rules: $exclusionsSummary
 Existing Epics & Live Features:
 ${beatCatalogLines.join('\n')}
 
 ${GeminiAgentClient.compactStyleRules}
-- If `releaseTimingMode` is `"now"`, omit `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, and `"futureTasks"`.
+- If `releaseTimingMode` is `"now"`, omit `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTasks"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
 
-Return ONLY valid JSON:
-{
-  "releaseTimingMode": "now | splitNowAndFuture | futureRelease",
-  "targetFuturePhase": "mvp | verticalSlice | fullProduction | postLaunch",
-  "releaseTimingReasoning": "<1 concise sentence explaining why this release timing fits the active phase and scope>",
-  "integrationMode": "newFeatureInEpic | upgradeExistingFeature | newEpicAndFeature",
-  "targetBeatId": "<exact existing beat id or new_epic>",
-  "targetFeatureId": "<exact existing feature id if upgradeExistingFeature, else null>",
-  "newEpicTitle": "<2-4 word plain title if newEpicAndFeature, else null>",
-  "placementReasoning": "<1 concise sentence explaining why it belongs in this Epic/Feature>",
-  "featureTitle": "<2-4 word plain functional title>",
-  "goal": "<1 plain-English sentence starting with Build/Implement>",
-  "inScope": ["<item 1>", "<item 2>"],
-  "doneWhen": "<1 observable playtest completion condition>",
-  "architectureHowSummary": [
-    "<Engine node/component setup in $engineLabel>",
-    "<Signal/input/state wiring>",
-    "<Runtime guard & edge-case protection>"
-  ],
-  "checkpointTitle": "<2-4 word immediate checkpoint title>",
-  "playtestGate": "<Action -> Observable result>",
-  "tasks": [
-    "<Task 1 entity/collision foundation> (2h)",
-    "<Task 2 core mechanic velocity/action> (1h)",
-    "<Task 3 observable feedback & clamp> (1h)"
-  ],
-  "tuningParams": ["<param1: value unit>", "<param2: value unit>"],
-  "edgeCases": ["[STATE GUARD] <concise guard rule>"],
-  "futureCheckpointTitle": "<2-4 word future phase checkpoint title if split/future>",
-  "futureGoal": "<1 sentence future phase upgrade goal>",
-  "futurePlaytestGate": "<Action -> Observable result in future phase>",
-  "futureTasks": [
-    "<Future Task 1> (2h)",
-    "<Future Task 2> (1h)",
-    "<Future Task 3> (1h)"
-  ]
-}''';
+Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -5223,7 +5526,13 @@ Return ONLY valid JSON:
     final aiHow = readStrList(json['architectureHowSummary']);
     if (aiHow.isNotEmpty) target.architectureHowSummary = aiHow;
     final aiTasks = ReleasePlannerAgent.extractCheckpointTasksFromMap(json);
-    if (aiTasks.isNotEmpty) target.tasks = aiTasks;
+    if (aiTasks.isNotEmpty) {
+      target.tasks = ReleasePlannerAgent.normalizeFoundationFirstTasks(
+        aiTasks,
+        featureTitle: target.featureTitle,
+        beatTitle: target.targetBeatTitle,
+      );
+    }
     final aiTuning = readStrList(json['tuningParams']);
     if (aiTuning.isNotEmpty) target.tuningParams = aiTuning;
     final aiGuards = readStrList(json['edgeCases']);
@@ -5238,7 +5547,19 @@ Return ONLY valid JSON:
     final aiFutTasks = ReleasePlannerAgent.extractCheckpointTasksFromMap({
       'tasks': json['futureTasks'],
     });
-    if (aiFutTasks.isNotEmpty) target.futureTasks = aiFutTasks;
+    if (aiFutTasks.isNotEmpty) {
+      target.futureTasks = ReleasePlannerAgent.normalizeFoundationFirstTasks(
+        aiFutTasks,
+        featureTitle: target.futureCheckpointTitle.isNotEmpty
+            ? target.futureCheckpointTitle
+            : target.featureTitle,
+        beatTitle: target.targetBeatTitle,
+      );
+    }
+    final aiFutTuning = readStrList(json['futureTuningParams']);
+    if (aiFutTuning.isNotEmpty) target.futureTuningParams = aiFutTuning;
+    final aiFutGuards = readStrList(json['futureEdgeCases']);
+    if (aiFutGuards.isNotEmpty) target.futureEdgeCases = aiFutGuards;
 
     _saveFeatureInboxItems(latestItems);
   }
@@ -5426,6 +5747,8 @@ Return ONLY valid JSON:
               'Core Logic & Signal Hookup for $cpTitle (1h)',
               'State & Bounds Guard for $cpTitle (1h)',
             ];
+      final existingPrimaryAsset =
+          (featDoc.sections['primary_asset'] ?? '').trim();
       final newCp = FeatureStateNode(
         id: '${featDoc.id}_${activeVer}_cp_$nextCpNum',
         name: 'Checkpoint $nextCpNum: $cpTitle',
@@ -5442,7 +5765,11 @@ Return ONLY valid JSON:
         coveredScope: item.inScope.isNotEmpty ? item.inScope : [cpTitle],
         tuningParams: item.tuningParams,
         edgeCases: item.edgeCases,
-        parameters: {'releaseVersion': activeVer},
+        parameters: {
+          'releaseVersion': activeVer,
+          if (existingPrimaryAsset.isNotEmpty)
+            'primarySharedScriptOrScene': existingPrimaryAsset,
+        },
       );
       for (int tIdx = 0; tIdx < newCp.checklist.length; tIdx++) {
         TaskHowToBlueprint.resolve(

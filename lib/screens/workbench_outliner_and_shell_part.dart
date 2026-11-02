@@ -1,9 +1,6 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
-  static final RegExp _explicitHoursRegex =
-      RegExp(r'\(\d+\s*h\)', caseSensitive: false);
-
   void _startStage2InlineEdit(String key, String initialText) {
     _rebuild(() {
       _activeStage2InlineEditKey = key;
@@ -146,29 +143,15 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
   ) {
     final trimmed = rawTitle.trim();
     if (trimmed.isEmpty || cpIdx < 0 || cpIdx >= states.length) return;
-    final hasExplicitHours = _explicitHoursRegex.hasMatch(trimmed);
-    final taskText = hasExplicitHours ? trimmed : '$trimmed (2h)';
     final cpNode = states[cpIdx];
-    final newTask = Subtask(
-      id: 'task_${DateTime.now().millisecondsSinceEpoch}',
-      text: taskText,
-      completed: false,
-    );
-    cpNode.checklist.add(newTask);
-    final newIdx = cpNode.checklist.length - 1;
-    TaskHowToBlueprint.resolve(
-      parentTask: newTask,
-      taskIndex: newIdx,
-      checkpointNode: cpNode,
-      engineHint: widget.workbench.conceptDraft?.techSpec.join(' '),
+    final newIdx = widget.workbench.addBuildTaskToCheckpointWithAi(
+      featureId: feat.id,
+      states: states,
+      checkpointIndex: cpIdx,
+      rawTaskTitle: trimmed,
       unrealCppMode: _unrealCppMode,
-      phase: widget.workbench.currentPhase,
     );
-    widget.workbench.updateFeatureStates(feat.id, states);
-    widget.workbench.synthesizeFeatureHowToStepsWithAi(
-      feat.id,
-      forceRefresh: true,
-    );
+    if (newIdx < 0) return;
     _rebuild(() {
       _manualCheckpointFocusIndex = cpIdx;
       _manualCheckpointFocusFeatureId = feat.id;

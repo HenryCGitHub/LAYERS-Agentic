@@ -6376,6 +6376,59 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           parsedLoopOpts,
           equals(['High-Risk Salvage: Dive & Cut → Haul Scrap → Refuel Rig']),
         );
+
+        // Verify AI Add Workflow Refinements:
+        // 1. commitLiveFeatureEnrichmentTool includes inScope and primarySharedScriptOrScene
+        final liveEnrichProps =
+            (WorkbenchReleaseMixin.commitLiveFeatureEnrichmentTool['parameters']
+                as Map)['properties'] as Map;
+        expect(liveEnrichProps.containsKey('inScope'), isTrue);
+        expect(
+          liveEnrichProps.containsKey('primarySharedScriptOrScene'),
+          isTrue,
+        );
+
+        // 2. commitInboxFeatureTriageTool uses typed { role, title } tasks & futureTasks + futureTuningParams & futureEdgeCases
+        final inboxTriageProps =
+            (WorkbenchReleaseMixin.commitInboxFeatureTriageTool['parameters']
+                as Map)['properties'] as Map;
+        expect(inboxTriageProps.containsKey('futureTuningParams'), isTrue);
+        expect(inboxTriageProps.containsKey('futureEdgeCases'), isTrue);
+        final inboxTasksSchema = inboxTriageProps['tasks'] as Map;
+        final inboxTaskItemSchema = inboxTasksSchema['items'] as Map;
+        expect(inboxTaskItemSchema['type'], equals('OBJECT'));
+        final inboxFutureTasksSchema = inboxTriageProps['futureTasks'] as Map;
+        final inboxFutureTaskItemSchema = inboxFutureTasksSchema['items'] as Map;
+        expect(inboxFutureTaskItemSchema['type'], equals('OBJECT'));
+
+        // 3. addBuildTaskToCheckpointWithAi appends a new task and preserves existing tasks 0..N-1
+        final targetFeatForAddTask = provider.selectedFeature!;
+        final statesBeforeAdd =
+            FeatureStateNode.getStatesForDocument(targetFeatForAddTask);
+        final cp0BeforeCount = statesBeforeAdd.first.checklist.length;
+        final firstTaskFirstChildBefore =
+            statesBeforeAdd.first.checklist.first.children.first.text;
+        final addedTaskIdx = provider.addBuildTaskToCheckpointWithAi(
+          featureId: targetFeatForAddTask.id,
+          states: statesBeforeAdd,
+          checkpointIndex: 0,
+          rawTaskTitle: 'Tether Winch Recoil Clamp',
+        );
+        expect(addedTaskIdx, equals(cp0BeforeCount));
+        final statesAfterAdd =
+            FeatureStateNode.getStatesForDocument(targetFeatForAddTask);
+        expect(
+          statesAfterAdd.first.checklist.length,
+          equals(cp0BeforeCount + 1),
+        );
+        expect(
+          statesAfterAdd.first.checklist.last.text,
+          equals('Tether Winch Recoil Clamp (2h)'),
+        );
+        expect(
+          statesAfterAdd.first.checklist.first.children.first.text,
+          equals(firstTaskFirstChildBefore),
+        );
       },
     );
   });
