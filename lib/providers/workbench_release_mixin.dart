@@ -1892,7 +1892,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 You are the Systems Designer for "$projTitle" ($engineLabel).
 Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
 ${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
-- Keep Task 1 focused on Scene/Entity/Collision foundation (never Input/Keybind) and include 2–3 "paramName: numericValue unit" entries in tuningParams.
+- Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
 Return ONLY a JSON object:
 {
   "goal": "<1 plain-English sentence starting with Build/Implement>",
@@ -1900,9 +1900,9 @@ Return ONLY a JSON object:
   "checkpointTitle": "<2-4 word playable checkpoint title>",
   "playtestGate": "<Action -> Observable result>",
   "tasks": [
-    "<Task 1 entity/collision foundation> (2h)",
-    "<Task 2 core mechanic velocity/action> (1h)",
-    "<Task 3 observable feedback & boundary clamp> (1h)"
+    "<Entity/collision foundation task> (2h)",
+    "<Core mechanic velocity/action task 1..N> (1h)",
+    "<Observable feedback & boundary clamp task> (1h)"
   ],
   "tuningParams": [
     "<param1: numericValue unit>",
@@ -2252,12 +2252,12 @@ Return ONLY a JSON object:
 
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
-Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize a concrete 3-step engine fix:
+Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize the exact number of concrete engine fix steps needed to resolve and verify it:
 ${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}$dimensionRule${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
-Return ONLY a JSON object with 3 concrete fix steps:
+Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through Step $taskNum.N):
 {
   "playtestGuard": "[PLAYTEST GUARD] <1 concise rule preventing this bug>",
   "steps": [
@@ -3088,10 +3088,10 @@ ${priorCheckpointsSummary.isNotEmpty ? 'Previous Checkpoints & Project Variable 
 
 CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
 - ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
-- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF:
-  * Task 1 builds the primary scene/node/actor/prefab hierarchy and collision foundation in the level.
-  * Task 2 binds input/signals and wires the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
-  * Task 3 stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
+- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF (ACROSS ALL ${cpNode.checklist.length} TASKS):
+  * First Task (Task 1) builds the primary scene/node/actor/prefab hierarchy and collision foundation in the level.
+  * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) bind input/signals and wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
+  * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
 
 For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
 1. "title": "STEP X.Y · Short Title-Case Telegraphic Step Title (3-5 words)"

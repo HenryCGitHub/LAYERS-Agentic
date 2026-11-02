@@ -6244,6 +6244,39 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           WorkbenchReleaseMixin.commitFeatureHowToStepsTool['name'],
           equals('commit_feature_howto_steps'),
         );
+
+        // Verify dynamic {role, title} checkpoint task array parsing & role ordering (supports 1..N middle tasks)
+        final dynamicToolTasks =
+            ReleasePlannerAgent.extractCheckpointTasksFromMap({
+          'tasks': [
+            {
+              'role': 'core_action_and_math',
+              'title': 'Harpoon Reel Tension Math (2h)',
+            },
+            {
+              'role': 'entity_and_collision_foundation',
+              'title': 'Winch Mount & Cable Body (2h)',
+            },
+            {
+              'role': 'core_action_and_math',
+              'title': 'Scrap Mass Drag Scaling (1h)',
+            },
+            {
+              'role': 'feedback_and_boundary_guard',
+              'title': 'Snap Threshold & Sparks (1h)',
+            },
+            {
+              'role': 'core_action_and_math',
+              'title': 'Docking Clamp Release (1h)',
+            },
+          ],
+        });
+        expect(dynamicToolTasks.length, equals(5));
+        expect(dynamicToolTasks[0], equals('Winch Mount & Cable Body (2h)'));
+        expect(dynamicToolTasks[1], equals('Harpoon Reel Tension Math (2h)'));
+        expect(dynamicToolTasks[2], equals('Scrap Mass Drag Scaling (1h)'));
+        expect(dynamicToolTasks[3], equals('Docking Clamp Release (1h)'));
+        expect(dynamicToolTasks[4], equals('Snap Threshold & Sparks (1h)'));
       },
     );
   });

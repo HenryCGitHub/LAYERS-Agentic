@@ -37,29 +37,69 @@ class ReleasePlannerAgent {
         .toList();
   }
 
-  static List<String> _extractCheckpointTasksFromMap(Map cMap) {
-    final t1 = (cMap['task1_entityAndCollisionFoundation'] ?? '').toString().trim();
+  /// Extracts a dynamic list of checkpoint task strings from either a unified `{role, title}`
+  /// tool-call `tasks` array or a plain string `tasks` array, ordering tasks by role
+  /// (`entity_and_collision_foundation` -> `1..N core_action_and_math` -> `feedback_and_boundary_guard`).
+  static List<String> extractCheckpointTasksFromMap(Map cMap) {
+    final rawTasks = cMap['tasks'];
+    if (rawTasks is List && rawTasks.isNotEmpty) {
+      final foundations = <String>[];
+      final actions = <String>[];
+      final guards = <String>[];
+      final plainStrings = <String>[];
+      for (final item in rawTasks) {
+        if (item is Map) {
+          final title =
+              (item['title'] ?? item['task'] ?? item['text'] ?? '')
+                  .toString()
+                  .trim();
+          if (title.isEmpty || title == '...') continue;
+          final role = (item['role'] ?? '').toString().trim().toLowerCase();
+          if (role.contains('foundation') || role.contains('entity')) {
+            foundations.add(title);
+          } else if (role.contains('guard') ||
+              role.contains('feedback') ||
+              role.contains('boundary')) {
+            guards.add(title);
+          } else {
+            actions.add(title);
+          }
+        } else {
+          final str = item.toString().trim();
+          if (str.isNotEmpty && str != '...') {
+            plainStrings.add(str);
+          }
+        }
+      }
+      final roleOrdered = <String>[...foundations, ...actions, ...guards];
+      if (roleOrdered.isNotEmpty) {
+        return [...roleOrdered, ...plainStrings];
+      }
+      if (plainStrings.isNotEmpty) {
+        return plainStrings;
+      }
+    }
+    final t1 =
+        (cMap['task1_entityAndCollisionFoundation'] ?? '').toString().trim();
     final t2 = (cMap['task2_coreActionAndMath'] ?? '').toString().trim();
     final t3 = (cMap['task3_feedbackAndBoundaryGuard'] ?? '').toString().trim();
     final extra = _parseStringList(cMap['additionalTasks']);
-    final explicitTasks = <String>[
+    return <String>[
       if (t1.isNotEmpty) t1,
       if (t2.isNotEmpty) t2,
       if (t3.isNotEmpty) t3,
       ...extra,
     ];
-    if (explicitTasks.isNotEmpty) return explicitTasks;
-    return _parseStringList(cMap['tasks']);
   }
 
   /// Native Gemini Tool Declaration for `planRelease` (`commit_release_plan`).
-  /// Enforces Foundation-First task roles (`task1_entityAndCollisionFoundation`,
-  /// `task2_coreActionAndMath`, `task3_feedbackAndBoundaryGuard` + optional `additionalTasks`),
-  /// non-empty `tuningParams`, and `edgeCases` at the schema level.
+  /// Enforces 100% dynamic counts for Epics (`beats`), Features (`features`), and Checkpoint Tasks (`tasks`),
+  /// while enforcing Foundation-First task role progression (`entity_and_collision_foundation` ->
+  /// `1..N core_action_and_math` -> `feedback_and_boundary_guard`) at the schema level.
   static const Map<String, dynamic> commitReleasePlanTool = {
     'name': 'commit_release_plan',
     'description':
-        'Commits the structured Epic and Feature Release Plan Blueprint.',
+        'Commits the structured Epic and Feature Release Plan Blueprint with dynamic Epic, Feature, and Task counts.',
     'parameters': {
       'type': 'OBJECT',
       'properties': {
@@ -97,6 +137,8 @@ class ReleasePlannerAgent {
         },
         'beats': {
           'type': 'ARRAY',
+          'description':
+              'Dynamic list of Epics required to build the game loop end-to-end (zero artificial Epic count limits).',
           'items': {
             'type': 'OBJECT',
             'properties': {
@@ -106,6 +148,8 @@ class ReleasePlannerAgent {
               'doneWhen': {'type': 'STRING'},
               'features': {
                 'type': 'ARRAY',
+                'description':
+                    'Dynamic list of singular-focused Playable Features required to complete this Epic end-to-end.',
                 'items': {
                   'type': 'OBJECT',
                   'properties': {
@@ -144,31 +188,32 @@ class ReleasePlannerAgent {
                         'properties': {
                           'title': {'type': 'STRING'},
                           'playtestCriteria': {'type': 'STRING'},
-                          'task1_entityAndCollisionFoundation': {
-                            'type': 'STRING',
-                            'description':
-                                'Task 1: Entity/Scene/Collision foundation in the level (e.g. "Capsule Body & Camera (2h)"). Never Input/Keybind.',
-                          },
-                          'task2_coreActionAndMath': {
-                            'type': 'STRING',
-                            'description':
-                                'Task 2: Core interaction, movement, or simulation math on Task 1 asset (e.g. "WASD Velocity & Look (2h)").',
-                          },
-                          'task3_feedbackAndBoundaryGuard': {
-                            'type': 'STRING',
-                            'description':
-                                'Task 3: Observable cue & boundary clamp on Task 1 asset (e.g. "Wall Slide & Pitch Clamp (1h)").',
-                          },
-                          'additionalTasks': {
-                            'type': 'ARRAY',
-                            'items': {'type': 'STRING'},
-                          },
                           'tasks': {
                             'type': 'ARRAY',
-                            'items': {'type': 'STRING'},
+                            'description':
+                                'Dynamic list of sequential tasks required to build and verify this checkpoint on one shared asset. Start with entity_and_collision_foundation, include as many core_action_and_math tasks as the mechanic requires, and finish with feedback_and_boundary_guard.',
+                            'items': {
+                              'type': 'OBJECT',
+                              'required': ['role', 'title'],
+                              'properties': {
+                                'role': {
+                                  'type': 'STRING',
+                                  'enum': [
+                                    'entity_and_collision_foundation',
+                                    'core_action_and_math',
+                                    'feedback_and_boundary_guard',
+                                  ],
+                                },
+                                'title': {
+                                  'type': 'STRING',
+                                  'description':
+                                      '2-4 plain words naming the concrete asset/behavior + duration tag (e.g. "Capsule Body & Camera (2h)"). Never put Input/Keybind in entity_and_collision_foundation.',
+                                },
+                              },
+                            },
                           },
                         },
-                        'required': ['title', 'playtestCriteria'],
+                        'required': ['title', 'playtestCriteria', 'tasks'],
                       },
                     },
                   },
@@ -251,18 +296,25 @@ class ReleasePlannerAgent {
                         'properties': {
                           'title': {'type': 'STRING'},
                           'playtestCriteria': {'type': 'STRING'},
-                          'task1_entityAndCollisionFoundation': {
-                            'type': 'STRING',
-                          },
-                          'task2_coreActionAndMath': {'type': 'STRING'},
-                          'task3_feedbackAndBoundaryGuard': {'type': 'STRING'},
-                          'additionalTasks': {
-                            'type': 'ARRAY',
-                            'items': {'type': 'STRING'},
-                          },
                           'tasks': {
                             'type': 'ARRAY',
-                            'items': {'type': 'STRING'},
+                            'description':
+                                'Dynamic list of sequential tasks for this checkpoint ordered from entity_and_collision_foundation -> core_action_and_math (1..N) -> feedback_and_boundary_guard.',
+                            'items': {
+                              'type': 'OBJECT',
+                              'required': ['role', 'title'],
+                              'properties': {
+                                'role': {
+                                  'type': 'STRING',
+                                  'enum': [
+                                    'entity_and_collision_foundation',
+                                    'core_action_and_math',
+                                    'feedback_and_boundary_guard',
+                                  ],
+                                },
+                                'title': {'type': 'STRING'},
+                              },
+                            },
                           },
                         },
                       },
@@ -467,7 +519,7 @@ class ReleasePlannerAgent {
           '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
     } else {
       phaseInstruction =
-          '- PHASE 1 PLAYABLE PROTOTYPE (`v0.1` GREYBOX CORE LOOP): Organize `beats` into 4 to 5 major Epics required to build ${releaseDoc.title} end-to-end across the Concept Blueprint (`01 Goal` through `08 Done When`), with 2 to 3 singular-focused greybox Features per Epic.';
+          '- PHASE 1 PLAYABLE PROTOTYPE (`v0.1` GREYBOX CORE LOOP): Organize `beats` into the exact number of Epics required to build ${releaseDoc.title} end-to-end across the Concept Blueprint (`01 Goal` through `08 Done When`), breaking each Epic into as many singular-focused greybox Features as its mechanics genuinely require.';
     }
 
     final targetPhase = switch (releasePhase) {
@@ -607,17 +659,17 @@ $progressiveDiagnosticInstructions
   * `Dependency Rule 1 (Surface / Space Before Actor)`: In Epic 1 (`beat_1`), always place the Greybox Level/Arena/Corridor Blockout feature at `Feature #1` BEFORE Player/Vehicle Locomotion at `Feature #2` (so a gravity-enabled body does not fall into the void).
   * `Dependency Rule 2 (Target Entity Before Tool / Tether / Resolver)`: Inside any Epic, always build the physical Target Object, Pickup Body, Container, or Enemy Spawner (`"Scrap Core Physics"`, `"Sentry Drone Spawner"`, `"Water Tank Container"`, `"Cargo Crate"`) BEFORE the Tether, Harpoon, Raycast, Weapon Impact, or Delivery Zone (`"Harpoon Tow Cable"`, `"Drone Projectile Impact"`, `"Winch Docking Zone"`) that attaches to or acts on it. Never put a tether or interaction before the object it hooks onto!
   * `Dependency Rule 3 (Base Mechanic Before Lock / Gate / Constraint)`: Always build the core playable action (`"Mature Crop Harvest"`, `"Heat Cannon Fire"`) BEFORE adding the lock, pressure seal, or overheat gate (`"Tank Seal Depressurize"`, `"Reactor Steam Vent"`) that restricts it.
-- THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into 2 to 3 cohesive Playable Features (`"included": true`, across 4 to 5 Epics for a full prototype loop) needed to complete that Epic end-to-end for ${releaseDoc.title}. Group closely related controls, physics, and feedback into cohesive playable units; only split into separate Feature cards inside an Epic when they represent distinct mechanics (e.g., planting vs. harvesting, or target spawner vs. weapon fire)!
-- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
+- THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into the exact number of cohesive Playable Features (`"included": true`) needed to complete that Epic end-to-end for ${releaseDoc.title}. Group closely related controls, physics, and feedback into cohesive playable units; split into separate Feature cards inside an Epic whenever they represent distinct mechanics (e.g., planting vs. harvesting, or target spawner vs. weapon fire)!
+- ZERO ARTIFICIAL COUNT LIMITS ON EPICS, FEATURES, OR TASKS: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
 - PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Greybox Arena Layout"`, `"Player Dash"`, `"Enemy Wave Spawner"`, `"Loot Pickup"`, `"Upgrade Terminal"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
 - MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"moveSpeed: 6.0 m/s"`, `"dashCooldown: 0.8 s"`, `"pickupRadius: 1.5 m"`). NEVER return an empty `"tuningParams": []` array on any feature.
-- NATURAL, CONCRETE TASKS ON ONE SHARED ASSET (NO REPETITIVE "SETUP / LOGIC / GUARD" SUFFIXES): Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2–4` words + duration tag) that name the actual node/mesh, behavior, and boundary condition WITHOUT mechanically ending every task in the words `"Setup"`, `"Logic"`, or `"Guard"`:
-  * `Task 1` (Entity / Node / Scene Foundation): Create or place the specific playable Character, Greybox Room, Emitter, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Arena Floor & Walls (2h)"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in `Task 1`'s title.
-  * `Task 2` (Core Interaction, Movement, or Simulation Math): Wire the specific interaction, movement, or simulation behavior onto `Task 1`'s asset (e.g., `"WASD Velocity & Look (2h)"`, `"Burst Impulse & Trail (2h)"`).
-  * `Task 3` (Observable Feedback & Boundary Condition): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Cooldown Lock & Flash (1h)"`).
+- DYNAMIC, CONCRETE TASKS ON ONE SHARED ASSET (NO REPETITIVE "SETUP / LOGIC / GUARD" SUFFIXES): Give each Feature checkpoint the exact number of concrete, mechanic-specific tasks (`2–4` words + duration tag) that its complexity genuinely requires—without mechanically ending every task in the words `"Setup"`, `"Logic"`, or `"Guard"`:
+  * `entity_and_collision_foundation` (First Task): Create or place the specific playable Character, Greybox Room, Emitter, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Arena Floor & Walls (2h)"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in the foundation task's title.
+  * `core_action_and_math` (`1..N` Middle Tasks): Wire the specific interaction, movement, or simulation behaviors onto that same shared asset (use 1 task for a simple action or multiple `core_action_and_math` tasks for a multi-step mechanic, e.g., `"WASD Velocity & Look (2h)"`, `"Burst Impulse & Trail (2h)"`).
+  * `feedback_and_boundary_guard` (Final Task): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Cooldown Lock & Flash (1h)"`).
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
 - THINKING VERIFICATION BEFORE EMITTING JSON:
   1. 100% Concept Coverage: Verify every action in `01 Goal`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When` has a dedicated Feature while honoring `07 Out of Scope`.
@@ -1036,7 +1088,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                 .trim();
             final cpVer = versionTag;
             final cpTasks = normalizeFoundationFirstTasks(
-              _extractCheckpointTasksFromMap(cMap),
+              extractCheckpointTasksFromMap(cMap),
               featureTitle: fTitle,
               beatTitle: bTitle,
               isFirstFeatureOfRelease: bIdx == 0 && fIdx == 0 && cIdx == 0,
