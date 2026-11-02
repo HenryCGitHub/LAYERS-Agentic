@@ -1638,6 +1638,38 @@ Return ONLY valid JSON:
                 deltaBeat.title.toLowerCase().trim(),
       );
       if (idx != -1) {
+        final existingBeat = mergedBeats[idx];
+        deltaBeat.id = existingBeat.id;
+        final reconciledFeats = <ProposedFeatureBlueprint>[];
+        final matchedExistingIds = <String>{};
+        for (final df in deltaBeat.features) {
+          final existingFeat = existingBeat.features
+              .where(
+                (ef) =>
+                    ef.id == df.id ||
+                    ef.title.toLowerCase().trim() ==
+                        df.title.toLowerCase().trim(),
+              )
+              .firstOrNull;
+          if (existingFeat != null) {
+            df.id = existingFeat.id;
+            if (existingFeat.originVersion.isNotEmpty) {
+              df.originVersion = existingFeat.originVersion;
+            }
+            matchedExistingIds.add(existingFeat.id);
+          }
+          reconciledFeats.add(df);
+        }
+        // Preserve any prior-release features from existingBeat that the LLM omitted
+        for (final ef in existingBeat.features) {
+          if (!matchedExistingIds.contains(ef.id) &&
+              ef.originVersion != blueprint.releaseVersionTag) {
+            reconciledFeats.insert(0, ef);
+          }
+        }
+        deltaBeat.features
+          ..clear()
+          ..addAll(reconciledFeats);
         mergedBeats[idx] = deltaBeat;
       } else {
         mergedBeats.add(deltaBeat);
@@ -1730,22 +1762,26 @@ class ReleaseExecutorAgent {
     for (int bIdx = 0; bIdx < blueprint.beats.length; bIdx++) {
       final beatBp = blueprint.beats[bIdx];
       final includedFeats = beatBp.includedFeatures;
-      if (includedFeats.isEmpty) continue;
 
       final concreteBeatTitle =
           MechanicArchetypeProfile.concreteBeatDisplayTitle(
         beatBp.title,
         beatIndex: bIdx,
       );
+      final existingBeat = projectScopedDocs[beatBp.id] ??
+          existingBeatsByTitle[concreteBeatTitle.toLowerCase().trim()] ??
+          existingBeatsByTitle[beatBp.title.toLowerCase().trim()];
+      if (includedFeats.isEmpty &&
+          (isInitialPrototypeRelease || existingBeat == null)) {
+        continue;
+      }
+
       beatTitles.add(concreteBeatTitle);
       onProgress?.call(
         'Syncing Core Loop Epic ${bIdx + 1}: $concreteBeatTitle...',
       );
       await Future<void>.delayed(const Duration(milliseconds: 40));
 
-      final existingBeat = projectScopedDocs[beatBp.id] ??
-          existingBeatsByTitle[concreteBeatTitle.toLowerCase().trim()] ??
-          existingBeatsByTitle[beatBp.title.toLowerCase().trim()];
       final beatId = existingBeat?.id ?? 'epic_${releaseDoc.id}_${bIdx + 1}';
 
       final featTitlesForBeat = includedFeats
@@ -1764,6 +1800,7 @@ class ReleaseExecutorAgent {
             tier: TierType.epic,
             parentId: releaseDoc.id,
           );
+      final priorBeatFeatureIds = List<String>.from(beatDoc.childrenIds);
       beatDoc.title = concreteBeatTitle;
       beatDoc.parentId = releaseDoc.id;
       beatDoc.estimatedDuration = '${beatBp.totalIncludedHours}h';
@@ -1868,6 +1905,8 @@ class ReleaseExecutorAgent {
           existingFeat.parentId = beatDoc.id;
           existingFeat.sections['lifecycle'] =
               FeatureLifecycleStatus.stable.name;
+          existingFeat.sections.remove('supersededInVersion');
+          existingFeat.sections.remove('supersededByRelease');
           existingFeat.sections['activeReleaseVersion'] = versionTag;
           existingFeat.sections['lastVerifiedVersion'] =
               existingFeat.sections['originVersion'] ?? 'v0.1';
@@ -1969,6 +2008,8 @@ class ReleaseExecutorAgent {
         featDoc.sections['originVersion'] = originVer;
         featDoc.sections['activeReleaseVersion'] = versionTag;
         featDoc.sections['lifecycle'] = resolvedLifecycle.name;
+        featDoc.sections.remove('supersededInVersion');
+        featDoc.sections.remove('supersededByRelease');
         featDoc.sections['scope'] = 'Goal: ${featBp.goal}\n\n'
             'In Scope:\n$inScopeText\n\n'
             '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
@@ -2051,6 +2092,54 @@ class ReleaseExecutorAgent {
           beatDoc.childrenIds.add(featDoc.id);
         }
         createdOrUpdatedDocs.add(featDoc);
+      }
+
+      if (!isInitialPrototypeRelease) {
+        for (final priorFeatId in priorBeatFeatureIds) {
+          if (beatDoc.childrenIds.contains(priorFeatId) ||
+              allocatedFeatIds.contains(priorFeatId)) {
+            continue;
+          }
+          final priorFeatDoc =
+              projectScopedDocs[priorFeatId] ?? existingDocuments[priorFeatId];
+          if (priorFeatDoc == null) continue;
+          if (priorFeatDoc.sections['lifecycle'] ==
+              FeatureLifecycleStatus.superseded.name) {
+            continue;
+          }
+          final explicitlySupersededInBp = beatBp.features.any(
+            (f) =>
+                (f.id == priorFeatId ||
+                    f.title.toLowerCase().trim() ==
+                        priorFeatDoc.title.toLowerCase().trim()) &&
+                f.lifecycle == FeatureLifecycleStatus.superseded,
+          );
+          if (explicitlySupersededInBp) continue;
+
+          priorFeatDoc.parentId = beatDoc.id;
+          priorFeatDoc.sections['lifecycle'] =
+              FeatureLifecycleStatus.stable.name;
+          priorFeatDoc.sections.remove('supersededInVersion');
+          priorFeatDoc.sections.remove('supersededByRelease');
+          priorFeatDoc.sections['activeReleaseVersion'] = versionTag;
+          priorFeatDoc.sections['lastVerifiedVersion'] =
+              priorFeatDoc.sections['originVersion'] ?? 'v0.1';
+          final priorStates =
+              FeatureStateNode.getStatesForDocument(priorFeatDoc);
+          if (priorStates.isNotEmpty) {
+            for (final s in priorStates) {
+              for (final t in s.checklist) {
+                t.completed = true;
+                for (final c in t.children) {
+                  c.completed = true;
+                }
+              }
+            }
+            FeatureStateNode.saveStatesToDocument(priorFeatDoc, priorStates);
+          }
+          beatDoc.childrenIds.add(priorFeatDoc.id);
+          createdOrUpdatedDocs.add(priorFeatDoc);
+        }
       }
     }
 

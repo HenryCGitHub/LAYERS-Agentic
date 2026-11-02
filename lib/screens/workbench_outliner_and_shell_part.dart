@@ -226,6 +226,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           } else {
                             _rebuild(() {
                               _manualCheckpointFocusIndex = null;
+                              _manualCheckpointFocusFeatureId = null;
                             });
                             widget.workbench.selectActiveRelease(targetId);
                           }
@@ -1083,6 +1084,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   onSave: (val) {
                                     _rebuild(() {
                                       _manualCheckpointFocusIndex = null;
+                                      _manualCheckpointFocusFeatureId = null;
                                     });
                                     widget.workbench.addLiveFeatureToBeat(
                                       beat.id,

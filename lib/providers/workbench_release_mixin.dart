@@ -1053,6 +1053,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       activeProject?.childrenIds ?? const <String>[],
     );
     _preModalReleaseBlueprint = _releaseBlueprint;
+    _preModalFeatureInboxJson = activeProject?.sections['feature_inbox_json'];
+    _preModalExclusions = activeProject?.sections['exclusions'];
+    _preModalFeatureLifecycles = {
+      for (final d in documents.values.where((d) => d.tier == TierType.feature))
+        d.id: d.sections['lifecycle'],
+    };
     await advanceToNextRelease(
       transitionToGateStage: false,
       agentReasonedProgressive: true,
@@ -1118,11 +1124,43 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
       }
     }
+    if (proj != null) {
+      if (_preModalFeatureInboxJson != null) {
+        proj.sections['feature_inbox_json'] = _preModalFeatureInboxJson!;
+      } else {
+        proj.sections.remove('feature_inbox_json');
+      }
+      _cachedInboxRawHash = null;
+      if (_preModalExclusions != null) {
+        proj.sections['exclusions'] = _preModalExclusions!;
+      } else {
+        proj.sections.remove('exclusions');
+      }
+    }
+    final preLifecycles = _preModalFeatureLifecycles;
+    if (preLifecycles != null) {
+      for (final entry in preLifecycles.entries) {
+        final featDoc = documents[entry.key];
+        if (featDoc == null) continue;
+        if (entry.value != null) {
+          featDoc.sections['lifecycle'] = entry.value!;
+        } else {
+          featDoc.sections.remove('lifecycle');
+        }
+        if (entry.value != FeatureLifecycleStatus.superseded.name) {
+          featDoc.sections.remove('supersededInVersion');
+        }
+        _persistDocument(featDoc);
+      }
+    }
     if (_preModalReleaseBlueprint != null) {
       _releaseBlueprint = _preModalReleaseBlueprint;
     }
     _preModalReleaseIds = null;
     _preModalReleaseBlueprint = null;
+    _preModalFeatureInboxJson = null;
+    _preModalExclusions = null;
+    _preModalFeatureLifecycles = null;
     if (previousReleaseId != null && documents.containsKey(previousReleaseId)) {
       _activeReleaseId = previousReleaseId;
     }

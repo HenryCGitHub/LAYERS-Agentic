@@ -78,6 +78,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
       _addingFeatureToBeatId = null;
       if (confirmed) {
         _manualCheckpointFocusIndex = null;
+        _manualCheckpointFocusFeatureId = null;
         _selectedTaskIndexByCheckpoint.clear();
         _selectedSubStepIndexByTask.clear();
       }
@@ -577,8 +578,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                               }
                             }
 
-                            // 3. Collect "Next in v0.X" active feature rows & pivoted/archived rows
+                            // 3. Collect "Next in v0.X" active feature rows, stable rows, & pivoted/archived rows
                             final nextRows = <({
+                              String beatId,
+                              String epicCode,
+                              ProposedFeatureBlueprint feat,
+                            })>[];
+                            final stableRows = <({
                               String beatId,
                               String epicCode,
                               ProposedFeatureBlueprint feat,
@@ -599,7 +605,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                     epicCode: eCode,
                                     feat: f,
                                   ));
-                                } else if (!f.isStable) {
+                                } else if (f.isStable) {
+                                  stableRows.add((
+                                    beatId: b.id,
+                                    epicCode: eCode,
+                                    feat: f,
+                                  ));
+                                } else {
                                   nextRows.add((
                                     beatId: b.id,
                                     epicCode: eCode,
@@ -608,6 +620,15 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 }
                               }
                             }
+                            final stableTitleLowerSet = stableRows
+                                .map((r) => r.feat.title.toLowerCase().trim())
+                                .toSet();
+                            final extraBuiltSummaryChips = builtChips
+                                .where(
+                                  (c) => !stableTitleLowerSet
+                                      .contains(c.toLowerCase().trim()),
+                                )
+                                .toList();
 
                             final heroGoal = bp.goal.trim().isNotEmpty
                                 ? bp.goal.trim()
@@ -704,7 +725,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        if (builtChips.isNotEmpty) ...[
+                                        if (stableRows.isNotEmpty ||
+                                            extraBuiltSummaryChips
+                                                .isNotEmpty) ...[
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 12,
@@ -736,11 +759,61 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                   child: Wrap(
-                                                    spacing: 10,
+                                                    spacing: 8,
                                                     runSpacing: 6,
                                                     children: [
+                                                      for (final sRow
+                                                          in stableRows)
+                                                        InkWell(
+                                                          key: ValueKey(
+                                                            'progressive_toggle_feat_${sRow.feat.id}',
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(4),
+                                                          onTap: () {
+                                                            widget.workbench
+                                                                .toggleProposedFeatureUpgradeOrStable(
+                                                              sRow.beatId,
+                                                              sRow.feat.id,
+                                                            );
+                                                            _rebuild(() {});
+                                                          },
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 7,
+                                                              vertical: 3,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: bgSurface,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                4,
+                                                              ),
+                                                              border:
+                                                                  Border.all(
+                                                                color:
+                                                                    borderSubtle,
+                                                              ),
+                                                            ),
+                                                            child: Text(
+                                                              '✓ ${sRow.epicCode} · ${sRow.feat.title} · +Upgrade',
+                                                              style: GoogleFonts
+                                                                  .inter(
+                                                                fontSize: 11,
+                                                                color:
+                                                                    textSecondary,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
                                                       for (final chip
-                                                          in builtChips.take(8))
+                                                          in extraBuiltSummaryChips
+                                                              .take(8))
                                                         Text(
                                                           '✓ $chip',
                                                           style: GoogleFonts

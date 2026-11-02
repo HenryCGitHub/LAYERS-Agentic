@@ -4951,7 +4951,27 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isTrue,
         );
 
-        // 5. Advance to v0.2 (02 · MVP) -> verify the scheduled 02 · MVP upgrade auto-injects into the v0.2 Release Blueprint!
+        // 5. Verify side-effect-free Cancel on Progressive Release Draft before building v0.2:
+        final preCancelRelId = provider.activeReleaseId;
+        final preCancelPhase = provider.currentPhase;
+        await provider.prepareProgressiveNextReleaseDraft();
+        final cancelBp = provider.releaseBlueprint!;
+        final cancelTargetBeat = cancelBp.beats.first;
+        provider.toggleProposedFeatureSuperseded(
+          cancelTargetBeat.id,
+          splitCoreFeatId,
+        );
+        expect(
+          provider.documents[splitCoreFeatId]!.sections['lifecycle'],
+          equals(FeatureLifecycleStatus.superseded.name),
+        );
+        provider.restoreActiveReleaseAfterCancel(preCancelRelId, preCancelPhase);
+        expect(
+          provider.documents[splitCoreFeatId]!.sections['lifecycle'],
+          isNot(equals(FeatureLifecycleStatus.superseded.name)),
+        );
+
+        // Advance to v0.2 (02 · MVP) -> verify the scheduled 02 · MVP upgrade auto-injects into the v0.2 Release Blueprint!
         await provider.prepareProgressiveNextReleaseDraft();
         expect(provider.currentPhase, equals(ProductionPhase.mvp));
         final v2Bp = provider.releaseBlueprint!;
@@ -4965,6 +4985,27 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals(FeatureLifecycleStatus.upgrade),
         );
         expect(upgradedSplitFeatInBp.included, isTrue);
+
+        // Verify bidirectional STABLE <-> UPGRADE toggling on prior-release features:
+        final splitBeatId = v2Bp.beats
+            .firstWhere((b) => b.features.any((f) => f.id == splitCoreFeatId))
+            .id;
+        provider.toggleProposedFeatureUpgradeOrStable(
+          splitBeatId,
+          splitCoreFeatId,
+        );
+        expect(
+          upgradedSplitFeatInBp.lifecycle,
+          equals(FeatureLifecycleStatus.stable),
+        );
+        provider.toggleProposedFeatureUpgradeOrStable(
+          splitBeatId,
+          splitCoreFeatId,
+        );
+        expect(
+          upgradedSplitFeatInBp.lifecycle,
+          equals(FeatureLifecycleStatus.upgrade),
+        );
 
         // Also test 1-click `pullInboxItemIntoReleaseDraft` inside the Progressive Release Co-Pilot:
         // Add a Full Production Inbox item and pull it into v0.2 draft, while leaving `vsItem` for Vertical Slice
