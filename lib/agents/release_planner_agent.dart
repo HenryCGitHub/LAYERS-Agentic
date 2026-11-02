@@ -369,7 +369,7 @@ $progressiveDiagnosticInstructions
   * `Dependency Rule 1 (Surface / Space Before Actor)`: In Epic 1 (`beat_1`), always place the Greybox Level/Arena/Corridor Blockout feature at `Feature #1` BEFORE Player/Vehicle Locomotion at `Feature #2` (so a gravity-enabled body does not fall into the void).
   * `Dependency Rule 2 (Target Entity Before Tool / Tether / Resolver)`: Inside any Epic, always build the physical Target Object, Pickup Body, Container, or Enemy Spawner (`"Scrap Core Physics"`, `"Sentry Drone Spawner"`, `"Water Tank Container"`, `"Cargo Crate"`) BEFORE the Tether, Harpoon, Raycast, Weapon Impact, or Delivery Zone (`"Harpoon Tow Cable"`, `"Drone Projectile Impact"`, `"Winch Docking Zone"`) that attaches to or acts on it. Never put a tether or interaction before the object it hooks onto!
   * `Dependency Rule 3 (Base Mechanic Before Lock / Gate / Constraint)`: Always build the core playable action (`"Mature Crop Harvest"`, `"Heat Cannon Fire"`) BEFORE adding the lock, pressure seal, or overheat gate (`"Tank Seal Depressurize"`, `"Reactor Steam Vent"`) that restricts it.
-- THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into all the individual Playable Features (`"included": true`, 4 to 5 features per Epic across 4 to 6 Epics for a full prototype loop) needed to complete that Epic end-to-end for ${releaseDoc.title}. If a Feature's `inScope` would list 3 different mechanics (e.g., growth stages + harvesting + crate loading, or shop purchase + equipment mounting + seed planting), split each of those mechanics into its own separate Feature card inside that Epic!
+- THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into 2 to 3 cohesive Playable Features (`"included": true`, across 4 to 5 Epics for a full prototype loop) needed to complete that Epic end-to-end for ${releaseDoc.title}. Group closely related controls, physics, and feedback into cohesive playable units; only split into separate Feature cards inside an Epic when they represent distinct mechanics (e.g., planting vs. harvesting, or target spawner vs. weapon fire)!
 - ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
 - PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Station Corridor Blockout"`, `"First Person Movement"`, `"Object Interaction Raycast"`, `"Manual Valve Turn"`, `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Seed Planting"`, `"Crop Growth Timer"`, `"Mature Crop Harvest"`, `"Tank Seal Depressurize"`, `"Cargo Crate Loading"`, `"Airlock Terminal Sale"`, `"Upgrade Shop Purchase"`, `"Pump Upgrade Mount"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
@@ -1764,49 +1764,120 @@ Return ONLY valid JSON:
 
     if (updatedBp.goal.isNotEmpty) blueprint.goal = updatedBp.goal;
     if (updatedBp.doneWhen.isNotEmpty) blueprint.doneWhen = updatedBp.doneWhen;
+    final cleanMsgLower = cleanMsg.toLowerCase();
+    final isRemoveOrReplaceTurn = cleanMsgLower.contains('remove') ||
+        cleanMsgLower.contains('delete') ||
+        cleanMsgLower.contains('drop') ||
+        cleanMsgLower.contains('cut') ||
+        cleanMsgLower.contains('replace');
+    Set<String> extractKeywords(String text) {
+      return text
+          .toLowerCase()
+          .replaceAll(_nonAlphaNumSpaceRegex, ' ')
+          .split(_whitespaceRegex)
+          .where((w) => w.length >= 4 && w != 'beat' && w != 'epic' && w != 'loop')
+          .toSet();
+    }
     final mergedBeats = List<ProposedBeatBlueprint>.from(blueprint.beats);
     for (final deltaBeat in updatedBp.beats) {
-      final idx = mergedBeats.indexWhere(
-        (b) =>
-            b.id == deltaBeat.id ||
-            b.title.toLowerCase().trim() ==
-                deltaBeat.title.toLowerCase().trim(),
-      );
+      final dTitle = deltaBeat.title.toLowerCase().trim();
+      final dKeywords = extractKeywords(deltaBeat.title);
+      // 1. Match by normalized title or substring first so generic "beat_1" schema examples
+      // never overwrite Beat #1 when the LLM is actually targeting Beat #2..N by title.
+      int idx = mergedBeats.indexWhere((b) {
+        final bTitle = b.title.toLowerCase().trim();
+        return bTitle == dTitle ||
+            (bTitle.length >= 4 &&
+                dTitle.length >= 4 &&
+                (bTitle.contains(dTitle) || dTitle.contains(bTitle)));
+      });
+      // 2. Match by keyword overlap on the Beat title
+      if (idx == -1 && dKeywords.isNotEmpty) {
+        idx = mergedBeats.indexWhere(
+          (b) => extractKeywords(b.title).intersection(dKeywords).isNotEmpty,
+        );
+      }
+      // 3. Fall back to ID match when not a generic single-beat "beat_1" collision
+      if (idx == -1) {
+        idx = mergedBeats.indexWhere((b) {
+          if (b.id != deltaBeat.id) return false;
+          if (deltaBeat.id != 'beat_1' ||
+              updatedBp.beats.length == mergedBeats.length) {
+            return true;
+          }
+          return cleanMsgLower.contains(b.title.toLowerCase().trim()) ||
+              cleanMsgLower.contains('beat 1') ||
+              cleanMsgLower.contains('epic 1') ||
+              cleanMsgLower.contains('e01');
+        });
+      }
+
       if (idx != -1) {
         final existingBeat = mergedBeats[idx];
         deltaBeat.id = existingBeat.id;
-        final reconciledFeats = <ProposedFeatureBlueprint>[];
-        final matchedExistingIds = <String>{};
+        final matchedUpdatesById = <String, ProposedFeatureBlueprint>{};
+        final newlyAddedFeats = <ProposedFeatureBlueprint>[];
         for (final df in deltaBeat.features) {
-          final existingFeat = existingBeat.features
-              .where(
-                (ef) =>
-                    ef.id == df.id ||
-                    ef.title.toLowerCase().trim() ==
-                        df.title.toLowerCase().trim(),
-              )
+          final dfTitle = df.title.toLowerCase().trim();
+          ProposedFeatureBlueprint? existingFeat = existingBeat.features
+              .where((ef) => ef.title.toLowerCase().trim() == dfTitle)
               .firstOrNull;
+          existingFeat ??= existingBeat.features.where((ef) {
+            if (ef.id != df.id || matchedUpdatesById.containsKey(ef.id)) {
+              return false;
+            }
+            if (df.id != 'feat_1_1' ||
+                deltaBeat.features.length == existingBeat.features.length) {
+              return isRemoveOrReplaceTurn ||
+                  extractKeywords(ef.title)
+                      .intersection(extractKeywords(df.title))
+                      .isNotEmpty;
+            }
+            return false;
+          }).firstOrNull;
           if (existingFeat != null) {
             df.id = existingFeat.id;
             if (existingFeat.originVersion.isNotEmpty) {
               df.originVersion = existingFeat.originVersion;
             }
-            matchedExistingIds.add(existingFeat.id);
+            matchedUpdatesById[existingFeat.id] = df;
+          } else {
+            if (existingBeat.features.any((ef) => ef.id == df.id) ||
+                newlyAddedFeats.any((nf) => nf.id == df.id) ||
+                mergedBeats.any((b) => b.features.any((ef) => ef.id == df.id))) {
+              df.id =
+                  'feat_${existingBeat.id}_${existingBeat.features.length + newlyAddedFeats.length + 1}';
+            }
+            newlyAddedFeats.add(df);
           }
-          reconciledFeats.add(df);
         }
-        // Preserve any prior-release features from existingBeat that the LLM omitted
+        // Preserve existing features in existingBeat (both prior-release and same-release)
+        // unless the user explicitly requested removing/replacing that feature.
+        final reconciledFeats = <ProposedFeatureBlueprint>[];
         for (final ef in existingBeat.features) {
-          if (!matchedExistingIds.contains(ef.id) &&
-              ef.originVersion != blueprint.releaseVersionTag) {
-            reconciledFeats.insert(0, ef);
+          final updatedFeat = matchedUpdatesById[ef.id];
+          if (updatedFeat != null) {
+            reconciledFeats.add(updatedFeat);
+          } else {
+            final explicitlyRemoved = isRemoveOrReplaceTurn &&
+                (cleanMsgLower.contains(ef.title.toLowerCase().trim()) ||
+                    deltaBeat.features.isNotEmpty &&
+                        existingBeat.features.length == 1 &&
+                        cleanMsgLower.contains('instead'));
+            if (!explicitlyRemoved) {
+              reconciledFeats.add(ef);
+            }
           }
         }
+        reconciledFeats.addAll(newlyAddedFeats);
         deltaBeat.features
           ..clear()
           ..addAll(reconciledFeats);
         mergedBeats[idx] = deltaBeat;
       } else {
+        if (mergedBeats.any((b) => b.id == deltaBeat.id)) {
+          deltaBeat.id = 'beat_${mergedBeats.length + 1}';
+        }
         mergedBeats.add(deltaBeat);
       }
     }
@@ -1945,6 +2016,7 @@ class ReleaseExecutorAgent {
           'Done When: ${beatBp.doneWhen}';
       beatDoc.childrenIds.clear();
 
+      beatBp.id = beatDoc.id;
       releaseDoc.childrenIds.add(beatDoc.id);
       createdOrUpdatedDocs.add(beatDoc);
 

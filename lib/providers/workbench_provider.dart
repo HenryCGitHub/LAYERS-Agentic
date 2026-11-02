@@ -73,7 +73,7 @@ class WorkbenchProvider extends ChangeNotifier {
   String _conversationModel = 'gemini-flash-latest';
   String get conversationModel => _conversationModel;
 
-  String _planningModel = 'gemini-4-argon';
+  String _planningModel = 'gemini-flash-latest';
   String get planningModel => _planningModel;
 
   String _thinkingLevel = 'LOW';
@@ -86,8 +86,8 @@ class WorkbenchProvider extends ChangeNotifier {
   ];
 
   static const List<String> availablePlanningModels = [
-    'gemini-4-argon',
     'gemini-flash-latest',
+    'gemini-4-argon',
     'gemini-3.8-flash',
     'gemini-3.5-flash-lite',
   ];

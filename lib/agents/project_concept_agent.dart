@@ -510,12 +510,15 @@ Return ONLY valid JSON:
         ? ''
         : '\nSelected Idea Additions to Fold In: ${selectedCardAdditions.join(' | ')}';
 
-    final includeExpansionCards = GeminiAgentClient.testMockResponder != null;
+    final includeExpansionCards = existingIntake == null ||
+        existingIntake.expansionCards.isEmpty ||
+        GeminiAgentClient.testMockResponder != null;
     final expansionCardsSchemaTail = includeExpansionCards
         ? ''',
   "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"],
 $_kExpansionCardsJsonSchema'''
-        : '';
+        : ''',
+  "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"]''';
 
     final prompt = '''
 You are an indie game producer summarizing a developer's game idea before building the blueprint.
@@ -545,7 +548,10 @@ Return ONLY valid JSON:
     final summary = (json['baseSummary'] ?? '').toString().trim();
     final mechs = _parseStringList(json['mechanics']);
     final cards = _parseExpansionCards(json['expansionCards']);
-    if (summary.isEmpty || (includeExpansionCards && cards.isEmpty)) return null;
+    if (summary.isEmpty ||
+        (GeminiAgentClient.testMockResponder != null && cards.isEmpty)) {
+      return null;
+    }
 
     final updatedRawIdea = existingIntake != null
         ? (cleanInput.isNotEmpty
@@ -561,7 +567,9 @@ Return ONLY valid JSON:
       mechanics: mechs.isNotEmpty
           ? mechs
           : (existingIntake?.mechanics ?? const <String>[]),
-      expansionCards: cards,
+      expansionCards: cards.isNotEmpty
+          ? cards
+          : (existingIntake?.expansionCards ?? const <SparkExpansionCard>[]),
     );
   }
 

@@ -5711,5 +5711,322 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.scheduledFeatureInboxItems, isEmpty);
       },
     );
+
+    test(
+      '2nd Project Multi-Project Vault & Token Optimization Audit ("Submerged Mech Salvage" Unity 6 C# after "Crop Shotgun Arena" Godot 4)',
+      () async {
+        int planReleaseCalls = 0;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains('planning Release:') &&
+              !prompt.contains('DELTA-ONLY BEATS')) {
+            planReleaseCalls++;
+            if (prompt.contains('Submerged Mech Salvage')) {
+              return {
+                'releaseTitle': 'v0.1: Trench Walk & Harpoon Tow - Prototype',
+                'releasePhase': 'prototype',
+                'agentReasoning':
+                    'Prioritizes weighted 3D seabed movement and physics-tethered harpoon towing.',
+                'goal':
+                    'Build a playable 3D abyssal trench salvage loop in Unity 6.',
+                'doneWhen':
+                    'Playtester walks the trench, winches a core, defends against drones, and docks.',
+                'explicitExclusions': ['4-Player Co-Op'],
+                'questions': [],
+                'beats': [
+                  {
+                    'id': 'beat_1',
+                    'title': 'Exo-Rig Trench Walk',
+                    'goal': 'Build weighted 3D exo-rig movement.',
+                    'doneWhen': 'Player walks across the trench floor.',
+                    'features': [
+                      {
+                        'id': 'feat_1_1',
+                        'title': 'Exo-Rig Buoyancy Walk',
+                        'goal': 'Implement 3D Rigidbody movement.',
+                        'doneWhen': 'Rig walks and jumps with thruster hop.',
+                        'estimatedHours': 4,
+                        'included': true,
+                        'lifecycle': 'new',
+                        'inScope': ['Rigidbody movement'],
+                        'outOfScope': [],
+                        'tuningParams': ['moveForce: 18000 N'],
+                        'edgeCases': [
+                          '[DEPTH GUARD] Clamp downward velocity on trench floor impact',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Exo-Rig Buoyancy Walk',
+                            'playtestCriteria':
+                                'Hold WASD -> Rig walks with weighted footstep drag',
+                            'tasks': [
+                              'Configure ExoRigController Rigidbody (2h)',
+                              'Implement WASD movement and thruster impulse (1h)',
+                              'Clamp terminal sink speed (1h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    'id': 'beat_2',
+                    'title': 'Harpoon Winch & Tow',
+                    'goal': 'Build harpoon firing and cable towing.',
+                    'doneWhen': 'Player winches heavy salvage cores.',
+                    'features': [
+                      {
+                        'id': 'feat_2_1',
+                        'title': 'Harpoon Cable Winch',
+                        'goal': 'Fire harpoon projectile and reel target.',
+                        'doneWhen': 'Harpoon latches onto salvage core.',
+                        'estimatedHours': 4,
+                        'included': true,
+                        'lifecycle': 'new',
+                        'inScope': ['ConfigurableJoint winch'],
+                        'outOfScope': [],
+                        'tuningParams': ['maxCableLength: 28.0 m'],
+                        'edgeCases': [
+                          '[TENSION GUARD] Auto-detach cable if tension exceeds limit',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Harpoon Cable Winch',
+                            'playtestCriteria':
+                                'Fire harpoon -> core reels toward rig',
+                            'tasks': [
+                              'Create HarpoonProjectile and ConfigurableJoint (2h)',
+                              'Implement cable reel-in force (1h)',
+                              'Add LineRenderer cable visual (1h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+          }
+          if (prompt.contains('DELTA-ONLY BEATS')) {
+            // Simulate LLM returning schema placeholder "id": "beat_1" and "id": "feat_1_1"
+            // while targeting Beat #2 ("Harpoon Winch & Tow") by title to add a 2nd feature
+            return {
+              'reply':
+                  'Added Cable Tension Snap Meter to Harpoon Winch & Tow.',
+              'goal':
+                  'Build a playable 3D abyssal trench salvage loop in Unity 6.',
+              'doneWhen':
+                  'Playtester walks the trench, winches a core with tension gauge, and docks.',
+              'explicitExclusions': ['4-Player Co-Op'],
+              'beats': [
+                {
+                  'id': 'beat_1',
+                  'title': 'Harpoon Winch & Tow',
+                  'goal': 'Build harpoon firing, cable towing, and tension HUD.',
+                  'doneWhen':
+                      'Player winches heavy salvage cores without snapping the cable.',
+                  'features': [
+                    {
+                      'id': 'feat_1_1',
+                      'title': 'Cable Tension Snap Meter',
+                      'goal':
+                          'Display live cable strain and snap cable if redlined.',
+                      'doneWhen':
+                          'Tension bar fills during heavy tow and snaps after 1.5s overload.',
+                      'estimatedHours': 3,
+                      'included': true,
+                      'lifecycle': 'new',
+                      'inScope': ['Tension gauge UI'],
+                      'outOfScope': [],
+                      'tuningParams': ['overloadSnapDuration: 1.5 s'],
+                      'edgeCases': [
+                        '[SNAP GUARD] Reset tension gauge on detach',
+                      ],
+                      'checkpoints': [
+                        {
+                          'title': 'Cable Tension Snap Meter',
+                          'playtestCriteria':
+                              'Tow trapped core -> gauge flashes red and snaps after 1.5s',
+                          'tasks': [
+                            'Calculate joint force ratio (1h)',
+                            'Bind CableTensionSlider color (1h)',
+                            'Trigger joint break on overload (1h)',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          if (prompt.contains(
+            'creating a Stage 1 Concept Blueprint for this spark idea:',
+          )) {
+            if (prompt.contains('Crop Shotgun Arena')) {
+              return {
+                'reply': 'Drafted Crop Shotgun Arena.',
+                'title': 'Crop Shotgun Arena',
+                'goal': 'Build a 2D farm-and-fight arena loop.',
+                'gameSpec': ['Perspective: 2D Top-Down'],
+                'techSpec': ['Engine: Godot 4 (GDScript)'],
+                'designPillars': ['Fast Action: Every crop fuels combat'],
+                'tradeOffs': ['Arcade speed over farming sim'],
+                'coreLoopBeats': [
+                  'Crop Planting & Harvest: Plant and harvest crops',
+                ],
+                'exclusions': ['Multiplayer'],
+                'doneWhen': 'Player completes 1 loop.',
+                'sectionOptions': <String, dynamic>{},
+                'clarifyingQuestions': <dynamic>[],
+              };
+            }
+            return {
+              'reply': 'Drafted Submerged Mech Salvage.',
+              'title': 'Submerged Mech Salvage',
+              'goal':
+                  'Build a 3D underwater mech salvage loop in Unity 6.',
+              'gameSpec': ['Perspective: 3D Third-Person Over-Shoulder'],
+              'techSpec': ['Engine: Unity 6 (C#)'],
+              'designPillars': ['Crushing Abyssal Weight: Heavy momentum'],
+              'tradeOffs': [
+                'Tethered cable physics over free-swimming arcade flight',
+              ],
+              'coreLoopBeats': [
+                'Exo-Rig Trench Walk: Walk across the seabed in a weighted rig',
+                'Harpoon Winch & Tow: Latch onto salvage cores and winch them',
+              ],
+              'exclusions': ['4-Player Co-Op'],
+              'doneWhen': 'Player extracts 2 cores.',
+              'sectionOptions': <String, dynamic>{},
+              'clarifyingQuestions': <dynamic>[],
+            };
+          }
+          return _mockGeminiResponder(prompt, model);
+        };
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+
+        // 1. Set up Project #1 ("Crop Shotgun Arena") and advance it to MVP with retrospective state
+        await provider.startConceptInterview('Crop Shotgun Arena');
+        final proj1Id = provider.activeProject!.id;
+        await provider.approveConceptAndBuildRelease();
+        await provider.prepareProgressiveNextReleaseDraft();
+        await provider.approveAndExecuteReleasePlan();
+        expect(provider.currentPhase, equals(ProductionPhase.mvp));
+        expect(provider.lastReleaseRetrospective, isNotNull);
+
+        // 2. Create Project #2 via createNewProject() — verify Bug 1 Fix (full state isolation)
+        provider.createNewProject();
+        expect(provider.currentPhase, equals(ProductionPhase.prototype));
+        expect(provider.lastReleaseRetrospective, isNull);
+        expect(provider.releaseViewFilter, equals('active'));
+        expect(provider.executionLog, isEmpty);
+
+        // 3. Draft Project #2 ("Submerged Mech Salvage", Unity 6 C#) and verify Cost Fix 1
+        // (Stage 1 concept edits do NOT trigger background planRelease pre-warm calls)
+        planReleaseCalls = 0;
+        await provider.startConceptInterview('Submerged Mech Salvage');
+        final proj2Id = provider.activeProject!.id;
+        expect(proj2Id, isNot(equals(proj1Id)));
+        provider.updateConceptDraft((d) {
+          d.techSpec = ['Engine: Unity 6 (C#)', 'Platform: Desktop PC'];
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          planReleaseCalls,
+          equals(0),
+          reason:
+              'Stage 1 concept interview and inline edits must not fire wasteful background planRelease pre-warm calls',
+        );
+
+        // 4. Open Release Plan Gate for v0.1 and test delta chat turn (Bug 2 Fix)
+        await provider.openReleasePlanGate();
+        expect(planReleaseCalls, equals(1));
+        expect(provider.releaseBlueprint!.beats, hasLength(2));
+
+        await provider.sendReleasePlanChatMessage(
+          'Add Cable Tension Snap Meter to Harpoon Winch & Tow',
+        );
+        final bpAfterChat = provider.releaseBlueprint!;
+        expect(
+          bpAfterChat.beats[0].title,
+          equals('Exo-Rig Trench Walk'),
+          reason:
+              'Beat #1 must not be overwritten when LLM delta returns placeholder id beat_1 for Beat #2',
+        );
+        expect(bpAfterChat.beats[0].features, hasLength(1));
+        expect(
+          bpAfterChat.beats[0].features.first.title,
+          equals('Exo-Rig Buoyancy Walk'),
+        );
+        expect(bpAfterChat.beats[1].title, equals('Harpoon Winch & Tow'));
+        expect(
+          bpAfterChat.beats[1].features.map((f) => f.title).toList(),
+          equals(['Harpoon Cable Winch', 'Cable Tension Snap Meter']),
+        );
+        expect(
+          bpAfterChat.beats[1].features[1].id,
+          isNot(equals('feat_1_1')),
+          reason: 'Added feature in Beat #2 must receive a unique feature ID',
+        );
+
+        // 5. Execute v0.1 and verify Bug 3 Fix (persisted release_blueprint_json has updated epic_... and feat_... IDs)
+        await provider.approveAndExecuteReleasePlan();
+        final relDoc = provider.activeRelease!;
+        final persistedBpJson =
+            relDoc.sections['release_blueprint_json'] ?? '';
+        for (final epicDoc in provider.activeReleaseBeats) {
+          expect(persistedBpJson, contains(epicDoc.id));
+        }
+
+        // 6. Verify Bug 5 Fix: addLiveFeatureToBeat immediately seeds 3 tasks with >= 3 eager sub-steps each
+        final addedFeatId = provider.addLiveFeatureToBeat(
+          provider.activeReleaseBeats.first.id,
+          'Sonar Ping Scanner',
+        );
+        expect(addedFeatId, isNotNull);
+        final addedFeatDoc = provider.documents[addedFeatId!]!;
+        final addedStates = FeatureStateNode.getStatesForDocument(addedFeatDoc);
+        expect(addedStates.first.checklist, hasLength(3));
+        for (final task in addedStates.first.checklist) {
+          expect(task.children.length, greaterThanOrEqualTo(3));
+        }
+
+        // 7. Verify Bug 4 Fix: logPlaytestIssueOnCheckpoint on Unity 6 (C#) project uses C# Debug.LogWarning & .cs path
+        final firstFeat =
+            provider.featuresForBeat(provider.activeReleaseBeats.first.id).first;
+        final firstStates = FeatureStateNode.getStatesForDocument(firstFeat);
+        final fixIdx = provider.logPlaytestIssueOnCheckpoint(
+          featureId: firstFeat.id,
+          states: firstStates,
+          checkpointIndex: 0,
+          issueDescription:
+              'Winch cable pulls mech through seafloor terrain collider',
+        );
+        expect(fixIdx, greaterThanOrEqualTo(0));
+        final fixSub1 =
+            FeatureStateNode.getStatesForDocument(firstFeat)
+                .first
+                .checklist[fixIdx]
+                .children
+                .first;
+        expect(fixSub1.codeSnippet, contains('Debug.LogWarning'));
+        expect(
+          fixSub1.codeLanguage,
+          equals('Assets/Scripts/PlaytestFixController.cs'),
+        );
+
+        // 8. Verify Multi-Project Vault Switching (Project #2 <-> Project #1)
+        expect(provider.savedProjects, hasLength(2));
+        provider.switchProject(proj1Id);
+        expect(provider.activeProject!.title, equals('Crop Shotgun Arena'));
+        expect(provider.conceptDraft!.title, equals('Crop Shotgun Arena'));
+
+        provider.switchProject(proj2Id);
+        expect(provider.activeProject!.title, equals('Submerged Mech Salvage'));
+        expect(provider.conceptDraft!.title, equals('Submerged Mech Salvage'));
+      },
+    );
   });
 }

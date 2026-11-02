@@ -1760,17 +1760,40 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       },
     );
 
+    final starterTasks = <String>[
+      'Create actor/node structure and base properties for $cleanTitle (2h)',
+      'Implement core state transitions and player input for $cleanTitle (1h)',
+      'Hook visual/audio feedback cues and state guard for $cleanTitle (1h)',
+    ];
+    final starterGuards = <String>[
+      '[STATE GUARD] Block duplicate $cleanTitle activation while active',
+    ];
     final stateNode = FeatureStateNode(
       id: '${featId}_${versionTag}_cp_1',
       name: 'Checkpoint 1: $cleanTitle',
-      trigger: '',
+      trigger: 'Playtest: Trigger $cleanTitle in the test arena',
       order: 0,
-      checklist: const [],
-      coveredScope: const [],
-      tuningParams: const [],
-      edgeCases: const [],
+      checklist: [
+        for (int tIdx = 0; tIdx < starterTasks.length; tIdx++)
+          Subtask(
+            id: '${featId}_t_${tIdx + 1}',
+            text: starterTasks[tIdx],
+            completed: false,
+          ),
+      ],
+      coveredScope: [cleanTitle],
+      tuningParams: const ['cooldown: 0.4 s', 'speed: 1.0 x'],
+      edgeCases: starterGuards,
       parameters: {'releaseVersion': versionTag},
     );
+    for (int tIdx = 0; tIdx < stateNode.checklist.length; tIdx++) {
+      TaskHowToBlueprint.resolve(
+        parentTask: stateNode.checklist[tIdx],
+        taskIndex: tIdx,
+        checkpointNode: stateNode,
+        engineHint: _activeEngineHint,
+      );
+    }
 
     FeatureStateNode.saveStatesToDocument(featDoc, [stateNode]);
     documents[featId] = featDoc;
@@ -1919,6 +1942,14 @@ Return ONLY a JSON object:
         cp.edgeCases =
             rawGuards.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
       }
+      for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
+        TaskHowToBlueprint.resolve(
+          parentTask: cp.checklist[tIdx],
+          taskIndex: tIdx,
+          checkpointNode: cp,
+          engineHint: _activeEngineHint,
+        );
+      }
       updateFeatureStates(featureId, states);
     }
     await synthesizeFeatureHowToStepsWithAi(featureId, forceRefresh: true);
@@ -2028,8 +2059,14 @@ Return ONLY a JSON object:
     final newTaskIndex = cpNode.checklist.length;
     final taskNum = newTaskIndex + 1;
     final engineLabel = _activeEngineLabel;
-    final isUnity = engineLabel.contains('Unity');
-    final isUnreal = engineLabel.contains('Unreal');
+    final engineUpper = engineLabel.toUpperCase();
+    final isUnity = engineUpper.contains('UNITY');
+    final isUnreal = engineUpper.contains('UNREAL');
+    final defaultScriptPath = isUnity
+        ? 'Assets/Scripts/PlaytestFixController.cs'
+        : (isUnreal
+            ? 'Source/PlaytestFixActor.cpp'
+            : 'res://scripts/playtest_fix_controller.gd');
     final primaryTune = cpNode.tuningParams.isNotEmpty
         ? cpNode.tuningParams.first
         : 'threshold: 1.0';
@@ -2044,6 +2081,7 @@ Return ONLY a JSON object:
           text: 'STEP $taskNum.1 · REPRODUCE & INSPECT PLAYTEST ISSUE',
           specNotes:
               'Trigger "$cleanIssue" in the game viewport and inspect live state values ($primaryTune).',
+          codeLanguage: defaultScriptPath,
           codeTargetFile: 'custom_snippet',
           codeSnippet: isUnity
               ? '// Inspect live state when "$cleanIssue" occurs\nDebug.LogWarning("[PLAYTEST FIX] $cleanIssue | $primaryTune");'
@@ -2056,6 +2094,7 @@ Return ONLY a JSON object:
           text: 'STEP $taskNum.2 · APPLY FIX & CLAMP TUNING BOUNDS',
           specNotes:
               'Adjust the update/collision logic and clamp $primaryTune so "$cleanIssue" cannot happen.',
+          codeLanguage: defaultScriptPath,
           codeTargetFile: 'custom_snippet',
           codeSnippet: isUnity
               ? '// Enforce boundary check for: $cleanIssue\n// Active tuning: $primaryTune'
@@ -2068,6 +2107,7 @@ Return ONLY a JSON object:
           text: 'STEP $taskNum.3 · VERIFY PLAYTEST GUARD IN VIEWPORT',
           specNotes:
               'Re-run the checkpoint playtest gate ("${cpNode.playtestCondition}") 3 times to confirm "$cleanIssue" is resolved.',
+          codeLanguage: defaultScriptPath,
           codeTargetFile: 'custom_snippet',
           codeSnippet: isUnity
               ? '// Verify guard in Play mode: [PLAYTEST GUARD] $cleanIssue'
@@ -2346,6 +2386,7 @@ Return ONLY a JSON object with this schema:
         documents[d.id] = d;
         _persistDocument(d);
       }
+      relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
       _persistDocument(relDoc);
       _markExecutedInboxItemsImplemented(bp);
 
@@ -2369,37 +2410,27 @@ Return ONLY a JSON object with this schema:
               .where((id) => id != primaryFeatId)
               .toList();
           final currentGen = ++_stepQueueGeneration;
-          _pendingFeatureStepQueue
-            ..clear()
-            ..addAll(remainingFeatIds);
+          _pendingFeatureStepQueue.clear();
           final primaryTitle = documents[primaryFeatId]?.title ?? 'Feature 1';
           _agentProgressStep =
               'Synthesizing Feature #1 ($primaryTitle) so you can enter the Workarea immediately...';
           notifyListeners();
 
-          // Always synthesize Feature #1 first so the user enters the Workarea with Step 1.1 ready
-          // and so Features #2..N receive Feature #1's Cumulative Project Ledger.
+          // Always synthesize Feature #1 first so the user enters the Workarea with Step 1.1 ready.
+          // Features #2..N already have instant deterministic steps from TaskHowToBlueprint.resolve
+          // and are AI-tailored on-demand when selected via selectWorkbenchFeature.
           await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
 
           if (remainingFeatIds.isNotEmpty &&
-              _stepQueueGeneration == currentGen) {
-            if (GeminiAgentClient.testMockResponder != null) {
-              // In test mode, run sequentially one feature at a time so each feature K
-              // receives the Cumulative Project Ledger from features 1..K-1.
-              await _prefetchRemainingFeatureStepsInBackground(
-                remainingFeatIds,
-                currentGen,
-              );
-            } else {
-              // In live mode, release _isAgentBusy immediately after Feature #1 finishes
-              // and synthesize Features #2..N sequentially in the background.
-              unawaited(
-                _prefetchRemainingFeatureStepsInBackground(
-                  remainingFeatIds,
-                  currentGen,
-                ),
-              );
-            }
+              _stepQueueGeneration == currentGen &&
+              GeminiAgentClient.testMockResponder != null) {
+            _pendingFeatureStepQueue.addAll(remainingFeatIds);
+            // In test mode, run sequentially one feature at a time so each feature K
+            // receives the Cumulative Project Ledger from features 1..K-1.
+            await _prefetchRemainingFeatureStepsInBackground(
+              remainingFeatIds,
+              currentGen,
+            );
           }
         }
       }

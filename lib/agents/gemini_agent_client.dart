@@ -15,8 +15,9 @@ class GeminiAgentClient {
   static const Map<String, String> _jsonHeaders = {
     'Content-Type': 'application/json',
   };
-  static const Duration _heavyModelTimeout = Duration(seconds: 12);
-  static const Duration _standardModelTimeout = Duration(seconds: 20);
+  static const Duration _heavyModelTimeout = Duration(seconds: 45);
+  static const Duration _standardModelTimeout = Duration(seconds: 30);
+  static const int _maxOutputTokens = 8192;
 
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~55 tokens vs ~220 tokens).
   static const String compactStyleRules = '''
@@ -82,10 +83,6 @@ RULES:
     }.toList();
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
-    // Always pass explicit thinkingConfig (including 'LOW') first so Gemini 3.8/4 models
-    // do not fall back to their default HIGH thinking budget; retry without if unsupported.
-    final thinkingOrder =
-        normalizedThinking.isNotEmpty ? const [true, false] : const [false];
     final contentsPayload = [
       {
         'parts': [
@@ -95,80 +92,73 @@ RULES:
     ];
 
     for (final model in modelsToTry) {
-      for (final includeThinking in thinkingOrder) {
-        try {
-          final uri = Uri.parse(
-            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
-          );
-          final genConfig = <String, dynamic>{
-            'temperature': temperature,
-            'responseMimeType': 'application/json',
-          };
-          if (includeThinking && normalizedThinking.isNotEmpty) {
-            final isFlash25 = model == 'gemini-flash-latest' ||
-                model.startsWith('gemini-2.5');
-            genConfig['thinkingConfig'] = isFlash25
-                ? <String, dynamic>{
-                    'thinkingBudget': normalizedThinking == 'LOW' ? 0 : 1024,
-                  }
-                : <String, dynamic>{
-                    'thinkingLevel': normalizedThinking,
-                  };
-          }
+      try {
+        final uri = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
+        );
+        final genConfig = <String, dynamic>{
+          'temperature': temperature,
+          'maxOutputTokens': _maxOutputTokens,
+          'responseMimeType': 'application/json',
+        };
+        if (normalizedThinking.isNotEmpty) {
+          final isFlash25 = model == 'gemini-flash-latest' ||
+              model.startsWith('gemini-2.5');
+          genConfig['thinkingConfig'] = isFlash25
+              ? <String, dynamic>{
+                  'thinkingBudget': normalizedThinking == 'LOW' ? 0 : 1024,
+                }
+              : <String, dynamic>{
+                  'thinkingLevel': normalizedThinking,
+                };
+        }
 
-          final isHeavyPlanningModel =
-              model.contains('argon') || model.contains('pro');
-          final timeoutDuration =
-              isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
+        final isHeavyPlanningModel =
+            model.contains('argon') || model.contains('pro');
+        final timeoutDuration =
+            isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
 
-          final response = await http
-              .post(
-                uri,
-                headers: _jsonHeaders,
-                body: jsonEncode({
-                  'contents': contentsPayload,
-                  'generationConfig': genConfig,
-                }),
-              )
-              .timeout(timeoutDuration);
+        final response = await http
+            .post(
+              uri,
+              headers: _jsonHeaders,
+              body: jsonEncode({
+                'contents': contentsPayload,
+                'generationConfig': genConfig,
+              }),
+            )
+            .timeout(timeoutDuration);
 
-          if (response.statusCode == 200) {
-            lastErrorStatus = null;
-            final body = jsonDecode(response.body) as Map<String, dynamic>;
-            final candidates = body['candidates'] as List?;
-            if (candidates != null && candidates.isNotEmpty) {
-              final content = candidates.first['content'] as Map<String, dynamic>?;
-              final parts = content?['parts'] as List?;
-              if (parts != null && parts.isNotEmpty) {
-                for (final part in parts.reversed) {
-                  if (part is Map && part['thought'] != true) {
-                    final rawText = part['text']?.toString() ?? '';
-                    final cleaned = _extractJsonObject(rawText);
-                    if (cleaned.isNotEmpty) {
-                      return jsonDecode(cleaned) as Map<String, dynamic>;
-                    }
+        if (response.statusCode == 200) {
+          lastErrorStatus = null;
+          final body = jsonDecode(response.body) as Map<String, dynamic>;
+          final candidates = body['candidates'] as List?;
+          if (candidates != null && candidates.isNotEmpty) {
+            final content =
+                candidates.first['content'] as Map<String, dynamic>?;
+            final parts = content?['parts'] as List?;
+            if (parts != null && parts.isNotEmpty) {
+              for (final part in parts.reversed) {
+                if (part is Map && part['thought'] != true) {
+                  final rawText = part['text']?.toString() ?? '';
+                  final cleaned = _extractJsonObject(rawText);
+                  if (cleaned.isNotEmpty) {
+                    return jsonDecode(cleaned) as Map<String, dynamic>;
                   }
                 }
               }
             }
-          } else if (response.statusCode == 401 ||
-              response.statusCode == 402 ||
-              response.statusCode == 403) {
-            // Fail fast on auth/billing errors instead of retrying across models
-            lastErrorStatus = 'HTTP ${response.statusCode}';
-            return null;
-          } else if (response.statusCode == 400 && includeThinking) {
-            // Only retry without thinkingConfig when HTTP 400 indicates unsupported thinking field
-            continue;
-          } else {
-            // Skip second thinking pass on 404/429/5xx and fall back to next model immediately
-            break;
           }
-        } catch (_) {
-          // Never retry the same model without thinkingConfig on TimeoutException (which would
-          // drop thinkingLevel: 'LOW' and stall in HIGH thinking); fall back to next model.
-          break;
+        } else if (response.statusCode == 401 ||
+            response.statusCode == 402 ||
+            response.statusCode == 403) {
+          // Fail fast on auth/billing errors instead of retrying across models
+          lastErrorStatus = 'HTTP ${response.statusCode}';
+          return null;
         }
+      } catch (_) {
+        // Fall back to next model immediately on timeout or network error
+        continue;
       }
     }
     return null;

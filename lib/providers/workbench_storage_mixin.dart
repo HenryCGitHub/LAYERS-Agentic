@@ -205,6 +205,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
   /// Starts a brand-new Project at Stage 1A (`New Project`) while keeping existing projects in the vault.
   void createNewProject() {
+    _stepQueueGeneration++;
+    _pendingFeatureStepQueue.clear();
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedBeatId = null;
@@ -214,6 +216,13 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _sparkIntake = null;
     _sparkSuggestionVariantOffset = 0;
     _offlineErrorMessage = null;
+    _currentPhase = ProductionPhase.prototype;
+    _lastReleaseRetrospective = null;
+    _releaseViewFilter = 'active';
+    _prewarmedConceptSignature = null;
+    _initialProgressiveTrack0BlueprintJson = null;
+    _cachedInboxRawHash = null;
+    _executionLog.clear();
     _currentStage = WorkbenchStage.projectPitch;
     notifyListeners();
   }
@@ -693,6 +702,14 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   void _restoreProjectState(String projectId) {
     final proj = documents[projectId];
     if (proj == null) return;
+    _stepQueueGeneration++;
+    _pendingFeatureStepQueue.clear();
+    _lastReleaseRetrospective = null;
+    _releaseViewFilter = 'active';
+    _prewarmedConceptSignature = null;
+    _initialProgressiveTrack0BlueprintJson = null;
+    _cachedInboxRawHash = null;
+    _executionLog.clear();
     _activeProjectId = projectId;
 
     // Restore Collaborators
@@ -720,7 +737,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         );
       } catch (e) {
         debugPrint('Restore concept_blueprint_json error: $e');
+        _conceptDraft = null;
       }
+    } else {
+      _conceptDraft = null;
     }
 
     // Restore Release Blueprint

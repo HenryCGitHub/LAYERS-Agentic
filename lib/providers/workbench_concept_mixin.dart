@@ -121,9 +121,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
-      if (_conceptDraft != null) {
-        unawaited(prewarmInitialReleasePlanIfNeeded());
-      }
     }
   }
 
@@ -174,7 +171,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   Future<void> startConceptInterview([
     String sparkText = '',
     bool jumpToFullReview = true,
-    bool prewarmRelease = true,
+    bool prewarmRelease = false,
   ]) async {
     final cleanText = sparkText.trim();
     final effectiveSpark = cleanText.isNotEmpty
@@ -261,9 +258,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
-      if (_conceptDraft != null) {
-        unawaited(prewarmInitialReleasePlanIfNeeded());
-      }
     }
   }
 
@@ -274,7 +268,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     mutator(draft);
     _commitConceptToVault(draft);
     notifyListeners();
-    unawaited(prewarmInitialReleasePlanIfNeeded());
   }
 
   void _commitConceptToVault(
@@ -651,6 +644,14 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           edgeCases: starterGuards,
           parameters: {'releaseVersion': activeVer},
         );
+        for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+          TaskHowToBlueprint.resolve(
+            parentTask: cpNode.checklist[tIdx],
+            taskIndex: tIdx,
+            checkpointNode: cpNode,
+            engineHint: _activeEngineHint,
+          );
+        }
         final newFeatDoc = TierDocument(
           id: newFeatId,
           title: featTitle,
