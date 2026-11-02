@@ -786,10 +786,27 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             final activeVer = widget.workbench.activeReleaseVersionTag;
             final rel = widget.workbench.activeRelease;
             final beats = widget.workbench.activeReleaseBeats;
+            final showAllLiveFeatures =
+                widget.workbench.releaseViewFilter == 'all';
+            final releaseHasActiveFeats = beats.any(
+              (b) => widget.workbench
+                  .featuresForBeat(b.id)
+                  .any((f) => widget.workbench.isFeatureActiveInRelease(f)),
+            );
+            List<TierDocument> displayedFeaturesForBeat(String beatId) {
+              final allBeatFeats = widget.workbench.featuresForBeat(beatId);
+              if (!showAllLiveFeatures && releaseHasActiveFeats) {
+                return allBeatFeats
+                    .where((f) => widget.workbench.isFeatureActiveInRelease(f))
+                    .toList();
+              }
+              return allBeatFeats;
+            }
+
             int totalFeats = 0;
             int passedFeats = 0;
             for (final b in beats) {
-              for (final f in widget.workbench.featuresForBeat(b.id)) {
+              for (final f in displayedFeaturesForBeat(b.id)) {
                 totalFeats++;
                 if (widget.workbench.getDocumentProgress(f.id) >= 100) {
                   passedFeats++;
@@ -888,24 +905,27 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            for (int bIdx = 0; bIdx < beats.length; bIdx++) ...[
-                              Padding(
-                                padding: EdgeInsets.only(
-                                  top: bIdx == 0 ? 0 : 14,
-                                  bottom: 8,
-                                ),
-                                child: Text(
-                                  'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beats[bIdx].title).toUpperCase()}',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.7,
-                                    color: textSecondary,
+                            for (int bIdx = 0; bIdx < beats.length; bIdx++)
+                              if (displayedFeaturesForBeat(beats[bIdx].id)
+                                  .isNotEmpty) ...[
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    top: bIdx == 0 ? 0 : 14,
+                                    bottom: 8,
+                                  ),
+                                  child: Text(
+                                    'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beats[bIdx].title).toUpperCase()}',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.7,
+                                      color: textSecondary,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              for (final feat in widget.workbench
-                                  .featuresForBeat(beats[bIdx].id))
+                                for (final feat in displayedFeaturesForBeat(
+                                  beats[bIdx].id,
+                                ))
                                 Builder(
                                   builder: (context) {
                                     final states =

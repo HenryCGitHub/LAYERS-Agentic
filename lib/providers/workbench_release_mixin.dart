@@ -720,6 +720,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         relDoc.sections['versionTag'] = 'v0.${idx + 1}';
       }
     }
+    final resolvedVerTag = relDoc.sections['versionTag'] ?? 'v0.2';
+    relDoc.title = '$resolvedVerTag: ${targetPhase.label}';
     _persistDocument(relDoc);
     _syncActiveProjectMetadata();
     await openReleasePlanGate(
@@ -1091,6 +1093,25 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         jsonDecode(raw) as Map<String, dynamic>,
       );
       _releaseBlueprint = restored;
+      final proj = activeProject;
+      if (proj != null) {
+        if (_preModalFeatureInboxJson != null) {
+          proj.sections['feature_inbox_json'] = _preModalFeatureInboxJson!;
+        } else {
+          proj.sections.remove('feature_inbox_json');
+        }
+        _cachedInboxRawHash = null;
+        if (_preModalExclusions != null) {
+          proj.sections['exclusions'] = _preModalExclusions!;
+        } else {
+          proj.sections.remove('exclusions');
+        }
+        _persistDocument(proj);
+      }
+      if (_conceptDraft != null && _preModalConceptExclusions != null) {
+        _conceptDraft!.exclusions =
+            List<String>.from(_preModalConceptExclusions!);
+      }
       final preLifecycles = _preModalFeatureLifecycles;
       if (preLifecycles != null) {
         for (final entry in preLifecycles.entries) {
@@ -2991,6 +3012,21 @@ Return ONLY a JSON object with this schema:
     notifyListeners();
 
     try {
+      final isInitialV01Rebuild = bp.releaseVersionTag == 'v0.1' &&
+          (relDoc.sections['prototypePart'] ?? '') != '2';
+      final oldV01BeatIds = isInitialV01Rebuild
+          ? List<String>.from(relDoc.childrenIds)
+          : const <String>[];
+      final oldV01FeatureIds = isInitialV01Rebuild
+          ? <String>{
+              for (final bId in oldV01BeatIds)
+                ...(documents[bId]?.childrenIds ?? const <String>[]),
+            }
+          : const <String>{};
+      if (isInitialV01Rebuild) {
+        _aiSynthesizedFeatureSteps.clear();
+      }
+
       final createdDocs = await ReleaseExecutorAgent.executeBlueprint(
         releaseDoc: relDoc,
         blueprint: bp,
@@ -3002,9 +3038,37 @@ Return ONLY a JSON object with this schema:
         },
       );
 
+      final createdDocIds = <String>{for (final d in createdDocs) d.id};
       for (final d in createdDocs) {
         documents[d.id] = d;
         _persistDocument(d);
+      }
+      if (isInitialV01Rebuild &&
+          (oldV01BeatIds.isNotEmpty || oldV01FeatureIds.isNotEmpty)) {
+        final otherReleaseBeatIds = <String>{
+          for (final r in projectReleases)
+            if (r.id != relDoc.id) ...r.childrenIds,
+        };
+        final user = _authService.currentUser;
+        for (final oldFeatId in oldV01FeatureIds) {
+          if (!createdDocIds.contains(oldFeatId)) {
+            documents.remove(oldFeatId);
+            LocalVaultService.deleteDocument(oldFeatId);
+            if (user != null) {
+              _firestoreService.deleteDocument(uid: user.uid, docId: oldFeatId);
+            }
+          }
+        }
+        for (final oldBeatId in oldV01BeatIds) {
+          if (!createdDocIds.contains(oldBeatId) &&
+              !otherReleaseBeatIds.contains(oldBeatId)) {
+            documents.remove(oldBeatId);
+            LocalVaultService.deleteDocument(oldBeatId);
+            if (user != null) {
+              _firestoreService.deleteDocument(uid: user.uid, docId: oldBeatId);
+            }
+          }
+        }
       }
       relDoc.sections['synced_engine_label'] = _activeEngineLabel;
       relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
@@ -4871,7 +4935,9 @@ Return ONLY valid JSON:
       _persistDocument(proj, debounce: true);
     }
     notifyListeners();
-    if (triggerAiSynthesis && GeminiAgentClient.hasKey(_apiKey)) {
+    if (triggerAiSynthesis &&
+        (GeminiAgentClient.hasKey(_apiKey) ||
+            GeminiAgentClient.testMockResponder != null)) {
       if (feat.sections.remove('needs_ai_enrichment') == 'true') {
         final parentBeatTitle = (feat.parentId != null
                 ? documents[feat.parentId!]?.title

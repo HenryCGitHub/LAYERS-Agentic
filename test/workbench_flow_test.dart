@@ -11,6 +11,7 @@ import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/project_pitch_screen.dart';
+import 'package:layers_agentic/utils/section_text_utils.dart';
 
 Future<Map<String, dynamic>?> _mockGeminiResponder(
   String prompt,
@@ -6835,6 +6836,70 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           provider.conceptDraft!.exclusions.contains('No Online Multiplayer'),
           isTrue,
         );
+
+        // 10. Pass 7 AI & Workflow Audit Refinements
+        // 10a. SectionTextUtils.resolveDoneWhen and resolveInScope fallback to 'pass'/'doneWhen' and 'inScope' when 'scope' only has 'Goal:'
+        final splitKeySections = <String, String>{
+          'scope': 'Goal: Build a responsive arcade grapple swing.',
+          'inScope': '• Hook projectile launch\n• Pendulum swing tension',
+          'pass': 'Playtester swings across 3 chasm gaps without clipping.',
+        };
+        expect(
+          SectionTextUtils.resolveDoneWhen(splitKeySections),
+          equals('Playtester swings across 3 chasm gaps without clipping.'),
+        );
+        expect(
+          SectionTextUtils.resolveInScope(splitKeySections),
+          equals(['Hook projectile launch', 'Pendulum swing tension']),
+        );
+
+        // 10b. setDraftReleasePhase updates relDoc.title and restoreInitialProgressiveDraftBlueprint restores exclusions & inbox state
+        final pass7PrevRelId = provider.activeReleaseId;
+        final pass7PrevPhase = provider.currentPhase;
+        await provider.prepareProgressiveNextReleaseDraft();
+        await provider.setDraftReleasePhase(ProductionPhase.fullProduction);
+        expect(provider.activeRelease!.title, startsWith('v1.0:'));
+        await provider.setDraftReleasePhase(ProductionPhase.mvp);
+        expect(provider.activeRelease!.title, startsWith('v0.2:'));
+        expect(provider.activeReleaseVersionTag, equals('v0.2'));
+
+        provider.promoteExclusionToNextRelease('No Online Multiplayer');
+        expect(
+          provider.conceptDraft!.exclusions.contains('No Online Multiplayer'),
+          isFalse,
+        );
+        provider.restoreInitialProgressiveDraftBlueprint();
+        expect(
+          provider.conceptDraft!.exclusions.contains('No Online Multiplayer'),
+          isTrue,
+        );
+        provider.restoreActiveReleaseAfterCancel(
+          pass7PrevRelId,
+          pass7PrevPhase,
+        );
+
+        // 10c. Switching projects restores each project's own saved selected_feature_id
+        final pass7Proj1Id = provider.activeProjectId;
+        final pass7Proj1Beats = provider.activeReleaseBeats;
+        if (pass7Proj1Id != null && pass7Proj1Beats.length >= 2) {
+          final secondBeatFeats =
+              provider.featuresForBeat(pass7Proj1Beats[1].id);
+          if (secondBeatFeats.isNotEmpty) {
+            final targetProj1FeatId = secondBeatFeats.first.id;
+            provider.selectFeature(
+              targetProj1FeatId,
+              triggerAiSynthesis: false,
+            );
+            expect(provider.selectedFeatureId, equals(targetProj1FeatId));
+
+            provider.createNewProject();
+            final pass7Proj2Id = provider.activeProjectId;
+            expect(pass7Proj2Id, isNot(equals(pass7Proj1Id)));
+
+            provider.switchProject(pass7Proj1Id);
+            expect(provider.selectedFeatureId, equals(targetProj1FeatId));
+          }
+        }
       },
     );
   });

@@ -244,7 +244,11 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         if (isSelected) return;
                                         await widget.workbench
                                             .setDraftReleasePhase(phase);
-                                        if (mounted) _rebuild(() {});
+                                        if (mounted) {
+                                          _rebuild(() {
+                                            _selectedProgressiveTrackIndex = 0;
+                                          });
+                                        }
                                       },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -2076,9 +2080,17 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     final retro = widget.workbench.buildActiveReleaseRetrospective();
     final beats = widget.workbench.activeReleaseBeats;
     final activeRelVer = widget.workbench.activeReleaseVersionTag;
-    final allFeats = <TierDocument>[
+    final allUnfilteredFeats = <TierDocument>[
       for (final b in beats) ...widget.workbench.featuresForBeat(b.id),
     ];
+    final releaseHasActiveFeats = allUnfilteredFeats.any(
+      (f) => widget.workbench.isFeatureActiveInRelease(f),
+    );
+    final allFeats = releaseHasActiveFeats
+        ? allUnfilteredFeats
+            .where((f) => widget.workbench.isFeatureActiveInRelease(f))
+            .toList()
+        : allUnfilteredFeats;
     int totalTasks = 0;
     int totalStepsDone = 0;
     for (final f in allFeats) {

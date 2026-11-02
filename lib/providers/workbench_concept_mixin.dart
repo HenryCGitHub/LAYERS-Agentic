@@ -490,8 +490,19 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final previousEngineLabel = rel.sections['synced_engine_label'] ?? '';
     if (previousEngineLabel.isNotEmpty &&
         previousEngineLabel != currentEngineLabel) {
-      rel.sections['synced_engine_label'] = currentEngineLabel;
-      _persistDocument(rel);
+      for (final r in releases) {
+        r.sections['synced_engine_label'] = currentEngineLabel;
+        final relBp = releaseBlueprintFor(r.id);
+        if (relBp != null) {
+          for (final b in relBp.beats) {
+            for (final f in b.features) {
+              f.primarySharedScriptOrScene = null;
+            }
+          }
+          r.sections['release_blueprint_json'] = jsonEncode(relBp.toJson());
+        }
+        _persistDocument(r);
+      }
       _aiSynthesizedFeatureSteps.clear();
       TaskHowToBlueprint.clearCache();
 
@@ -535,9 +546,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             f.primarySharedScriptOrScene = null;
           }
         }
-        rel.sections['release_blueprint_json'] =
-            jsonEncode(_releaseBlueprint!.toJson());
-        _persistDocument(rel);
+        final ownerRel = documents[_releaseBlueprint!.releaseDocId];
+        if (ownerRel != null) {
+          ownerRel.sections['release_blueprint_json'] =
+              jsonEncode(_releaseBlueprint!.toJson());
+          _persistDocument(ownerRel);
+        }
       }
       if (_selectedFeatureId != null &&
           (GeminiAgentClient.hasKey(_apiKey) ||
@@ -548,8 +562,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         );
       }
     } else if (previousEngineLabel.isEmpty) {
-      rel.sections['synced_engine_label'] = currentEngineLabel;
-      _persistDocument(rel);
+      for (final r in releases) {
+        if ((r.sections['synced_engine_label'] ?? '').isEmpty) {
+          r.sections['synced_engine_label'] = currentEngineLabel;
+          _persistDocument(r);
+        }
+      }
     }
 
     // Once v0.2+ releases are built, or when 06 · Core Loop itself was not modified,
@@ -854,6 +872,16 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       if (_selectedBeatId == null ||
           !newReleaseBeatIds.contains(_selectedBeatId)) {
         _selectFirstIncompleteFeatureInActiveRelease();
+      }
+      if (_currentStage == WorkbenchStage.releaseWorkbench &&
+          _selectedFeatureId != null) {
+        final selFeat = documents[_selectedFeatureId!];
+        if (selFeat != null &&
+            selFeat.sections['needs_ai_enrichment'] == 'true' &&
+            (GeminiAgentClient.hasKey(_apiKey) ||
+                GeminiAgentClient.testMockResponder != null)) {
+          selectFeature(selFeat.id);
+        }
       }
     }
   }

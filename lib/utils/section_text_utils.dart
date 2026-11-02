@@ -74,8 +74,8 @@ class SectionTextUtils {
 
   /// Resolves the `In Scope:` bullet list from a document's `sections`.
   static List<String> resolveInScope(Map<String, String> sections) {
-    final raw = sections['scope'] ?? sections['inScope'];
-    if (raw != null && raw.trim().isNotEmpty) {
+    List<String> parseRaw(String? raw) {
+      if (raw == null || raw.trim().isEmpty) return const [];
       if (_inScopeHeaderRegex.hasMatch(raw)) {
         final parts = raw.split(_inScopeHeaderRegex);
         if (parts.length > 1) {
@@ -96,7 +96,8 @@ class SectionTextUtils {
           final trimmed = line.trim();
           if (trimmed.isEmpty) continue;
           final lower = trimmed.toLowerCase();
-          if (lower.startsWith('out of scope') || lower.startsWith('exclusions')) {
+          if (lower.startsWith('out of scope') ||
+              lower.startsWith('exclusions')) {
             inExclusions = true;
             continue;
           }
@@ -107,7 +108,8 @@ class SectionTextUtils {
             continue;
           }
           if (!inExclusions) {
-            final cleaned = trimmed.replaceAll(_bulletPrefixStripRegex, '').trim();
+            final cleaned =
+                trimmed.replaceAll(_bulletPrefixStripRegex, '').trim();
             if (cleaned.isNotEmpty && !cleaned.startsWith('#')) {
               lines.add(cleaned);
             }
@@ -115,8 +117,12 @@ class SectionTextUtils {
         }
         if (lines.isNotEmpty) return lines;
       }
+      return const [];
     }
-    return const [];
+
+    final fromScope = parseRaw(sections['scope']);
+    if (fromScope.isNotEmpty) return fromScope;
+    return parseRaw(sections['inScope'] ?? sections['in_scope']);
   }
 
   /// Resolves the `Exclusions` / `Out of Scope` bullet list from a document's `sections`.
@@ -183,8 +189,8 @@ class SectionTextUtils {
 
   /// Resolves the `Done When:` condition from a document's `sections`.
   static String resolveDoneWhen(Map<String, String> sections) {
-    final raw = sections['scope'] ?? sections['pass'] ?? sections['doneWhen'];
-    if (raw != null && raw.trim().isNotEmpty) {
+    String extractFromHeaderBlock(String? raw) {
+      if (raw == null || raw.trim().isEmpty) return '';
       final match = _doneWhenMatchRegex.firstMatch(raw);
       if (match != null && match.group(1)!.trim().isNotEmpty) {
         return match.group(1)!.replaceAll(_bulletPrefixStripRegex, '').trim();
@@ -198,6 +204,24 @@ class SectionTextUtils {
             return firstLine.replaceAll(_bulletPrefixStripRegex, '').trim();
           }
         }
+      }
+      return '';
+    }
+
+    final fromScope = extractFromHeaderBlock(sections['scope']);
+    if (fromScope.isNotEmpty) return fromScope;
+
+    final fallback =
+        sections['pass'] ?? sections['doneWhen'] ?? sections['done_when'];
+    if (fallback != null && fallback.trim().isNotEmpty) {
+      final fromHeader = extractFromHeaderBlock(fallback);
+      if (fromHeader.isNotEmpty) return fromHeader;
+      final firstLine = _firstNonEmptyLine(fallback);
+      if (firstLine.isNotEmpty) {
+        return firstLine
+            .replaceAll(_doneWhenSplitRegex, '')
+            .replaceAll(_bulletPrefixStripRegex, '')
+            .trim();
       }
     }
     return '';

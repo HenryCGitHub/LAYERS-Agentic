@@ -203,6 +203,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   void createNewProject() {
     _stepQueueGeneration++;
     _pendingFeatureStepQueue.clear();
+    _synthesizingFeatureIds.clear();
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedBeatId = null;
@@ -698,8 +699,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   void _restoreProjectState(String projectId) {
     final proj = documents[projectId];
     if (proj == null) return;
+    final wasSameProject = projectId == _activeProjectId;
     _stepQueueGeneration++;
     _pendingFeatureStepQueue.clear();
+    if (!wasSameProject) {
+      _synthesizingFeatureIds.clear();
+    }
     _lastReleaseRetrospective = null;
     _releaseViewFilter = 'active';
     _prewarmedConceptSignature = null;
@@ -846,7 +851,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         }
       }
 
-      final candidateFeatId = (projectId == _activeProjectId &&
+      final candidateFeatId = (wasSameProject &&
               _selectedFeatureId != null &&
               documents.containsKey(_selectedFeatureId))
           ? _selectedFeatureId

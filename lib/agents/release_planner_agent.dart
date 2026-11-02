@@ -374,7 +374,10 @@ class ReleasePlannerAgent {
     }
 
     final preset = releaseDoc.releaseScope;
-    final versionTag = extractReleaseVersionTag(releaseDoc.title);
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
     final releasePhase = releaseDoc.sections['phase'] ?? '';
     final prototypePart = releaseDoc.sections['prototypePart'] ?? '';
     final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
@@ -1301,7 +1304,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
     if (coreLoopItems.isEmpty) return null;
     final preset = releaseDoc.releaseScope;
-    final versionTag = extractReleaseVersionTag(releaseDoc.title);
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
     final projectExclusions = SectionTextUtils.resolveExclusions(
       projectDoc.sections,
       splitSingleSentence: false,
@@ -1429,7 +1435,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
   }) {
     if (existingBeats.isEmpty) return null;
     final preset = releaseDoc.releaseScope;
-    final versionTag = extractReleaseVersionTag(releaseDoc.title);
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
     final releasePhase = releaseDoc.sections['phase'] ?? '';
     final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
     final mvpEpicMatch = _mvpEpicNumRegex.firstMatch(releaseDoc.title);
@@ -2334,9 +2343,11 @@ class ReleaseExecutorAgent {
         beatBp.title,
         beatIndex: bIdx,
       );
-      final existingBeat = projectScopedDocs[beatBp.id] ??
-          existingBeatsByTitle[concreteBeatTitle.toLowerCase().trim()] ??
-          existingBeatsByTitle[beatBp.title.toLowerCase().trim()];
+      final existingBeat = isInitialPrototypeRelease
+          ? projectScopedDocs['epic_${releaseDoc.id}_${bIdx + 1}']
+          : (projectScopedDocs[beatBp.id] ??
+              existingBeatsByTitle[concreteBeatTitle.toLowerCase().trim()] ??
+              existingBeatsByTitle[beatBp.title.toLowerCase().trim()]);
       if (includedFeats.isEmpty &&
           (isInitialPrototypeRelease || existingBeat == null)) {
         continue;
@@ -2433,21 +2444,25 @@ class ReleaseExecutorAgent {
         final candidateByTitle =
             existingFeaturesByBeatAndTitle['${beatDoc.id}::$normConcreteTitle'] ??
                 existingFeaturesByBeatAndTitle['${beatDoc.id}::$normRawTitle'];
-        final existingFeat = canMatchById
-            ? candidateById
-            : (candidateByTitle != null &&
-                    !allocatedFeatIds.contains(candidateByTitle.id)
-                ? candidateByTitle
-                : null);
+        final existingFeat = isInitialPrototypeRelease
+            ? null
+            : (canMatchById
+                ? candidateById
+                : (candidateByTitle != null &&
+                        !allocatedFeatIds.contains(candidateByTitle.id)
+                    ? candidateByTitle
+                    : null));
 
         String featId;
         if (existingFeat != null) {
           featId = existingFeat.id;
         } else {
           final defaultId = 'feat_${beatId}_${fIdx + 1}';
-          if (!existingDocuments.containsKey(defaultId) &&
-              !projectScopedDocs.containsKey(defaultId) &&
-              !allocatedFeatIds.contains(defaultId)) {
+          if ((isInitialPrototypeRelease &&
+                  !allocatedFeatIds.contains(defaultId)) ||
+              (!existingDocuments.containsKey(defaultId) &&
+                  !projectScopedDocs.containsKey(defaultId) &&
+                  !allocatedFeatIds.contains(defaultId))) {
             featId = defaultId;
           } else {
             final cleanVer =
@@ -2673,6 +2688,9 @@ class ReleaseExecutorAgent {
             'mvp' => ProductionPhase.mvp,
             'prototype' => ProductionPhase.prototype,
             _ => switch (blueprint.preset) {
+              ReleaseScope.patch ||
+              ReleaseScope.contentUpdate =>
+                ProductionPhase.postLaunch,
               ReleaseScope.fullProduction => ProductionPhase.fullProduction,
               ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
               ReleaseScope.mvp => ProductionPhase.mvp,

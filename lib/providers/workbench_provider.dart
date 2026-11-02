@@ -281,7 +281,8 @@ class WorkbenchProvider extends ChangeNotifier {
       return draftTech.join(' ');
     }
     return activeProject?.sections['tech_spec'] ??
-        activeProject?.sections['techSpec'];
+        activeProject?.sections['techSpec'] ??
+        activeProject?.sections['tech_stack'];
   }
 
   String get _activeEngineLabel =>
@@ -414,6 +415,16 @@ class WorkbenchProvider extends ChangeNotifier {
 
   void setStage(WorkbenchStage stage) {
     _currentStage = stage;
+    if (stage == WorkbenchStage.releaseWorkbench &&
+        _selectedFeatureId != null) {
+      final selFeat = documents[_selectedFeatureId!];
+      if (selFeat != null &&
+          selFeat.sections['needs_ai_enrichment'] == 'true' &&
+          (GeminiAgentClient.hasKey(_apiKey) ||
+              GeminiAgentClient.testMockResponder != null)) {
+        selectFeature(selFeat.id);
+      }
+    }
     _syncActiveProjectMetadata();
     notifyListeners();
   }
@@ -441,6 +452,9 @@ class WorkbenchProvider extends ChangeNotifier {
       'mvp' => ProductionPhase.mvp,
       'prototype' => ProductionPhase.prototype,
       _ => switch (relDoc.releaseScope) {
+        ReleaseScope.patch ||
+        ReleaseScope.contentUpdate =>
+          ProductionPhase.postLaunch,
         ReleaseScope.fullProduction => ProductionPhase.fullProduction,
         ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
         ReleaseScope.mvp => ProductionPhase.mvp,
