@@ -5963,18 +5963,24 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema):
     if (targetBeatId != null && documents[targetBeatId]?.tier == TierType.epic) {
       item.targetBeatId = targetBeatId;
       item.targetBeatTitle = documents[targetBeatId]!.title;
-      final beatFeats = featuresForBeat(targetBeatId);
-      if (item.integrationMode == InboxIntegrationMode.upgradeExistingFeature &&
-          beatFeats.isNotEmpty &&
-          !beatFeats.any((f) => f.id == item.targetFeatureId)) {
-        item.targetFeatureId = beatFeats.first.id;
-        item.targetFeatureTitle = beatFeats.first.title;
-      }
     }
     if (targetFeatureId != null &&
         documents[targetFeatureId]?.tier == TierType.feature) {
       item.targetFeatureId = targetFeatureId;
       item.targetFeatureTitle = documents[targetFeatureId]!.title;
+    } else if (item.integrationMode ==
+        InboxIntegrationMode.upgradeExistingFeature) {
+      final beatFeats = featuresForBeat(item.targetBeatId);
+      final candidateFeats = beatFeats.isNotEmpty
+          ? beatFeats
+          : <TierDocument>[
+              for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
+            ];
+      if (candidateFeats.isNotEmpty &&
+          !candidateFeats.any((f) => f.id == item.targetFeatureId)) {
+        item.targetFeatureId = candidateFeats.first.id;
+        item.targetFeatureTitle = candidateFeats.first.title;
+      }
     }
     _saveFeatureInboxItems(items);
   }
@@ -6112,6 +6118,15 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema):
 
     // 2. If upgrading an existing Feature, append a new version-stamped Delta Checkpoint
     if (item.integrationMode == InboxIntegrationMode.upgradeExistingFeature &&
+        (item.targetFeatureId == null ||
+            documents[item.targetFeatureId!]?.tier != TierType.feature)) {
+      final beatFeats = featuresForBeat(beatDoc.id);
+      if (beatFeats.isNotEmpty) {
+        item.targetFeatureId = beatFeats.first.id;
+        item.targetFeatureTitle = beatFeats.first.title;
+      }
+    }
+    if (item.integrationMode == InboxIntegrationMode.upgradeExistingFeature &&
         item.targetFeatureId != null &&
         documents[item.targetFeatureId!]?.tier == TierType.feature) {
       final featDoc = documents[item.targetFeatureId!]!;
@@ -6129,6 +6144,12 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema):
             ];
       final existingPrimaryAsset =
           (featDoc.sections['primary_asset'] ?? '').trim();
+      final resolvedPrimaryAsset = existingPrimaryAsset.isNotEmpty
+          ? existingPrimaryAsset
+          : (item.primarySharedScriptOrScene ?? '').trim();
+      if (existingPrimaryAsset.isEmpty && resolvedPrimaryAsset.isNotEmpty) {
+        featDoc.sections['primary_asset'] = resolvedPrimaryAsset;
+      }
       final newCp = FeatureStateNode(
         id: '${featDoc.id}_${activeVer}_cp_$nextCpNum',
         name: 'Checkpoint $nextCpNum: $cpTitle',
@@ -6147,8 +6168,8 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema):
         edgeCases: item.edgeCases,
         parameters: {
           'releaseVersion': activeVer,
-          if (existingPrimaryAsset.isNotEmpty)
-            'primarySharedScriptOrScene': existingPrimaryAsset,
+          if (resolvedPrimaryAsset.isNotEmpty)
+            'primarySharedScriptOrScene': resolvedPrimaryAsset,
         },
       );
       for (int tIdx = 0; tIdx < newCp.checklist.length; tIdx++) {

@@ -6688,6 +6688,43 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           resolvedSharedBp.subSteps.first.stepPath,
           contains('custom_hook_rig.gd'),
         );
+
+        // 8. Pass 5 AI & Workflow Refinements
+        // 8a. Feature Inbox switching integrationMode to upgradeExistingFeature auto-resolves targetFeatureId & syncs primarySharedScriptOrScene
+        final inboxUpgradeIdea = await provider.submitFeatureIdeaToInbox(
+          'Add grapple cable sparks and tension recoil',
+        );
+        expect(inboxUpgradeIdea, isNotNull);
+        // Simulate switching from newFeatureInEpic (with null targetFeatureId) to upgradeExistingFeature
+        provider.updateFeatureInboxItemTriage(
+          inboxUpgradeIdea!.id,
+          integrationMode: InboxIntegrationMode.upgradeExistingFeature,
+        );
+        final updatedInboxItem = provider.featureInboxItems
+            .firstWhere((i) => i.id == inboxUpgradeIdea.id);
+        expect(updatedInboxItem.targetFeatureId, isNotNull);
+        expect(updatedInboxItem.targetFeatureTitle, isNotEmpty);
+
+        // 8b. Editing sub-step instruction via encodeThreeAreaNotes preserves [[AREA1]] and [[AREA2]]
+        final encodedThreeAreaPass5 = TaskHowToBlueprint.encodeThreeAreaNotes(
+          instruction: 'Updated step instruction prose.',
+          area1Hierarchy: 'PlayerRoot (CharacterBody2D)\n└─ GrappleRig (Node2D)',
+          area2Inspector: 'maxTension: 900.0 | reelSpeed: 420.0',
+        );
+        final decodedThreeAreaPass5 =
+            TaskHowToBlueprint.decodeThreeAreaNotes(encodedThreeAreaPass5);
+        expect(
+          decodedThreeAreaPass5.cleanInstruction,
+          equals('Updated step instruction prose.'),
+        );
+        expect(
+          decodedThreeAreaPass5.area1Hierarchy,
+          contains('GrappleRig (Node2D)'),
+        );
+        expect(
+          decodedThreeAreaPass5.area2Inspector,
+          contains('maxTension: 900.0'),
+        );
       },
     );
   });

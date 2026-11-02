@@ -213,7 +213,11 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           sub.text = titleCtrl.text.trim();
         }
         sub.codeLanguage = whereCtrl.text.trim();
-        sub.specNotes = instrCtrl.text.trim();
+        sub.specNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
+          instruction: instrCtrl.text.trim(),
+          area1Hierarchy: resolvedSub?.area1Hierarchy ?? '',
+          area2Inspector: resolvedSub?.area2Inspector ?? '',
+        );
         sub.codeSnippet = codeCtrl.text.trim();
         sub.verification = verifyCtrl.text.trim();
         sub.codeTargetFile = 'custom_snippet';

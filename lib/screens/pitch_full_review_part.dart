@@ -751,6 +751,12 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     Future<void> triggerRefreshOptions() async {
       if (widget.workbench.isAgentBusy) return;
       await widget.workbench.regenerateStage1SectionOptions(sec.optionKey);
+      if (!mounted) return;
+      _rebuild(() {
+        _initialSectionDefaults.remove(sectionIdx);
+        _selectedOptionBySection.remove(sectionIdx);
+        _selectedOptionsBySection.remove(sectionIdx);
+      });
     }
 
     return Container(

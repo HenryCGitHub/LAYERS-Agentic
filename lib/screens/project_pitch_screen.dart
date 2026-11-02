@@ -502,22 +502,20 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     widget.workbench.updateConceptDraft((d) {
       switch (sectionIdx) {
         case 3: // 04 Design Pillars
-          final combined = <String>[];
+          final combined = List<String>.from(baseList);
           for (final idx in sorted) {
             if (idx < 0 || idx >= opts.length) continue;
             final raw = opts[idx].trim();
-            final val = raw.contains(':') ? raw : 'Core Focus: $raw';
+            final val = ProjectConceptBlueprint.ensureNamedPillar(
+              raw,
+              combined.length,
+            );
             if (!combined.contains(val)) combined.add(val);
-          }
-          for (final existing in baseList) {
-            if (combined.length < 4 && !combined.contains(existing)) {
-              combined.add(existing);
-            }
           }
           d.designPillars = combined;
           break;
         case 4: // 05 Trade-Offs
-          final combined = <String>[];
+          final combined = List<String>.from(baseList);
           for (final idx in sorted) {
             if (idx < 0 || idx >= opts.length) continue;
             final raw = opts[idx].trim();
@@ -526,15 +524,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 : raw;
             if (!combined.contains(body)) combined.add(body);
           }
-          for (final existing in baseList) {
-            if (combined.length < 3 && !combined.contains(existing)) {
-              combined.add(existing);
-            }
-          }
           d.tradeOffs = combined;
           break;
         case 5: // 06 Core Loop Beats
-          final combined = <String>[];
+          final combined = List<String>.from(baseList);
           for (final idx in sorted) {
             if (idx < 0 || idx >= opts.length) continue;
             final raw = opts[idx].trim();
@@ -542,19 +535,26 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 ? raw.substring(raw.indexOf(':') + 1).trim()
                 : raw;
             if (body.contains('→')) {
+              combined.clear();
               final steps = body
                   .split('→')
                   .map((s) => s.trim())
-                  .where((s) => s.isNotEmpty);
-              for (final step in steps) {
-                final formatted = step.trim();
+                  .where((s) => s.isNotEmpty)
+                  .toList();
+              for (int i = 0; i < steps.length; i++) {
+                final formatted = steps[i].trim();
                 if (!combined.any((c) => c.toLowerCase().startsWith(
-                    step.split(':').first.trim().toLowerCase()))) {
+                    formatted.split(':').first.trim().toLowerCase()))) {
                   combined.add(formatted);
                 }
               }
-            } else if (!combined.contains(raw)) {
-              combined.add(raw);
+            } else {
+              final formatted = raw.contains(':')
+                  ? raw
+                  : 'Beat ${combined.length + 1}: $raw';
+              if (!combined.contains(formatted) && !combined.contains(raw)) {
+                combined.add(formatted);
+              }
             }
           }
           if (combined.isNotEmpty) {
@@ -562,7 +562,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
           }
           break;
         case 6: // 07 Out of Scope Exclusions
-          final combined = <String>[];
+          final combined = List<String>.from(baseList);
           for (final idx in sorted) {
             if (idx < 0 || idx >= opts.length) continue;
             final raw = opts[idx].trim();
@@ -570,11 +570,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
                 ? raw.substring(raw.indexOf(':') + 1).trim()
                 : raw;
             if (!combined.contains(body)) combined.add(body);
-          }
-          for (final existing in baseList) {
-            if (!combined.contains(existing)) {
-              combined.add(existing);
-            }
           }
           d.exclusions = combined;
           break;
@@ -658,6 +653,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     await widget.workbench.sendConceptChatMessage(
       '[Section ${sec.numLabel} ${sec.title}] $text',
     );
+    if (!mounted) return;
+    setState(() {
+      _initialSectionDefaults.remove(sectionIdx);
+      _selectedOptionBySection.remove(sectionIdx);
+      _selectedOptionsBySection.remove(sectionIdx);
+    });
   }
 
   List<String> _kvPresetsForCell(bool isGameSpec, int cellIndex) {

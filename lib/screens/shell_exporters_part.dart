@@ -20,28 +20,53 @@ extension _ShellExportersExt on WorkbenchShell {
       sb.writeln(draft.toFullMarkdownSpec());
     } else if (workbench.activeProject != null) {
       final projSec = workbench.activeProject!.sections;
+      final goalText = (projSec['goal'] ?? '').trim();
+      final gameSpecText =
+          (projSec['game_spec'] ?? projSec['gameSpec'] ?? '').trim();
+      final techSpecText =
+          (projSec['tech_spec'] ?? projSec['techSpec'] ?? '').trim();
+      final pillarsText =
+          (projSec['design_pillars'] ?? projSec['designPillars'] ?? '').trim();
+      final tradeOffsText =
+          (projSec['trade_offs'] ?? projSec['tradeOffs'] ?? '').trim();
+      final scopeText = (projSec['scope'] ?? '').trim();
+      final exclusionsText = (projSec['exclusions'] ?? '').trim();
+      final doneWhenText =
+          (projSec['done_when'] ?? projSec['doneWhen'] ?? '').trim();
       sb.writeln('\n## Stage 1: Project Concept Blueprint');
-      if ((projSec['game_spec'] ?? '').isNotEmpty) {
-        sb.writeln('Game Spec: ${projSec['game_spec']}');
+      if (goalText.isNotEmpty) {
+        sb.writeln('Goal: $goalText');
       }
-      if ((projSec['tech_spec'] ?? '').isNotEmpty) {
-        sb.writeln('Tech Spec: ${projSec['tech_spec']}');
+      if (gameSpecText.isNotEmpty) {
+        sb.writeln('Game Spec: $gameSpecText');
       }
-      if ((projSec['design_pillars'] ?? '').isNotEmpty) {
-        sb.writeln('\nDesign Pillars:\n${projSec['design_pillars']}');
+      if (techSpecText.isNotEmpty) {
+        sb.writeln('Tech Spec: $techSpecText');
       }
-      if ((projSec['trade_offs'] ?? '').isNotEmpty) {
-        sb.writeln('\nTrade-Offs:\n${projSec['trade_offs']}');
+      if (pillarsText.isNotEmpty) {
+        sb.writeln('\nDesign Pillars:\n$pillarsText');
       }
-      if ((projSec['scope'] ?? '').isNotEmpty) {
-        sb.writeln('\n${projSec['scope']}');
+      if (tradeOffsText.isNotEmpty) {
+        sb.writeln('\nTrade-Offs:\n$tradeOffsText');
+      }
+      if (scopeText.isNotEmpty) {
+        sb.writeln('\n$scopeText');
+      }
+      if (exclusionsText.isNotEmpty) {
+        sb.writeln('\nOut of Scope:\n$exclusionsText');
+      }
+      if (doneWhenText.isNotEmpty) {
+        sb.writeln('\nDone When: $doneWhenText');
       }
     }
     final beats = workbench.activeReleaseBeats;
     if (rel != null && beats.isNotEmpty) {
       final relProgress = workbench.getDocumentProgress(rel.id);
-      final engineHint =
-          draft?.techSpec.join(' ') ?? workbench.activeProject?.sections['tech_spec'];
+      final draftTech = draft?.techSpec.join(' ').trim() ?? '';
+      final engineHint = draftTech.isNotEmpty
+          ? draftTech
+          : (workbench.activeProject?.sections['tech_spec'] ??
+              workbench.activeProject?.sections['techSpec']);
       sb.writeln('\n## Stage 2: Active Release Workbench (${rel.title} · $relProgress% Verified)');
       for (int bIdx = 0; bIdx < beats.length; bIdx++) {
         final beat = beats[bIdx];
@@ -70,6 +95,7 @@ extension _ShellExportersExt on WorkbenchShell {
                   taskIndex: tIdx,
                   checkpointNode: cp,
                   engineHint: engineHint,
+                  phase: workbench.currentPhase,
                 );
               }
               final tDone = task.completed ? 'x' : ' ';

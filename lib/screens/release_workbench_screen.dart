@@ -312,9 +312,13 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
   }
 
-  String? get _engineHint =>
-      widget.workbench.conceptDraft?.techSpec.join(' ') ??
-      widget.workbench.activeProject?.sections['tech_spec'];
+  String? get _engineHint {
+    final draftTech =
+        widget.workbench.conceptDraft?.techSpec.join(' ').trim() ?? '';
+    if (draftTech.isNotEmpty) return draftTech;
+    final projSec = widget.workbench.activeProject?.sections;
+    return projSec?['tech_spec'] ?? projSec?['techSpec'];
+  }
 
   int _computeCheckpointRemainingMinutes(FeatureStateNode cpNode) {
     final hint = _engineHint;

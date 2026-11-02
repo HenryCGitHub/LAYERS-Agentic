@@ -3295,6 +3295,86 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                   ],
                                 ),
                               ],
+                              if (item.integrationMode ==
+                                  InboxIntegrationMode
+                                      .upgradeExistingFeature) ...[
+                                Builder(
+                                  builder: (context) {
+                                    final targetFeats = widget.workbench
+                                        .featuresForBeat(item.targetBeatId);
+                                    if (targetFeats.length <= 1) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: [
+                                          for (final tf in targetFeats)
+                                            Builder(
+                                              builder: (context) {
+                                                final isFeatSel =
+                                                    item.targetFeatureId ==
+                                                        tf.id;
+                                                return InkWell(
+                                                  key: ValueKey(
+                                                    'inbox_target_feat_${item.id}_${tf.id}',
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  onTap: () {
+                                                    widget.workbench
+                                                        .updateFeatureInboxItemTriage(
+                                                      item.id,
+                                                      targetFeatureId: tf.id,
+                                                    );
+                                                    setModalState(() {});
+                                                    _rebuild(() {});
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 7,
+                                                      vertical: 3,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: isFeatSel
+                                                          ? bgSurface
+                                                          : Colors.transparent,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        4,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: isFeatSel
+                                                            ? accentEmerald
+                                                            : borderSubtle,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      '↑ ${tf.title}',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 9.5,
+                                                        fontWeight: isFeatSel
+                                                            ? FontWeight.w700
+                                                            : FontWeight.w500,
+                                                        color: isFeatSel
+                                                            ? textPrimary
+                                                            : textMuted,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                               const SizedBox(height: 4),
                               Text(
                                 item.placementReasoning,
