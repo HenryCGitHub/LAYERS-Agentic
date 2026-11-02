@@ -2541,11 +2541,34 @@ Return ONLY a JSON object:
     notifyListeners();
     try {
       final projectDoc = activeProject;
-      final gameSpec = (projectDoc?.sections['game_spec'] ?? '').trim();
-      final techSpec = (projectDoc?.sections['tech_spec'] ?? '').trim();
+      final draft = _conceptDraft;
+      final gameSpec = (projectDoc?.sections['game_spec'] ??
+              projectDoc?.sections['gameSpec'] ??
+              draft?.gameSpec.join(' · ') ??
+              '')
+          .trim();
+      final techSpec = (projectDoc?.sections['tech_spec'] ??
+              projectDoc?.sections['techSpec'] ??
+              draft?.techSpec.join(' · ') ??
+              '')
+          .trim();
+      final pillarsSummary = (projectDoc?.sections['design_pillars'] ??
+              projectDoc?.sections['designPillars'] ??
+              draft?.designPillars.join(' | ') ??
+              '')
+          .replaceAll('\n', ' | ')
+          .trim();
+      final tradeOffsSummary = (projectDoc?.sections['trade_offs'] ??
+              projectDoc?.sections['tradeOffs'] ??
+              draft?.tradeOffs.join(' | ') ??
+              '')
+          .replaceAll('\n', ' | ')
+          .trim();
       final specLine = [
         if (gameSpec.isNotEmpty) 'Game Spec: $gameSpec',
         if (techSpec.isNotEmpty) 'Tech Spec: $techSpec',
+        if (pillarsSummary.isNotEmpty) 'Design Pillars: $pillarsSummary',
+        if (tradeOffsSummary.isNotEmpty) 'Trade-Offs: $tradeOffsSummary',
       ].join(' | ');
       final existingTasksSummary = [
         for (int i = 0; i < fixTaskIndex; i++)
@@ -2572,8 +2595,10 @@ Return ONLY a JSON object:
               ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
               : '');
 
-      final primaryAsset =
-          (documents[featureId]?.sections['primary_asset'] ?? '').trim();
+      final primaryAsset = (documents[featureId]?.sections['primary_asset'] ??
+              cpNode.parameters['primarySharedScriptOrScene'] ??
+              '')
+          .trim();
       final primaryAssetLine = primaryAsset.isNotEmpty
           ? 'Primary Shared Asset (modify this exact script/scene): $primaryAsset\n'
           : '';
@@ -3418,11 +3443,16 @@ Return ONLY a JSON object with this schema:
   static const Map<String, dynamic> commitCodeToSpecSyncTool = {
     'name': 'commit_code_to_spec_sync',
     'description':
-        'Extracts updated or newly exported tuning variables and [GUARD] rules from a pasted engine script so the feature spec stays in sync with code.',
+        'Extracts updated or newly exported tuning variables, primary script/scene asset, and [GUARD] rules from a pasted engine script so the feature spec stays in sync with code.',
     'parameters': {
       'type': 'OBJECT',
       'required': ['tuningUpdates', 'newGuards'],
       'properties': {
+        'primarySharedScriptOrScene': {
+          'type': 'STRING',
+          'description':
+              'Optional canonical class/script/scene identifier detected in the pasted code (e.g., "PlayerDashController (res://scripts/player_dash.gd)").',
+        },
         'tuningUpdates': {
           'type': 'ARRAY',
           'items': {
@@ -4002,24 +4032,56 @@ Return ONLY valid JSON:
     sb.writeln('- **Project**: $projectTitle');
     sb.writeln('- **Active Release**: $relTitle (`$activeVer`)');
     sb.writeln('- **Target Engine**: $effectiveEngineTarget');
-    if (draft != null) {
-      if (draft.goal.trim().isNotEmpty) {
-        sb.writeln('- **Goal**: ${draft.goal.trim()}');
-      }
-      if (draft.designPillars.isNotEmpty) {
-        sb.writeln('- **Design Pillars**: ${draft.designPillars.join(' · ')}');
-      }
-      if (draft.tradeOffs.isNotEmpty) {
-        sb.writeln('- **Engineering Trade-Offs**: ${draft.tradeOffs.join(' · ')}');
-      }
-      if (draft.exclusions.isNotEmpty) {
-        sb.writeln(
-          '- **Explicitly Out of Scope (DO NOT BUILD IN $activeVer)**: ${draft.exclusions.join(' · ')}',
-        );
-      }
-      if (draft.doneWhen.trim().isNotEmpty) {
-        sb.writeln('- **Release Done When**: ${draft.doneWhen.trim()}');
-      }
+    final goalText = (draft != null && draft.goal.trim().isNotEmpty)
+        ? draft.goal.trim()
+        : (proj?.sections['goal'] ?? '').trim();
+    if (goalText.isNotEmpty) {
+      sb.writeln('- **Goal**: $goalText');
+    }
+    final gameSpecText = (draft != null && draft.gameSpec.isNotEmpty)
+        ? draft.gameSpec.join(' · ')
+        : (proj?.sections['game_spec'] ?? proj?.sections['gameSpec'] ?? '')
+            .trim();
+    if (gameSpecText.isNotEmpty) {
+      sb.writeln('- **Game Spec**: $gameSpecText');
+    }
+    final pillarsText = (draft != null && draft.designPillars.isNotEmpty)
+        ? draft.designPillars.join(' · ')
+        : (proj?.sections['design_pillars'] ??
+                proj?.sections['designPillars'] ??
+                '')
+            .replaceAll('\n', ' · ')
+            .replaceAll('• ', '')
+            .trim();
+    if (pillarsText.isNotEmpty) {
+      sb.writeln('- **Design Pillars**: $pillarsText');
+    }
+    final tradeOffsText = (draft != null && draft.tradeOffs.isNotEmpty)
+        ? draft.tradeOffs.join(' · ')
+        : (proj?.sections['trade_offs'] ?? proj?.sections['tradeOffs'] ?? '')
+            .replaceAll('\n', ' · ')
+            .replaceAll('• ', '')
+            .trim();
+    if (tradeOffsText.isNotEmpty) {
+      sb.writeln('- **Engineering Trade-Offs**: $tradeOffsText');
+    }
+    final exclusionsText = (draft != null && draft.exclusions.isNotEmpty)
+        ? draft.exclusions.join(' · ')
+        : (proj?.sections['exclusions'] ?? '')
+            .replaceAll('\n', ' · ')
+            .replaceAll('• ', '')
+            .trim();
+    if (exclusionsText.isNotEmpty) {
+      sb.writeln(
+        '- **Explicitly Out of Scope (DO NOT BUILD IN $activeVer)**: $exclusionsText',
+      );
+    }
+    final doneWhenText = (draft != null && draft.doneWhen.trim().isNotEmpty)
+        ? draft.doneWhen.trim()
+        : (proj?.sections['done_when'] ?? proj?.sections['doneWhen'] ?? '')
+            .trim();
+    if (doneWhenText.isNotEmpty) {
+      sb.writeln('- **Release Done When**: $doneWhenText');
     }
 
     final beats = activeReleaseBeats;
@@ -4033,7 +4095,12 @@ Return ONLY valid JSON:
         final eNum = (bIdx + 1).toString().padLeft(2, '0');
         sb.writeln('- **E$eNum · ${b.title}**: ${b.goal}');
         for (final f in b.features.where((f) => f.included)) {
-          sb.writeln('  - **${f.title}** (${f.estimatedHours}h): ${f.goal}');
+          final bpAsset = (f.primarySharedScriptOrScene ?? '').trim();
+          final assetSuffix =
+              bpAsset.isNotEmpty ? ' · Shared Asset: `$bpAsset`' : '';
+          sb.writeln(
+            '  - **${f.title}** (${f.estimatedHours}h$assetSuffix): ${f.goal}',
+          );
         }
       }
     } else {
@@ -4044,14 +4111,23 @@ Return ONLY valid JSON:
         for (final feat in featuresForBeat(beat.id)) {
           final lc = (feat.sections['lifecycle'] ?? 'newFeature').toUpperCase();
           final p = getDocumentProgress(feat.id);
-          sb.writeln(
-            '  - **${feat.title}** [`$lc` · $p% verified · ${feat.estimatedDuration}]',
-          );
           final states = FeatureStateNode.getStatesForDocument(feat);
           final activeStates =
               states.where((s) => s.releaseVersion == activeVer).toList();
           final effectiveStates =
               activeStates.isNotEmpty ? activeStates : states;
+          final featAsset = (feat.sections['primary_asset'] ??
+                  (effectiveStates.isNotEmpty
+                      ? effectiveStates
+                          .last.parameters['primarySharedScriptOrScene']
+                      : null) ??
+                  '')
+              .trim();
+          final assetSuffix =
+              featAsset.isNotEmpty ? ' · Shared Asset: `$featAsset`' : '';
+          sb.writeln(
+            '  - **${feat.title}** [`$lc` · $p% verified · ${feat.estimatedDuration}$assetSuffix]',
+          );
           for (final cp in effectiveStates) {
             for (final t in cp.tuningParams) {
               final parts = t.split(':');
@@ -4118,6 +4194,13 @@ Return ONLY valid JSON:
           sb.writeln(
             '\n#### ${feat.title} — ${cp.cleanStageTitle} (${cp.releaseVersion})',
           );
+          final cpAsset = (feat.sections['primary_asset'] ??
+                  cp.parameters['primarySharedScriptOrScene'] ??
+                  '')
+              .trim();
+          if (cpAsset.isNotEmpty) {
+            sb.writeln('- **Primary Shared Asset**: `$cpAsset`');
+          }
           sb.writeln('- **Playtest Gate**: ${cp.playtestCondition}');
           for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
             final task = cp.checklist[tIdx];
@@ -4356,12 +4439,42 @@ Return ONLY valid JSON:
     sb.writeln('- **Target Engine**: $effectiveEngineTarget');
     sb.writeln('- **Epic**: $epicLabel');
     sb.writeln('- **Feature**: ${feat.title}');
+    final featPrimaryAsset = (feat.sections['primary_asset'] ??
+            cpNode?.parameters['primarySharedScriptOrScene'] ??
+            '')
+        .trim();
+    if (featPrimaryAsset.isNotEmpty) {
+      sb.writeln('- **Primary Shared Asset**: `$featPrimaryAsset`');
+    }
     final rawGoal = (feat.sections['scope'] ?? feat.sections['goal'] ?? '').trim();
     if (rawGoal.isNotEmpty) {
       sb.writeln('- **Goal**: ${rawGoal.split('\n').first.replaceFirst(_goalPrefixRegex, '').trim()}');
     }
+    if (cpNode != null && cpNode.coveredScope.isNotEmpty) {
+      sb.writeln('- **In Scope**: ${cpNode.coveredScope.join(' · ')}');
+    }
     if (cpNode != null && cpNode.playtestCondition.trim().isNotEmpty) {
       sb.writeln('- **Playtest Gate (Done When)**: ${cpNode.playtestCondition.trim()}');
+    }
+    final pillarsText = (draft != null && draft.designPillars.isNotEmpty)
+        ? draft.designPillars.join(' · ')
+        : (proj?.sections['design_pillars'] ??
+                proj?.sections['designPillars'] ??
+                '')
+            .replaceAll('\n', ' · ')
+            .replaceAll('• ', '')
+            .trim();
+    if (pillarsText.isNotEmpty) {
+      sb.writeln('- **Design Pillars**: $pillarsText');
+    }
+    final tradeOffsText = (draft != null && draft.tradeOffs.isNotEmpty)
+        ? draft.tradeOffs.join(' · ')
+        : (proj?.sections['trade_offs'] ?? proj?.sections['tradeOffs'] ?? '')
+            .replaceAll('\n', ' · ')
+            .replaceAll('• ', '')
+            .trim();
+    if (tradeOffsText.isNotEmpty) {
+      sb.writeln('- **Trade-Offs**: $tradeOffsText');
     }
 
     sb.writeln('\n## 2. Canonical Tuning Variables & Sibling Context');
@@ -4378,10 +4491,20 @@ Return ONLY valid JSON:
       for (final sib in featuresForBeat(parentBeat.id)) {
         if (sib.id == feat.id) continue;
         final sibStates = FeatureStateNode.getStatesForDocument(sib);
+        final sibAsset = (sib.sections['primary_asset'] ??
+                (sibStates.isNotEmpty
+                    ? sibStates.last.parameters['primarySharedScriptOrScene']
+                    : null) ??
+                '')
+            .trim();
+        final sibAssetSuffix =
+            sibAsset.isNotEmpty ? ' `[shared asset: $sibAsset]`' : '';
         if (sibStates.isNotEmpty && sibStates.last.tuningParams.isNotEmpty) {
           siblingLines.add(
-            '- **${sib.title}**: `${sibStates.last.tuningParams.join('`, `')}`',
+            '- **${sib.title}**$sibAssetSuffix: `${sibStates.last.tuningParams.join('`, `')}`',
           );
+        } else if (sibAssetSuffix.isNotEmpty) {
+          siblingLines.add('- **${sib.title}**$sibAssetSuffix');
         }
       }
       if (siblingLines.isNotEmpty) {
@@ -4475,14 +4598,19 @@ Return ONLY valid JSON:
 
     final extractedTuning = <String, String>{};
     final extractedGuards = <String>[];
+    String? extractedPrimaryAsset;
 
     // 1. Fast AI extraction pass via gemini-flash-latest when key is available
     if (GeminiAgentClient.hasKey(_apiKey)) {
+      final currentAsset = (feat.sections['primary_asset'] ??
+              cpNode.parameters['primarySharedScriptOrScene'] ??
+              '')
+          .trim();
       final prompt = '''
-You are a Game Engine Code-to-Spec Synchronizer.
+You are a Game Engine Code-to-Spec Synchronizer ($_activeEngineLabel).
 Compare the developer's pasted engine script against the Feature's current Tuning Parameters and Guards.
 Feature: "${feat.title}"
-Current Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+${currentAsset.isNotEmpty ? 'Current Primary Shared Asset: $currentAsset\n' : ''}Current Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Current Guards: ${cpNode.edgeCases.join(' | ')}
 
 Pasted Engine Script:
@@ -4491,11 +4619,13 @@ $trimmedCode
 ```
 
 Extract:
-1. "tuningUpdates": Any updated or newly exported numeric/boolean/string tuning variables from the script formatted as "variableName: value". Preserve existing variable names when they match.
-2. "newGuards": Any new safety/null/cooldown/bounds guard checks in the script formatted as "[GUARD] condition — safe fallback".
+1. "primarySharedScriptOrScene": Optional canonical class/script/scene identifier detected in the pasted code.
+2. "tuningUpdates": Any updated or newly exported numeric/boolean/string tuning variables from the script. Preserve existing variable names when they match.
+3. "newGuards": Any new safety/null/cooldown/bounds guard checks in the script formatted as "[GUARD] condition — safe fallback".
 
 Return ONLY valid JSON:
 {
+  "primarySharedScriptOrScene": "PlayerDashController (res://scripts/player_dash.gd)",
   "tuningUpdates": [{"variableName": "moveSpeed", "value": "650.0"}],
   "newGuards": ["[GUARD] Prevent dash while stunned — early-return when isStunned is true"]
 }''';
@@ -4507,6 +4637,10 @@ Return ONLY valid JSON:
         temperature: 0.1,
         functionDeclarations: const [commitCodeToSpecSyncTool],
       );
+      final rawAsset = json?['primarySharedScriptOrScene']?.toString().trim();
+      if (rawAsset != null && rawAsset.isNotEmpty) {
+        extractedPrimaryAsset = rawAsset;
+      }
       final rawTuning = json?['tuningUpdates'];
       if (rawTuning is List) {
         for (final item in rawTuning) {
@@ -4654,18 +4788,27 @@ Return ONLY valid JSON:
       }
     }
 
-    if (updatedVars > 0 || addedGuards > 0) {
+    final hasNewPrimaryAsset = extractedPrimaryAsset != null &&
+        extractedPrimaryAsset.isNotEmpty &&
+        extractedPrimaryAsset !=
+            (feat.sections['primary_asset'] ?? '').trim();
+
+    if (updatedVars > 0 || addedGuards > 0 || hasNewPrimaryAsset) {
       cpNode.tuningParams = updatedTuningList;
       cpNode.edgeCases = updatedGuardsList;
+      if (extractedPrimaryAsset != null && extractedPrimaryAsset.isNotEmpty) {
+        feat.sections['primary_asset'] = extractedPrimaryAsset;
+        cpNode.parameters['primarySharedScriptOrScene'] = extractedPrimaryAsset;
+      }
       if (updatedTuningList.isNotEmpty) {
         final formattedTuning =
-            updatedTuningList.map((t) => '- $t').join('\n');
+            updatedTuningList.map((t) => '• $t').join('\n');
         feat.sections['tuning'] = formattedTuning;
         feat.sections['variables'] = formattedTuning;
       }
       if (updatedGuardsList.isNotEmpty) {
         feat.sections['edge_cases'] =
-            updatedGuardsList.map((e) => '- $e').join('\n');
+            updatedGuardsList.map((e) => '• $e').join('\n');
       }
       TaskHowToBlueprint.clearCache();
       updateFeatureStates(featureId, states);
@@ -5644,7 +5787,30 @@ ${beatCatalogLines.join('\n')}
 ${GeminiAgentClient.compactStyleRules}
 - If `releaseTimingMode` is `"now"`, omit `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTasks"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
 
-Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).''';
+Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema):
+{
+  "releaseTimingMode": "now",
+  "targetFuturePhase": "mvp",
+  "releaseTimingReasoning": "<1 sentence why now vs split vs future>",
+  "integrationMode": "newFeatureInEpic",
+  "targetBeatId": "${beats.isNotEmpty ? beats.first.id : 'beat_1'}",
+  "placementReasoning": "<1 sentence why this Epic/Feature owns it>",
+  "featureTitle": "<2-4 word plain mechanic title>",
+  "goal": "<1 sentence player/system action>",
+  "inScope": ["<Deliverable 1>", "<Deliverable 2>"],
+  "doneWhen": "<Observable playtest condition>",
+  "primarySharedScriptOrScene": "<1 shared script/scene asset for all tasks>",
+  "architectureHowSummary": ["<Engine node/class setup>", "<Input/state flow>", "<Guard/feedback hook>"],
+  "checkpointTitle": "Checkpoint 1: <Stage Title>",
+  "playtestGate": "<Action> -> <Observable response>",
+  "tasks": [
+    {"role": "entity_and_collision_foundation", "title": "<Task 1> (1h)"},
+    {"role": "core_action_and_math", "title": "<Task 2> (2h)"},
+    {"role": "feedback_and_boundary_guard", "title": "<Task 3> (1h)"}
+  ],
+  "tuningParams": ["paramOne: 1.0", "paramTwo: 2.0"],
+  "edgeCases": ["[STATE GUARD] <condition — fallback>"]
+}''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,

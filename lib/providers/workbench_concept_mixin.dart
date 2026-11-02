@@ -284,12 +284,16 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         );
     projDoc.title = draft.title;
     projDoc.sections['scope'] = draft.toFormattedScopeSection();
+    projDoc.sections['goal'] = draft.goal;
     projDoc.sections['game_spec'] = draft.gameSpec.join(' · ');
     projDoc.sections['tech_spec'] = draft.techSpec.join(' · ');
     projDoc.sections['design_pillars'] =
         draft.designPillars.map((p) => '• $p').join('\n');
     projDoc.sections['trade_offs'] =
         draft.tradeOffs.map((t) => '• $t').join('\n');
+    projDoc.sections['exclusions'] =
+        draft.exclusions.map((e) => '• $e').join('\n');
+    projDoc.sections['done_when'] = draft.doneWhen;
 
     final releaseIds = <String>[];
     final trainTitles = draft.releaseTrainTitles.isNotEmpty

@@ -6628,6 +6628,66 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           tailorToolProps.containsKey('primarySharedScriptOrScene'),
           isTrue,
         );
+
+        // 7. Pass 4 AI & Workflow Refinements
+        // 7a. commitCodeToSpecSyncTool supports primarySharedScriptOrScene
+        final codeSyncToolProps =
+            (WorkbenchReleaseMixin.commitCodeToSpecSyncTool['parameters']
+                as Map)['properties'] as Map;
+        expect(
+          codeSyncToolProps.containsKey('primarySharedScriptOrScene'),
+          isTrue,
+        );
+
+        // 7b. buildActiveReleaseCodingAgentMarkdown and buildActiveFeatureCodingAgentPrompt output Primary Shared Asset
+        liveDocForBpSync.sections['primary_asset'] =
+            'GrappleHookController (res://scripts/grapple_hook_controller.gd)';
+        final releaseAgentsMd =
+            provider.buildActiveReleaseCodingAgentMarkdown();
+        expect(
+          releaseAgentsMd,
+          contains(
+            'GrappleHookController (res://scripts/grapple_hook_controller.gd)',
+          ),
+        );
+        final singleFeaturePrompt =
+            provider.buildActiveFeatureCodingAgentPrompt(liveDocForBpSync.id);
+        expect(
+          singleFeaturePrompt,
+          contains(
+            '**Primary Shared Asset**: `GrappleHookController (res://scripts/grapple_hook_controller.gd)`',
+          ),
+        );
+        expect(singleFeaturePrompt, contains('**Design Pillars**:'));
+
+        // 7c. TaskHowToBlueprint.resolve honors checkpointNode.parameters['primarySharedScriptOrScene']
+        TaskHowToBlueprint.clearCache();
+        final sharedAssetCp = FeatureStateNode(
+          id: 'cp_shared_asset_test',
+          name: 'Checkpoint 1: Grapple Swing',
+          trigger: 'Playtest: Press E -> attach grapple hook',
+          checklist: [
+            Subtask(
+              id: 't_shared_1',
+              text: 'Implement swing tension physics (2h)',
+            ),
+          ],
+          parameters: {
+            'releaseVersion': 'v0.1',
+            'primarySharedScriptOrScene':
+                'CustomHookRig (res://scenes/custom_hook_rig.tscn)',
+          },
+        );
+        final resolvedSharedBp = TaskHowToBlueprint.resolve(
+          parentTask: sharedAssetCp.checklist.first,
+          taskIndex: 0,
+          checkpointNode: sharedAssetCp,
+          engineHint: 'Godot 4 (2D)',
+        );
+        expect(
+          resolvedSharedBp.subSteps.first.stepPath,
+          contains('custom_hook_rig.gd'),
+        );
       },
     );
   });

@@ -667,6 +667,49 @@ class TaskHowToBlueprint {
     return (pascalName: pascal, snakeName: snake);
   }
 
+  static final RegExp _camelOrSnakeTokenRegex = RegExp(
+    r'[A-Z]+(?=[A-Z][a-z]|\d|\b)|[A-Z]?[a-z]+|\d+',
+  );
+  static final RegExp _assetExtRegex = RegExp(
+    r'\.(?:gd|tscn|tres|cs|prefab|h|cpp|uasset|umap)$',
+    caseSensitive: false,
+  );
+  static final RegExp _unrealBpPrefixRegex = RegExp(
+    r'^(?:WBP_|ABP_|BP_)',
+    caseSensitive: false,
+  );
+  static final RegExp _unrealCppPrefixRegex = RegExp(r'^[AU](?=[A-Z][a-z])');
+
+  /// Resolves `(pascalName, snakeName)` from an explicit `primarySharedScriptOrScene`
+  /// when present, or falls back to `deriveConcreteAssetName(fallbackText)`.
+  static ({String pascalName, String snakeName}) resolveAssetName({
+    String? primarySharedAsset,
+    required String fallbackText,
+  }) {
+    final raw = (primarySharedAsset ?? '').trim();
+    if (raw.isNotEmpty) {
+      var head = raw.split('(').first.trim();
+      if (head.isEmpty) head = raw;
+      head = head.split('/').last.split(r'\').last.trim();
+      head = head.replaceFirst(_assetExtRegex, '').trim();
+      head = head.replaceFirst(_unrealBpPrefixRegex, '').trim();
+      head = head.replaceFirst(_unrealCppPrefixRegex, '').trim();
+      final tokens = _camelOrSnakeTokenRegex
+          .allMatches(head)
+          .map((m) => m.group(0)!)
+          .where((t) => t.isNotEmpty)
+          .toList();
+      if (tokens.isNotEmpty) {
+        final pascal = tokens
+            .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+            .join();
+        final snake = tokens.map((w) => w.toLowerCase()).join('_');
+        return (pascalName: pascal, snakeName: snake);
+      }
+    }
+    return deriveConcreteAssetName(fallbackText);
+  }
+
   static int _computeTaskSignature({
     required Subtask parentTask,
     required FeatureStateNode checkpointNode,
@@ -684,6 +727,7 @@ class TaskHowToBlueprint {
       checkpointNode.trigger,
       checkpointNode.tuningParams.join('|'),
       checkpointNode.edgeCases.join('|'),
+      checkpointNode.parameters['primarySharedScriptOrScene'] ?? '',
       engineHint ?? '',
       unrealCppMode,
       effectivePhase.name,
@@ -928,7 +972,11 @@ class TaskHowToBlueprint {
     final assetSource = checkpointNode.checklist.isNotEmpty
         ? checkpointNode.checklist.first.text
         : cleanTitle;
-    final asset = deriveConcreteAssetName('$assetSource ${checkpointNode.name}');
+    final asset = resolveAssetName(
+      primarySharedAsset:
+          checkpointNode.parameters['primarySharedScriptOrScene'],
+      fallbackText: '$assetSource ${checkpointNode.name}',
+    );
     final pascalAsset = asset.pascalName;
     final snakeAsset = asset.snakeName;
     final bpAsset = 'BP_$pascalAsset';

@@ -274,8 +274,14 @@ class WorkbenchProvider extends ChangeNotifier {
     _jumpToFullReviewPending = false;
   }
 
-  String? get _activeEngineHint =>
-      _conceptDraft?.techSpec.join(' ') ?? activeProject?.sections['tech_spec'];
+  String? get _activeEngineHint {
+    final draftTech = _conceptDraft?.techSpec;
+    if (draftTech != null && draftTech.isNotEmpty) {
+      return draftTech.join(' ');
+    }
+    return activeProject?.sections['tech_spec'] ??
+        activeProject?.sections['techSpec'];
+  }
 
   String get _activeEngineLabel =>
       TaskHowToBlueprint.detectEngineLabel(_activeEngineHint);
