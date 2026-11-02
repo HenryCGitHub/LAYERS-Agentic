@@ -6340,6 +6340,42 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           WorkbenchReleaseMixin.commitInboxFeatureTriageTool['name'],
           equals('commit_inbox_feature_triage'),
         );
+        expect(
+          WorkbenchReleaseMixin.commitCodeToSpecSyncTool['name'],
+          equals('commit_code_to_spec_sync'),
+        );
+
+        // Verify Stage 1A Spark Intake & Expansion Tools and typed Section Option tools
+        expect(
+          ProjectConceptAgent.commitSparkIntakeTool['name'],
+          equals('commit_spark_intake'),
+        );
+        expect(
+          ProjectConceptAgent.proposeSparkExpansionCardsTool['name'],
+          equals('propose_spark_expansion_cards'),
+        );
+        expect(
+          ProjectConceptAgent.buildSectionOptionsTool('designPillars')['name'],
+          equals('propose_design_pillar_options'),
+        );
+        expect(
+          ProjectConceptAgent.buildSectionOptionsTool('coreLoop')['name'],
+          equals('propose_core_loop_options'),
+        );
+        final parsedLoopOpts =
+            ProjectConceptAgent.parseSectionOptionsToolOutput(
+          'coreLoop',
+          [
+            {
+              'label': 'High-Risk Salvage',
+              'beats': ['Dive & Cut', 'Haul Scrap', 'Refuel Rig'],
+            },
+          ],
+        );
+        expect(
+          parsedLoopOpts,
+          equals(['High-Risk Salvage: Dive & Cut → Haul Scrap → Refuel Rig']),
+        );
       },
     );
   });

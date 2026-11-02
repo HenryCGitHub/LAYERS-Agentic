@@ -162,9 +162,19 @@ class ReleasePlannerAgent {
                     'goal': {'type': 'STRING'},
                     'doneWhen': {'type': 'STRING'},
                     'estimatedHours': {'type': 'INTEGER'},
+                    'included': {
+                      'type': 'BOOLEAN',
+                      'description':
+                          'Whether this feature is checked/active in the current release scope (defaults to true).',
+                    },
                     'lifecycle': {
                       'type': 'STRING',
                       'enum': ['new', 'upgrade', 'superseded'],
+                    },
+                    'supersedesFeatureTitle': {
+                      'type': 'STRING',
+                      'description':
+                          'Optional title of an earlier feature that this feature replaces/supersedes.',
                     },
                     'inScope': {
                       'type': 'ARRAY',
@@ -273,10 +283,12 @@ class ReleasePlannerAgent {
                     'goal': {'type': 'STRING'},
                     'doneWhen': {'type': 'STRING'},
                     'estimatedHours': {'type': 'INTEGER'},
+                    'included': {'type': 'BOOLEAN'},
                     'lifecycle': {
                       'type': 'STRING',
                       'enum': ['new', 'upgrade', 'stable', 'superseded'],
                     },
+                    'supersedesFeatureTitle': {'type': 'STRING'},
                     'inScope': {
                       'type': 'ARRAY',
                       'items': {'type': 'STRING'},

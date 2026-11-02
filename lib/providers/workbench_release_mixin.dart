@@ -2249,10 +2249,16 @@ Return ONLY a JSON object:
               ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
               : '');
 
+      final primaryAsset =
+          (documents[featureId]?.sections['primary_asset'] ?? '').trim();
+      final primaryAssetLine = primaryAsset.isNotEmpty
+          ? 'Primary Shared Asset (modify this exact script/scene): $primaryAsset\n'
+          : '';
+
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize the exact number of concrete engine fix steps needed to resolve and verify it:
-${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}$dimensionRule${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
+${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}$dimensionRule$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
@@ -2416,13 +2422,19 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
               ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
               : '');
 
+      final primaryAsset =
+          (featDoc?.sections['primary_asset'] ?? '').trim();
+      final primaryAssetLine = primaryAsset.isNotEmpty
+          ? 'Primary Shared Asset (modify this exact script/scene): $primaryAsset\n'
+          : '';
+
       final prompt = '''
 You are a senior game engine programmer assisting with a concrete implementation task.
 Engine: $engineLabel
 ${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}${dimensionRule}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
 Playtest Gate: "${cpNode.playtestCondition}"
 Target Task ($taskNum of ${cpNode.checklist.length}): "${parentTask.text}"
-${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+$primaryAssetLine${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
@@ -2929,6 +2941,38 @@ Return ONLY a JSON object with this schema:
     },
   };
 
+  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 Code-to-Spec Reverse Sync (`syncFeatureTuningAndGuardsFromCode`).
+  static const Map<String, dynamic> commitCodeToSpecSyncTool = {
+    'name': 'commit_code_to_spec_sync',
+    'description':
+        'Extracts updated or newly exported tuning variables and [GUARD] rules from a pasted engine script so the feature spec stays in sync with code.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['tuningUpdates', 'newGuards'],
+      'properties': {
+        'tuningUpdates': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['variableName', 'value'],
+            'properties': {
+              'variableName': {'type': 'STRING'},
+              'value': {'type': 'STRING'},
+            },
+          },
+        },
+        'newGuards': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'STRING',
+            'description':
+                'Safety/null/cooldown/bounds guard formatted as "[GUARD] condition — safe fallback".',
+          },
+        },
+      },
+    },
+  };
+
   /// Extracts a compact Cumulative Project Ledger entry for an already-synthesized feature
   /// so subsequent features reuse exact Actor/Scene/Script names, tuning variables, and guards.
   String _summarizeFeatureForProjectLedger(
@@ -2937,6 +2981,10 @@ Return ONLY a JSON object with this schema:
   ) {
     final states = FeatureStateNode.getStatesForDocument(featDoc);
     final assetTokens = <String>{};
+    final primaryAsset = (featDoc.sections['primary_asset'] ?? '').trim();
+    if (primaryAsset.isNotEmpty) {
+      assetTokens.add(primaryAsset);
+    }
     final pathTokens = <String>{};
     final tuningTokens = <String>{};
     final guardTokens = <String>{};
@@ -3343,6 +3391,11 @@ Return ONLY valid JSON:
         temperature: 0.25,
         functionDeclarations: const [commitFeatureHowToStepsTool],
       );
+      final primaryAsset =
+          (json?['primarySharedScriptOrScene'] ?? '').toString().trim();
+      if (primaryAsset.isNotEmpty) {
+        feat.sections['primary_asset'] = primaryAsset;
+      }
       final rawTasks = json?['tasks'];
       if (rawTasks is! List || rawTasks.isEmpty) return;
 
@@ -3969,17 +4022,28 @@ Return ONLY valid JSON:
         preferredModel: _conversationModel,
         thinkingLevel: _thinkingLevel,
         temperature: 0.1,
+        functionDeclarations: const [commitCodeToSpecSyncTool],
       );
       final rawTuning = json?['tuningUpdates'];
       if (rawTuning is List) {
         for (final item in rawTuning) {
-          final text = item?.toString().trim() ?? '';
-          final colonIdx = text.indexOf(':');
-          if (colonIdx > 0) {
-            final k = text.substring(0, colonIdx).trim();
-            final v = text.substring(colonIdx + 1).trim();
+          if (item is Map) {
+            final k = (item['variableName'] ?? item['name'] ?? '')
+                .toString()
+                .trim();
+            final v = (item['value'] ?? '').toString().trim();
             if (k.isNotEmpty && v.isNotEmpty) {
               extractedTuning[k] = v;
+            }
+          } else {
+            final text = item?.toString().trim() ?? '';
+            final colonIdx = text.indexOf(':');
+            if (colonIdx > 0) {
+              final k = text.substring(0, colonIdx).trim();
+              final v = text.substring(colonIdx + 1).trim();
+              if (k.isNotEmpty && v.isNotEmpty) {
+                extractedTuning[k] = v;
+              }
             }
           }
         }
@@ -4110,6 +4174,16 @@ Return ONLY valid JSON:
     if (updatedVars > 0 || addedGuards > 0) {
       cpNode.tuningParams = updatedTuningList;
       cpNode.edgeCases = updatedGuardsList;
+      if (updatedTuningList.isNotEmpty) {
+        final formattedTuning =
+            updatedTuningList.map((t) => '- $t').join('\n');
+        feat.sections['tuning'] = formattedTuning;
+        feat.sections['variables'] = formattedTuning;
+      }
+      if (updatedGuardsList.isNotEmpty) {
+        feat.sections['edge_cases'] =
+            updatedGuardsList.map((e) => '- $e').join('\n');
+      }
       TaskHowToBlueprint.clearCache();
       updateFeatureStates(featureId, states);
     }

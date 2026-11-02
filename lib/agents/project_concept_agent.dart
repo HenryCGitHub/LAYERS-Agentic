@@ -209,18 +209,42 @@ class ProjectConceptAgent {
         },
         'designPillars': {
           'type': 'ARRAY',
+          'description':
+              '3-4 core player feelings/experiences (never features or genres).',
           'items': {
-            'type': 'STRING',
-            'description':
-                '2-3 Word Pillar Name: Concise 1-sentence player feeling (never a feature or genre).',
+            'type': 'OBJECT',
+            'required': ['pillarName', 'playerExperience'],
+            'properties': {
+              'pillarName': {
+                'type': 'STRING',
+                'description': '2-3 Word Pillar Name',
+              },
+              'playerExperience': {
+                'type': 'STRING',
+                'description':
+                    'Concise 1-sentence player feeling (never a feature or genre).',
+              },
+            },
           },
         },
         'tradeOffs': {
           'type': 'ARRAY',
+          'description': '2-3 explicit X over Y engineering/design boundaries.',
           'items': {
-            'type': 'STRING',
-            'description':
-                'Explicit X over Y boundary rule (e.g. "Immediate arcade movement over realistic physics inertia").',
+            'type': 'OBJECT',
+            'required': ['priorityX', 'overAlternativeY'],
+            'properties': {
+              'priorityX': {
+                'type': 'STRING',
+                'description':
+                    'What we prioritize (e.g. "Immediate arcade movement")',
+              },
+              'overAlternativeY': {
+                'type': 'STRING',
+                'description':
+                    'What we sacrifice (e.g. "realistic physics inertia")',
+              },
+            },
           },
         },
         'coreLoopBeats': {
@@ -247,6 +271,11 @@ class ProjectConceptAgent {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
         },
+        'sectionOptions': {
+          'type': 'OBJECT',
+          'description':
+              'Upfront Option Cards keyed by section (goal, gameSpec, techSpec, designPillars, tradeOffs, coreLoop, exclusions, doneWhen).',
+        },
       },
       'required': [
         'title',
@@ -259,6 +288,73 @@ class ProjectConceptAgent {
         'exclusions',
         'doneWhen',
       ],
+    },
+  };
+
+  /// Native Gemini Tool Declaration for Stage 1A `ingestOrRefineSparkIdea` (`commit_spark_intake`).
+  static const Map<String, dynamic> commitSparkIntakeTool = {
+    'name': 'commit_spark_intake',
+    'description':
+        'Summarizes a developer raw game idea into a workingTitle, 2-sentence baseSummary, mechanics tags, and 3 optional expansion twist cards.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['workingTitle', 'baseSummary', 'mechanics'],
+      'properties': {
+        'workingTitle': {
+          'type': 'STRING',
+          'description': 'Concrete 2-3 word game title.',
+        },
+        'baseSummary': {
+          'type': 'STRING',
+          'description':
+              '2 natural sentences summarizing the premise, core mechanics, and repeatable loop.',
+        },
+        'mechanics': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'expansionCards': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['id', 'title', 'category', 'pitch', 'additionSummary'],
+            'properties': {
+              'id': {'type': 'STRING'},
+              'title': {'type': 'STRING'},
+              'category': {'type': 'STRING'},
+              'pitch': {'type': 'STRING'},
+              'additionSummary': {'type': 'STRING'},
+            },
+          },
+        },
+      },
+    },
+  };
+
+  /// Native Gemini Tool Declaration for Stage 1A `refreshSparkExpansionCards` (`propose_spark_expansion_cards`).
+  static const Map<String, dynamic> proposeSparkExpansionCardsTool = {
+    'name': 'propose_spark_expansion_cards',
+    'description':
+        'Proposes 3 fresh gameplay expansion / twist cards for the active game concept.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['expansionCards'],
+      'properties': {
+        'expansionCards': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['id', 'title', 'category', 'pitch', 'additionSummary'],
+            'properties': {
+              'id': {'type': 'STRING'},
+              'title': {'type': 'STRING'},
+              'category': {'type': 'STRING'},
+              'pitch': {'type': 'STRING'},
+              'additionSummary': {'type': 'STRING'},
+            },
+          },
+        },
+      },
     },
   };
 
@@ -679,6 +775,36 @@ class ProjectConceptAgent {
             },
           },
         };
+      case 'designPillars':
+        return const {
+          'name': 'propose_design_pillar_options',
+          'description':
+              'Proposes 3 fresh Design Pillar Option Cards (pillarName + playerExperience).',
+          'parameters': {
+            'type': 'OBJECT',
+            'required': ['options'],
+            'properties': {
+              'options': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': ['pillarName', 'playerExperience'],
+                  'properties': {
+                    'pillarName': {
+                      'type': 'STRING',
+                      'description': '2-3 Word Pillar Name',
+                    },
+                    'playerExperience': {
+                      'type': 'STRING',
+                      'description':
+                          'Concise 1-sentence player feeling (never a feature or genre).',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        };
       case 'tradeOffs':
         return const {
           'name': 'propose_trade_off_options',
@@ -697,6 +823,32 @@ class ProjectConceptAgent {
                     'label': {'type': 'STRING'},
                     'priorityX': {'type': 'STRING'},
                     'overAlternativeY': {'type': 'STRING'},
+                  },
+                },
+              },
+            },
+          },
+        };
+      case 'coreLoop':
+        return const {
+          'name': 'propose_core_loop_options',
+          'description':
+              'Proposes 3 fresh Core Loop Sequence Option Cards (label + 4-6 sequential playable beats).',
+          'parameters': {
+            'type': 'OBJECT',
+            'required': ['options'],
+            'properties': {
+              'options': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': ['label', 'beats'],
+                  'properties': {
+                    'label': {'type': 'STRING'},
+                    'beats': {
+                      'type': 'ARRAY',
+                      'items': {'type': 'STRING'},
+                    },
                   },
                 },
               },
@@ -748,11 +900,26 @@ class ProjectConceptAgent {
           if (cells.length >= 2) {
             result.add('$label: ${cells.join(' · ')}');
           }
+        } else if (optionKey == 'designPillars') {
+          final pName =
+              (item['pillarName'] ?? item['label'] ?? '').toString().trim();
+          final pExp =
+              (item['playerExperience'] ?? item['text'] ?? '').toString().trim();
+          if (pName.isNotEmpty && pExp.isNotEmpty) {
+            result.add('$pName: $pExp');
+          } else if (pExp.isNotEmpty) {
+            result.add(pExp);
+          }
         } else if (optionKey == 'tradeOffs') {
           final x = (item['priorityX'] ?? '').toString().trim();
           final y = (item['overAlternativeY'] ?? '').toString().trim();
           if (x.isNotEmpty && y.isNotEmpty) {
             result.add('$label: $x over $y');
+          }
+        } else if (optionKey == 'coreLoop') {
+          final beats = _parseStringList(item['beats']);
+          if (beats.isNotEmpty) {
+            result.add('$label: ${beats.join(' → ')}');
           }
         } else {
           final text = (item['text'] ?? item['option'] ?? '').toString().trim();
@@ -883,8 +1050,8 @@ Call `commit_concept_blueprint` (or return valid JSON):
       goal: json['goal']?.toString().trim() ?? '',
       gameSpec: parsedGameSpec,
       techSpec: parsedTechSpec,
-      designPillars: _parseStringList(json['designPillars']),
-      tradeOffs: _parseStringList(json['tradeOffs']),
+      designPillars: parsePillarsList(json['designPillars']),
+      tradeOffs: parseTradeOffsList(json['tradeOffs']),
       coreLoopBeats: sortBeatsByDeveloperImpact(
         _parseStringList(json['coreLoopBeats']),
       ),
@@ -1033,6 +1200,12 @@ Call `$activeToolName` (or return ONLY valid JSON):
     if (goalOpts != null && goalOpts.length >= 2) {
       draft.sectionOptions['goal'] = goalOpts;
     }
+    final nestedSectionOpts = _parseSectionOptions(json['sectionOptions']);
+    for (final entry in nestedSectionOpts.entries) {
+      if (entry.value.isNotEmpty) {
+        draft.sectionOptions[entry.key] = entry.value;
+      }
+    }
     final beats = cleanList(json['coreLoopBeats']);
     if (beats != null) {
       draft.coreLoopBeats = sortBeatsByDeveloperImpact(beats);
@@ -1125,7 +1298,10 @@ Call `$activeToolName` (or return ONLY valid JSON):
     for (final entry in rawSectionOptions.entries) {
       final key = entry.key.toString().trim();
       if (key.isNotEmpty) {
-        final cleaned = _parseStringList(entry.value);
+        final typedCleaned = parseSectionOptionsToolOutput(key, entry.value);
+        final cleaned = typedCleaned.isNotEmpty
+            ? typedCleaned
+            : _parseStringList(entry.value);
         if (cleaned.isNotEmpty) {
           result[key] = cleaned;
         }
@@ -1192,6 +1368,7 @@ Return ONLY valid JSON:
       preferredModel: modelName,
       thinkingLevel: thinkingLevel,
       temperature: 0.45,
+      functionDeclarations: const [commitSparkIntakeTool],
     );
     if (json == null) return null;
 
@@ -1265,6 +1442,7 @@ $_kExpansionCardsJsonSchema
       preferredModel: modelName,
       thinkingLevel: thinkingLevel,
       temperature: 0.65,
+      functionDeclarations: const [proposeSparkExpansionCardsTool],
     );
     if (json == null) return null;
 
