@@ -138,13 +138,16 @@ class ProjectConceptAgent {
       if (item is Map) {
         cards.add(
           SparkExpansionCard(
-            badge: (item['badge'] ?? '0${i + 1} · IDEA ADDITION')
+            badge: (item['badge'] ??
+                    item['category'] ??
+                    '0${i + 1} · IDEA ADDITION')
                 .toString()
                 .trim(),
             title: (item['title'] ?? 'Gameplay Twist ${i + 1}')
                 .toString()
                 .trim(),
-            description: (item['description'] ?? '').toString().trim(),
+            description:
+                (item['description'] ?? item['pitch'] ?? '').toString().trim(),
             additionSummary: (item['additionSummary'] ?? item['title'] ?? '')
                 .toString()
                 .trim(),
@@ -317,12 +320,15 @@ class ProjectConceptAgent {
           'type': 'ARRAY',
           'items': {
             'type': 'OBJECT',
-            'required': ['id', 'title', 'category', 'pitch', 'additionSummary'],
+            'required': ['badge', 'title', 'description', 'additionSummary'],
             'properties': {
-              'id': {'type': 'STRING'},
+              'badge': {
+                'type': 'STRING',
+                'description':
+                    'e.g. "01 · RISK vs REWARD", "02 · WORLD HAZARD", or "03 · META UPGRADE"',
+              },
               'title': {'type': 'STRING'},
-              'category': {'type': 'STRING'},
-              'pitch': {'type': 'STRING'},
+              'description': {'type': 'STRING'},
               'additionSummary': {'type': 'STRING'},
             },
           },
@@ -344,12 +350,15 @@ class ProjectConceptAgent {
           'type': 'ARRAY',
           'items': {
             'type': 'OBJECT',
-            'required': ['id', 'title', 'category', 'pitch', 'additionSummary'],
+            'required': ['badge', 'title', 'description', 'additionSummary'],
             'properties': {
-              'id': {'type': 'STRING'},
+              'badge': {
+                'type': 'STRING',
+                'description':
+                    'e.g. "01 · RISK vs REWARD", "02 · WORLD HAZARD", or "03 · META UPGRADE"',
+              },
               'title': {'type': 'STRING'},
-              'category': {'type': 'STRING'},
-              'pitch': {'type': 'STRING'},
+              'description': {'type': 'STRING'},
               'additionSummary': {'type': 'STRING'},
             },
           },
@@ -381,24 +390,58 @@ class ProjectConceptAgent {
           'items': {'type': 'STRING'},
         },
         'gameSpec': {
-          'type': 'ARRAY',
-          'items': {'type': 'STRING'},
-          'description':
-              '4 cells: ["Camera View", "Controls", "Player Mode", "Arena Structure"].',
+          'type': 'OBJECT',
+          'required': [
+            'cameraView',
+            'controls',
+            'playerMode',
+            'arenaStructure',
+          ],
+          'properties': {
+            'cameraView': {'type': 'STRING'},
+            'controls': {'type': 'STRING'},
+            'playerMode': {'type': 'STRING'},
+            'arenaStructure': {'type': 'STRING'},
+          },
         },
         'techSpec': {
-          'type': 'ARRAY',
-          'items': {'type': 'STRING'},
-          'description':
-              '4 cells: ["Godot 4 (GDScript) | Unity 6 (C#) | Unreal Engine 5 (Blueprints / C++)", "Platform", "Asset Pipeline", "Network / Save"].',
+          'type': 'OBJECT',
+          'required': ['engine', 'platform', 'assetPipeline', 'saveMode'],
+          'properties': {
+            'engine': {
+              'type': 'STRING',
+              'enum': [
+                'Godot 4 (GDScript)',
+                'Unity 6 (C#)',
+                'Unreal Engine 5 (Blueprints / C++)',
+              ],
+            },
+            'platform': {'type': 'STRING'},
+            'assetPipeline': {'type': 'STRING'},
+            'saveMode': {'type': 'STRING'},
+          },
         },
         'designPillars': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'items': {
+            'type': 'OBJECT',
+            'required': ['pillarName', 'playerExperience'],
+            'properties': {
+              'pillarName': {'type': 'STRING'},
+              'playerExperience': {'type': 'STRING'},
+            },
+          },
         },
         'tradeOffs': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'items': {
+            'type': 'OBJECT',
+            'required': ['priorityX', 'overAlternativeY'],
+            'properties': {
+              'priorityX': {'type': 'STRING'},
+              'overAlternativeY': {'type': 'STRING'},
+            },
+          },
         },
         'coreLoopBeats': {
           'type': 'ARRAY',
@@ -1004,10 +1047,24 @@ Call `commit_concept_blueprint` (or return valid JSON):
 {
   "title": "Short 2-3 word title",
   "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
-  "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
-  "techSpec": ["Godot 4 (GDScript) | Unity 6 (C#) | Unreal Engine 5", "Platform", "Asset Pipeline", "Network / Save"],
-  "designPillars": ["2-3 Word Pillar Name: Concise 1-sentence player feeling 1", "2-3 Word Pillar Name: Concise 1-sentence player feeling 2", "2-3 Word Pillar Name: Concise 1-sentence player feeling 3"],
-  "tradeOffs": ["2-3 word priority over 2-3 word alternative", "2-3 word priority 2 over 2-3 word alternative 2", "2-3 word priority 3 over 2-3 word alternative 3"],
+  "gameSpec": {
+    "cameraView": "Camera View",
+    "controls": "Controls",
+    "playerMode": "Player Mode",
+    "arenaStructure": "Arena Structure"
+  },
+  "techSpec": {
+    "engine": "Godot 4 (GDScript)",
+    "platform": "Platform",
+    "assetPipeline": "Asset Pipeline",
+    "saveMode": "Network / Save"
+  },
+  "designPillars": [
+    {"pillarName": "2-3 Word Pillar Name", "playerExperience": "Concise 1-sentence player feeling 1"}
+  ],
+  "tradeOffs": [
+    {"priorityX": "2-3 word priority", "overAlternativeY": "2-3 word alternative"}
+  ],
   "coreLoopBeats": ["Beat Name: Concise 1-sentence action and response", "..."],
   "exclusions": ["No 2-4 word prototype cut 1", "No 2-4 word prototype cut 2", "No 2-4 word prototype cut 3"],
   "doneWhen": "Concise 1-sentence playtest completion condition without FPS targets",

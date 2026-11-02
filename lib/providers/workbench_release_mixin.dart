@@ -1748,6 +1748,8 @@ Call `commit_live_feature_enrichment` (or return ONLY a JSON object).''';
     if (json == null || _releaseBlueprint != bp) return;
     final aiGoal = json['goal']?.toString().trim() ?? '';
     final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
+    final aiPrimaryAsset =
+        json['primarySharedScriptOrScene']?.toString().trim() ?? '';
     final aiCpTitle = json['checkpointTitle']?.toString().trim() ?? '';
     final aiGate = json['playtestGate']?.toString().trim() ?? '';
     final extractedTasks =
@@ -1761,6 +1763,9 @@ Call `commit_live_feature_enrichment` (or return ONLY a JSON object).''';
     }
     if (aiDoneWhen.isNotEmpty) {
       targetFeat.doneWhen = aiDoneWhen;
+    }
+    if (aiPrimaryAsset.isNotEmpty) {
+      targetFeat.primarySharedScriptOrScene = aiPrimaryAsset;
     }
     if (rawInScope is List && rawInScope.isNotEmpty) {
       final scopeItems = rawInScope
@@ -2063,9 +2068,9 @@ Return ONLY a JSON object:
   "checkpointTitle": "<2-4 word playable checkpoint title>",
   "playtestGate": "<Action -> Observable result>",
   "tasks": [
-    "<Entity/collision foundation task> (2h)",
-    "<Core mechanic velocity/action task 1..N> (1h)",
-    "<Observable feedback & boundary clamp task> (1h)"
+    {"role": "entity_and_collision_foundation", "title": "<Entity/collision foundation task> (2h)"},
+    {"role": "core_action_and_math", "title": "<Core mechanic velocity/action task 1..N> (1h)"},
+    {"role": "feedback_and_boundary_guard", "title": "<Observable feedback & boundary clamp task> (1h)"}
   ],
   "tuningParams": [
     "<param1: numericValue unit>",
@@ -3651,10 +3656,16 @@ Return ONLY a JSON object with this schema:
       final featureGoalText = SectionTextUtils.resolveGoal(feat.sections);
       final featureInScopeItems =
           SectionTextUtils.resolveInScope(feat.sections);
+      final existingPrimaryAsset = (cpNode.parameters['primarySharedScriptOrScene'] ??
+              feat.sections['primary_asset'] ??
+              '')
+          .trim();
       final featureOwnScopeBlock = [
         if (featureGoalText.isNotEmpty) 'Feature Goal: "$featureGoalText"',
         if (featureInScopeItems.isNotEmpty)
           'Feature In Scope: ${featureInScopeItems.join(' | ')}',
+        if (existingPrimaryAsset.isNotEmpty)
+          'Existing Feature Primary Shared Asset (extend in-place across checkpoints): $existingPrimaryAsset',
         if (cpNode.playtestCondition.isNotEmpty)
           'Checkpoint Playtest Gate: "${cpNode.playtestCondition}"',
       ].join('\n');
@@ -3721,6 +3732,9 @@ Return ONLY valid JSON:
           (json?['primarySharedScriptOrScene'] ?? '').toString().trim();
       if (primaryAsset.isNotEmpty) {
         feat.sections['primary_asset'] = primaryAsset;
+        cpNode.parameters['primarySharedScriptOrScene'] = primaryAsset;
+      } else if (existingPrimaryAsset.isNotEmpty) {
+        cpNode.parameters['primarySharedScriptOrScene'] = existingPrimaryAsset;
       }
       final rawTasks = json?['tasks'];
       if (rawTasks is! List || rawTasks.isEmpty) return;
@@ -4339,7 +4353,7 @@ Extract:
 
 Return ONLY valid JSON:
 {
-  "tuningUpdates": ["moveSpeed: 650.0"],
+  "tuningUpdates": [{"variableName": "moveSpeed", "value": "650.0"}],
   "newGuards": ["[GUARD] Prevent dash while stunned — early-return when isStunned is true"]
 }''';
       final json = await GeminiAgentClient.generateJson(
@@ -4540,6 +4554,14 @@ Return ONLY valid JSON:
     }
     notifyListeners();
     if (triggerAiSynthesis && GeminiAgentClient.hasKey(_apiKey)) {
+      if (feat.sections.remove('needs_ai_enrichment') == 'true') {
+        final parentBeatTitle = (feat.parentId != null
+                ? documents[feat.parentId!]?.title
+                : null) ??
+            'Core Loop Epic';
+        _enrichLiveFeatureWithAi(featureId, parentBeatTitle);
+        return;
+      }
       final states = FeatureStateNode.getStatesForDocument(feat);
       final activeVer = activeReleaseVersionTag;
       final activeCp = states.isNotEmpty

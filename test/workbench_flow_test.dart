@@ -6429,6 +6429,101 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           statesAfterAdd.first.checklist.first.children.first.text,
           equals(firstTaskFirstChildBefore),
         );
+
+        // 4. Verify End-to-End AI & Workflow Audit fixes:
+        // 4a. commitSparkIntakeTool & proposeSparkExpansionCardsTool require badge & description
+        final sparkExpItems = (((ProjectConceptAgent
+                    .commitSparkIntakeTool['parameters'] as Map)['properties']
+                as Map)['expansionCards'] as Map)['items'] as Map;
+        expect(
+          sparkExpItems['required'],
+          equals(['badge', 'title', 'description', 'additionSummary']),
+        );
+        final proposeExpItems = (((ProjectConceptAgent
+                        .proposeSparkExpansionCardsTool['parameters']
+                    as Map)['properties'] as Map)['expansionCards']
+            as Map)['items'] as Map;
+        expect(
+          proposeExpItems['required'],
+          equals(['badge', 'title', 'description', 'additionSummary']),
+        );
+
+        // 4b. updateConceptSectionTool enforces typed OBJECT schemas for gameSpec, techSpec, designPillars, tradeOffs
+        final updateConceptProps = (ProjectConceptAgent
+                .updateConceptSectionTool['parameters'] as Map)['properties']
+            as Map;
+        expect((updateConceptProps['gameSpec'] as Map)['type'], equals('OBJECT'));
+        expect((updateConceptProps['techSpec'] as Map)['type'], equals('OBJECT'));
+        expect(
+          ((updateConceptProps['designPillars'] as Map)['items'] as Map)['type'],
+          equals('OBJECT'),
+        );
+        expect(
+          ((updateConceptProps['tradeOffs'] as Map)['items'] as Map)['type'],
+          equals('OBJECT'),
+        );
+
+        // 4c. ReleaseExecutorAgent carries primary_asset into v0.2+ upgrade checkpoints
+        targetFeatForAddTask.sections['primary_asset'] =
+            'res://actors/salvage_winch.gd';
+        final upgradeBp = ReleaseBlueprint(
+          releaseDocId: provider.activeRelease!.id,
+          releaseTitle: 'v0.2: Winch Upgrade',
+          releaseVersionTag: 'v0.2',
+          goal: 'Extend winch with tension overload.',
+          doneWhen: 'Overload snaps cable at max tension.',
+          questions: const [],
+          beats: [
+            ProposedBeatBlueprint(
+              id: targetFeatForAddTask.parentId!,
+              title: 'Core Loop Epic',
+              goal: 'Extend winch.',
+              doneWhen: 'Verified.',
+              features: [
+                ProposedFeatureBlueprint(
+                  id: targetFeatForAddTask.id,
+                  title: targetFeatForAddTask.title,
+                  goal: 'Add tension overload.',
+                  doneWhen: 'Verified.',
+                  lifecycle: FeatureLifecycleStatus.upgrade,
+                  originVersion: 'v0.1',
+                  checkpoints: const [
+                    ProposedCheckpointBlueprint(
+                      title: 'Tension Overload',
+                      playtestCriteria: 'Pull heavy scrap -> tension meter flashes',
+                      tasks: ['Overload Meter (2h)'],
+                      releaseVersion: 'v0.2',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        );
+        await ReleaseExecutorAgent.executeBlueprint(
+          releaseDoc: provider.activeRelease!,
+          blueprint: upgradeBp,
+          existingDocuments: provider.documents,
+        );
+        final upgradedStates =
+            FeatureStateNode.getStatesForDocument(targetFeatForAddTask);
+        expect(
+          upgradedStates.last.parameters['primarySharedScriptOrScene'],
+          equals('res://actors/salvage_winch.gd'),
+        );
+
+        // 4d. Stage 1 -> Stage 2 newly synced Core Loop Beat stamps needs_ai_enrichment and clears on selectFeature
+        provider.conceptDraft!.coreLoopBeats.add(
+          'Emergency Beacon Extraction: Trigger extraction flare and defend drop zone',
+        );
+        provider.syncConceptChangesToBuiltWorkbench(provider.conceptDraft!);
+        final newlySyncedBeat = provider.activeReleaseBeats.last;
+        final newlySyncedFeat =
+            provider.featuresForBeat(newlySyncedBeat.id).first;
+        expect(
+          newlySyncedFeat.sections['needs_ai_enrichment'],
+          equals('true'),
+        );
       },
     );
   });

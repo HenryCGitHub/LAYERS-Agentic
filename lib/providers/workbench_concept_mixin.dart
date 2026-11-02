@@ -662,6 +662,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             'originVersion': activeVer,
             'activeReleaseVersion': activeVer,
             'lifecycle': FeatureLifecycleStatus.newFeature.name,
+            'needs_ai_enrichment': 'true',
             'scope':
                 'Goal: Build ${sBeat.description}\n\nIn Scope:\n• $featTitle\n\nDone When: $playtestGate',
             'tuning': formattedStarterTuning,

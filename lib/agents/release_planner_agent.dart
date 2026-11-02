@@ -176,6 +176,11 @@ class ReleasePlannerAgent {
                       'description':
                           'Optional title of an earlier feature that this feature replaces/supersedes.',
                     },
+                    'primarySharedScriptOrScene': {
+                      'type': 'STRING',
+                      'description':
+                          'Optional shared script, scene, prefab, or Blueprint asset for this feature.',
+                    },
                     'inScope': {
                       'type': 'ARRAY',
                       'items': {'type': 'STRING'},
@@ -289,6 +294,7 @@ class ReleasePlannerAgent {
                       'enum': ['new', 'upgrade', 'stable', 'superseded'],
                     },
                     'supersedesFeatureTitle': {'type': 'STRING'},
+                    'primarySharedScriptOrScene': {'type': 'STRING'},
                     'inScope': {
                       'type': 'ARRAY',
                       'items': {'type': 'STRING'},
@@ -599,8 +605,10 @@ class ReleasePlannerAgent {
           final latestCp = states.isNotEmpty
               ? '${states.last.releaseVersion} "${states.last.cleanStageTitle}"'
               : originVer;
+          final primaryAsset = (f.sections['primary_asset'] ?? '').trim();
           existingTreeSummary.writeln(
             '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints (latest: $latestCp)]'
+            '${primaryAsset.isNotEmpty ? ' | Primary Asset: $primaryAsset' : ''}'
             '${allTuning.isNotEmpty ? ' | Live Variables: ${allTuning.take(3).join(', ')}' : ''}'
             '${allFixesAndGuards.isNotEmpty ? ' | Guards: ${allFixesAndGuards.take(2).join('; ')}' : ''}',
           );
@@ -717,7 +725,11 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "tasks": ["Capsule Body & Camera (2h)", "WASD Velocity & Look (2h)", "Wall Slide & Pitch Clamp (1h)"]
+              "tasks": [
+                {"role": "entity_and_collision_foundation", "title": "Capsule Body & Camera (2h)"},
+                {"role": "core_action_and_math", "title": "WASD Velocity & Look (2h)"},
+                {"role": "feedback_and_boundary_guard", "title": "Wall Slide & Pitch Clamp (1h)"}
+              ]
             }
           ]
         }
@@ -1076,6 +1088,8 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             (fMap['originVersion'] ?? versionTag).toString().trim();
         final supersedesTitle =
             fMap['supersedesFeatureTitle']?.toString().trim();
+        final primaryAsset =
+            fMap['primarySharedScriptOrScene']?.toString().trim();
 
         final inScope = _parseStringList(fMap['inScope']);
         final outOfScope = _parseStringList(fMap['outOfScope']);
@@ -1139,6 +1153,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             supersedesFeatureTitle:
                 (supersedesTitle != null && supersedesTitle.isNotEmpty)
                     ? supersedesTitle
+                    : null,
+            primarySharedScriptOrScene:
+                (primaryAsset != null && primaryAsset.isNotEmpty)
+                    ? primaryAsset
                     : null,
             inScope: inScope,
             outOfScope: outOfScope,
@@ -1844,6 +1862,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         if (matchedEf != null) {
           lf.id = matchedEf.id;
           lf.originVersion = matchedEf.sections['originVersion'] ?? 'v0.1';
+          final existingAsset =
+              (matchedEf.sections['primary_asset'] ?? '').trim();
+          if ((lf.primarySharedScriptOrScene == null ||
+                  lf.primarySharedScriptOrScene!.trim().isEmpty) &&
+              existingAsset.isNotEmpty) {
+            lf.primarySharedScriptOrScene = existingAsset;
+          }
           matchedByExistingId[matchedEf.id] = lf;
         } else {
           final existingIdCollision = existingFeats.any((e) => e.id == lf.id) ||
@@ -1869,6 +1894,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         if (matchedLf != null) {
           orderedFeatures.add(matchedLf);
         } else {
+          final existingAsset = (ef.sections['primary_asset'] ?? '').trim();
           orderedFeatures.add(
             ProposedFeatureBlueprint(
               id: ef.id,
@@ -1881,6 +1907,8 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                   ? FeatureLifecycleStatus.superseded
                   : FeatureLifecycleStatus.stable,
               originVersion: ef.sections['originVersion'] ?? 'v0.1',
+              primarySharedScriptOrScene:
+                  existingAsset.isNotEmpty ? existingAsset : null,
               inScope: SectionTextUtils.resolveInScope(ef.sections),
               outOfScope: const [],
               tuningParams: const [],
@@ -1968,7 +1996,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     final currentBeatsSummary = blueprint.beats
         .map(
           (b) => '- ${b.id} "${b.title}" (${b.goal}): '
-              '${b.features.map((f) => '"${f.title}" [${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
+              '${b.features.map((f) => '"${f.title}" [${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${(f.primarySharedScriptOrScene != null && f.primarySharedScriptOrScene!.trim().isNotEmpty) ? ", asset: ${f.primarySharedScriptOrScene!.trim()}" : ""}${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
         )
         .join('\n');
 
@@ -1992,9 +2020,19 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             '')
         .replaceAll('\n', ' | ')
         .trim();
+    final specCorpusLower = '$gameSpecText $techSpecText'.toLowerCase();
+    final is2dPlan = specCorpusLower.contains('2d') ||
+        specCorpusLower.contains('sprite') ||
+        specCorpusLower.contains('pixel') ||
+        specCorpusLower.contains('tilemap');
+    final dimensionRule = (gameSpecText.isEmpty && techSpecText.isEmpty)
+        ? ''
+        : (is2dPlan
+            ? 'Dimension Rule: 2D ONLY (use 2D scenes/nodes/colliders/Vector2; NEVER 3D nodes or Vector3).\n'
+            : 'Dimension Rule: 3D (use 3D actors/nodes/colliders/Vector3).\n');
     final conceptHeader = projectDoc == null
         ? ''
-        : 'Concept Context: Game Spec: $gameSpecText | Tech Spec: $techSpecText | Pillars: $pillarsText | Trade-Offs: $tradeOffsText\n';
+        : 'Concept Context: Game Spec: $gameSpecText | Tech Spec: $techSpecText | Pillars: $pillarsText | Trade-Offs: $tradeOffsText\n$dimensionRule';
 
     final prompt = '''
 You are the Antigravity Release Planner Agent updating "${blueprint.releaseTitle}" (${blueprint.releaseVersionTag}).
@@ -2037,7 +2075,11 @@ Return ONLY valid JSON:
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "tasks": ["Entity & Collision Body (2h)", "Core Action Velocity (2h)", "Boundary Clamp & Cue (2h)"]
+              "tasks": [
+                {"role": "entity_and_collision_foundation", "title": "Entity & Collision Body (2h)"},
+                {"role": "core_action_and_math", "title": "Core Action Velocity (2h)"},
+                {"role": "feedback_and_boundary_guard", "title": "Boundary Clamp & Cue (2h)"}
+              ]
             }
           ]
         }
@@ -2150,6 +2192,13 @@ Return ONLY valid JSON:
             df.id = existingFeat.id;
             if (existingFeat.originVersion.isNotEmpty) {
               df.originVersion = existingFeat.originVersion;
+            }
+            if ((df.primarySharedScriptOrScene == null ||
+                    df.primarySharedScriptOrScene!.trim().isEmpty) &&
+                existingFeat.primarySharedScriptOrScene != null &&
+                existingFeat.primarySharedScriptOrScene!.trim().isNotEmpty) {
+              df.primarySharedScriptOrScene =
+                  existingFeat.primarySharedScriptOrScene;
             }
             matchedUpdatesById[existingFeat.id] = df;
           } else {
@@ -2528,6 +2577,13 @@ class ReleaseExecutorAgent {
         featDoc.sections['lifecycle'] = resolvedLifecycle.name;
         featDoc.sections.remove('supersededInVersion');
         featDoc.sections.remove('supersededByRelease');
+        final effectivePrimaryAsset = (featBp.primarySharedScriptOrScene != null &&
+                featBp.primarySharedScriptOrScene!.trim().isNotEmpty)
+            ? featBp.primarySharedScriptOrScene!.trim()
+            : (existingFeat?.sections['primary_asset'] ?? '').trim();
+        if (effectivePrimaryAsset.isNotEmpty) {
+          featDoc.sections['primary_asset'] = effectivePrimaryAsset;
+        }
         featDoc.sections['scope'] = 'Goal: ${featBp.goal}\n\n'
             'In Scope:\n$inScopeText\n\n'
             '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
@@ -2599,6 +2655,8 @@ class ReleaseExecutorAgent {
             edgeCases: List<String>.from(cpBp.edgeCases),
             parameters: {
               'releaseVersion': versionTag,
+              if (effectivePrimaryAsset.isNotEmpty)
+                'primarySharedScriptOrScene': effectivePrimaryAsset,
             },
           );
           final projDocForHint =

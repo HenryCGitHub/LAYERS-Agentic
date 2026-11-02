@@ -544,6 +544,7 @@ class ProposedFeatureBlueprint {
   FeatureLifecycleStatus lifecycle;
   String originVersion;
   String? supersedesFeatureTitle;
+  String? primarySharedScriptOrScene;
   List<String> inScope;
   List<String> outOfScope;
   List<String> tuningParams;
@@ -560,6 +561,7 @@ class ProposedFeatureBlueprint {
     this.lifecycle = FeatureLifecycleStatus.newFeature,
     this.originVersion = 'v0.1',
     this.supersedesFeatureTitle,
+    this.primarySharedScriptOrScene,
     this.inScope = const [],
     this.outOfScope = const [],
     this.tuningParams = const [],
@@ -583,6 +585,9 @@ class ProposedFeatureBlueprint {
         'originVersion': originVersion,
         if (supersedesFeatureTitle != null)
           'supersedesFeatureTitle': supersedesFeatureTitle,
+        if (primarySharedScriptOrScene != null &&
+            primarySharedScriptOrScene!.trim().isNotEmpty)
+          'primarySharedScriptOrScene': primarySharedScriptOrScene,
         'inScope': inScope,
         'outOfScope': outOfScope,
         'tuningParams': tuningParams,
@@ -601,6 +606,8 @@ class ProposedFeatureBlueprint {
       lifecycle: FeatureLifecycleStatus.fromString(json['lifecycle']?.toString()),
       originVersion: json['originVersion']?.toString() ?? 'v0.1',
       supersedesFeatureTitle: json['supersedesFeatureTitle']?.toString(),
+      primarySharedScriptOrScene:
+          json['primarySharedScriptOrScene']?.toString(),
       inScope: _parseStringList(json['inScope']),
       outOfScope: _parseStringList(json['outOfScope']),
       tuningParams: _parseStringList(json['tuningParams']),
