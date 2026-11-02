@@ -276,7 +276,10 @@ class ReleasePlannerAgent {
         for (final f in feats) {
           if (f.sections['lifecycle'] ==
               FeatureLifecycleStatus.superseded.name) {
-            final pivotNote = (f.sections['pivot_reason'] ?? '').trim();
+            final pivotNote = (f.sections['pivotReason'] ??
+                    f.sections['pivot_reason'] ??
+                    '')
+                .trim();
             existingTreeSummary.writeln(
               '  * SUPERSEDED / ARCHIVED TESTBED: "${f.title}" [id: ${f.id}${pivotNote.isNotEmpty ? ', reason: $pivotNote' : ''}] — Propose a `"lifecycle": "new"` replacement mechanic in this Beat if needed.',
             );
@@ -1665,9 +1668,29 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
         )
         .join('\n');
 
+    final gameSpecText = (projectDoc?.sections['game_spec'] ??
+            projectDoc?.sections['gameSpec'] ??
+            '')
+        .replaceAll('\n', ' · ')
+        .trim();
+    final techSpecText = (projectDoc?.sections['tech_spec'] ??
+            projectDoc?.sections['techSpec'] ??
+            '')
+        .replaceAll('\n', ' · ')
+        .trim();
+    final pillarsText = (projectDoc?.sections['design_pillars'] ??
+            projectDoc?.sections['designPillars'] ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final tradeOffsText = (projectDoc?.sections['trade_offs'] ??
+            projectDoc?.sections['tradeOffs'] ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
     final conceptHeader = projectDoc == null
         ? ''
-        : 'Concept Context: Game Spec: ${(projectDoc.sections['gameSpec'] ?? '').replaceAll('\n', ' · ')} | Tech Spec: ${(projectDoc.sections['techSpec'] ?? '').replaceAll('\n', ' · ')} | Pillars: ${(projectDoc.sections['designPillars'] ?? '').replaceAll('\n', ' | ')} | Trade-Offs: ${(projectDoc.sections['tradeOffs'] ?? '').replaceAll('\n', ' | ')}\n';
+        : 'Concept Context: Game Spec: $gameSpecText | Tech Spec: $techSpecText | Pillars: $pillarsText | Trade-Offs: $tradeOffsText\n';
 
     final prompt = '''
 You are the Antigravity Release Planner Agent updating "${blueprint.releaseTitle}" (${blueprint.releaseVersionTag}).

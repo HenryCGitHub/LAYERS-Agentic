@@ -6038,8 +6038,15 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         String? capturedTailorPrompt;
         String? capturedOptionRegenPrompt;
         String? capturedGddPrompt;
+        String? capturedRelChatPrompt;
         int sonarStepSynthCalls = 0;
         GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains(
+            'You are the Antigravity Release Planner Agent updating',
+          )) {
+            capturedRelChatPrompt = prompt;
+            return _mockGeminiResponder(prompt, model);
+          }
           if (prompt.contains(
             'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature',
           )) {
@@ -6195,6 +6202,26 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           capturedGddPrompt,
           contains('FAITHFUL GDD EXTRACTION'),
         );
+
+        // Verify _enrichLiveFeatureWithAi persists tuning and edge_cases onto featDoc.sections
+        final welderDoc = provider.documents[welderFeatId]!;
+        expect(welderDoc.sections['tuning'], isNotEmpty);
+        expect(welderDoc.sections['edge_cases'], isNotEmpty);
+
+        // Verify ReleasePlannerAgent.sendReleasePlanChatTurn resolves snake_case game_spec / tech_spec / design_pillars / trade_offs
+        await provider.sendReleasePlanChatMessage(
+          'Add a hull pressure alarm warning to Epic 1',
+        );
+        expect(capturedRelChatPrompt, isNotNull);
+        expect(
+          capturedRelChatPrompt,
+          isNot(
+            contains(
+              'Concept Context: Game Spec:  | Tech Spec:  | Pillars:  | Trade-Offs:',
+            ),
+          ),
+        );
+        expect(capturedRelChatPrompt, contains('Unity 6 (C#)'));
       },
     );
   });

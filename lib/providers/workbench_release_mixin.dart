@@ -1545,6 +1545,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       featDoc.sections['activeReleaseVersion'] = activeVer;
       featDoc.sections.remove('supersededInVersion');
       featDoc.sections.remove('pivotReason');
+      featDoc.sections.remove('pivot_reason');
       _persistDocument(featDoc);
 
       final parentBeatId = featDoc.parentId;
@@ -1582,7 +1583,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       featDoc.sections['lifecycle'] = FeatureLifecycleStatus.superseded.name;
       featDoc.sections['supersededInVersion'] = activeVer;
       if (pivotReason != null && pivotReason.trim().isNotEmpty) {
-        featDoc.sections['pivotReason'] = pivotReason.trim();
+        final cleanReason = pivotReason.trim();
+        featDoc.sections['pivotReason'] = cleanReason;
+        featDoc.sections['pivot_reason'] = cleanReason;
       }
       _persistDocument(featDoc);
 
@@ -1862,10 +1865,22 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
             _conceptDraft?.gameSpec.join(' · ') ??
             '')
         .trim();
+    final techSpecSummary = (activeProject?.sections['tech_spec'] ??
+            activeProject?.sections['techSpec'] ??
+            _conceptDraft?.techSpec.join(' · ') ??
+            '')
+        .trim();
     final pillarsSummary = (activeProject?.sections['design_pillars'] ??
             activeProject?.sections['designPillars'] ??
             _conceptDraft?.designPillars.join(' | ') ??
             '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final tradeOffsSummary = (activeProject?.sections['trade_offs'] ??
+            activeProject?.sections['tradeOffs'] ??
+            _conceptDraft?.tradeOffs.join(' | ') ??
+            '')
+        .replaceAll('\n', ' | ')
         .trim();
     final siblingTitles = featDoc.parentId == null
         ? const <String>[]
@@ -1876,7 +1891,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
 Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
-${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
 - Keep Task 1 focused on Scene/Entity/Collision foundation (never Input/Keybind) and include 2–3 "paramName: numericValue unit" entries in tuningParams.
 Return ONLY a JSON object:
 {
@@ -1965,10 +1980,27 @@ Return ONLY a JSON object:
       if (rawTuning is List && rawTuning.isNotEmpty) {
         cp.tuningParams =
             rawTuning.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+        final tuningText = cp.tuningParams.map((t) => '• $t').join('\n');
+        featDoc.sections['tuning'] = tuningText;
+        featDoc.sections['variables'] = tuningText;
       }
       if (rawGuards is List && rawGuards.isNotEmpty) {
         cp.edgeCases =
             rawGuards.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+        featDoc.sections['edge_cases'] =
+            cp.edgeCases.map((e) => '• $e').join('\n');
+      }
+      _persistDocument(featDoc);
+      final bp = _releaseBlueprint;
+      if (bp != null) {
+        for (final b in bp.beats) {
+          for (final f in b.features) {
+            if (f.id == featureId) {
+              f.tuningParams = List<String>.from(cp.tuningParams);
+              f.edgeCases = List<String>.from(cp.edgeCases);
+            }
+          }
+        }
       }
       for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
         TaskHowToBlueprint.resolve(
@@ -2755,6 +2787,9 @@ Return ONLY a JSON object with this schema:
               .map((f) => '"${f.title}"')
               .toList()
           : const <String>[];
+      final compactPrecedingSummary = precedingFeatureTitles.length <= 3
+          ? precedingFeatureTitles.join(', ')
+          : '${precedingFeatureTitles.first}, ..., ${precedingFeatureTitles.sublist(precedingFeatureTitles.length - 2).join(', ')} (${precedingFeatureTitles.length} total)';
       final engineAssetHint = engineLabel == 'UNREAL 5'
           ? 'BP_PlayerCharacter / Actor Blueprint and IMC_Default'
           : (engineLabel == 'UNITY C#'
@@ -2762,7 +2797,7 @@ Return ONLY a JSON object with this schema:
               : 'player.tscn / CharacterBody + GDScript and Project Input Map');
       final projectBuildStateContext = isGreenfieldFirstFeature
           ? 'Project Build State: FEATURE #1 OF THE ENTIRE PROJECT (Greenfield). Create the foundational scene/character/arena asset ($engineAssetHint) and place it in the active level before wiring input and physics.'
-          : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: ${precedingFeatureTitles.join(', ')}). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
+          : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
 
       // Build Focused Cumulative Project Ledger (max 5 relevant preceding features:
       // Epic 1 foundational #1-#2 + same-Epic earlier siblings + immediate predecessor)
@@ -2817,17 +2852,19 @@ Return ONLY a JSON object with this schema:
         for (int sIdx = 0; sIdx < beatSiblings.length; sIdx++) {
           final sib = beatSiblings[sIdx];
           if (sib.id == feat.id) continue;
-          final sibStates = FeatureStateNode.getStatesForDocument(sib);
-          final sibVars = <String>{
-            for (final sibCp in sibStates) ...sibCp.tuningParams,
-          };
-          if (sibVars.isNotEmpty) {
-            priorCheckpointsSummary.add(
-              '- Sibling Feature "${sib.title}" (${sibStates.last.releaseVersion}): vars=[${sibVars.join(', ')}]',
-            );
+          final isEarlierInEpic = selfBeatIdx >= 0 && sIdx < selfBeatIdx;
+          if (!isEarlierInEpic) {
+            final sibStates = FeatureStateNode.getStatesForDocument(sib);
+            final sibVars = <String>{
+              for (final sibCp in sibStates) ...sibCp.tuningParams,
+            };
+            if (sibVars.isNotEmpty) {
+              priorCheckpointsSummary.add(
+                '- Sibling Feature "${sib.title}" (${sibStates.last.releaseVersion}): vars=[${sibVars.join(', ')}]',
+              );
+            }
           }
           if (beatSiblings.length > 1) {
-            final isEarlierInEpic = selfBeatIdx >= 0 && sIdx < selfBeatIdx;
             final sibScopeRaw = (sib.sections['scope'] ?? '').trim();
             final sibGoalLine = sibScopeRaw
                 .split('\n')
@@ -3613,7 +3650,7 @@ Return ONLY valid JSON:
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _conversationModel,
-        thinkingLevel: 'LOW',
+        thinkingLevel: _thinkingLevel,
         temperature: 0.1,
       );
       final rawTuning = json?['tuningUpdates'];

@@ -1620,18 +1620,22 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                     : () async {
                                                         final prevIdx =
                                                             _selectedProgressiveTrackIndex;
+                                                        if (prevIdx == oIdx) {
+                                                          return;
+                                                        }
                                                         _rebuild(() {
                                                           _selectedProgressiveTrackIndex =
                                                               oIdx;
                                                         });
+                                                        if (prevIdx != 0) {
+                                                          widget.workbench
+                                                              .restoreInitialProgressiveDraftBlueprint();
+                                                        }
                                                         if (oIdx > 0) {
                                                           await submitDirective(
                                                             'Re-architect $nextVer around this strategic option: $rawOpt',
                                                           );
-                                                        } else if (prevIdx !=
-                                                            0) {
-                                                          widget.workbench
-                                                              .restoreInitialProgressiveDraftBlueprint();
+                                                        } else {
                                                           _rebuild(() {});
                                                         }
                                                       },
