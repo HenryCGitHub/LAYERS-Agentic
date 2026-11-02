@@ -6035,6 +6035,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.thinkingLevel, equals('HIGH'));
 
         String? capturedStepSynthPrompt;
+        String? capturedTailorPrompt;
+        String? capturedOptionRegenPrompt;
+        String? capturedGddPrompt;
         int sonarStepSynthCalls = 0;
         GeminiAgentClient.testMockResponder = (prompt, model) async {
           if (prompt.contains(
@@ -6049,6 +6052,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           if (prompt.contains(
             'Break this task down into the exact number of checkable How-To Sub-Steps',
           )) {
+            capturedTailorPrompt = prompt;
             return {
               'subSteps': [
                 {
@@ -6062,6 +6066,20 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 },
               ],
             };
+          }
+          if (prompt.contains('generating 3 fresh Option Cards for the')) {
+            capturedOptionRegenPrompt = prompt;
+            return {
+              'options': [
+                'Tight Salvage Spec: 3D Third-Person Action · PC (Steam) · Single-Player PvE · Trench Arena',
+                'Cockpit Sim Spec: 3D Cockpit Sim · PC & Steam Deck · 2-Player Co-Op · Modular Wreck',
+                'Side-View Spec: 2.5D Side-View Action · PC & Switch · Single-Player · Abyssal Shaft',
+              ],
+            };
+          }
+          if (prompt.contains('FAITHFUL GDD EXTRACTION')) {
+            capturedGddPrompt = prompt;
+            return _mockGeminiResponder(prompt, model);
           }
           return _mockGeminiResponder(prompt, model);
         };
@@ -6140,6 +6158,42 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(
           decodedThreeArea.area2Inspector,
           equals('maxReelForce: 450 N | cableDamping: 0.8'),
+        );
+        expect(capturedTailorPrompt, isNotNull);
+        expect(
+          capturedTailorPrompt,
+          contains('Project Specs (match exact 2D/3D classes and camera):'),
+        );
+        expect(capturedTailorPrompt, contains('Playtest Gate:'));
+
+        // Verify Stage 1B Option Card Regeneration injects exact Section Format Rules
+        final regenOpts = await ProjectConceptAgent.regenerateSectionOptionsWithAi(
+          draft: provider.conceptDraft!,
+          optionKey: 'gameSpec',
+          currentOptions: const [],
+          apiKey: 'mock-key',
+          modelName: 'gemini-flash-latest',
+          thinkingLevel: 'HIGH',
+        );
+        expect(regenOpts, isNotNull);
+        expect(regenOpts!.first, contains(' · '));
+        expect(capturedOptionRegenPrompt, isNotNull);
+        expect(
+          capturedOptionRegenPrompt,
+          contains('4 `·`-separated cells after the colon'),
+        );
+
+        // Verify GDD extraction mode passes isGddExtraction: true so pasted docs are extracted rather than treated as a 1-line spark
+        await ProjectConceptAgent.extractConceptFromGdd(
+          '# Salvage Protocol\n## Core Loop\nDive -> Cut Hull -> Extract Core',
+          apiKey: 'mock-key',
+          modelName: 'gemini-flash-latest',
+          thinkingLevel: 'HIGH',
+        );
+        expect(capturedGddPrompt, isNotNull);
+        expect(
+          capturedGddPrompt,
+          contains('FAITHFUL GDD EXTRACTION'),
         );
       },
     );

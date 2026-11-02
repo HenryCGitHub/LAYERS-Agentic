@@ -163,6 +163,7 @@ class ProjectConceptAgent {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
     String thinkingLevel = 'HIGH',
+    bool isGddExtraction = false,
   }) async {
     final cleanSpark = ProjectConceptBlueprint.normalizeCommonTypos(
       rawSpark.trim(),
@@ -186,9 +187,17 @@ class ProjectConceptAgent {
   }'''
         : '';
 
+    final promptLead = isGddExtraction
+        ? '''You are an indie game producer extracting a structured 8-section Stage 1 Concept Blueprint from this pasted Game Design Document (GDD) / Notes:
+"""
+$cleanSpark
+"""
+- FAITHFUL GDD EXTRACTION: Extract and preserve the exact title, mechanics, camera/controls, engine/platform, design pillars, trade-offs, core loop beats, exclusions, and completion criteria described in the pasted document rather than inventing unrelated systems.'''
+        : '''You are an indie game producer creating a Stage 1 Concept Blueprint for this spark idea:
+"$cleanSpark"''';
+
     final prompt = '''
-You are an indie game producer creating a Stage 1 Concept Blueprint for this spark idea:
-"$cleanSpark"
+$promptLead
 
 ${GeminiAgentClient.compactStyleRules}
 - Decompose `coreLoopBeats` into 4 to 6 sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:
@@ -286,6 +295,11 @@ Return ONLY valid JSON:
     );
     if (cleanMsg.isEmpty || !GeminiAgentClient.hasKey(apiKey)) return false;
 
+    final isSectionScoped = cleanMsg.startsWith('[Section ');
+    final sectionScopeRule = isSectionScoped
+        ? '\n- SECTION-SCOPED REQUEST: Focus your update on the target `[Section ...]` named in Developer Direction while keeping locked upstream sections consistent. When updating `gameSpec`, always return all 4 cells `["Camera View", "Controls", "Player Mode", "Arena Structure"]`; when updating `techSpec`, always return all 4 cells `["Engine", "Platform", "Asset Pipeline", "Network / Save"]`.'
+        : '';
+
     final prompt = '''
 You are Antigravity, an indie game producer updating a Live Concept Blueprint.
 Spark: "${draft.sparkIdea}"
@@ -305,7 +319,7 @@ Developer Direction: "$cleanMsg"
 ${GeminiAgentClient.compactStyleRules}
 - Synthesize and rewrite the affected field(s) into natural, polished game-dev English. NEVER copy-paste the developer's raw phrasing ("instead of...", "but in a...") verbatim.
 - Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
-- DELTA-ONLY OUTPUT: Include ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (valid keys: `title`, `goal`, `goalOptions`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Omit all unchanged keys! If `goal` or `title` changed, also include 3 updated `goalOptions`.
+- DELTA-ONLY OUTPUT: Include ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (valid keys: `title`, `goal`, `goalOptions`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Omit all unchanged keys! If `goal` or `title` changed, also include 3 updated `goalOptions`.$sectionScopeRule
 
 Return ONLY valid JSON (example when Goal changed):
 {
@@ -645,6 +659,27 @@ $_kExpansionCardsJsonSchema
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
 
+    final sectionFormatRule = switch (optionKey) {
+      'goal' =>
+        '- Format each option as: `"Strategy Label: Build a playable ${draft.title} prototype where you [action 1], [action 2], and [action 3]."`',
+      'gameSpec' =>
+        '- Format each option with 4 `·`-separated cells after the colon: `"Spec Label: Camera View · Controls · Player Mode · Arena Structure"` (e.g., `"Tight Arena Spec: 2D Top-Down · Twin-Stick WASD+Mouse · Singleplayer · Single-Screen Arena"`).',
+      'techSpec' =>
+        '- Format each option with 4 `·`-separated cells after the colon: `"Stack Label: Concrete Engine · Platform · Asset Pipeline · Save Mode"` (e.g., `"Godot 4 2D Stack: Godot 4 (GDScript) · PC Desktop · 2D Sprites + Particles · Offline Local Save"`).',
+      'designPillars' =>
+        '- Format each option as: `"2-3 Word Pillar Name: 1-sentence core player feeling or emotional tension (never a feature or genre)"`.',
+      'tradeOffs' =>
+        '- Format each option as an explicit `X over Y` boundary rule: `"Rule Label: Concrete Priority X over Concrete Alternative Y"`.',
+      'coreLoop' =>
+        '- Format each option as a 4-to-5 beat chain separated by ` → `: `"Loop Label: Beat 1 Name: Action → Beat 2 Name: Action → Beat 3 Name: Action → Beat 4 Name: Action"`.',
+      'exclusions' =>
+        '- Format each option as a prototype scope cut: `"Cut Label: No [deferred system/content] in v0.1 prototype"`.',
+      'doneWhen' =>
+        '- Format each option as an observable playtest gate without FPS targets: `"Playtest Gate Label: Player spawns, completes [core loop actions], and resets cleanly"`.',
+      _ =>
+        '- Format each option as `"Short Label: Concrete statement tailored to ${draft.title}"`.',
+    };
+
     final prompt = '''
 You are an indie game producer generating 3 fresh Option Cards for the "$optionKey" section of this game concept:
 Title: "${draft.title}"
@@ -660,7 +695,7 @@ ${currentOptions.isNotEmpty ? 'Previously Shown Options (DO NOT REPEAT): ${curre
 
 ${GeminiAgentClient.compactStyleRules}
 - Stay 100% faithful to "${draft.title}" and its locked upstream Game Spec, Tech Spec, Design Pillars, and Trade-Offs.
-- Format each option as "Short Label: Concrete statement tailored to ${draft.title}".
+$sectionFormatRule
 
 Return ONLY valid JSON:
 {
@@ -706,6 +741,7 @@ Return ONLY valid JSON:
       apiKey: apiKey,
       modelName: modelName,
       thinkingLevel: thinkingLevel,
+      isGddExtraction: true,
     );
     if (bp == null) return null;
 

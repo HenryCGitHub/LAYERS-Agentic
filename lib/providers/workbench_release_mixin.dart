@@ -2186,10 +2186,31 @@ Return ONLY a JSON object:
     _synthesizingFeatureIds.add(featureId);
     notifyListeners();
     try {
+      final projectDoc = activeProject;
+      final gameSpec = (projectDoc?.sections['game_spec'] ?? '').trim();
+      final techSpec = (projectDoc?.sections['tech_spec'] ?? '').trim();
+      final specLine = [
+        if (gameSpec.isNotEmpty) 'Game Spec: $gameSpec',
+        if (techSpec.isNotEmpty) 'Tech Spec: $techSpec',
+      ].join(' | ');
+      final existingTasksSummary = [
+        for (int i = 0; i < fixTaskIndex; i++)
+          () {
+            final t = cpNode.checklist[i];
+            final firstPath = t.children
+                .map((s) => (s.codeLanguage ?? '').trim())
+                .firstWhere(
+                  (p) => p.isNotEmpty && p != 'custom_snippet',
+                  orElse: () => '',
+                );
+            return 'Task ${i + 1}: "${t.text}"${firstPath.isNotEmpty ? ' ($firstPath)' : ''}';
+          }(),
+      ].join(' | ');
+
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize a concrete 3-step engine fix:
-Reported Bug: "$issueDescription"
+${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
@@ -2316,16 +2337,36 @@ Return ONLY a JSON object with 3 concrete fix steps:
     _synthesizingFeatureIds.add(featureId);
     notifyListeners();
     try {
+      final projectDoc = activeProject;
+      final gameSpec = (projectDoc?.sections['game_spec'] ?? '').trim();
+      final techSpec = (projectDoc?.sections['tech_spec'] ?? '').trim();
+      final specLine = [
+        if (gameSpec.isNotEmpty) 'Game Spec: $gameSpec',
+        if (techSpec.isNotEmpty) 'Tech Spec: $techSpec',
+      ].join(' | ');
+      final featGoal = featDoc != null
+          ? SectionTextUtils.resolveGoal(featDoc.sections).trim()
+          : '';
       final siblingTasksSummary = [
         for (int sIdx = 0; sIdx < cpNode.checklist.length; sIdx++)
           if (sIdx != taskIndex)
-            'Task ${sIdx + 1}: "${cpNode.checklist[sIdx].text}"',
+            () {
+              final st = cpNode.checklist[sIdx];
+              final firstPath = st.children
+                  .map((s) => (s.codeLanguage ?? '').trim())
+                  .firstWhere(
+                    (p) => p.isNotEmpty && p != 'custom_snippet',
+                    orElse: () => '',
+                  );
+              return 'Task ${sIdx + 1}: "${st.text}"${firstPath.isNotEmpty ? ' ($firstPath)' : ''}';
+            }(),
       ].join(' | ');
 
       final prompt = '''
 You are a senior game engine programmer assisting with a concrete implementation task.
 Engine: $engineLabel
-Feature: "${featDoc?.title ?? cpNode.name}"
+${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
+Playtest Gate: "${cpNode.playtestCondition}"
 Target Task ($taskNum of ${cpNode.checklist.length}): "${parentTask.text}"
 ${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
@@ -2563,6 +2604,7 @@ Return ONLY a JSON object with this schema:
       }
       for (final task in cp.checklist) {
         for (final sub in task.children) {
+          if (sub.codeTargetFile != 'custom_snippet') continue;
           final stepPath = (sub.codeLanguage ?? '').trim();
           if (stepPath.isNotEmpty && stepPath != 'custom_snippet') {
             pathTokens.add(stepPath);
