@@ -1273,6 +1273,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
     // Clear _releaseBlueprint while gemini-4-argon is synthesizing so the UI shows an honest
     // Agent Architectural Synthesis state rather than a pre-baked or prior-release plan.
+    _stepQueueGeneration++;
+    _pendingFeatureStepQueue.clear();
     _releaseBlueprint = null;
     final verTag = releaseVersionTagFor(relDoc);
     relDoc.sections['versionTag'] = verTag;
@@ -2320,6 +2322,8 @@ Return ONLY a JSON object with this schema:
     final relDoc = activeRelease;
     if (bp == null || relDoc == null) return;
 
+    _stepQueueGeneration++;
+    _pendingFeatureStepQueue.clear();
     _isAgentBusy = true;
     _executionLog.clear();
     _currentStage = WorkbenchStage.releaseWorkbench;
@@ -2364,6 +2368,7 @@ Return ONLY a JSON object with this schema:
           final remainingFeatIds = activeFeatureIds
               .where((id) => id != primaryFeatId)
               .toList();
+          final currentGen = ++_stepQueueGeneration;
           _pendingFeatureStepQueue
             ..clear()
             ..addAll(remainingFeatIds);
@@ -2376,18 +2381,23 @@ Return ONLY a JSON object with this schema:
           // and so Features #2..N receive Feature #1's Cumulative Project Ledger.
           await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
 
-          if (remainingFeatIds.isNotEmpty) {
+          if (remainingFeatIds.isNotEmpty &&
+              _stepQueueGeneration == currentGen) {
             if (GeminiAgentClient.testMockResponder != null) {
               // In test mode, run sequentially one feature at a time so each feature K
               // receives the Cumulative Project Ledger from features 1..K-1.
               await _prefetchRemainingFeatureStepsInBackground(
                 remainingFeatIds,
+                currentGen,
               );
             } else {
               // In live mode, release _isAgentBusy immediately after Feature #1 finishes
               // and synthesize Features #2..N sequentially in the background.
               unawaited(
-                _prefetchRemainingFeatureStepsInBackground(remainingFeatIds),
+                _prefetchRemainingFeatureStepsInBackground(
+                  remainingFeatIds,
+                  currentGen,
+                ),
               );
             }
           }
@@ -2402,7 +2412,9 @@ Return ONLY a JSON object with this schema:
 
   Future<void> _prefetchRemainingFeatureStepsInBackground([
     List<String>? initialFeatureIds,
+    int? expectedGeneration,
   ]) async {
+    final startGen = expectedGeneration ?? _stepQueueGeneration;
     if (initialFeatureIds != null) {
       _pendingFeatureStepQueue
         ..clear()
@@ -2416,10 +2428,13 @@ Return ONLY a JSON object with this schema:
     final startProjectId = _activeProjectId;
     final startReleaseId = _activeReleaseId;
     while (_pendingFeatureStepQueue.isNotEmpty) {
-      if (_activeProjectId != startProjectId ||
+      if (_stepQueueGeneration != startGen ||
+          _activeProjectId != startProjectId ||
           _activeReleaseId != startReleaseId) {
-        _pendingFeatureStepQueue.clear();
-        notifyListeners();
+        if (_stepQueueGeneration == startGen) {
+          _pendingFeatureStepQueue.clear();
+          notifyListeners();
+        }
         break;
       }
       final fId = _pendingFeatureStepQueue.removeAt(0);
@@ -2683,9 +2698,34 @@ Return ONLY a JSON object with this schema:
               ? 'UNITY C# (MonoBehaviour)'
               : 'GODOT 4 (GDScript 2.0)');
 
+      final gameSpecText = (activeProject?.sections['game_spec'] ??
+              activeProject?.sections['gameSpec'] ??
+              _conceptDraft?.gameSpec.join(' · ') ??
+              '')
+          .trim();
+      final techSpecText = (activeProject?.sections['tech_spec'] ??
+              activeProject?.sections['techSpec'] ??
+              _conceptDraft?.techSpec.join(' · ') ??
+              '')
+          .trim();
+      final specCorpusLower = '$gameSpecText $techSpecText'.toLowerCase();
+      final is2dProject = specCorpusLower.contains('2d') ||
+          specCorpusLower.contains('sprite') ||
+          specCorpusLower.contains('pixel') ||
+          specCorpusLower.contains('tilemap') ||
+          (specCorpusLower.contains('top-down') &&
+              !specCorpusLower.contains('3d')) ||
+          (specCorpusLower.contains('side-scroll') &&
+              !specCorpusLower.contains('3d'));
+      final dimensionInstructionBlock = is2dProject
+          ? 'PROJECT DIMENSION & CAMERA SPEC: 2D GAME ($gameSpecText | $techSpecText)\n'
+              '- STRICT 2D ENGINE NODE RULE: Use ONLY 2D scenes, nodes, and math (e.g., Node2D, CharacterBody2D, StaticBody2D, Area2D, Sprite2D, CollisionShape2D, RectangleShape2D/CircleShape2D, Vector2 in Godot 4; Rigidbody2D, BoxCollider2D, CircleCollider2D, SpriteRenderer, Vector2 in Unity). NEVER use 3D nodes or classes (NEVER use Node3D, MeshInstance3D, StaticBody3D, CharacterBody3D, Area3D, CapsuleShape3D, or Vector3)!'
+          : 'PROJECT DIMENSION & CAMERA SPEC: 3D GAME ($gameSpecText | $techSpecText)\n'
+              '- Use 3D actors/nodes/components and Vector3/FVector math matching $targetEngineMode.';
+
       final phaseInstructionBlock = switch (_currentPhase) {
         ProductionPhase.prototype =>
-          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes, greybox meshes, and direct Inspector/Details variables.\n- Focus strictly on proving the core mechanic feel and playtest loop.',
+          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes, greybox shapes/sprites, and direct Inspector/Details variables.\n- Focus strictly on proving the core mechanic feel and playtest loop.',
         ProductionPhase.mvp =>
           'ACTIVE PRODUCTION PHASE: 02 · MVP (FUNCTIONAL DELTA UPGRADE)\n- Extend the existing v0.1 prototype script/Actor in-place (NEVER recreate from scratch).\n- Wire cross-system state, HUD counters, or progression loops.',
         ProductionPhase.verticalSlice =>
@@ -2699,6 +2739,7 @@ Return ONLY a JSON object with this schema:
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+$dimensionInstructionBlock
 $phaseInstructionBlock
 $projectBuildStateContext
 ${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Already Built in Earlier Features — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
@@ -4378,15 +4419,28 @@ Return ONLY valid JSON:
       );
     }
 
+    final gameSpecSummary = (proj?.sections['game_spec'] ??
+            proj?.sections['gameSpec'] ??
+            draft?.gameSpec.join(' · ') ??
+            '')
+        .trim();
+    final techSpecSummary = (proj?.sections['tech_spec'] ??
+            proj?.sections['techSpec'] ??
+            draft?.techSpec.join(' · ') ??
+            '')
+        .trim();
+
     final prompt = '''
 You are the Principal Game Producer & Lead Systems Architect ($engineLabel) for "${proj?.title ?? 'Game Project'}".
 Triage this developer feature request captured in the Feature Inbox across 3 dimensions:
 1. WHEN (Release Timing): Does it belong in the CURRENT release ($activeVer · ${_currentPhase.label}), should it be SPLIT (lean 4h core slice in $activeVer now + deeper upgrade scheduled for a future ProductionPhase), or should it be SCHEDULED entirely for a future ProductionPhase (mvp, verticalSlice, fullProduction, postLaunch)?
 2. WHERE (Single Live Tree Placement): Which existing Epic (or new Epic) owns it, and should it be a standalone NEW feature ("newFeatureInEpic") or an UPGRADE checkpoint on an existing Feature ("upgradeExistingFeature")?
-3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel), Playtest Gate, 3 Build Tasks (4h), Tuning Params, and [STATE GUARD] rules.
+3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, 3 Build Tasks (4h), Tuning Params, and [STATE GUARD] rules.
 
 Developer Request: "${item.rawIdea}"
 Active Release: $activeVer (${_currentPhase.label})
+Game Spec: $gameSpecSummary
+Tech Spec: $techSpecSummary
 Design Pillars: ${draft?.designPillars.join(' | ') ?? 'Core gameplay clarity'}
 Trade-Offs: ${draft?.tradeOffs.join(' | ') ?? 'Playable feel over complexity'}
 Out of Scope Rules: ${draft?.exclusions.join(' | ') ?? 'None'}
@@ -4738,6 +4792,15 @@ Return ONLY valid JSON:
         edgeCases: item.edgeCases,
         parameters: {'releaseVersion': activeVer},
       );
+      for (int tIdx = 0; tIdx < newCp.checklist.length; tIdx++) {
+        TaskHowToBlueprint.resolve(
+          parentTask: newCp.checklist[tIdx],
+          taskIndex: tIdx,
+          checkpointNode: newCp,
+          engineHint: _activeEngineHint,
+          phase: _currentPhase,
+        );
+      }
       states.add(newCp);
       featDoc.sections['activeReleaseVersion'] = activeVer;
       if (featDoc.sections['originVersion'] != activeVer) {
@@ -4835,6 +4898,15 @@ Return ONLY valid JSON:
       edgeCases: item.edgeCases,
       parameters: {'releaseVersion': activeVer},
     );
+    for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+      TaskHowToBlueprint.resolve(
+        parentTask: cpNode.checklist[tIdx],
+        taskIndex: tIdx,
+        checkpointNode: cpNode,
+        engineHint: _activeEngineHint,
+        phase: _currentPhase,
+      );
+    }
     FeatureStateNode.saveStatesToDocument(featDoc, [cpNode]);
     documents[featId] = featDoc;
     beatDoc.childrenIds.add(featId);
@@ -4934,14 +5006,6 @@ Return ONLY valid JSON:
 
     final verTag = bp.releaseVersionTag;
     for (final item in dueItems) {
-      ProposedBeatBlueprint targetBeat = bp.beats.firstWhere(
-        (b) =>
-            b.id == item.targetBeatId ||
-            b.title.toLowerCase().trim() ==
-                item.targetBeatTitle.toLowerCase().trim(),
-        orElse: () => bp.beats.first,
-      );
-
       final cpTitle = item.futureCheckpointTitle.trim().isNotEmpty
           ? item.futureCheckpointTitle.trim()
           : (item.checkpointTitle.trim().isNotEmpty
@@ -4962,6 +5026,41 @@ Return ONLY valid JSON:
                   'Core Logic & Signal Hookup for $cpTitle (1h)',
                   'State & Bounds Guard for $cpTitle (1h)',
                 ]);
+
+      ProposedBeatBlueprint targetBeat;
+      if (item.integrationMode == InboxIntegrationMode.newEpicAndFeature) {
+        final newEpicName = (item.newEpicTitle != null &&
+                item.newEpicTitle!.trim().isNotEmpty)
+            ? item.newEpicTitle!.trim()
+            : item.featureTitle;
+        final existingNewBeat = bp.beats
+            .where(
+              (b) =>
+                  b.title.toLowerCase().trim() ==
+                  newEpicName.toLowerCase().trim(),
+            )
+            .firstOrNull;
+        if (existingNewBeat != null) {
+          targetBeat = existingNewBeat;
+        } else {
+          targetBeat = ProposedBeatBlueprint(
+            id: 'beat_${verTag}_inbox_${bp.beats.length + 1}',
+            title: newEpicName,
+            goal: goalText,
+            doneWhen: gateText,
+            features: [],
+          );
+          bp.beats.add(targetBeat);
+        }
+      } else {
+        targetBeat = bp.beats.firstWhere(
+          (b) =>
+              b.id == item.targetBeatId ||
+              b.title.toLowerCase().trim() ==
+                  item.targetBeatTitle.toLowerCase().trim(),
+          orElse: () => bp.beats.first,
+        );
+      }
 
       // Check if upgrading an existing feature in targetBeat
       ProposedFeatureBlueprint? existingFeat;

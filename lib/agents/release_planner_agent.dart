@@ -1333,6 +1333,99 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             explicitExclusions: parsed.explicitExclusions,
           );
         }
+      } else if (prototypePart != '1' &&
+          allCoreLoopItems.isNotEmpty &&
+          parsed.beats.length < allCoreLoopItems.length) {
+        // Ensure v0.1 covers every Stage 1 Core Loop Beat so trailing beats are never dropped
+        Set<String> extractKeywords(String text) => text
+            .toLowerCase()
+            .replaceAll(_nonAlphaNumSpaceRegex, ' ')
+            .split(_whitespaceRegex)
+            .where((w) => w.length >= 4)
+            .toSet();
+        final fullBeats = List<ProposedBeatBlueprint>.from(parsed.beats);
+        for (int cIdx = 0; cIdx < allCoreLoopItems.length; cIdx++) {
+          final rawCore = allCoreLoopItems[cIdx].trim();
+          final colonIdx = rawCore.indexOf(':');
+          final rawTitlePart =
+              colonIdx > 0 ? rawCore.substring(0, colonIdx).trim() : rawCore;
+          final rawDescPart = colonIdx > 0 && colonIdx + 1 < rawCore.length
+              ? rawCore.substring(colonIdx + 1).trim()
+              : rawCore;
+          final coreKeywords = extractKeywords(rawTitlePart);
+          final alreadyCovered = fullBeats.any((b) {
+            final bLower = b.title.toLowerCase();
+            final cLower = rawTitlePart.toLowerCase();
+            if (bLower.contains(cLower) || cLower.contains(bLower)) return true;
+            final bKw = extractKeywords(b.title);
+            return coreKeywords.isNotEmpty &&
+                bKw.intersection(coreKeywords).isNotEmpty;
+          });
+          if (!alreadyCovered) {
+            final nextBeatNum = fullBeats.length + 1;
+            final bTitle = MechanicArchetypeProfile.concreteBeatDisplayTitle(
+              rawTitlePart,
+              beatIndex: fullBeats.length,
+            );
+            final bGoal = rawDescPart.isNotEmpty
+                ? (rawDescPart.endsWith('.') ? rawDescPart : '$rawDescPart.')
+                : 'Build $bTitle in the greybox arena.';
+            final fTitle =
+                MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+              rawTitlePart,
+              beatTitle: bTitle,
+              beatGoal: bGoal,
+              beatIndex: fullBeats.length,
+            );
+            fullBeats.add(
+              ProposedBeatBlueprint(
+                id: 'beat_$nextBeatNum',
+                title: bTitle,
+                goal: bGoal,
+                doneWhen: 'Playtester verifies $bTitle in the test arena.',
+                features: [
+                  ProposedFeatureBlueprint(
+                    id: 'feat_${nextBeatNum}_1',
+                    title: fTitle,
+                    goal: bGoal,
+                    doneWhen:
+                        'Playtester triggers $fTitle and verifies response on screen.',
+                    estimatedHours: 4,
+                    included: true,
+                    lifecycle: FeatureLifecycleStatus.newFeature,
+                    originVersion: versionTag,
+                    inScope: [rawCore],
+                    outOfScope: const [],
+                    tuningParams: _defaultTuningParamsForFeature(fTitle, bGoal),
+                    edgeCases: const [
+                      '[STATE GUARD] Prevent duplicate trigger while action is active',
+                    ],
+                    checkpoints: [
+                      ProposedCheckpointBlueprint(
+                        title: '$fTitle Core',
+                        playtestCriteria:
+                            'Trigger $fTitle in playtest -> verify immediate response on screen',
+                        releaseVersion: versionTag,
+                        tasks: [
+                          'Actor Setup (2h)',
+                          'State Logic (1h)',
+                          'State Guard (1h)',
+                        ],
+                        coveredScope: [rawCore],
+                        tuningParams:
+                            _defaultTuningParamsForFeature(fTitle, bGoal),
+                        edgeCases: const [
+                          '[STATE GUARD] Prevent duplicate trigger while action is active',
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+        parsed.beats = fullBeats;
       }
       return parsed;
     }
@@ -1343,9 +1436,17 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     final matchedLlmBeatByExistingId = <String, ProposedBeatBlueprint>{};
     final unmatchedNewLlmBeats = <ProposedBeatBlueprint>[];
 
+    Set<String> extractBeatKeywords(String text) => text
+        .toLowerCase()
+        .replaceAll(_nonAlphaNumSpaceRegex, ' ')
+        .split(_whitespaceRegex)
+        .where((w) => w.length >= 4)
+        .toSet();
+
     for (int bIdx = 0; bIdx < parsed.beats.length; bIdx++) {
       final llmBeat = parsed.beats[bIdx];
       final cleanLlmTitle = llmBeat.title.toLowerCase().trim();
+      final llmKeywords = extractBeatKeywords(llmBeat.title);
       TierDocument? matchedBeatDoc;
 
       // 1. Exact ID or exact title match
@@ -1357,24 +1458,57 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           break;
         }
       }
-      // 2. Substring title match
+      // 2. Substring title match or shared feature ID/title match
       if (matchedBeatDoc == null && cleanLlmTitle.isNotEmpty) {
         for (final eb in existingBeats) {
           if (matchedLlmBeatByExistingId.containsKey(eb.id)) continue;
           final cleanEbTitle = eb.title.toLowerCase().trim();
+          final existingFeats =
+              existingFeaturesByBeat[eb.id] ?? const <TierDocument>[];
+          final sharesExistingFeature = llmBeat.features.any(
+            (lf) => existingFeats.any(
+              (ef) =>
+                  ef.id == lf.id ||
+                  ef.title.toLowerCase().trim() ==
+                      lf.title.toLowerCase().trim(),
+            ),
+          );
+          final sharesKeyword = llmKeywords.isNotEmpty &&
+              extractBeatKeywords(eb.title)
+                  .intersection(llmKeywords)
+                  .isNotEmpty;
           if (cleanEbTitle.contains(cleanLlmTitle) ||
-              cleanLlmTitle.contains(cleanEbTitle)) {
+              cleanLlmTitle.contains(cleanEbTitle) ||
+              sharesExistingFeature ||
+              sharesKeyword) {
             matchedBeatDoc = eb;
             break;
           }
         }
       }
-      // 3. Positional fallback only when all existing beats were returned in full
+      // 3. Positional fallback only when not agent-reasoned delta OR when canonical beat_K ID matches
       if (matchedBeatDoc == null &&
           parsed.beats.length == existingBeats.length &&
           bIdx < existingBeats.length &&
           !matchedLlmBeatByExistingId.containsKey(existingBeats[bIdx].id)) {
-        matchedBeatDoc = existingBeats[bIdx];
+        final canonicalBeatId = 'beat_${bIdx + 1}';
+        final hasNonNewFeature = llmBeat.features.any(
+          (f) => f.lifecycle != FeatureLifecycleStatus.newFeature,
+        );
+        if (!isAgentReasoned ||
+            llmBeat.id == canonicalBeatId ||
+            hasNonNewFeature) {
+          // Only map onto existingBeats[bIdx] if it's an upgrade/canonical beat,
+          // NEVER if it's a brand-new Epic with 100% new features and an unrelated title!
+          final isUnrelatedNewEpic = isAgentReasoned &&
+              !hasNonNewFeature &&
+              extractBeatKeywords(existingBeats[bIdx].title)
+                  .intersection(llmKeywords)
+                  .isEmpty;
+          if (!isUnrelatedNewEpic) {
+            matchedBeatDoc = existingBeats[bIdx];
+          }
+        }
       }
 
       if (matchedBeatDoc != null) {
@@ -1399,6 +1533,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           );
 
       llmBeat.id = eb.id;
+      llmBeat.title = eb.title;
       final matchedByExistingId = <String, ProposedFeatureBlueprint>{};
       final unmatchedNewFeats = <ProposedFeatureBlueprint>[];
       final cleanVer = versionTag.replaceAll(_nonAlphaNumRegex, '_');
@@ -2070,21 +2205,33 @@ class ReleaseExecutorAgent {
               ),
           ];
 
-          stateNodes.add(
-            FeatureStateNode(
-              id: '${featId}_${versionTag}_cp_$cpNumber',
-              name: 'Checkpoint $cpNumber: ${cpBp.title}',
-              trigger: 'Playtest: ${cpBp.playtestCriteria}',
-              order: nextOrder,
-              checklist: checklist,
-              coveredScope: List<String>.from(cpBp.coveredScope),
-              tuningParams: List<String>.from(cpBp.tuningParams),
-              edgeCases: List<String>.from(cpBp.edgeCases),
-              parameters: {
-                'releaseVersion': versionTag,
-              },
-            ),
+          final cpNode = FeatureStateNode(
+            id: '${featId}_${versionTag}_cp_$cpNumber',
+            name: 'Checkpoint $cpNumber: ${cpBp.title}',
+            trigger: 'Playtest: ${cpBp.playtestCriteria}',
+            order: nextOrder,
+            checklist: checklist,
+            coveredScope: List<String>.from(cpBp.coveredScope),
+            tuningParams: List<String>.from(cpBp.tuningParams),
+            edgeCases: List<String>.from(cpBp.edgeCases),
+            parameters: {
+              'releaseVersion': versionTag,
+            },
           );
+          final projDocForHint =
+              parentProjId != null ? existingDocuments[parentProjId] : null;
+          final engineHint = projDocForHint?.sections['tech_spec'] ??
+              projDocForHint?.sections['techSpec'] ??
+              '';
+          for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+            TaskHowToBlueprint.resolve(
+              parentTask: cpNode.checklist[tIdx],
+              taskIndex: tIdx,
+              checkpointNode: cpNode,
+              engineHint: engineHint,
+            );
+          }
+          stateNodes.add(cpNode);
         }
 
         FeatureStateNode.saveStatesToDocument(featDoc, stateNodes);

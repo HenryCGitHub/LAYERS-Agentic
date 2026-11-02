@@ -5159,5 +5159,557 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    test(
+      'Crop Shotgun Arena End-to-End Workflow Audit Regressions: Concrete Engine Normalization, 2D Step Guard, Full Core Loop Seeding, Canonical Epic Preservation, Eager Sub-Steps, and Scheduled newEpicAndFeature Inbox Injection',
+      () async {
+        final capturedStepPrompts = <String>[];
+        final capturedInboxPrompts = <String>[];
+
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains(
+            'creating a Stage 1 Concept Blueprint for this spark idea:',
+          )) {
+            return {
+              'title': 'Crop Shotgun Arena',
+              'goal':
+                  'Build a playable 2D top-down arena shooter where planting crops by day yields elemental shotgun ammo by night.',
+              'gameSpec': [
+                '2D Top-Down',
+                'Twin-Stick (WASD + Mouse Aim)',
+                'Singleplayer',
+                'Compact Farm Arena',
+              ],
+              // Fix 1 test case: LLM returns generic "2D Game Engine" and 2 release titles
+              'techSpec': [
+                '2D Game Engine',
+                'PC Desktop',
+                '2D Pixel Art Sprites',
+                'Offline Local Save',
+              ],
+              'designPillars': [
+                'Harvest Fuels Firepower: Every crop you tend directly shapes your combat ammo.',
+                'Relentless Forward Dash: Dashing through enemies rewards aggressive positioning.',
+                'Readable Night Waves: Enemy telegraphs and ammo counts stay clear at a glance.',
+              ],
+              'tradeOffs': [
+                'Snappy Arcade Movement: Instant twin-stick velocity over realistic inertia',
+                'Direct Plot Interaction: One-button planting and harvest over complex farming menus',
+              ],
+              'coreLoopBeats': [
+                'Crop Planting & Harvest: Plant seeds in soil plots, water them, and harvest ammo pods.',
+                'Day Night Phase Shift: Trigger sunset transition to lock plots and spawn enemy waves.',
+                'Dash Reload Combat: Dash through enemies to reload shells and fire elemental spreads.',
+                'Shotgun Wave Clearing: Clear pest waves and collect dropped seed packets.',
+                'Seed Loot & Plot Upgrade: Spend harvested pods to unlock soil plots and start next day.',
+              ],
+              'exclusions': [
+                'No town NPC dialogue trees',
+                'No online co-op multiplayer',
+              ],
+              'doneWhen':
+                  'Playtester plants crops, survives 2 night waves using dash-reload shotgun shells, and unlocks a soil plot.',
+              'releaseTrainTitles': [
+                'v0.1: Prototype — Part 1: Controls & Primary Mechanics',
+                'v0.2: Prototype — Part 2: Progression & Loop Reset',
+              ],
+            };
+          }
+
+          if (prompt.contains('updating a Live Concept Blueprint')) {
+            return {
+              'reply': 'Added dash-through-enemy reload and kept 2D engine.',
+              'updatedFields': ['Tech Spec', 'Core Loop'],
+              'techSpec': [
+                '2D Engine',
+                'PC Desktop',
+                '2D Pixel Art Sprites',
+                'Offline Local Save',
+              ],
+            };
+          }
+
+          if (prompt.contains(
+            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps',
+          )) {
+            capturedStepPrompts.add(prompt);
+            return null; // Let deterministic fallback or eager seeding verify
+          }
+
+          if (prompt.contains(
+            'Triage this developer feature request captured in the Feature Inbox',
+          )) {
+            capturedInboxPrompts.add(prompt);
+            if (prompt.contains('Seed Mutator Workbench')) {
+              return {
+                'releaseTimingMode': 'futureRelease',
+                'targetFuturePhase': 'mvp',
+                'releaseTimingReasoning':
+                    'Meta-crafting fits Phase 2 (02 · MVP) as a dedicated progression station.',
+                'integrationMode': 'newEpicAndFeature',
+                'targetBeatId': 'new_epic',
+                'newEpicTitle': 'Seed Combiner Station',
+                'placementReasoning':
+                    'Belongs in its own Seed Combiner Station Epic.',
+                'featureTitle': 'Physical Seed Combiner',
+                'goal': 'Build a 2-slot seed combiner anvil between waves.',
+                'inScope': [
+                  'Two-slot seed anvil interaction',
+                  'Hybrid seed output drop',
+                ],
+                'doneWhen':
+                    'Playtester drops 2 seeds onto the anvil and collects 1 hybrid seed.',
+                'architectureHowSummary': [
+                  'Area2D SeedAnvil with 2 slot markers',
+                  'Interact signal combines 2 seed IDs',
+                  'Guard against empty slots before combining',
+                ],
+                'checkpointTitle': 'Playable Physical Seed Combiner',
+                'playtestGate': 'Drop 2 seeds -> spawns 1 hybrid seed',
+                'tasks': [
+                  'Build 2-slot seed anvil trigger and hybrid output spawner (1.5h)',
+                  'Wire seed packet consumption and hybrid pickup prompt (1.5h)',
+                ],
+                'tuningParams': ['combineDuration: 1.5 s'],
+                'edgeCases': [
+                  '[EMPTY SLOT GUARD] Require 2 valid seeds before combining',
+                ],
+                'futureCheckpointTitle': 'Playable Physical Seed Combiner',
+                'futureGoal':
+                    'Build a 2-slot seed combiner anvil between waves.',
+                'futurePlaytestGate': 'Drop 2 seeds -> spawns 1 hybrid seed',
+                'futureTasks': [
+                  'Build 2-slot seed anvil trigger and hybrid output spawner (1.5h)',
+                  'Wire seed packet consumption and hybrid pickup prompt (1.5h)',
+                ],
+              };
+            }
+            return {
+              'releaseTimingMode': 'now',
+              'targetFuturePhase': 'mvp',
+              'releaseTimingReasoning':
+                  'Fits directly into active v0.1 combat feel.',
+              'integrationMode': 'newFeatureInEpic',
+              'targetBeatId': 'beat_3',
+              'placementReasoning': 'Fits inside Dash Reload Combat.',
+              'featureTitle': 'Shotgun Knockback Recoil',
+              'goal':
+                  'Apply backward recoil impulse when firing shotgun shells.',
+              'inScope': ['Recoil velocity impulse on fire'],
+              'doneWhen':
+                  'Firing shotgun pushes player back by recoilImpulse without clipping walls.',
+              'architectureHowSummary': [
+                'CharacterBody2D recoil vector',
+                'Apply opposite aim impulse on fire',
+                'Clamp velocity against walls',
+              ],
+              'checkpointTitle': 'Playable Shotgun Knockback Recoil',
+              'playtestGate': 'Fire shotgun -> player nudges backward cleanly',
+              'tasks': [
+                'Apply backward recoil velocity vector on shotgun fire (1.5h)',
+                'Clamp recoil impulse against arena boundary collisions (1.5h)',
+              ],
+              'tuningParams': ['recoilImpulse: 180.0 px/s'],
+              'edgeCases': [
+                '[WALL CLIP GUARD] Zero recoil impulse when colliding with wall',
+              ],
+            };
+          }
+
+          if (prompt.contains('planning Release:')) {
+            final isFirstRelease = prompt.contains(
+              'First Release (v0.1): No prior features exist yet.',
+            );
+            if (isFirstRelease) {
+              // Fix 3A test case: LLM only returns 3 beats out of the 5 Stage 1 Core Loop Beats in v0.1
+              return {
+                'goal':
+                    'Plant seeds, shift to night, and dash-reload through enemy waves.',
+                'doneWhen':
+                    'Playtester plants seeds, shifts to night, and clears wave.',
+                'explicitExclusions': ['No online co-op'],
+                'beats': [
+                  {
+                    'id': 'beat_1',
+                    'title': 'Crop Planting & Harvest',
+                    'goal': 'Plant seeds in soil plots and harvest ammo pods.',
+                    'doneWhen': 'Plots grow and drop ammo pods.',
+                    'features': [
+                      {
+                        'id': 'feat_1_1',
+                        'title': 'Soil Plot Planting',
+                        'lifecycle': 'new',
+                        'included': true,
+                        'estimatedHours': 3,
+                        'goal':
+                            'Plant seeds in soil plots and harvest ammo pods.',
+                        'inScope': ['Soil plot state and pod drop'],
+                        'doneWhen':
+                            'Player plants a seed and collects harvested ammo pod.',
+                        'tuningParams': ['growthTime: 6.0 s'],
+                        'edgeCases': [
+                          '[PLOT BUSY GUARD] Block planting on occupied plot',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Playable Soil Plot Planting',
+                            'playtestCriteria':
+                                'Plant seed in plot and harvest ammo pod.',
+                            'tasks': [
+                              'Build soil plot interaction and growth timer (1.5h)',
+                              'Spawn harvestable ammo pod when timer completes (1.5h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    'id': 'beat_2',
+                    'title': 'Day Night Phase Shift',
+                    'goal':
+                        'Trigger sunset transition and spawn enemy waves.',
+                    'doneWhen': 'Bell switches phase to night.',
+                    'features': [
+                      {
+                        'id': 'feat_2_1',
+                        'title': 'Sunset Wave Bell',
+                        'lifecycle': 'new',
+                        'included': true,
+                        'estimatedHours': 3,
+                        'goal': 'Transition from day planting to night combat.',
+                        'inScope': ['Phase state switch and wave trigger'],
+                        'doneWhen':
+                            'Ringing bell switches phase to night and spawns enemies.',
+                        'tuningParams': ['waveCount: 5 enemies'],
+                        'edgeCases': [
+                          '[NIGHT LOCK GUARD] Disable bell during active night wave',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Playable Sunset Wave Bell',
+                            'playtestCriteria':
+                                'Ring bell to shift into night wave combat.',
+                            'tasks': [
+                              'Create bell interactable and day/night state switch (1.5h)',
+                              'Trigger night enemy spawner on phase change (1.5h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    'id': 'beat_3',
+                    'title': 'Dash Reload Combat',
+                    'goal':
+                        'Dash through enemies to reload shells and fire.',
+                    'doneWhen': 'Dashing through enemy refills 2 shells.',
+                    'features': [
+                      {
+                        'id': 'feat_3_1',
+                        'title': 'Dash Burst',
+                        'lifecycle': 'new',
+                        'included': true,
+                        'estimatedHours': 3,
+                        'goal': 'Dash across the arena with brief i-frames.',
+                        'inScope': ['Dash velocity burst and cooldown'],
+                        'doneWhen':
+                            'Player dashes cleanly without clipping walls.',
+                        'tuningParams': ['dashSpeed: 420.0 px/s'],
+                        'edgeCases': [
+                          '[COOLDOWN GUARD] Block dash during active cooldown',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Playable Dash Burst',
+                            'playtestCriteria': 'Dash forward with Spacebar.',
+                            'tasks': [
+                              'Implement 2D dash velocity impulse and timer (1.5h)',
+                              'Add dash trail visual and cooldown guard (1.5h)',
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        'id': 'feat_3_2',
+                        'title': 'Dash Strike Reload',
+                        'lifecycle': 'new',
+                        'included': true,
+                        'estimatedHours': 3,
+                        'goal':
+                            'Refill shotgun ammo by dashing through enemies.',
+                        'inScope': ['Dash overlap detector and ammo refill'],
+                        'doneWhen':
+                            'Dashing through an enemy refills 2 shells up to maxAmmo.',
+                        'tuningParams': ['reloadPerDash: 2 shells'],
+                        'edgeCases': [
+                          '[MAX AMMO GUARD] Clamp shell count to maxCapacity',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Playable Dash Strike Reload',
+                            'playtestCriteria':
+                                'Refill 2 shells when dashing through an enemy.',
+                            'tasks': [
+                              'Detect enemy overlap during active dash state (1.5h)',
+                              'Increment currentAmmo and play reload cue (1.5h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              };
+            } else {
+              // Fix 3B test case: In v0.2, LLM returns 3 beats where Beat #3 is a brand-new topic ("Farm Upgrading")
+              // at positional index 2 (where "Dash Reload Combat" lives).
+              return {
+                'goal':
+                    'Test multi-stage crop growth, sunset hazards, and plot upgrades.',
+                'doneWhen': 'Playtester verifies v0.2 upgrades.',
+                'explicitExclusions': ['No online co-op'],
+                'beats': [
+                  {
+                    'id': 'beat_1',
+                    'title': 'Crop Growth Cycle',
+                    'goal': 'Upgrade soil plots with fertilizer boost.',
+                    'doneWhen': 'Fertilized plots drop 2x pods.',
+                    'features': [
+                      {
+                        'id': 'feat_1_1',
+                        'title': 'Soil Plot Planting',
+                        'lifecycle': 'upgrade',
+                        'included': true,
+                        'estimatedHours': 3,
+                        'goal':
+                            'Add fertilizer yield boost to soil plots.',
+                        'inScope': ['Fertilizer interaction and 2x yield'],
+                        'doneWhen':
+                            'Fertilized plot drops 2x ammo pods on harvest.',
+                        'tuningParams': ['fertilizerMultiplier: 2.0x'],
+                        'edgeCases': [
+                          '[DOUBLE FERTILIZE GUARD] Block second fertilizer on same plot',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Fertilizer Yield Upgrade',
+                            'playtestCriteria':
+                                'Apply fertilizer to double ammo pod harvest.',
+                            'tasks': [
+                              'Add fertilizer state and 2x pod spawn multiplier (1.5h)',
+                              'Add fertilized soil tint and harvest pop cue (1.5h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    'id': 'beat_2',
+                    'title': 'Day Night Transition',
+                    'goal': 'Upgrade sunset bell with early-ring bonus.',
+                    'doneWhen': 'Early bell ring drops bonus seed packet.',
+                    'features': [
+                      {
+                        'id': 'feat_2_1',
+                        'title': 'Sunset Wave Bell',
+                        'lifecycle': 'upgrade',
+                        'included': true,
+                        'estimatedHours': 3,
+                        'goal':
+                            'Reward early bell activation with bonus seeds.',
+                        'inScope': ['Early-ring timer check and bonus drop'],
+                        'doneWhen':
+                            'Ringing bell early drops 1 bonus seed packet.',
+                        'tuningParams': ['earlyBonusSeeds: 1 packet'],
+                        'edgeCases': [
+                          '[DUSK EXPIRED GUARD] No bonus after dusk timer ends',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Early Bell Bonus Upgrade',
+                            'playtestCriteria':
+                                'Ring bell early to earn bonus seed packet.',
+                            'tasks': [
+                              'Track remaining daylight time on bell activation (1.5h)',
+                              'Spawn bonus seed packet when triggered early (1.5h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    'id': 'beat_3',
+                    'title': 'Farm Upgrading',
+                    'goal': 'Unlock irrigation sprinklers for plots.',
+                    'doneWhen': 'Sprinklers auto-water adjacent plots.',
+                    'features': [
+                      {
+                        'id': 'feat_3_new',
+                        'title': 'Sprinkler Auto-Water',
+                        'lifecycle': 'new',
+                        'included': true,
+                        'estimatedHours': 3,
+                        'goal':
+                            'Auto-water adjacent soil plots each morning.',
+                        'inScope': ['Sprinkler placement and radius water'],
+                        'doneWhen':
+                            'Placed sprinkler waters adjacent plots automatically.',
+                        'tuningParams': ['sprinklerRadius: 120.0 px'],
+                        'edgeCases': [
+                          '[OVERLAP GUARD] Prevent placing two sprinklers on same tile',
+                        ],
+                        'checkpoints': [
+                          {
+                            'title': 'Playable Sprinkler Auto-Water',
+                            'playtestCriteria':
+                                'Place sprinkler and auto-water nearby plots.',
+                            'tasks': [
+                              'Build sprinkler placement node and radius check (1.5h)',
+                              'Trigger watered state on adjacent plots at dawn (1.5h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+          }
+
+          return _mockGeminiResponder(prompt, model);
+        };
+
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview(
+          'A 2D top-down arena shooter where you farm crops by day for shotgun ammo by night',
+        );
+
+        // Verify Fix 1: "2D Game Engine" normalized to "Godot 4 (GDScript)" and initial releaseTrainTitles capped to 1
+        expect(provider.conceptDraft!.techSpec.first, 'Godot 4 (GDScript)');
+        expect(provider.conceptDraft!.releaseTrainTitles.length, 1);
+
+        // Verify Fix 1 on chat turn as well ("2D Engine" -> "Godot 4 (GDScript)")
+        await provider.sendConceptChatMessage(
+          'Add dash-through-enemy reload mechanic',
+        );
+        expect(provider.conceptDraft!.techSpec.first, 'Godot 4 (GDScript)');
+
+        // Build v0.1 Release
+        await provider.openReleasePlanGate();
+        final v01RelDoc = provider.activeRelease!;
+        expect(v01RelDoc.sections['prototypePart'], isNull);
+
+        // Verify Fix 3A: Even though the LLM only returned 3 beats, all 5 Stage 1 Core Loop Beats are present in v0.1
+        expect(provider.releaseBlueprint!.beats.length, 5);
+
+        await provider.approveAndExecuteReleasePlan();
+
+        // Verify Fix 4: Immediately after executeBlueprint, every feature task already has >= 3 sub-steps via eager TaskHowToBlueprint.resolve
+        for (final beat in provider.activeReleaseBeats) {
+          for (final feat in provider.featuresForBeat(beat.id)) {
+            final states = FeatureStateNode.getStatesForDocument(feat);
+            expect(states, isNotEmpty);
+            for (final task in states.first.checklist) {
+              expect(
+                task.children.length,
+                greaterThanOrEqualTo(3),
+                reason:
+                    'Feature "${feat.title}" task "${task.text}" must eagerly have >= 3 sub-steps immediately after executeBlueprint',
+              );
+            }
+          }
+        }
+
+        // Verify Fix 2: 2D Game Spec & Tech Spec inject explicit 2D dimension guard into step synthesis prompt
+        expect(capturedStepPrompts, isNotEmpty);
+        expect(
+          capturedStepPrompts.first,
+          contains('PROJECT DIMENSION & CAMERA SPEC: 2D GAME'),
+        );
+
+        // Test Feature Inbox in v0.1:
+        // 1) Immediate ('now') Inbox item eagerly populates >= 3 sub-steps
+        final nowInbox = await provider.submitFeatureIdeaToInbox(
+          'Add shotgun knockback recoil when firing heavy shells',
+          preferredBeatId: provider.activeReleaseBeats[2].id,
+        );
+        expect(nowInbox, isNotNull);
+        expect(capturedInboxPrompts.last, contains('Game Spec: 2D Top-Down'));
+        expect(
+          capturedInboxPrompts.last,
+          contains('Tech Spec: Godot 4 (GDScript)'),
+        );
+        final nowFeatId = await provider.acceptFeatureInboxTriage(nowInbox!.id);
+        expect(nowFeatId, isNotNull);
+        final nowFeatDoc = provider.documents[nowFeatId!]!;
+        final nowFeatStates = FeatureStateNode.getStatesForDocument(nowFeatDoc);
+        for (final task in nowFeatStates.first.checklist) {
+          expect(task.children.length, greaterThanOrEqualTo(3));
+        }
+
+        // 2) Scheduled ('futureRelease' -> 02 · MVP) Inbox item with newEpicAndFeature ("Physical Seed Combiner")
+        final mvpInbox = await provider.submitFeatureIdeaToInbox(
+          'Add Seed Mutator Workbench to combine two seeds between waves',
+          preferredBeatId: provider.activeReleaseBeats.first.id,
+        );
+        expect(mvpInbox, isNotNull);
+        expect(
+          mvpInbox!.integrationMode,
+          equals(InboxIntegrationMode.newEpicAndFeature),
+        );
+        expect(
+          mvpInbox.releaseTimingMode,
+          equals(InboxReleaseTimingMode.futureRelease),
+        );
+        expect(mvpInbox.targetFuturePhase, equals(ProductionPhase.mvp));
+        await provider.acceptFeatureInboxTriage(mvpInbox.id);
+        expect(provider.scheduledFeatureInboxItems, hasLength(1));
+
+        // Advance to v0.2 (02 · MVP)
+        await provider.prepareProgressiveNextReleaseDraft();
+        final v02Bp = provider.releaseBlueprint!;
+
+        // Verify Fix 3B:
+        // - Beat #1 and Beat #2 keep their canonical Stage 1 / v0.1 Epic titles ("Crop Planting & Harvest", "Day Night Phase Shift"), never renamed to "Crop Growth Cycle" or "Day Night Transition"
+        // - Beat #3 ("Dash Reload Combat") is NOT overwritten by positional Beat #3 ("Farm Upgrading") and preserves its v0.1 features (Dash Burst, Dash Strike Reload, Shotgun Knockback Recoil)
+        // - "Farm Upgrading" is appended as a new Epic
+        final v02BeatTitles = v02Bp.beats.map((b) => b.title).toList();
+        expect(v02BeatTitles, contains('Crop Planting & Harvest'));
+        expect(v02BeatTitles, contains('Day Night Phase Shift'));
+        expect(v02BeatTitles, contains('Dash Reload Combat'));
+        expect(v02BeatTitles, contains('Farm Upgrading'));
+        expect(v02BeatTitles, isNot(contains('Crop Growth Cycle')));
+        expect(v02BeatTitles, isNot(contains('Day Night Transition')));
+
+        final dashBeatInV02 = v02Bp.beats.firstWhere(
+          (b) => b.title == 'Dash Reload Combat',
+        );
+        final dashFeatTitles =
+            dashBeatInV02.features.map((f) => f.title).toList();
+        expect(dashFeatTitles, contains('Dash Burst'));
+        expect(dashFeatTitles, contains('Dash Strike Reload'));
+        expect(dashFeatTitles, contains('Shotgun Knockback Recoil'));
+
+        // Verify Fix 5: Scheduled 02 · MVP newEpicAndFeature ("Physical Seed Combiner" in "Seed Combiner Station") is auto-injected into v0.2!
+        expect(v02BeatTitles, contains('Seed Combiner Station'));
+        final combinerBeat = v02Bp.beats.firstWhere(
+          (b) => b.title == 'Seed Combiner Station',
+        );
+        expect(
+          combinerBeat.features.any(
+            (f) => f.title == 'Physical Seed Combiner',
+          ),
+          isTrue,
+        );
+
+        await provider.approveAndExecuteReleasePlan();
+        expect(provider.scheduledFeatureInboxItems, isEmpty);
+      },
+    );
   });
 }

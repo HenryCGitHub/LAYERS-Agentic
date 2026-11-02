@@ -93,6 +93,43 @@ class ProjectConceptAgent {
         .toList();
   }
 
+  static List<String> _normalizeTechSpecEngine(
+    List<String> techSpec,
+    List<String> gameSpec,
+    String sparkText,
+  ) {
+    if (techSpec.isEmpty) return techSpec;
+    final result = List<String>.from(techSpec);
+    final e0 = result.first.toLowerCase();
+    final hasConcreteEngine = e0.contains('godot') ||
+        e0.contains('unity') ||
+        e0.contains('unreal') ||
+        e0.contains('gamemaker') ||
+        e0.contains('phaser') ||
+        e0.contains('bevy') ||
+        e0.contains('defold') ||
+        e0.contains('flutter') ||
+        e0.contains('flame');
+    if (hasConcreteEngine) return result;
+
+    final corpus =
+        '${gameSpec.join(' ')} ${techSpec.join(' ')} $sparkText'.toLowerCase();
+    if (corpus.contains('unreal')) {
+      result[0] = 'Unreal Engine 5 (Blueprints / C++)';
+    } else if (corpus.contains('unity') || corpus.contains('c#')) {
+      result[0] = 'Unity 6 (C#)';
+    } else if (corpus.contains('2d') ||
+        corpus.contains('sprite') ||
+        corpus.contains('pixel') ||
+        corpus.contains('tilemap') ||
+        corpus.contains('top-down')) {
+      result[0] = 'Godot 4 (GDScript)';
+    } else {
+      result[0] = 'Unreal Engine 5 (Blueprints / C++)';
+    }
+    return result;
+  }
+
   static List<SparkExpansionCard> _parseExpansionCards(dynamic rawCards) {
     if (rawCards is! List) return const <SparkExpansionCard>[];
     final cards = <SparkExpansionCard>[];
@@ -159,13 +196,14 @@ ${GeminiAgentClient.compactStyleRules}
   2. Middle Beats cover the core simulation/action and reactive challenge (e.g. chemical drift & plant stress, active enemy/hazard pressure, or resource processing) in the exact chronological sequence the player experiences them.
   3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.
 - Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
+- In `techSpec[0]`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
 
 Return ONLY valid JSON:
 {
   "title": "Short 2-3 word title",
   "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
   "gameSpec": ["Camera View", "Controls", "Player Mode", "Arena Structure"],
-  "techSpec": ["Engine", "Platform", "Asset Pipeline", "Network / Save"],
+  "techSpec": ["Godot 4 (GDScript) | Unity 6 (C#) | Unreal Engine 5", "Platform", "Asset Pipeline", "Network / Save"],
   "designPillars": ["2-3 Word Pillar Name: Concise 1-sentence player feeling 1", "2-3 Word Pillar Name: Concise 1-sentence player feeling 2", "2-3 Word Pillar Name: Concise 1-sentence player feeling 3"],
   "tradeOffs": ["2-3 word priority over 2-3 word alternative", "2-3 word priority 2 over 2-3 word alternative 2", "2-3 word priority 3 over 2-3 word alternative 3"],
   "coreLoopBeats": ["Beat Name: Concise 1-sentence action and response", "..."],
@@ -189,14 +227,20 @@ Return ONLY valid JSON:
     final resolvedTitle = aiTitle.isNotEmpty ? aiTitle : cleanSpark;
     final parsedSectionOptions = _parseSectionOptions(json['sectionOptions']);
     final releaseTitles = _parseStringList(json['releaseTrainTitles']);
+    final parsedGameSpec = _parseStringList(json['gameSpec']);
+    final parsedTechSpec = _normalizeTechSpecEngine(
+      _parseStringList(json['techSpec']),
+      parsedGameSpec,
+      cleanSpark,
+    );
 
     return ProjectConceptBlueprint(
       title: resolvedTitle,
       sparkIdea: cleanSpark,
       questions: const <AgentQuestion>[],
       goal: json['goal']?.toString().trim() ?? '',
-      gameSpec: _parseStringList(json['gameSpec']),
-      techSpec: _parseStringList(json['techSpec']),
+      gameSpec: parsedGameSpec,
+      techSpec: parsedTechSpec,
       designPillars: _parseStringList(json['designPillars']),
       tradeOffs: _parseStringList(json['tradeOffs']),
       coreLoopBeats: sortBeatsByDeveloperImpact(
@@ -206,7 +250,7 @@ Return ONLY valid JSON:
       doneWhen: json['doneWhen']?.toString().trim() ?? '',
       firstReleasePreset: ReleaseScope.featurePrototype,
       releaseTrainTitles: releaseTitles.isNotEmpty
-          ? releaseTitles
+          ? releaseTitles.take(1).toList()
           : <String>['v0.1: $resolvedTitle - Prototype'],
       isInterviewComplete: true,
       lastUpdatedFields: const [
@@ -309,7 +353,11 @@ Return ONLY valid JSON:
     }
     final tech = cleanList(json['techSpec']);
     if (tech != null && tech.length >= 2) {
-      draft.techSpec = tech;
+      draft.techSpec = _normalizeTechSpecEngine(
+        tech,
+        draft.gameSpec,
+        draft.sparkIdea,
+      );
       updated.add('Tech Spec');
     }
     final pillars = cleanList(json['designPillars']);
