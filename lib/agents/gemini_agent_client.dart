@@ -17,7 +17,11 @@ class GeminiAgentClient {
   };
   static const Duration _heavyModelTimeout = Duration(seconds: 60);
   static const Duration _standardModelTimeout = Duration(seconds: 60);
-  static const int _maxOutputTokens = 65536;
+  static const Duration _metadataTimeout = Duration(seconds: 6);
+
+  static bool _modelMetadataChecked = false;
+  static int? _cachedModelOutputTokenLimit;
+  static bool _cachedSupportsThinkingLevel = false;
 
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~85 tokens).
   static const String compactStyleRules = '''
@@ -59,6 +63,57 @@ RULES:
     return key.isNotEmpty;
   }
 
+  static Future<void> _ensureModelCapabilitiesLoaded(
+    String model,
+    String key,
+  ) async {
+    if (_modelMetadataChecked) return;
+    _modelMetadataChecked = true;
+    try {
+      final metaUri = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/$model?key=$key',
+      );
+      final res = await http.get(metaUri).timeout(_metadataTimeout);
+      if (res.statusCode == 200) {
+        final meta = jsonDecode(res.body) as Map<String, dynamic>;
+        final outLimit = meta['outputTokenLimit'];
+        if (outLimit is int && outLimit > 0) {
+          _cachedModelOutputTokenLimit = outLimit;
+        }
+        final version = (meta['version'] ?? '').toString().toLowerCase();
+        final displayName =
+            (meta['displayName'] ?? '').toString().toLowerCase();
+        final description =
+            (meta['description'] ?? '').toString().toLowerCase();
+        if (version.startsWith('3') ||
+            version.startsWith('4') ||
+            displayName.contains(' 3') ||
+            displayName.contains(' 4') ||
+            description.contains('gemini 3') ||
+            description.contains('gemini 4')) {
+          _cachedSupportsThinkingLevel = true;
+        }
+      }
+    } catch (_) {
+      // Non-fatal: fall back to model-native defaults on generateContent
+    }
+  }
+
+  static Map<String, dynamic> _buildNativeThinkingConfig({
+    required String normalizedThinking,
+    required bool useThinkingLevelEnum,
+  }) {
+    if (useThinkingLevelEnum) {
+      return <String, dynamic>{
+        'thinkingLevel': normalizedThinking,
+      };
+    }
+    // Dynamic (-1) instructs Gemini to allocate up to the model's full native thinking budget
+    return const <String, dynamic>{
+      'thinkingBudget': -1,
+    };
+  }
+
   static Future<Map<String, dynamic>?> generateJson({
     required String prompt,
     required String apiKey,
@@ -75,6 +130,8 @@ RULES:
       lastErrorStatus = 'Missing API Key';
       return null;
     }
+
+    await _ensureModelCapabilitiesLoaded(resolvedModel, key);
 
     const modelsToTry = <String>[resolvedModel];
 
@@ -94,31 +151,22 @@ RULES:
         );
         final genConfig = <String, dynamic>{
           'temperature': temperature,
-          'maxOutputTokens': _maxOutputTokens,
+          if (_cachedModelOutputTokenLimit != null)
+            'maxOutputTokens': _cachedModelOutputTokenLimit,
           'responseMimeType': 'application/json',
         };
         if (normalizedThinking.isNotEmpty) {
-          final isFlash25 = model == 'gemini-flash-latest' ||
-              model.startsWith('gemini-2.5');
-          final flashThinkingBudget = switch (normalizedThinking) {
-            'LOW' => 1024,
-            'MEDIUM' => 8192,
-            _ => 24576,
-          };
-          genConfig['thinkingConfig'] = isFlash25
-              ? <String, dynamic>{
-                  'thinkingBudget': flashThinkingBudget,
-                }
-              : <String, dynamic>{
-                  'thinkingLevel': normalizedThinking,
-                };
+          genConfig['thinkingConfig'] = _buildNativeThinkingConfig(
+            normalizedThinking: normalizedThinking,
+            useThinkingLevelEnum: _cachedSupportsThinkingLevel,
+          );
         }
 
         final isHeavyPlanningModel = model.contains('pro');
         final timeoutDuration =
             isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
 
-        final response = await http
+        var response = await http
             .post(
               uri,
               headers: _jsonHeaders,
@@ -128,6 +176,26 @@ RULES:
               }),
             )
             .timeout(timeoutDuration);
+
+        // If `gemini-flash-latest` alias upgraded on the backend and prefers the alternate
+        // native thinkingConfig schema, flip and retry automatically.
+        if (response.statusCode == 400 && normalizedThinking.isNotEmpty) {
+          _cachedSupportsThinkingLevel = !_cachedSupportsThinkingLevel;
+          genConfig['thinkingConfig'] = _buildNativeThinkingConfig(
+            normalizedThinking: normalizedThinking,
+            useThinkingLevelEnum: _cachedSupportsThinkingLevel,
+          );
+          response = await http
+              .post(
+                uri,
+                headers: _jsonHeaders,
+                body: jsonEncode({
+                  'contents': contentsPayload,
+                  'generationConfig': genConfig,
+                }),
+              )
+              .timeout(timeoutDuration);
+        }
 
         if (response.statusCode == 200) {
           lastErrorStatus = null;

@@ -538,7 +538,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                         _buildModelOptionTile(
                           modelId: m,
                           subtitle:
-                              'Always Latest — Gemini Flash Latest with Full Thinking Budget (24,576 tokens)',
+                              'Always Latest — Gemini Flash Latest with Full Model Thinking Budget',
                           isSelected: selectedConversationModel == m,
                           isRecommended: true,
                           onTap: () => setModalState(() => selectedConversationModel = m),
@@ -558,7 +558,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                         _buildModelOptionTile(
                           modelId: m,
                           subtitle:
-                              'Always Latest — Gemini Flash Latest with Full Thinking Budget (24,576 tokens)',
+                              'Always Latest — Gemini Flash Latest with Full Model Thinking Budget',
                           isSelected: selectedPlanningModel == m,
                           isRecommended: true,
                           onTap: () => setModalState(() => selectedPlanningModel = m),
