@@ -6277,6 +6277,69 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(dynamicToolTasks[2], equals('Scrap Mass Drag Scaling (1h)'));
         expect(dynamicToolTasks[3], equals('Docking Clamp Release (1h)'));
         expect(dynamicToolTasks[4], equals('Snap Threshold & Sparks (1h)'));
+
+        // Verify Stage 1 Section-Scoped Tools isolate each stepper section (01..08) and prevent cross-section bleed
+        final tradeOffTool = ProjectConceptAgent.buildFocusedConceptSectionTool(
+          '[Section 05 Trade-Offs]',
+        );
+        expect(tradeOffTool['name'], equals('update_trade_offs_section'));
+        final tradeOffProps =
+            (tradeOffTool['parameters'] as Map)['properties'] as Map;
+        expect(tradeOffProps.containsKey('tradeOffs'), isTrue);
+        expect(tradeOffProps.containsKey('goal'), isFalse);
+        expect(tradeOffProps.containsKey('coreLoopBeats'), isFalse);
+
+        final techSpecTool = ProjectConceptAgent.buildFocusedConceptSectionTool(
+          '[Section 03 Tech Spec]',
+        );
+        expect(techSpecTool['name'], equals('update_tech_spec_section'));
+        final fullReviewTool =
+            ProjectConceptAgent.buildFocusedConceptSectionTool(
+          '[Section 09 Full Concept Review]',
+        );
+        expect(fullReviewTool['name'], equals('update_concept_section'));
+
+        // Verify structured Trade-Off & Design Pillar tool object parsers
+        final parsedTradeOffs = ProjectConceptAgent.parseTradeOffsList([
+          {
+            'priorityX': 'Immediate winch physics',
+            'overAlternativeY': 'Complex rope simulation',
+          },
+        ]);
+        expect(
+          parsedTradeOffs,
+          equals(['Immediate winch physics over Complex rope simulation']),
+        );
+        final parsedPillars = ProjectConceptAgent.parsePillarsList([
+          {
+            'pillarName': 'Claustrophobic Tension',
+            'playerExperience': 'Every hull cut risks flooding the dive rig.',
+          },
+        ]);
+        expect(
+          parsedPillars,
+          equals([
+            'Claustrophobic Tension: Every hull cut risks flooding the dive rig.',
+          ]),
+        );
+
+        // Verify Stage 2 Surface-Specific Tools are registered
+        expect(
+          WorkbenchReleaseMixin.commitTailoredTaskSubStepsTool['name'],
+          equals('commit_tailored_task_substeps'),
+        );
+        expect(
+          WorkbenchReleaseMixin.commitPlaytestFixTool['name'],
+          equals('commit_playtest_fix'),
+        );
+        expect(
+          WorkbenchReleaseMixin.commitLiveFeatureEnrichmentTool['name'],
+          equals('commit_live_feature_enrichment'),
+        );
+        expect(
+          WorkbenchReleaseMixin.commitInboxFeatureTriageTool['name'],
+          equals('commit_inbox_feature_triage'),
+        );
       },
     );
   });

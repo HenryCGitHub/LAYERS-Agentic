@@ -322,6 +322,452 @@ class ProjectConceptAgent {
     },
   };
 
+  /// Returns a strictly single-section Gemini tool schema when the user is editing a specific
+  /// Stage 1 section (`01 Goal` through `08 Done When`), preventing cross-section overwrites.
+  /// Falls back to the multi-section `updateConceptSectionTool` on `09 Full Concept Review` or general chat.
+  static Map<String, dynamic> buildFocusedConceptSectionTool(
+    String? sectionHeaderOrName,
+  ) {
+    final raw = (sectionHeaderOrName ?? '').trim().toLowerCase();
+    if (raw.isEmpty || raw.contains('09') || raw.contains('review')) {
+      return updateConceptSectionTool;
+    }
+    if (raw.contains('02') || raw.contains('game spec') || raw == 'gamespec') {
+      return const {
+        'name': 'update_game_spec_section',
+        'description':
+            'Updates ONLY the 02 · Game Spec section (4 required cells: cameraView, controls, playerMode, arenaStructure).',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'gameSpec'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'gameSpec': {
+              'type': 'OBJECT',
+              'required': [
+                'cameraView',
+                'controls',
+                'playerMode',
+                'arenaStructure',
+              ],
+              'properties': {
+                'cameraView': {'type': 'STRING'},
+                'controls': {'type': 'STRING'},
+                'playerMode': {'type': 'STRING'},
+                'arenaStructure': {'type': 'STRING'},
+              },
+            },
+          },
+        },
+      };
+    }
+    if (raw.contains('03') || raw.contains('tech spec') || raw == 'techspec') {
+      return const {
+        'name': 'update_tech_spec_section',
+        'description':
+            'Updates ONLY the 03 · Tech Spec section (4 required cells: concrete engine enum, platform, assetPipeline, saveMode).',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'techSpec'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'techSpec': {
+              'type': 'OBJECT',
+              'required': ['engine', 'platform', 'assetPipeline', 'saveMode'],
+              'properties': {
+                'engine': {
+                  'type': 'STRING',
+                  'enum': [
+                    'Godot 4 (GDScript)',
+                    'Unity 6 (C#)',
+                    'Unreal Engine 5 (Blueprints / C++)',
+                  ],
+                },
+                'platform': {'type': 'STRING'},
+                'assetPipeline': {'type': 'STRING'},
+                'saveMode': {'type': 'STRING'},
+              },
+            },
+          },
+        },
+      };
+    }
+    if (raw.contains('04') ||
+        raw.contains('design pillar') ||
+        raw == 'designpillars') {
+      return const {
+        'name': 'update_design_pillars_section',
+        'description':
+            'Updates ONLY the 04 · Design Pillars section with named player-experience statements.',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'designPillars'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'designPillars': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'OBJECT',
+                'required': ['pillarName', 'playerExperience'],
+                'properties': {
+                  'pillarName': {
+                    'type': 'STRING',
+                    'description': '2-3 word pillar title',
+                  },
+                  'playerExperience': {
+                    'type': 'STRING',
+                    'description':
+                        '1-sentence player feeling or tension (never a feature or genre)',
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+    }
+    if (raw.contains('05') ||
+        raw.contains('trade-off') ||
+        raw.contains('tradeoff')) {
+      return const {
+        'name': 'update_trade_offs_section',
+        'description':
+            'Updates ONLY the 05 · Trade-Offs section with explicit X over Y engineering/design boundary rules.',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'tradeOffs'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'tradeOffs': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'OBJECT',
+                'required': ['priorityX', 'overAlternativeY'],
+                'properties': {
+                  'priorityX': {
+                    'type': 'STRING',
+                    'description':
+                        '2-4 words naming what we prioritize (e.g. "Immediate arcade dash")',
+                  },
+                  'overAlternativeY': {
+                    'type': 'STRING',
+                    'description':
+                        '2-4 words naming what we sacrifice (e.g. "Realistic momentum inertia")',
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+    }
+    if (raw.contains('06') || raw.contains('core loop') || raw == 'coreloop') {
+      return const {
+        'name': 'update_core_loop_section',
+        'description':
+            'Updates ONLY the 06 · Core Loop section with chronological playable beats.',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'coreLoopBeats'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'coreLoopBeats': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'STRING',
+                'description':
+                    'Beat Name: Observable player action and system response',
+              },
+            },
+          },
+        },
+      };
+    }
+    if (raw.contains('07') ||
+        raw.contains('out of scope') ||
+        raw.contains('exclusion')) {
+      return const {
+        'name': 'update_exclusions_section',
+        'description':
+            'Updates ONLY the 07 · Out of Scope section with explicit prototype exclusions.',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'exclusions'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'exclusions': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+          },
+        },
+      };
+    }
+    if (raw.contains('08') || raw.contains('done when') || raw == 'donewhen') {
+      return const {
+        'name': 'update_done_when_section',
+        'description':
+            'Updates ONLY the 08 · Done When section with a concrete playtest completion condition.',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'doneWhen'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'doneWhen': {'type': 'STRING'},
+          },
+        },
+      };
+    }
+    if (raw.contains('01') || raw.contains('goal')) {
+      return const {
+        'name': 'update_goal_section',
+        'description':
+            'Updates ONLY the 01 · Goal (and optional working title / goalOptions) section.',
+        'parameters': {
+          'type': 'OBJECT',
+          'required': ['reply', 'goal'],
+          'properties': {
+            'reply': {'type': 'STRING'},
+            'title': {'type': 'STRING'},
+            'goal': {'type': 'STRING'},
+            'goalOptions': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+          },
+        },
+      };
+    }
+    return updateConceptSectionTool;
+  }
+
+  /// Normalizes Design Pillars from either structured `{pillarName, playerExperience}` tool objects
+  /// or plain strings (`"Pillar Name: Experience"`).
+  static List<String> parsePillarsList(dynamic raw) {
+    if (raw is List) {
+      final result = <String>[];
+      for (int i = 0; i < raw.length; i++) {
+        final item = raw[i];
+        if (item is Map) {
+          final name = (item['pillarName'] ?? item['name'] ?? item['title'] ?? '')
+              .toString()
+              .trim();
+          final exp = (item['playerExperience'] ??
+                  item['experience'] ??
+                  item['description'] ??
+                  '')
+              .toString()
+              .trim();
+          if (name.isNotEmpty && exp.isNotEmpty) {
+            result.add('$name: $exp');
+          } else if (exp.isNotEmpty) {
+            result.add(ProjectConceptBlueprint.ensureNamedPillar(exp, i));
+          }
+        } else {
+          final s = item?.toString().trim() ?? '';
+          if (s.isNotEmpty && !_isPlaceholderString(s)) {
+            result.add(ProjectConceptBlueprint.ensureNamedPillar(s, i));
+          }
+        }
+      }
+      return result;
+    }
+    return _parseStringList(raw);
+  }
+
+  /// Normalizes Trade-Offs from either structured `{priorityX, overAlternativeY}` tool objects
+  /// or plain `"X over Y"` strings.
+  static List<String> parseTradeOffsList(dynamic raw) {
+    if (raw is List) {
+      final result = <String>[];
+      for (final item in raw) {
+        if (item is Map) {
+          final x = (item['priorityX'] ?? item['prioritized'] ?? item['x'] ?? '')
+              .toString()
+              .trim();
+          final y = (item['overAlternativeY'] ?? item['over'] ?? item['y'] ?? '')
+              .toString()
+              .trim();
+          final label = (item['label'] ?? '').toString().trim();
+          if (x.isNotEmpty && y.isNotEmpty) {
+            final rule = '$x over $y';
+            result.add(label.isNotEmpty ? '$label: $rule' : rule);
+          }
+        } else {
+          final s = item?.toString().trim() ?? '';
+          if (s.isNotEmpty && !_isPlaceholderString(s)) {
+            result.add(s);
+          }
+        }
+      }
+      return result;
+    }
+    return _parseStringList(raw);
+  }
+
+  /// Builds a section-matched Gemini Tool Schema for `regenerateSectionOptionsWithAi`.
+  static Map<String, dynamic> buildSectionOptionsTool(String optionKey) {
+    switch (optionKey) {
+      case 'gameSpec':
+        return const {
+          'name': 'propose_game_spec_options',
+          'description':
+              'Proposes 3 fresh 4-cell Game Spec Option Cards (label + cameraView, controls, playerMode, arenaStructure).',
+          'parameters': {
+            'type': 'OBJECT',
+            'required': ['options'],
+            'properties': {
+              'options': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': [
+                    'label',
+                    'cameraView',
+                    'controls',
+                    'playerMode',
+                    'arenaStructure',
+                  ],
+                  'properties': {
+                    'label': {'type': 'STRING'},
+                    'cameraView': {'type': 'STRING'},
+                    'controls': {'type': 'STRING'},
+                    'playerMode': {'type': 'STRING'},
+                    'arenaStructure': {'type': 'STRING'},
+                  },
+                },
+              },
+            },
+          },
+        };
+      case 'techSpec':
+        return const {
+          'name': 'propose_tech_spec_options',
+          'description':
+              'Proposes 3 fresh 4-cell Tech Spec Option Cards (label + concrete engine enum, platform, assetPipeline, saveMode).',
+          'parameters': {
+            'type': 'OBJECT',
+            'required': ['options'],
+            'properties': {
+              'options': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': [
+                    'label',
+                    'engine',
+                    'platform',
+                    'assetPipeline',
+                    'saveMode',
+                  ],
+                  'properties': {
+                    'label': {'type': 'STRING'},
+                    'engine': {
+                      'type': 'STRING',
+                      'enum': [
+                        'Godot 4 (GDScript)',
+                        'Unity 6 (C#)',
+                        'Unreal Engine 5',
+                      ],
+                    },
+                    'platform': {'type': 'STRING'},
+                    'assetPipeline': {'type': 'STRING'},
+                    'saveMode': {'type': 'STRING'},
+                  },
+                },
+              },
+            },
+          },
+        };
+      case 'tradeOffs':
+        return const {
+          'name': 'propose_trade_off_options',
+          'description':
+              'Proposes 3 fresh X-over-Y Trade-Off Option Cards (label + priorityX over overAlternativeY).',
+          'parameters': {
+            'type': 'OBJECT',
+            'required': ['options'],
+            'properties': {
+              'options': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': ['label', 'priorityX', 'overAlternativeY'],
+                  'properties': {
+                    'label': {'type': 'STRING'},
+                    'priorityX': {'type': 'STRING'},
+                    'overAlternativeY': {'type': 'STRING'},
+                  },
+                },
+              },
+            },
+          },
+        };
+      default:
+        return {
+          'name': 'propose_${optionKey}_options',
+          'description':
+              'Proposes 3 fresh Option Cards for the $optionKey section.',
+          'parameters': const {
+            'type': 'OBJECT',
+            'required': ['options'],
+            'properties': {
+              'options': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+            },
+          },
+        };
+    }
+  }
+
+  /// Normalizes option cards returned by `buildSectionOptionsTool` (supporting both typed cell maps and strings).
+  static List<String> parseSectionOptionsToolOutput(
+    String optionKey,
+    dynamic rawOptions,
+  ) {
+    if (rawOptions is! List) return const <String>[];
+    final result = <String>[];
+    for (final item in rawOptions) {
+      if (item is Map) {
+        final label = (item['label'] ?? 'Option').toString().trim();
+        if (optionKey == 'gameSpec') {
+          final cells = _parseSpecCells(
+            item,
+            const ['cameraView', 'controls', 'playerMode', 'arenaStructure'],
+          );
+          if (cells.length >= 2) {
+            result.add('$label: ${cells.join(' · ')}');
+          }
+        } else if (optionKey == 'techSpec') {
+          final cells = _parseSpecCells(
+            item,
+            const ['engine', 'platform', 'assetPipeline', 'saveMode'],
+          );
+          if (cells.length >= 2) {
+            result.add('$label: ${cells.join(' · ')}');
+          }
+        } else if (optionKey == 'tradeOffs') {
+          final x = (item['priorityX'] ?? '').toString().trim();
+          final y = (item['overAlternativeY'] ?? '').toString().trim();
+          if (x.isNotEmpty && y.isNotEmpty) {
+            result.add('$label: $x over $y');
+          }
+        } else {
+          final text = (item['text'] ?? item['option'] ?? '').toString().trim();
+          if (text.isNotEmpty) result.add(text);
+        }
+      } else {
+        final s = item?.toString().trim() ?? '';
+        if (s.isNotEmpty && !_isPlaceholderString(s)) {
+          result.add(s);
+        }
+      }
+    }
+    return result;
+  }
+
   static List<String> _parseSpecCells(
     dynamic raw,
     List<String> keysOrder,
@@ -486,6 +932,16 @@ Call `commit_concept_blueprint` (or return valid JSON):
         ? '\n- SECTION-SCOPED REQUEST: Focus your update on the target `[Section ...]` named in Developer Direction while keeping locked upstream sections consistent. When updating `gameSpec`, always return all 4 cells `["Camera View", "Controls", "Player Mode", "Arena Structure"]`; when updating `techSpec`, always return all 4 cells `["Engine", "Platform", "Asset Pipeline", "Network / Save"]`.'
         : '';
 
+    final closeBracketIdx =
+        isSectionScoped ? cleanMsg.indexOf(']') : -1;
+    final focusedSectionTag = (isSectionScoped && closeBracketIdx > 0)
+        ? cleanMsg.substring(0, closeBracketIdx + 1)
+        : null;
+    final activeConceptTool =
+        buildFocusedConceptSectionTool(focusedSectionTag);
+    final activeToolName = activeConceptTool['name']?.toString() ??
+        'update_concept_section';
+
     final prompt = '''
 You are Antigravity, an indie game producer updating a Live Concept Blueprint.
 Spark: "${draft.sparkIdea}"
@@ -504,9 +960,9 @@ Developer Direction: "$cleanMsg"
 
 ${GeminiAgentClient.compactStyleRules}
 - Synthesize and rewrite the affected field(s) into natural, polished game-dev English. NEVER copy-paste the developer's raw phrasing ("instead of...", "but in a...") verbatim.
-- DELTA-ONLY OUTPUT: Call `update_concept_section` (or return JSON) including ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (valid keys: `title`, `goal`, `goalOptions`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Omit all unchanged keys! If `goal` or `title` changed, also include 3 updated `goalOptions`.$sectionScopeRule
+- DELTA-ONLY OUTPUT: Call `$activeToolName` (or return JSON) including ONLY `reply` and the specific Blueprint key(s) that actually changed. Omit all unchanged keys!$sectionScopeRule
 
-Call `update_concept_section` (or return ONLY valid JSON):
+Call `$activeToolName` (or return ONLY valid JSON):
 {
   "reply": "1-sentence confirmation of what changed",
   "updatedFields": ["Goal"],
@@ -521,7 +977,7 @@ Call `update_concept_section` (or return ONLY valid JSON):
       preferredModel: conversationModel,
       thinkingLevel: thinkingLevel,
       temperature: 0.45,
-      functionDeclarations: const [updateConceptSectionTool],
+      functionDeclarations: [activeConceptTool],
     );
 
     if (json == null) return false;
@@ -558,16 +1014,13 @@ Call `update_concept_section` (or return ONLY valid JSON):
       );
       updated.add('Tech Spec');
     }
-    final pillars = cleanList(json['designPillars']);
-    if (pillars != null) {
-      draft.designPillars = [
-        for (int i = 0; i < pillars.length; i++)
-          ProjectConceptBlueprint.ensureNamedPillar(pillars[i], i),
-      ];
+    final pillars = parsePillarsList(json['designPillars']);
+    if (pillars.isNotEmpty) {
+      draft.designPillars = pillars;
       updated.add('Design Pillars');
     }
-    final tradeOffs = cleanList(json['tradeOffs']);
-    if (tradeOffs != null) {
+    final tradeOffs = parseTradeOffsList(json['tradeOffs']);
+    if (tradeOffs.isNotEmpty) {
       draft.tradeOffs = tradeOffs;
       updated.add('Trade-Offs');
     }
@@ -899,19 +1352,20 @@ Return ONLY valid JSON:
 }
 ''';
 
+    final sectionOptionsTool = buildSectionOptionsTool(optionKey);
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
       thinkingLevel: thinkingLevel,
       temperature: 0.65,
+      functionDeclarations: [sectionOptionsTool],
     );
-    final rawList = json?['options'];
-    if (rawList is List) {
-      final parsed = _parseStringList(rawList).take(3).toList();
-      if (parsed.length >= 2) {
-        return parsed;
-      }
+    final parsed = parseSectionOptionsToolOutput(optionKey, json?['options'])
+        .take(3)
+        .toList();
+    if (parsed.length >= 2) {
+      return parsed;
     }
     return null;
   }

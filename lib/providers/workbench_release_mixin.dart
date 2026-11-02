@@ -1918,6 +1918,7 @@ Return ONLY a JSON object:
       preferredModel: _conversationModel,
       thinkingLevel: _thinkingLevel,
       temperature: 0.4,
+      functionDeclarations: const [commitLiveFeatureEnrichmentTool],
     );
     if (json != null && documents.containsKey(featureId)) {
       final cp = states.first;
@@ -1925,7 +1926,8 @@ Return ONLY a JSON object:
       final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
       final aiTitle = json['checkpointTitle']?.toString().trim() ?? '';
       final aiGate = json['playtestGate']?.toString().trim() ?? '';
-      final rawTasks = json['tasks'];
+      final extractedTasks =
+          ReleasePlannerAgent.extractCheckpointTasksFromMap(json);
       final rawTuning = json['tuningParams'];
       final rawGuards = json['edgeCases'];
       if (aiGoal.isNotEmpty || aiDoneWhen.isNotEmpty) {
@@ -1958,13 +1960,10 @@ Return ONLY a JSON object:
       if (aiGate.isNotEmpty) {
         cp.trigger = 'Playtest: $aiGate';
       }
-      if (rawTasks is List && rawTasks.isNotEmpty) {
+      if (extractedTasks.isNotEmpty) {
         final normalizedTasks =
             ReleasePlannerAgent.normalizeFoundationFirstTasks(
-          rawTasks
-              .map((e) => e.toString().trim())
-              .where((s) => s.isNotEmpty)
-              .toList(),
+          extractedTasks,
           featureTitle: featDoc.title,
           beatTitle: beatTitle,
         );
@@ -2278,6 +2277,7 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
         preferredModel: _planningModel,
         thinkingLevel: _thinkingLevel,
         temperature: 0.3,
+        functionDeclarations: const [commitPlaytestFixTool],
       );
       if (json == null) return;
       final rawSteps = json['steps'];
@@ -2448,6 +2448,7 @@ Return ONLY a JSON object with this schema:
         preferredModel: _conversationModel,
         thinkingLevel: _thinkingLevel,
         temperature: 0.25,
+        functionDeclarations: const [commitTailoredTaskSubStepsTool],
       );
       final rawSubs = json?['subSteps'];
       if (rawSubs is List && rawSubs.isNotEmpty) {
@@ -2711,6 +2712,218 @@ Return ONLY a JSON object with this schema:
               },
             },
           },
+        },
+      },
+    },
+  };
+
+  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 Single-Task "Tailor Steps" (`tailorTaskHowToSubSteps`).
+  static const Map<String, dynamic> commitTailoredTaskSubStepsTool = {
+    'name': 'commit_tailored_task_substeps',
+    'description':
+        'Commits tailored 3-Area How-To sub-steps for a single target task using the developer\'s exact scene/node/script names.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['subSteps'],
+      'properties': {
+        'subSteps': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': [
+              'title',
+              'stepPath',
+              'instruction',
+              'area1Hierarchy',
+              'area2Inspector',
+              'codeFormula',
+              'verifyResult',
+            ],
+            'properties': {
+              'title': {'type': 'STRING'},
+              'stepPath': {'type': 'STRING'},
+              'instruction': {'type': 'STRING'},
+              'area1Hierarchy': {'type': 'STRING'},
+              'area2Inspector': {'type': 'STRING'},
+              'codeFormula': {'type': 'STRING'},
+              'verifyResult': {'type': 'STRING'},
+            },
+          },
+        },
+      },
+    },
+  };
+
+  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 Playtest Bug Debugger (`_enrichPlaytestFixWithAi`).
+  static const Map<String, dynamic> commitPlaytestFixTool = {
+    'name': 'commit_playtest_fix',
+    'description':
+        'Commits a root-cause playtest bug fix with a [PLAYTEST GUARD] rule and sequential 3-Area engine fix steps.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['playtestGuard', 'steps'],
+      'properties': {
+        'playtestGuard': {
+          'type': 'STRING',
+          'description': '[PLAYTEST GUARD] 1 concise rule preventing this bug',
+        },
+        'steps': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': [
+              'title',
+              'stepPath',
+              'instruction',
+              'area1Hierarchy',
+              'area2Inspector',
+              'codeFormula',
+              'verifyResult',
+            ],
+            'properties': {
+              'title': {'type': 'STRING'},
+              'stepPath': {'type': 'STRING'},
+              'instruction': {'type': 'STRING'},
+              'area1Hierarchy': {'type': 'STRING'},
+              'area2Inspector': {'type': 'STRING'},
+              'codeFormula': {'type': 'STRING'},
+              'verifyResult': {'type': 'STRING'},
+            },
+          },
+        },
+      },
+    },
+  };
+
+  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 "+ Add Feature" in Left Outliner (`_enrichLiveFeatureWithAi`).
+  static const Map<String, dynamic> commitLiveFeatureEnrichmentTool = {
+    'name': 'commit_live_feature_enrichment',
+    'description':
+        'Enriches a newly added Feature card in the active Epic with its goal, doneWhen, checkpoint title, playtest gate, role-ordered tasks, numeric tuning parameters, and edge-case guards.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': [
+        'goal',
+        'doneWhen',
+        'checkpointTitle',
+        'playtestGate',
+        'tasks',
+        'tuningParams',
+        'edgeCases',
+      ],
+      'properties': {
+        'goal': {'type': 'STRING'},
+        'doneWhen': {'type': 'STRING'},
+        'checkpointTitle': {'type': 'STRING'},
+        'playtestGate': {'type': 'STRING'},
+        'tasks': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['role', 'title'],
+            'properties': {
+              'role': {
+                'type': 'STRING',
+                'enum': [
+                  'entity_and_collision_foundation',
+                  'core_action_and_math',
+                  'feedback_and_boundary_guard',
+                ],
+              },
+              'title': {'type': 'STRING'},
+            },
+          },
+        },
+        'tuningParams': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'edgeCases': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+      },
+    },
+  };
+
+  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 Feature Inbox `WHEN / WHERE / HOW` Triage (`_triageFeatureInboxItemWithAi`).
+  static const Map<String, dynamic> commitInboxFeatureTriageTool = {
+    'name': 'commit_inbox_feature_triage',
+    'description':
+        'Commits the 3-dimensional Feature Inbox triage (WHEN releaseTimingMode, WHERE integrationMode & targetBeatId, HOW tasks, tuningParams, edgeCases).',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': [
+        'releaseTimingMode',
+        'targetFuturePhase',
+        'releaseTimingReasoning',
+        'integrationMode',
+        'targetBeatId',
+        'placementReasoning',
+        'featureTitle',
+        'goal',
+        'inScope',
+        'doneWhen',
+        'architectureHowSummary',
+        'checkpointTitle',
+        'playtestGate',
+        'tasks',
+        'tuningParams',
+        'edgeCases',
+      ],
+      'properties': {
+        'releaseTimingMode': {
+          'type': 'STRING',
+          'enum': ['now', 'splitNowAndFuture', 'futureRelease'],
+        },
+        'targetFuturePhase': {
+          'type': 'STRING',
+          'enum': ['mvp', 'verticalSlice', 'fullProduction', 'postLaunch'],
+        },
+        'releaseTimingReasoning': {'type': 'STRING'},
+        'integrationMode': {
+          'type': 'STRING',
+          'enum': [
+            'newFeatureInEpic',
+            'upgradeExistingFeature',
+            'newEpicAndFeature',
+          ],
+        },
+        'targetBeatId': {'type': 'STRING'},
+        'targetFeatureId': {'type': 'STRING'},
+        'newEpicTitle': {'type': 'STRING'},
+        'placementReasoning': {'type': 'STRING'},
+        'featureTitle': {'type': 'STRING'},
+        'goal': {'type': 'STRING'},
+        'inScope': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'doneWhen': {'type': 'STRING'},
+        'architectureHowSummary': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'checkpointTitle': {'type': 'STRING'},
+        'playtestGate': {'type': 'STRING'},
+        'tasks': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'tuningParams': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'edgeCases': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'futureCheckpointTitle': {'type': 'STRING'},
+        'futureGoal': {'type': 'STRING'},
+        'futurePlaytestGate': {'type': 'STRING'},
+        'futureTasks': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
         },
       },
     },
@@ -4853,6 +5066,7 @@ Return ONLY valid JSON:
       preferredModel: _conversationModel,
       thinkingLevel: _thinkingLevel,
       temperature: 0.25,
+      functionDeclarations: const [commitInboxFeatureTriageTool],
     );
     if (json == null) return;
 
@@ -4934,7 +5148,7 @@ Return ONLY valid JSON:
     if (aiInScope.isNotEmpty) target.inScope = aiInScope;
     final aiHow = readStrList(json['architectureHowSummary']);
     if (aiHow.isNotEmpty) target.architectureHowSummary = aiHow;
-    final aiTasks = readStrList(json['tasks']);
+    final aiTasks = ReleasePlannerAgent.extractCheckpointTasksFromMap(json);
     if (aiTasks.isNotEmpty) target.tasks = aiTasks;
     final aiTuning = readStrList(json['tuningParams']);
     if (aiTuning.isNotEmpty) target.tuningParams = aiTuning;
@@ -4947,7 +5161,9 @@ Return ONLY valid JSON:
     if (aiFutGoal.isNotEmpty) target.futureGoal = aiFutGoal;
     final aiFutGate = json['futurePlaytestGate']?.toString().trim() ?? '';
     if (aiFutGate.isNotEmpty) target.futurePlaytestGate = aiFutGate;
-    final aiFutTasks = readStrList(json['futureTasks']);
+    final aiFutTasks = ReleasePlannerAgent.extractCheckpointTasksFromMap({
+      'tasks': json['futureTasks'],
+    });
     if (aiFutTasks.isNotEmpty) target.futureTasks = aiFutTasks;
 
     _saveFeatureInboxItems(latestItems);
