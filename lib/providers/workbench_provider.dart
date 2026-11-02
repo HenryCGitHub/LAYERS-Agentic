@@ -138,6 +138,7 @@ class WorkbenchProvider extends ChangeNotifier {
   ReleaseBlueprint? _preModalReleaseBlueprint;
   String? _preModalFeatureInboxJson;
   String? _preModalExclusions;
+  List<String>? _preModalConceptExclusions;
   Map<String, String?>? _preModalFeatureLifecycles;
   String? _initialProgressiveTrack0BlueprintJson;
 

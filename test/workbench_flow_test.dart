@@ -6725,6 +6725,116 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           decodedThreeAreaPass5.area2Inspector,
           contains('maxTension: 900.0'),
         );
+
+        // 9. Pass 6 Cross-Stage & Cross-Action State-Transition Refinements
+        // 9a. propagateVariableRenameAcrossProject updates f.checkpoints inside _releaseBlueprint
+        if (provider.releaseBlueprint != null &&
+            provider.releaseBlueprint!.beats.isNotEmpty) {
+          final sampleFeatBp =
+              provider.releaseBlueprint!.beats.first.features.first;
+          sampleFeatBp.tuningParams = ['grappleTensionMax: 850.0'];
+          sampleFeatBp.checkpoints = [
+            ProposedCheckpointBlueprint(
+              title: 'Grapple Core',
+              playtestCriteria: 'Verify grappleTensionMax in arena',
+              tasks: ['Clamp grappleTensionMax in physics tick (1h)'],
+              coveredScope: ['Grapple Core'],
+              tuningParams: ['grappleTensionMax: 850.0'],
+              edgeCases: ['[STATE GUARD] Clamp grappleTensionMax <= 1200.0'],
+              releaseVersion: 'v0.1',
+            ),
+          ];
+          provider.propagateVariableRenameAcrossProject(
+            'grappleTensionMax',
+            'cableTensionLimit',
+          );
+          expect(
+            sampleFeatBp.checkpoints.first.tuningParams.first,
+            contains('cableTensionLimit'),
+          );
+          expect(
+            sampleFeatBp.checkpoints.first.edgeCases.first,
+            contains('cableTensionLimit'),
+          );
+          expect(
+            sampleFeatBp.checkpoints.first.tasks.first,
+            contains('cableTensionLimit'),
+          );
+          expect(
+            sampleFeatBp.checkpoints.first.playtestCriteria,
+            contains('cableTensionLimit'),
+          );
+        }
+
+        // 9b. Switching 03 Tech Spec Engine in Stage 1 (Unity 6 -> Godot 4 -> Unity 6) invalidates stale custom_snippet code and regenerates engine steps
+        final switchFeatId = liveDocForBpSync.id;
+        provider.updateConceptDraft((d) {
+          d.techSpec = ['Godot 4 (GDScript)', 'PC (Steam)', '2D Sprite & Tilemap'];
+        });
+        provider.documents[switchFeatId]!.sections['primary_asset'] =
+            'res://scenes/grapple_rig.tscn';
+        final preSwitchStates = FeatureStateNode.getStatesForDocument(
+          provider.documents[switchFeatId]!,
+        );
+        preSwitchStates.first.parameters['primarySharedScriptOrScene'] =
+            'res://scenes/grapple_rig.tscn';
+        preSwitchStates.first.checklist.first.completed = true;
+        preSwitchStates.first.checklist.first.children = [
+          Subtask(
+            id: 'stale_godot_sub_1',
+            text: 'STEP 1.1 · CREATE GODOT SCENE',
+            specNotes: 'Attach grapple_rig.gd in Godot.',
+            codeSnippet: '@export var cable_speed: float = 400.0',
+            codeLanguage: 'res://scenes/grapple_rig.tscn',
+            codeTargetFile: 'custom_snippet',
+            completed: true,
+          ),
+        ];
+        provider.updateFeatureStates(switchFeatId, preSwitchStates);
+
+        provider.updateConceptDraft((d) {
+          d.techSpec = ['Unity 6 (C#)', 'PC (Steam)', '2D Sprite & Tilemap'];
+        });
+
+        final postSwitchDoc = provider.documents[switchFeatId]!;
+        expect(postSwitchDoc.sections.containsKey('primary_asset'), isFalse);
+        final postSwitchStates =
+            FeatureStateNode.getStatesForDocument(postSwitchDoc);
+        expect(
+          postSwitchStates.first.parameters
+              .containsKey('primarySharedScriptOrScene'),
+          isFalse,
+        );
+        expect(postSwitchStates.first.checklist.first.completed, isTrue);
+        final resolvedUnityBp = TaskHowToBlueprint.resolve(
+          parentTask: postSwitchStates.first.checklist.first,
+          taskIndex: 0,
+          checkpointNode: postSwitchStates.first,
+          engineHint: 'Unity 6 (C#)',
+        );
+        expect(resolvedUnityBp.engineLabel, equals('UNITY C#'));
+        expect(
+          resolvedUnityBp.subSteps.first.codeFormula,
+          isNot(contains('@export var')),
+        );
+
+        // 9c. Promoting an Exclusion inside Progressive Release Co-Pilot and then canceling restores _conceptDraft.exclusions
+        provider.updateConceptDraft((d) {
+          d.exclusions = ['No Online Multiplayer', 'No VR Support'];
+        });
+        final prevRelId = provider.activeReleaseId;
+        final prevPhase = provider.currentPhase;
+        await provider.prepareProgressiveNextReleaseDraft();
+        provider.promoteExclusionToNextRelease('No Online Multiplayer');
+        expect(
+          provider.conceptDraft!.exclusions.contains('No Online Multiplayer'),
+          isFalse,
+        );
+        provider.restoreActiveReleaseAfterCancel(prevRelId, prevPhase);
+        expect(
+          provider.conceptDraft!.exclusions.contains('No Online Multiplayer'),
+          isTrue,
+        );
       },
     );
   });

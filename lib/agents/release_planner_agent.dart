@@ -2663,13 +2663,29 @@ class ReleaseExecutorAgent {
               parentProjId != null ? existingDocuments[parentProjId] : null;
           final engineHint = projDocForHint?.sections['tech_spec'] ??
               projDocForHint?.sections['techSpec'] ??
+              projDocForHint?.sections['tech_stack'] ??
               '';
+          final rawPhase = (releaseDoc.sections['phase'] ?? '').trim();
+          final releasePhase = switch (rawPhase) {
+            'postLaunch' => ProductionPhase.postLaunch,
+            'fullProduction' => ProductionPhase.fullProduction,
+            'verticalSlice' => ProductionPhase.verticalSlice,
+            'mvp' => ProductionPhase.mvp,
+            'prototype' => ProductionPhase.prototype,
+            _ => switch (blueprint.preset) {
+              ReleaseScope.fullProduction => ProductionPhase.fullProduction,
+              ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
+              ReleaseScope.mvp => ProductionPhase.mvp,
+              _ => ProductionPhase.prototype,
+            },
+          };
           for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
             TaskHowToBlueprint.resolve(
               parentTask: cpNode.checklist[tIdx],
               taskIndex: tIdx,
               checkpointNode: cpNode,
               engineHint: engineHint,
+              phase: releasePhase,
             );
           }
           stateNodes.add(cpNode);

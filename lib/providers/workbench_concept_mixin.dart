@@ -282,6 +282,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           title: draft.title,
           tier: TierType.project,
         );
+    final prevTechSpec =
+        existingProj?.sections['tech_spec'] ?? existingProj?.sections['techSpec'];
     projDoc.title = draft.title;
     projDoc.sections['scope'] = draft.toFormattedScopeSection();
     projDoc.sections['goal'] = draft.goal;
@@ -305,6 +307,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final relId = projId == 'proj_main' ? 'rel_v0_1' : '${projId}_rel_v0_1';
     final relTitle = trainTitles.first;
     final existingRel = documents[relId];
+    final draftEngineLabel =
+        TaskHowToBlueprint.detectEngineLabel(draft.techSpec.join(' '));
 
     if (existingRel != null) {
       existingRel.title = relTitle;
@@ -320,7 +324,11 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         existingRel.sections['releaseScope'] = ReleaseScope.prototype.name;
         existingRel.sections['synced_core_loop_sig'] =
             draft.coreLoopBeats.join('||');
+        existingRel.sections['synced_engine_label'] = draftEngineLabel;
         existingRel.sections['scope'] = draft.toFormattedScopeSection();
+      } else if (prevTechSpec != null && prevTechSpec.trim().isNotEmpty) {
+        existingRel.sections['synced_engine_label'] ??=
+            TaskHowToBlueprint.detectEngineLabel(prevTechSpec);
       }
       _persistDocument(existingRel);
       releaseIds.add(relId);
@@ -334,6 +342,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           'releaseScope': ReleaseScope.prototype.name,
           'phase': ProductionPhase.prototype.name,
           'synced_core_loop_sig': draft.coreLoopBeats.join('||'),
+          'synced_engine_label': draftEngineLabel,
           if (isSplitPrototype) 'prototypePart': '1',
           if (isSplitPrototype) 'splitPrototypePart2Title': trainTitles[1],
           'scope': draft.toFormattedScopeSection(),
@@ -470,6 +479,76 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         bp.doneWhen = draft.doneWhen.trim();
       }
       rel.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+      _persistDocument(rel);
+    }
+
+    // 1b. If 03 · Tech Spec Engine changed (e.g., Godot 4 <-> Unity 6 <-> Unreal 5),
+    // invalidate stale engine-specific custom_snippet steps and primary_asset paths across built features.
+    final newEngineHint = draft.techSpec.join(' ');
+    final currentEngineLabel =
+        TaskHowToBlueprint.detectEngineLabel(newEngineHint);
+    final previousEngineLabel = rel.sections['synced_engine_label'] ?? '';
+    if (previousEngineLabel.isNotEmpty &&
+        previousEngineLabel != currentEngineLabel) {
+      rel.sections['synced_engine_label'] = currentEngineLabel;
+      _persistDocument(rel);
+      _aiSynthesizedFeatureSteps.clear();
+      TaskHowToBlueprint.clearCache();
+
+      final projectFeatureIds = <String>{};
+      for (final r in releases) {
+        for (final bId in r.childrenIds) {
+          final beatDoc = documents[bId];
+          if (beatDoc == null) continue;
+          for (final fId in beatDoc.childrenIds) {
+            if (documents[fId]?.tier == TierType.feature) {
+              projectFeatureIds.add(fId);
+            }
+          }
+        }
+      }
+      for (final fId in projectFeatureIds) {
+        final featDoc = documents[fId];
+        if (featDoc == null) continue;
+        featDoc.sections.remove('primary_asset');
+        final states = FeatureStateNode.getStatesForDocument(featDoc);
+        for (final cp in states) {
+          cp.parameters.remove('primarySharedScriptOrScene');
+          for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
+            final task = cp.checklist[tIdx];
+            task.children = [];
+            TaskHowToBlueprint.resolve(
+              parentTask: task,
+              taskIndex: tIdx,
+              checkpointNode: cp,
+              engineHint: newEngineHint,
+              phase: _currentPhase,
+            );
+          }
+        }
+        FeatureStateNode.saveStatesToDocument(featDoc, states);
+        _persistDocument(featDoc);
+      }
+      if (_releaseBlueprint != null) {
+        for (final b in _releaseBlueprint!.beats) {
+          for (final f in b.features) {
+            f.primarySharedScriptOrScene = null;
+          }
+        }
+        rel.sections['release_blueprint_json'] =
+            jsonEncode(_releaseBlueprint!.toJson());
+        _persistDocument(rel);
+      }
+      if (_selectedFeatureId != null &&
+          (GeminiAgentClient.hasKey(_apiKey) ||
+              GeminiAgentClient.testMockResponder != null)) {
+        synthesizeFeatureHowToStepsWithAi(
+          _selectedFeatureId!,
+          forceRefresh: true,
+        );
+      }
+    } else if (previousEngineLabel.isEmpty) {
+      rel.sections['synced_engine_label'] = currentEngineLabel;
       _persistDocument(rel);
     }
 
@@ -654,6 +733,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             taskIndex: tIdx,
             checkpointNode: cpNode,
             engineHint: _activeEngineHint,
+            phase: _currentPhase,
           );
         }
         final newFeatDoc = TierDocument(

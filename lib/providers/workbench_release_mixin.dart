@@ -1055,6 +1055,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _preModalReleaseBlueprint = _releaseBlueprint;
     _preModalFeatureInboxJson = activeProject?.sections['feature_inbox_json'];
     _preModalExclusions = activeProject?.sections['exclusions'];
+    _preModalConceptExclusions = _conceptDraft != null
+        ? List<String>.from(_conceptDraft!.exclusions)
+        : null;
     _preModalFeatureLifecycles = {
       for (final d in documents.values.where((d) => d.tier == TierType.feature))
         d.id: d.sections['lifecycle'],
@@ -1088,6 +1091,22 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         jsonDecode(raw) as Map<String, dynamic>,
       );
       _releaseBlueprint = restored;
+      final preLifecycles = _preModalFeatureLifecycles;
+      if (preLifecycles != null) {
+        for (final entry in preLifecycles.entries) {
+          final featDoc = documents[entry.key];
+          if (featDoc == null) continue;
+          if (entry.value != null) {
+            featDoc.sections['lifecycle'] = entry.value!;
+          } else {
+            featDoc.sections.remove('lifecycle');
+          }
+          if (entry.value != FeatureLifecycleStatus.superseded.name) {
+            featDoc.sections.remove('supersededInVersion');
+          }
+          _persistDocument(featDoc);
+        }
+      }
       final relDoc = activeRelease;
       if (relDoc != null && relDoc.id == restored.releaseDocId) {
         relDoc.sections['release_blueprint_json'] = raw;
@@ -1137,6 +1156,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         proj.sections.remove('exclusions');
       }
     }
+    if (_conceptDraft != null && _preModalConceptExclusions != null) {
+      _conceptDraft!.exclusions =
+          List<String>.from(_preModalConceptExclusions!);
+    }
     final preLifecycles = _preModalFeatureLifecycles;
     if (preLifecycles != null) {
       for (final entry in preLifecycles.entries) {
@@ -1160,6 +1183,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _preModalReleaseBlueprint = null;
     _preModalFeatureInboxJson = null;
     _preModalExclusions = null;
+    _preModalConceptExclusions = null;
     _preModalFeatureLifecycles = null;
     if (previousReleaseId != null && documents.containsKey(previousReleaseId)) {
       _activeReleaseId = previousReleaseId;
@@ -1984,6 +2008,7 @@ Call `commit_live_feature_enrichment` (or return ONLY a JSON object):
         taskIndex: tIdx,
         checkpointNode: stateNode,
         engineHint: _activeEngineHint,
+        phase: _currentPhase,
       );
     }
 
@@ -2133,6 +2158,7 @@ Return ONLY a JSON object:
           json['primarySharedScriptOrScene']?.toString().trim() ?? '';
       if (aiPrimaryAsset.isNotEmpty) {
         featDoc.sections['primary_asset'] = aiPrimaryAsset;
+        cp.parameters['primarySharedScriptOrScene'] = aiPrimaryAsset;
       }
       final rawInScope = json['inScope'];
       final parsedInScope = (rawInScope is List)
@@ -2218,6 +2244,9 @@ Return ONLY a JSON object:
         for (final b in bp.beats) {
           for (final f in b.features) {
             if (f.id == featureId) {
+              if (aiPrimaryAsset.isNotEmpty) {
+                f.primarySharedScriptOrScene = aiPrimaryAsset;
+              }
               f.tuningParams = List<String>.from(cp.tuningParams);
               f.edgeCases = List<String>.from(cp.edgeCases);
               f.checkpoints = [
@@ -2248,6 +2277,7 @@ Return ONLY a JSON object:
           taskIndex: tIdx,
           checkpointNode: cp,
           engineHint: _activeEngineHint,
+          phase: _currentPhase,
         );
       }
       updateFeatureStates(featureId, states);
@@ -2772,6 +2802,7 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
       taskIndex: taskIndex,
       checkpointNode: cpNode,
       engineHint: engineHint,
+      phase: _currentPhase,
     );
 
     if (!GeminiAgentClient.hasKey(_apiKey)) {
@@ -2975,6 +3006,7 @@ Return ONLY a JSON object with this schema:
         documents[d.id] = d;
         _persistDocument(d);
       }
+      relDoc.sections['synced_engine_label'] = _activeEngineLabel;
       relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
       _persistDocument(relDoc);
       _markExecutedInboxItemsImplemented(bp);
@@ -5061,6 +5093,64 @@ Return ONLY valid JSON:
               bpChanged = true;
             }
           }
+          if (f.checkpoints.isNotEmpty) {
+            final updatedCps = <ProposedCheckpointBlueprint>[];
+            for (final cp in f.checkpoints) {
+              var cpChanged = false;
+              final newTuning = [
+                for (final t in cp.tuningParams)
+                  () {
+                    if (idRegex.hasMatch(t)) {
+                      cpChanged = true;
+                      return t.replaceAll(idRegex, newId);
+                    }
+                    return t;
+                  }(),
+              ];
+              final newEdges = [
+                for (final g in cp.edgeCases)
+                  () {
+                    if (idRegex.hasMatch(g)) {
+                      cpChanged = true;
+                      return g.replaceAll(idRegex, newId);
+                    }
+                    return g;
+                  }(),
+              ];
+              final newTasks = [
+                for (final taskText in cp.tasks)
+                  () {
+                    if (idRegex.hasMatch(taskText)) {
+                      cpChanged = true;
+                      return taskText.replaceAll(idRegex, newId);
+                    }
+                    return taskText;
+                  }(),
+              ];
+              var newCriteria = cp.playtestCriteria;
+              if (idRegex.hasMatch(newCriteria)) {
+                newCriteria = newCriteria.replaceAll(idRegex, newId);
+                cpChanged = true;
+              }
+              if (cpChanged) {
+                bpChanged = true;
+                updatedCps.add(
+                  ProposedCheckpointBlueprint(
+                    title: cp.title,
+                    playtestCriteria: newCriteria,
+                    tasks: newTasks,
+                    coveredScope: cp.coveredScope,
+                    tuningParams: newTuning,
+                    edgeCases: newEdges,
+                    releaseVersion: cp.releaseVersion,
+                  ),
+                );
+              } else {
+                updatedCps.add(cp);
+              }
+            }
+            f.checkpoints = updatedCps;
+          }
         }
       }
       if (bpChanged) {
@@ -6470,23 +6560,36 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema):
       }
 
       if (existingFeat != null) {
+        final effectiveTuning = item.futureTuningParams.isNotEmpty
+            ? item.futureTuningParams
+            : item.tuningParams;
+        final effectiveEdges = item.futureEdgeCases.isNotEmpty
+            ? item.futureEdgeCases
+            : item.edgeCases;
         existingFeat.lifecycle = FeatureLifecycleStatus.upgrade;
         existingFeat.included = true;
         existingFeat.estimatedHours = 4;
         existingFeat.goal = goalText;
         existingFeat.doneWhen = gateText;
+        if ((existingFeat.primarySharedScriptOrScene ?? '').trim().isEmpty &&
+            (item.primarySharedScriptOrScene ?? '').trim().isNotEmpty) {
+          existingFeat.primarySharedScriptOrScene =
+              item.primarySharedScriptOrScene!.trim();
+        }
+        if (effectiveTuning.isNotEmpty) {
+          existingFeat.tuningParams = List<String>.from(effectiveTuning);
+        }
+        if (effectiveEdges.isNotEmpty) {
+          existingFeat.edgeCases = List<String>.from(effectiveEdges);
+        }
         existingFeat.checkpoints = [
           ProposedCheckpointBlueprint(
             title: cpTitle,
             playtestCriteria: gateText,
             tasks: tasks,
             coveredScope: [cpTitle],
-            tuningParams: item.futureTuningParams.isNotEmpty
-                ? item.futureTuningParams
-                : item.tuningParams,
-            edgeCases: item.futureEdgeCases.isNotEmpty
-                ? item.futureEdgeCases
-                : item.edgeCases,
+            tuningParams: effectiveTuning,
+            edgeCases: effectiveEdges,
             releaseVersion: verTag,
           ),
         ];
