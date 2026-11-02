@@ -2550,7 +2550,9 @@ Active Guards: ${cpNode.edgeCases.join(', ')}
 
 Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through Step $taskNum.N):
 {
+  "fixTaskTitle": "[FIX] <Concise 2-4 word fix task title> (1h)",
   "playtestGuard": "[PLAYTEST GUARD] <1 concise rule preventing this bug>",
+  "tuningUpdates": [{"variableName": "<optional tuning var>", "value": "<updated value>"}],
   "steps": [
     {
       "title": "STEP $taskNum.1 · <SHORT LITERAL STEP TITLE>",
@@ -2572,6 +2574,16 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
         functionDeclarations: const [commitPlaytestFixTool],
       );
       if (json == null) return;
+      final aiFixTitle = json['fixTaskTitle']?.toString().trim() ?? '';
+      if (aiFixTitle.isNotEmpty) {
+        final withPrefix = aiFixTitle.startsWith('[FIX]')
+            ? aiFixTitle
+            : '[FIX] $aiFixTitle';
+        fixTask.text = RegExp(r'\(\s*\d+(?:\.\d+)?\s*[hm]\s*\)\s*$')
+                .hasMatch(withPrefix)
+            ? withPrefix
+            : '$withPrefix (1h)';
+      }
       final rawSteps = json['steps'];
       if (rawSteps is List && rawSteps.isNotEmpty) {
         final updatedSubs = <Subtask>[];
@@ -2615,14 +2627,50 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
           fixTask.children = updatedSubs;
         }
       }
+      final rawTuningUpdates = json['tuningUpdates'];
+      if (rawTuningUpdates is List && rawTuningUpdates.isNotEmpty) {
+        final updatedTuning = List<String>.from(cpNode.tuningParams);
+        for (final item in rawTuningUpdates) {
+          if (item is Map) {
+            final k = (item['variableName'] ?? item['name'] ?? '')
+                .toString()
+                .trim();
+            final v = (item['value'] ?? '').toString().trim();
+            if (k.isEmpty || v.isEmpty) continue;
+            final normK = k.toLowerCase().replaceAll(_nonAlphaNumRegex, '');
+            final existingIdx = updatedTuning.indexWhere(
+              (p) =>
+                  p
+                      .split(':')
+                      .first
+                      .toLowerCase()
+                      .replaceAll(_nonAlphaNumRegex, '') ==
+                  normK,
+            );
+            if (existingIdx >= 0) {
+              final canonicalKey =
+                  updatedTuning[existingIdx].split(':').first.trim();
+              updatedTuning[existingIdx] = '$canonicalKey: $v';
+            } else {
+              updatedTuning.add('$k: $v');
+            }
+          }
+        }
+        cpNode.tuningParams = updatedTuning;
+      }
       final aiGuard = json['playtestGuard']?.toString().trim() ?? '';
       if (aiGuard.isNotEmpty) {
         final normGuard = aiGuard.startsWith('[PLAYTEST GUARD]')
             ? aiGuard
             : '[PLAYTEST GUARD] $aiGuard';
-        if (!cpNode.edgeCases.contains(normGuard)) {
-          cpNode.edgeCases = [...cpNode.edgeCases, normGuard];
+        final rawPlaceholderGuard = '[PLAYTEST GUARD] ${issueDescription.trim()}';
+        final updatedGuards = cpNode.edgeCases
+            .where((g) => g.trim() != rawPlaceholderGuard)
+            .toList();
+        if (!updatedGuards.contains(normGuard)) {
+          updatedGuards.add(normGuard);
         }
+        cpNode.edgeCases = updatedGuards;
       }
       TaskHowToBlueprint.clearCache();
       updateFeatureStates(featureId, states);
@@ -3056,14 +3104,32 @@ Return ONLY a JSON object with this schema:
   static const Map<String, dynamic> commitPlaytestFixTool = {
     'name': 'commit_playtest_fix',
     'description':
-        'Commits a root-cause playtest bug fix with a [PLAYTEST GUARD] rule and sequential 3-Area engine fix steps.',
+        'Commits a root-cause playtest bug fix with a concise [FIX] task title, optional tuning updates, a [PLAYTEST GUARD] rule, and sequential 3-Area engine fix steps.',
     'parameters': {
       'type': 'OBJECT',
       'required': ['playtestGuard', 'steps'],
       'properties': {
+        'fixTaskTitle': {
+          'type': 'STRING',
+          'description':
+              'Optional concise 2-4 word fix task title (e.g., "[FIX] Wall Clip Velocity Clamp (1h)").',
+        },
         'playtestGuard': {
           'type': 'STRING',
           'description': '[PLAYTEST GUARD] 1 concise rule preventing this bug',
+        },
+        'tuningUpdates': {
+          'type': 'ARRAY',
+          'description':
+              'Optional updated numeric tuning parameters if the playtest issue requires clamping or retuning a variable.',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['variableName', 'value'],
+            'properties': {
+              'variableName': {'type': 'STRING'},
+              'value': {'type': 'STRING'},
+            },
+          },
         },
         'steps': {
           'type': 'ARRAY',
@@ -3203,6 +3269,7 @@ Return ONLY a JSON object with this schema:
           'items': {'type': 'STRING'},
         },
         'doneWhen': {'type': 'STRING'},
+        'primarySharedScriptOrScene': {'type': 'STRING'},
         'architectureHowSummary': {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
@@ -4607,6 +4674,50 @@ Return ONLY valid JSON:
         feat.sections['edge_cases'] =
             activeCp.edgeCases.map((e) => '• $e').join('\n');
       }
+      final bp = _releaseBlueprint;
+      if (bp != null) {
+        final primaryAsset = (feat.sections['primary_asset'] ?? '').trim();
+        for (final b in bp.beats) {
+          for (final f in b.features) {
+            if (f.id == featureId ||
+                (f.title.toLowerCase().trim() ==
+                        feat.title.toLowerCase().trim() &&
+                    b.id == feat.parentId)) {
+              if (activeCp.tuningParams.isNotEmpty) {
+                f.tuningParams = List<String>.from(activeCp.tuningParams);
+              }
+              if (activeCp.edgeCases.isNotEmpty) {
+                f.edgeCases = List<String>.from(activeCp.edgeCases);
+              }
+              if (primaryAsset.isNotEmpty) {
+                f.primarySharedScriptOrScene = primaryAsset;
+              }
+              if (f.checkpoints.isNotEmpty) {
+                final cpIdx = f.checkpoints.lastIndexWhere(
+                  (c) => c.releaseVersion == activeCp.releaseVersion,
+                );
+                final targetIdx = cpIdx >= 0 ? cpIdx : f.checkpoints.length - 1;
+                final oldCp = f.checkpoints[targetIdx];
+                final updatedCps =
+                    List<ProposedCheckpointBlueprint>.from(f.checkpoints);
+                updatedCps[targetIdx] = ProposedCheckpointBlueprint(
+                  title: oldCp.title,
+                  playtestCriteria: oldCp.playtestCriteria,
+                  tasks: [for (final t in activeCp.checklist) t.text],
+                  coveredScope: activeCp.coveredScope.isNotEmpty
+                      ? List<String>.from(activeCp.coveredScope)
+                      : oldCp.coveredScope,
+                  tuningParams: List<String>.from(activeCp.tuningParams),
+                  edgeCases: List<String>.from(activeCp.edgeCases),
+                  releaseVersion: oldCp.releaseVersion,
+                );
+                f.checkpoints = updatedCps;
+              }
+              break;
+            }
+          }
+        }
+      }
     }
     TaskHowToBlueprint.clearCache();
     _persistDocument(feat, debounce: true);
@@ -5530,6 +5641,11 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).
     if (aiGoal.isNotEmpty) target.goal = aiGoal;
     final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
     if (aiDoneWhen.isNotEmpty) target.doneWhen = aiDoneWhen;
+    final aiPrimaryAsset =
+        json['primarySharedScriptOrScene']?.toString().trim() ?? '';
+    if (aiPrimaryAsset.isNotEmpty) {
+      target.primarySharedScriptOrScene = aiPrimaryAsset;
+    }
     final aiCpTitle = json['checkpointTitle']?.toString().trim() ?? '';
     if (aiCpTitle.isNotEmpty) target.checkpointTitle = aiCpTitle;
     final aiGate = json['playtestGate']?.toString().trim() ?? '';
@@ -5864,6 +5980,8 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).
         .map((s) => '• $s')
         .join('\n');
 
+    final inboxPrimaryAsset =
+        (item.primarySharedScriptOrScene ?? '').trim();
     final featDoc = TierDocument(
       id: featId,
       title: item.featureTitle,
@@ -5874,6 +5992,7 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).
         'originVersion': activeVer,
         'activeReleaseVersion': activeVer,
         'lifecycle': FeatureLifecycleStatus.newFeature.name,
+        if (inboxPrimaryAsset.isNotEmpty) 'primary_asset': inboxPrimaryAsset,
         'scope':
             'Goal: ${item.goal}\n\nIn Scope:\n$inScopeBullets\n\nDone When: ${item.doneWhen}',
         'variables': formattedTuning,
@@ -5897,7 +6016,11 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).
       coveredScope: item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
       tuningParams: item.tuningParams,
       edgeCases: item.edgeCases,
-      parameters: {'releaseVersion': activeVer},
+      parameters: {
+        'releaseVersion': activeVer,
+        if (inboxPrimaryAsset.isNotEmpty)
+          'primarySharedScriptOrScene': inboxPrimaryAsset,
+      },
     );
     for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
       TaskHowToBlueprint.resolve(
@@ -5931,6 +6054,8 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).
               included: true,
               lifecycle: FeatureLifecycleStatus.newFeature,
               originVersion: activeVer,
+              primarySharedScriptOrScene:
+                  inboxPrimaryAsset.isNotEmpty ? inboxPrimaryAsset : null,
               inScope:
                   item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
               outOfScope: const [],
@@ -6119,6 +6244,11 @@ Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema).
               included: true,
               lifecycle: FeatureLifecycleStatus.newFeature,
               originVersion: verTag,
+              primarySharedScriptOrScene:
+                  (item.primarySharedScriptOrScene != null &&
+                          item.primarySharedScriptOrScene!.trim().isNotEmpty)
+                      ? item.primarySharedScriptOrScene!.trim()
+                      : null,
               inScope:
                   item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
               outOfScope: const [],

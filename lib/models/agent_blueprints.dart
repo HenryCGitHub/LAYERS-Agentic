@@ -989,6 +989,7 @@ class FeatureInboxItem {
   String goal;
   List<String> inScope;
   String doneWhen;
+  String? primarySharedScriptOrScene;
   List<String> architectureHowSummary;
   String checkpointTitle;
   String playtestGate;
@@ -1024,6 +1025,7 @@ class FeatureInboxItem {
     required this.goal,
     this.inScope = const [],
     required this.doneWhen,
+    this.primarySharedScriptOrScene,
     this.architectureHowSummary = const [],
     required this.checkpointTitle,
     required this.playtestGate,
@@ -1057,6 +1059,9 @@ class FeatureInboxItem {
         'goal': goal,
         'inScope': inScope,
         'doneWhen': doneWhen,
+        if (primarySharedScriptOrScene != null &&
+            primarySharedScriptOrScene!.trim().isNotEmpty)
+          'primarySharedScriptOrScene': primarySharedScriptOrScene,
         'architectureHowSummary': architectureHowSummary,
         'checkpointTitle': checkpointTitle,
         'playtestGate': playtestGate,
@@ -1103,6 +1108,8 @@ class FeatureInboxItem {
       goal: json['goal']?.toString() ?? '',
       inScope: _parseStringList(json['inScope']),
       doneWhen: json['doneWhen']?.toString() ?? '',
+      primarySharedScriptOrScene:
+          json['primarySharedScriptOrScene']?.toString(),
       architectureHowSummary: _parseStringList(json['architectureHowSummary']),
       checkpointTitle: json['checkpointTitle']?.toString() ?? '',
       playtestGate: json['playtestGate']?.toString() ?? '',

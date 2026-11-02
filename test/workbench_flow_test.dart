@@ -6524,6 +6524,74 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           newlySyncedFeat.sections['needs_ai_enrichment'],
           equals('true'),
         );
+
+        // 5. Pass 2 AI & Workflow Refinements
+        // 5a. commitPlaytestFixTool exposes fixTaskTitle and tuningUpdates
+        final playtestFixProps =
+            (WorkbenchReleaseMixin.commitPlaytestFixTool['parameters']
+                as Map)['properties'] as Map;
+        expect(playtestFixProps.containsKey('fixTaskTitle'), isTrue);
+        expect(playtestFixProps.containsKey('tuningUpdates'), isTrue);
+
+        // 5b. commitInboxFeatureTriageTool & FeatureInboxItem support primarySharedScriptOrScene
+        expect(
+          inboxTriageProps.containsKey('primarySharedScriptOrScene'),
+          isTrue,
+        );
+        final inboxSample = FeatureInboxItem(
+          id: 'inbox_test_1',
+          rawIdea: 'Add grapple hook',
+          featureTitle: 'Grapple Hook',
+          checkpointTitle: 'Hook & Swing',
+          goal: 'Fire grapple hook and pull player to anchor.',
+          doneWhen: 'Player swings across gap.',
+          playtestGate: 'Aim at ledge -> fire hook -> swing across',
+          targetBeatId: 'beat_1',
+          targetBeatTitle: 'Core Movement',
+          primarySharedScriptOrScene: 'res://actors/grapple_hook.gd',
+        );
+        final decodedInbox = FeatureInboxItem.fromJson(inboxSample.toJson());
+        expect(
+          decodedInbox.primarySharedScriptOrScene,
+          equals('res://actors/grapple_hook.gd'),
+        );
+
+        // 5c. buildSectionOptionsTool('techSpec') uses canonical 'Unreal Engine 5 (Blueprints / C++)'
+        final pass2TechSpecTool = ProjectConceptAgent.buildSectionOptionsTool(
+          'techSpec',
+        );
+        final pass2TechSpecProps =
+            (((pass2TechSpecTool['parameters'] as Map)['properties']
+                    as Map)['options'] as Map)['items']
+                as Map;
+        final pass2EngineEnum =
+            ((pass2TechSpecProps['properties'] as Map)['engine']
+                as Map)['enum'] as List<dynamic>;
+        expect(
+          pass2EngineEnum,
+          contains('Unreal Engine 5 (Blueprints / C++)'),
+        );
+
+        // 5d. updateFeatureStates automatically syncs _releaseBlueprint feature tuning, edgeCases, and task titles
+        final liveDocForBpSync =
+            provider.featuresForBeat(provider.activeReleaseBeats.first.id).first;
+        final statesToMutate = FeatureStateNode.getStatesForDocument(
+          liveDocForBpSync,
+        );
+        statesToMutate.last.tuningParams = ['syncTestSpeed = 777'];
+        statesToMutate.last.edgeCases = ['[GUARD] Sync test guard'];
+        statesToMutate.last.checklist.first.text = 'Synced Task Title (2h)';
+        provider.updateFeatureStates(liveDocForBpSync.id, statesToMutate);
+        final syncedBpFeat =
+            provider.releaseBlueprint!.beats.first.features.firstWhere(
+          (f) => f.title.toLowerCase() == liveDocForBpSync.title.toLowerCase(),
+        );
+        expect(syncedBpFeat.tuningParams, contains('syncTestSpeed = 777'));
+        expect(syncedBpFeat.edgeCases, contains('[GUARD] Sync test guard'));
+        expect(
+          syncedBpFeat.checkpoints.last.tasks,
+          contains('Synced Task Title (2h)'),
+        );
       },
     );
   });

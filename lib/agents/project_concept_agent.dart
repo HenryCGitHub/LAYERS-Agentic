@@ -806,7 +806,7 @@ class ProjectConceptAgent {
                       'enum': [
                         'Godot 4 (GDScript)',
                         'Unity 6 (C#)',
-                        'Unreal Engine 5',
+                        'Unreal Engine 5 (Blueprints / C++)',
                       ],
                     },
                     'platform': {'type': 'STRING'},
@@ -1165,6 +1165,24 @@ Call `commit_concept_blueprint` (or return valid JSON):
         buildFocusedConceptSectionTool(focusedSectionTag);
     final activeToolName = activeConceptTool['name']?.toString() ??
         'update_concept_section';
+    final toolExamplePayload = switch (activeToolName) {
+      'update_game_spec_section' =>
+        '"reply": "1-sentence confirmation", "gameSpec": {"cameraView": "...", "controls": "...", "playerMode": "...", "arenaStructure": "..."}',
+      'update_tech_spec_section' =>
+        '"reply": "1-sentence confirmation", "techSpec": {"engine": "Godot 4 (GDScript)", "platform": "...", "assetPipeline": "...", "saveMode": "..."}',
+      'update_design_pillars_section' =>
+        '"reply": "1-sentence confirmation", "designPillars": [{"pillarName": "...", "playerExperience": "..."}]',
+      'update_trade_offs_section' =>
+        '"reply": "1-sentence confirmation", "tradeOffs": [{"priorityX": "...", "overAlternativeY": "..."}]',
+      'update_core_loop_section' =>
+        '"reply": "1-sentence confirmation", "coreLoopBeats": ["Beat Name: Observable action and system response", "..."]',
+      'update_exclusions_section' =>
+        '"reply": "1-sentence confirmation", "exclusions": ["No 2-4 word prototype cut"]',
+      'update_done_when_section' =>
+        '"reply": "1-sentence confirmation", "doneWhen": "Concise 1-sentence playtest completion condition"',
+      _ =>
+        '"reply": "1-sentence confirmation of what changed", "updatedFields": ["Goal"], "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].", "goalOptions": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."]',
+    };
 
     final prompt = '''
 You are Antigravity, an indie game producer updating a Live Concept Blueprint.
@@ -1188,10 +1206,7 @@ ${GeminiAgentClient.compactStyleRules}
 
 Call `$activeToolName` (or return ONLY valid JSON):
 {
-  "reply": "1-sentence confirmation of what changed",
-  "updatedFields": ["Goal"],
-  "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
-  "goalOptions": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."]
+  $toolExamplePayload
 }
 ''';
 
@@ -1560,6 +1575,24 @@ $_kExpansionCardsJsonSchema
         '- Format each option as `"Short Label: Concrete statement tailored to ${draft.title}"`.',
     };
 
+    final sectionOptionsTool = buildSectionOptionsTool(optionKey);
+    final sectionToolName =
+        sectionOptionsTool['name']?.toString() ?? 'propose_section_options';
+    final optionsJsonExample = switch (optionKey) {
+      'gameSpec' =>
+        '[{"label": "Spec Label", "cameraView": "...", "controls": "...", "playerMode": "...", "arenaStructure": "..."}]',
+      'techSpec' =>
+        '[{"label": "Stack Label", "engine": "Godot 4 (GDScript)", "platform": "...", "assetPipeline": "...", "saveMode": "..."}]',
+      'designPillars' =>
+        '[{"pillarName": "2-3 Word Pillar", "playerExperience": "1-sentence player feeling"}]',
+      'tradeOffs' =>
+        '[{"label": "Rule Label", "priorityX": "Concrete Priority X", "overAlternativeY": "Concrete Alternative Y"}]',
+      'coreLoop' =>
+        '[{"label": "Loop Label", "beats": ["Beat 1: Action", "Beat 2: Action", "Beat 3: Action", "Beat 4: Action"]}]',
+      _ =>
+        '["Option Label 1: Concrete option tailored to ${draft.title}", "Option Label 2: ...", "Option Label 3: ..."]',
+    };
+
     final prompt = '''
 You are an indie game producer generating 3 fresh Option Cards for the "$optionKey" section of this game concept:
 Title: "${draft.title}"
@@ -1577,17 +1610,11 @@ ${GeminiAgentClient.compactStyleRules}
 - Stay 100% faithful to "${draft.title}" and its locked upstream Game Spec, Tech Spec, Design Pillars, and Trade-Offs.
 $sectionFormatRule
 
-Return ONLY valid JSON:
+Call `$sectionToolName` (or return ONLY valid JSON):
 {
-  "options": [
-    "Option Label 1: Concrete option tailored to ${draft.title}",
-    "Option Label 2: Concrete option tailored to ${draft.title}",
-    "Option Label 3: Concrete option tailored to ${draft.title}"
-  ]
+  "options": $optionsJsonExample
 }
 ''';
-
-    final sectionOptionsTool = buildSectionOptionsTool(optionKey);
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
       apiKey: apiKey,
