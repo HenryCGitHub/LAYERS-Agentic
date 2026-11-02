@@ -104,17 +104,21 @@ RULES:
         if (normalizedThinking.isNotEmpty) {
           final isFlash25 = model == 'gemini-flash-latest' ||
               model.startsWith('gemini-2.5');
+          final flashThinkingBudget = switch (normalizedThinking) {
+            'LOW' => 0,
+            'MEDIUM' => 1024,
+            _ => 2048,
+          };
           genConfig['thinkingConfig'] = isFlash25
               ? <String, dynamic>{
-                  'thinkingBudget': normalizedThinking == 'LOW' ? 0 : 1024,
+                  'thinkingBudget': flashThinkingBudget,
                 }
               : <String, dynamic>{
                   'thinkingLevel': normalizedThinking,
                 };
         }
 
-        final isHeavyPlanningModel =
-            model.contains('argon') || model.contains('pro');
+        final isHeavyPlanningModel = model.contains('pro');
         final timeoutDuration =
             isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
 

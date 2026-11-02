@@ -162,7 +162,7 @@ class ProjectConceptAgent {
     String rawSpark, {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'MEDIUM',
   }) async {
     final cleanSpark = ProjectConceptBlueprint.normalizeCommonTypos(
       rawSpark.trim(),
@@ -217,7 +217,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: thinkingLevel,
+      thinkingLevel: thinkingLevel == 'HIGH' ? 'MEDIUM' : thinkingLevel,
       temperature: 0.55,
     );
 
@@ -277,8 +277,8 @@ Return ONLY valid JSON:
     String userMessage, {
     String apiKey = '',
     String conversationModel = 'gemini-flash-latest',
-    String planningModel = 'gemini-4-argon',
-    String thinkingLevel = 'LOW',
+    String planningModel = 'gemini-flash-latest',
+    String thinkingLevel = 'MEDIUM',
   }) async {
     final cleanMsg = ProjectConceptBlueprint.normalizeCommonTypos(
       userMessage.trim(),
@@ -328,7 +328,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: conversationModel,
-      thinkingLevel: thinkingLevel,
+      thinkingLevel: thinkingLevel == 'HIGH' ? 'MEDIUM' : thinkingLevel,
       temperature: 0.45,
     );
 
@@ -539,7 +539,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: thinkingLevel,
+      thinkingLevel: 'LOW',
       temperature: 0.45,
     );
     if (json == null) return null;
@@ -612,7 +612,7 @@ $_kExpansionCardsJsonSchema
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: thinkingLevel,
+      thinkingLevel: 'LOW',
       temperature: 0.65,
     );
     if (json == null) return null;
@@ -658,11 +658,16 @@ You are an indie game producer generating 3 fresh Option Cards for the "$optionK
 Title: "${draft.title}"
 Spark Premise: "${draft.sparkIdea}"
 Current Goal: "${draft.goal}"
+Game Spec: ${draft.gameSpec.join(' · ')}
+Tech Spec: ${draft.techSpec.join(' · ')}
+Design Pillars: ${draft.designPillars.join(' | ')}
+Trade-Offs: ${draft.tradeOffs.join(' | ')}
 Current Core Loop: ${draft.coreLoopBeats.join(' -> ')}
+Out of Scope: ${draft.exclusions.join(' | ')}
 ${currentOptions.isNotEmpty ? 'Previously Shown Options (DO NOT REPEAT): ${currentOptions.join(' | ')}' : ''}
 
 ${GeminiAgentClient.compactStyleRules}
-- Stay 100% faithful to "${draft.title}" and its exact subject and mechanics.
+- Stay 100% faithful to "${draft.title}" and its locked upstream Game Spec, Tech Spec, Design Pillars, and Trade-Offs.
 - Format each option as "Short Label: Concrete statement tailored to ${draft.title}".
 
 Return ONLY valid JSON:
@@ -679,7 +684,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: thinkingLevel,
+      thinkingLevel: 'LOW',
       temperature: 0.65,
     );
     final rawList = json?['options'];
@@ -699,7 +704,7 @@ Return ONLY valid JSON:
     String rawGdd, {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'MEDIUM',
   }) async {
     final cleanDoc = rawGdd.trim();
     if (cleanDoc.isEmpty || !GeminiAgentClient.hasKey(apiKey)) return null;

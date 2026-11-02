@@ -167,7 +167,11 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       }
       if (loaded.planningModel != null &&
           loaded.planningModel!.trim().isNotEmpty) {
-        _planningModel = loaded.planningModel!.trim();
+        final rawPlanModel = loaded.planningModel!.trim();
+        // Auto-migrate any legacy 'argon' planning model setting in localStorage to gemini-flash-latest
+        _planningModel = rawPlanModel.contains('argon')
+            ? 'gemini-flash-latest'
+            : rawPlanModel;
       }
       if (loaded.thinkingLevel != null &&
           loaded.thinkingLevel!.trim().isNotEmpty) {

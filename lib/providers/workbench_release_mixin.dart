@@ -1840,7 +1840,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
     }
 
-    selectFeature(featId);
+    selectFeature(featId, triggerAiSynthesis: false);
     _syncActiveProjectMetadata();
     _enrichLiveFeatureWithAi(featId, beatDoc.title);
     return featId;
@@ -2173,6 +2173,8 @@ Return ONLY a JSON object with 3 concrete fix steps:
       "title": "STEP $taskNum.1 · <SHORT LITERAL STEP TITLE>",
       "stepPath": "<Exact $engineLabel panel/inspector/script path>",
       "instruction": "<1 sentence concrete fix/inspection instruction>",
+      "area1Hierarchy": "<Optional node/component tree using ├─ / └─ or empty string>",
+      "area2Inspector": "<Inspector/Details property bindings formatted as Property: Value>",
       "codeFormula": "<2-4 lines of $engineLabel code or node setup>",
       "verifyResult": "<1 sentence visual/console check in Play mode>"
     }
@@ -2182,7 +2184,7 @@ Return ONLY a JSON object with 3 concrete fix steps:
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _planningModel,
-        thinkingLevel: _thinkingLevel,
+        thinkingLevel: 'MEDIUM',
         temperature: 0.3,
       );
       if (json == null) return;
@@ -2195,11 +2197,18 @@ Return ONLY a JSON object with 3 concrete fix steps:
             final title = item['title']?.toString().trim() ?? '';
             final path = item['stepPath']?.toString().trim() ?? '';
             final instr = item['instruction']?.toString().trim() ?? '';
+            final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
+            final area2 = item['area2Inspector']?.toString().trim() ?? '';
             final code = item['codeFormula']?.toString().trim() ?? '';
             final verify = item['verifyResult']?.toString().trim() ?? '';
             final prevDone = i < fixTask.children.length
                 ? fixTask.children[i].completed
                 : false;
+            final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
+              instruction: instr,
+              area1Hierarchy: area1,
+              area2Inspector: area2,
+            );
             updatedSubs.add(
               Subtask(
                 id: i < fixTask.children.length
@@ -2208,7 +2217,7 @@ Return ONLY a JSON object with 3 concrete fix steps:
                 text: title.isNotEmpty
                     ? title
                     : 'STEP $taskNum.${i + 1} · APPLY ROOT-CAUSE FIX ${i + 1}',
-                specNotes: instr,
+                specNotes: encodedNotes,
                 codeSnippet: code,
                 codeLanguage: path,
                 verification: verify,
@@ -2279,12 +2288,18 @@ Return ONLY a JSON object with 3 concrete fix steps:
     _synthesizingFeatureIds.add(featureId);
     notifyListeners();
     try {
+      final siblingTasksSummary = [
+        for (int sIdx = 0; sIdx < cpNode.checklist.length; sIdx++)
+          if (sIdx != taskIndex)
+            'Task ${sIdx + 1}: "${cpNode.checklist[sIdx].text}"',
+      ].join(' | ');
+
       final prompt = '''
 You are a senior game engine programmer assisting with a concrete implementation task.
 Engine: $engineLabel
 Feature: "${featDoc?.title ?? cpNode.name}"
-Task ($taskNum): "${parentTask.text}"
-Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+Target Task ($taskNum of ${cpNode.checklist.length}): "${parentTask.text}"
+${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
@@ -2296,6 +2311,8 @@ Return ONLY a JSON object with this schema:
       "title": "STEP $taskNum.1 · SHORT LITERAL SUB-STEP TITLE",
       "stepPath": "Exact $engineLabel editor panel/inspector/script path",
       "instruction": "1-sentence literal instruction referencing the user's exact nodes/scripts",
+      "area1Hierarchy": "Optional Scene/Component hierarchy tree using ├─ / └─ or empty string",
+      "area2Inspector": "Inspector/Details bindings formatted as Property: Value | Property2: Value2",
       "codeFormula": "2-4 lines of $engineLabel code or hierarchy setup using the user's node/script names",
       "verifyResult": "1-sentence observable verification check in Play mode"
     }
@@ -2306,7 +2323,7 @@ Return ONLY a JSON object with this schema:
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _conversationModel,
-        thinkingLevel: _thinkingLevel,
+        thinkingLevel: 'MEDIUM',
         temperature: 0.25,
       );
       final rawSubs = json?['subSteps'];
@@ -2318,18 +2335,25 @@ Return ONLY a JSON object with this schema:
             final t = (item['title'] ?? '').toString().trim();
             final path = (item['stepPath'] ?? '').toString().trim();
             final instr = (item['instruction'] ?? '').toString().trim();
+            final area1 = (item['area1Hierarchy'] ?? '').toString().trim();
+            final area2 = (item['area2Inspector'] ?? '').toString().trim();
             final code = (item['codeFormula'] ?? '').toString().trim();
             final verify = (item['verifyResult'] ?? '').toString().trim();
             final prevDone = i < parentTask.children.length
                 ? parentTask.children[i].completed
                 : parentTask.completed;
+            final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
+              instruction: instr,
+              area1Hierarchy: area1,
+              area2Inspector: area2,
+            );
             newChildren.add(
               Subtask(
                 id: '${parentTask.id}_sub_${i + 1}',
                 text: t.isNotEmpty
                     ? t
                     : 'STEP $taskNum.${i + 1} · IMPLEMENT STEP ${i + 1}',
-                specNotes: instr,
+                specNotes: encodedNotes,
                 codeSnippet: code,
                 codeLanguage: path,
                 verification: verify,
@@ -2540,7 +2564,23 @@ Return ONLY a JSON object with this schema:
       }
     }
 
+    if (assetTokens.isEmpty) {
+      final firstTaskSource = (states.isNotEmpty &&
+              states.first.checklist.isNotEmpty)
+          ? '${states.first.checklist.first.text} ${featDoc.title}'
+          : featDoc.title;
+      final derivedAsset =
+          TaskHowToBlueprint.deriveConcreteAssetName(firstTaskSource);
+      if (derivedAsset.pascalName.isNotEmpty) {
+        assetTokens.add(derivedAsset.pascalName);
+      }
+    }
+
+    final featGoal = SectionTextUtils.resolveGoal(featDoc.sections).trim();
     final parts = <String>[];
+    if (featGoal.isNotEmpty) {
+      parts.add('goal="$featGoal"');
+    }
     if (assetTokens.isNotEmpty) {
       parts.add('assets=[${assetTokens.take(6).join(', ')}]');
     } else if (pathTokens.isNotEmpty) {
@@ -2767,10 +2807,30 @@ Return ONLY a JSON object with this schema:
           'ACTIVE PRODUCTION PHASE: 05 · POST-LAUNCH & LIVE OPS (PATCH & EXPANSION)\n- Apply surgical balance parameter adjustments, modular DLC/biome hooks, and regression guards without breaking existing save/state schemas.',
       };
 
+      final projectGoalText = (activeProject != null
+              ? SectionTextUtils.resolveGoal(activeProject!.sections)
+              : (_conceptDraft?.goal ?? ''))
+          .trim();
+      final pillarsText = (activeProject?.sections['design_pillars'] ??
+              activeProject?.sections['designPillars'] ??
+              _conceptDraft?.designPillars.join(' | ') ??
+              '')
+          .trim();
+      final tradeOffsText = (activeProject?.sections['trade_offs'] ??
+              activeProject?.sections['tradeOffs'] ??
+              _conceptDraft?.tradeOffs.join(' | ') ??
+              '')
+          .trim();
+      final projectPillarsAndTradeOffsBlock = [
+        if (projectGoalText.isNotEmpty) 'Project Goal: "$projectGoalText"',
+        if (pillarsText.isNotEmpty) 'Design Pillars: $pillarsText',
+        if (tradeOffsText.isNotEmpty) 'Trade-Offs: $tradeOffsText',
+      ].join('\n');
+
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
-$dimensionInstructionBlock
+${projectPillarsAndTradeOffsBlock.isNotEmpty ? '$projectPillarsAndTradeOffsBlock\n' : ''}$dimensionInstructionBlock
 $phaseInstructionBlock
 $projectBuildStateContext
 ${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Already Built in Earlier Features — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
@@ -2820,7 +2880,7 @@ Return ONLY valid JSON:
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _conversationModel,
-        thinkingLevel: _thinkingLevel,
+        thinkingLevel: 'HIGH',
         temperature: 0.25,
       );
       final rawTasks = json?['tasks'];
@@ -3597,7 +3657,10 @@ Return ONLY valid JSON:
     return (updatedVars: updatedVars, addedGuards: addedGuards);
   }
 
-  void selectFeature(String featureId) {
+  void selectFeature(
+    String featureId, {
+    bool triggerAiSynthesis = true,
+  }) {
     final feat = documents[featureId];
     if (feat == null) return;
     _selectedFeatureId = featureId;
@@ -3616,7 +3679,7 @@ Return ONLY valid JSON:
       _persistDocument(proj, debounce: true);
     }
     notifyListeners();
-    if (GeminiAgentClient.hasKey(_apiKey)) {
+    if (triggerAiSynthesis && GeminiAgentClient.hasKey(_apiKey)) {
       final states = FeatureStateNode.getStatesForDocument(feat);
       final activeVer = activeReleaseVersionTag;
       final activeCp = states.isNotEmpty
@@ -4721,7 +4784,7 @@ Return ONLY valid JSON:
     }
 
     _saveFeatureInboxItems(items);
-    selectFeature(materializedFeatId);
+    selectFeature(materializedFeatId, triggerAiSynthesis: false);
     await synthesizeFeatureHowToStepsWithAi(
       materializedFeatId,
       forceRefresh: true,

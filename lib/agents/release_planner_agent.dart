@@ -55,8 +55,8 @@ class ReleasePlannerAgent {
     Map<String, List<TierDocument>> existingFeaturesByBeat = const {},
     Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex = const {},
     String apiKey = '',
-    String modelName = 'gemini-4-argon',
-    String thinkingLevel = 'LOW',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'HIGH',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) {
       return null;
@@ -323,10 +323,9 @@ class ReleasePlannerAgent {
     final projectGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
     final projectDoneWhen =
         SectionTextUtils.resolveDoneWhen(projectDoc.sections);
-    final effectiveModel =
-        (!isSubsequentRelease && modelName == 'gemini-4-argon')
-            ? 'gemini-flash-latest'
-            : modelName;
+    final effectiveModel = modelName.contains('argon')
+        ? 'gemini-flash-latest'
+        : modelName;
     final progressiveDiagnosticInstructions = isSubsequentRelease
         ? '''
 - ARCHITECTURAL DIAGNOSTIC ("builtSoFar" & "missingGaps"):
@@ -381,6 +380,11 @@ $progressiveDiagnosticInstructions
   * `Task 2` (Core Interaction, Movement, or Simulation Math): Wire the specific interaction, movement, or simulation behavior onto `Task 1`'s asset (e.g., `"WASD Velocity & Look (2h)"`, `"Hold-E Valve Rotation (2h)"`, `"Wilt Color Lerp (2h)"`).
   * `Task 3` (Observable Feedback & Boundary Condition): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Full Tank Overflow Stop (1h)"`, `"Occupied Slot Reject (1h)"`).
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
+- THINKING VERIFICATION BEFORE EMITTING JSON:
+  1. 100% Concept Coverage: Verify every action in `01 Goal`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When` has a dedicated Feature while honoring `07 Out of Scope`.
+  2. Strict Build Dependency Order: Verify `beat_1` starts with Greybox Level/Arena Blockout before Character Movement, and every target entity is built before its tool/tether/gate.
+  3. Concrete Tuning & Guards: Verify every Feature has 2–3 `"paramName: value unit"` entries in `tuningParams` and `[TAG]` edge-case guards.
+  4. Progressive Delta Integrity: For v0.2+, verify `"upgrade"` checkpoints extend existing v0.1 features in-place without duplicating v0.1 tasks.
 
 Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
 {
@@ -446,7 +450,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: effectiveModel,
-      thinkingLevel: thinkingLevel,
+      thinkingLevel: thinkingLevel == 'LOW' ? 'HIGH' : thinkingLevel,
       temperature: 0.35,
     );
 
@@ -1673,7 +1677,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     required String userMessage,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'MEDIUM',
   }) async {
     final cleanMsg = userMessage.trim();
     if (cleanMsg.isEmpty || !GeminiAgentClient.hasKey(apiKey)) return false;

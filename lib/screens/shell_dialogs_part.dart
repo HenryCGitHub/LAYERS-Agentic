@@ -560,13 +560,13 @@ extension _ShellDialogsExt on WorkbenchShell {
                       for (final m in WorkbenchProvider.availablePlanningModels)
                         _buildModelOptionTile(
                           modelId: m,
-                          subtitle: m == 'gemini-4-argon'
-                              ? 'Default — Gemini 4 Argon (One-Shot Release Plan creation only; chat uses Flash)'
-                              : m == 'gemini-flash-latest'
-                                  ? 'Gemini Flash Latest (Fastest single-model mode)'
-                                  : 'Gemini 3.8 Flash',
+                          subtitle: m == 'gemini-flash-latest'
+                              ? 'Default — Gemini Flash Latest with HIGH thinking (2048 token reasoning)'
+                              : m == 'gemini-3.8-flash'
+                                  ? 'Gemini 3.8 Flash'
+                                  : 'Ultra-lightweight Flash-Lite',
                           isSelected: selectedPlanningModel == m,
-                          isRecommended: m == 'gemini-4-argon',
+                          isRecommended: m == 'gemini-flash-latest',
                           onTap: () => setModalState(() => selectedPlanningModel = m),
                         ),
                       const SizedBox(height: 14),
@@ -605,7 +605,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                                       ),
                                     ),
                                     child: Text(
-                                      lvl == 'LOW' ? 'LOW (Default)' : lvl,
+                                      lvl == 'HIGH' ? 'HIGH (Default)' : lvl,
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11,
                                         fontWeight: selectedThinking == lvl

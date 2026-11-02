@@ -11,6 +11,7 @@ import '../models/tier_document.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_vault_service.dart';
 import '../services/local_vault_service.dart';
+import '../utils/section_text_utils.dart';
 
 part 'workbench_storage_mixin.dart';
 part 'workbench_concept_mixin.dart';
@@ -76,7 +77,7 @@ class WorkbenchProvider extends ChangeNotifier {
   String _planningModel = 'gemini-flash-latest';
   String get planningModel => _planningModel;
 
-  String _thinkingLevel = 'LOW';
+  String _thinkingLevel = 'HIGH';
   String get thinkingLevel => _thinkingLevel;
 
   static const List<String> availableConversationModels = [
@@ -87,7 +88,6 @@ class WorkbenchProvider extends ChangeNotifier {
 
   static const List<String> availablePlanningModels = [
     'gemini-flash-latest',
-    'gemini-4-argon',
     'gemini-3.8-flash',
     'gemini-3.5-flash-lite',
   ];

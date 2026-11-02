@@ -6026,6 +6026,101 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         provider.switchProject(proj2Id);
         expect(provider.activeProject!.title, equals('Submerged Mech Salvage'));
         expect(provider.conceptDraft!.title, equals('Submerged Mech Salvage'));
+
+        // 9. Verify Pure gemini-flash-latest (HIGH) configuration & Focused Context Architecture:
+        expect(
+          WorkbenchProvider.availablePlanningModels,
+          isNot(contains('gemini-4-argon')),
+        );
+        expect(provider.thinkingLevel, equals('HIGH'));
+
+        String? capturedStepSynthPrompt;
+        int sonarStepSynthCalls = 0;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains(
+            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature',
+          )) {
+            capturedStepSynthPrompt = prompt;
+            if (prompt.contains('"Hull Breach Welder"')) {
+              sonarStepSynthCalls++;
+            }
+            return _mockGeminiResponder(prompt, model);
+          }
+          if (prompt.contains(
+            'Break this task down into the exact number of checkable How-To Sub-Steps',
+          )) {
+            return {
+              'subSteps': [
+                {
+                  'title': 'STEP 1.1 · WIRE HARPOON REEL JOINT',
+                  'stepPath': 'Assets/Scripts/HarpoonWinch.cs',
+                  'instruction': 'Attach ConfigurableJoint to HarpoonWinch.',
+                  'area1Hierarchy': 'HarpoonWinch\n └─ WinchCableJoint',
+                  'area2Inspector': 'maxReelForce: 450 N | cableDamping: 0.8',
+                  'codeFormula': 'winchJoint.xMotion = ConfigurableJointMotion.Limited;',
+                  'verifyResult': 'Cable reels in target core cleanly in Play mode.',
+                },
+              ],
+            };
+          }
+          return _mockGeminiResponder(prompt, model);
+        };
+
+        // Select 2nd feature ("Harpoon Cable Winch") and verify prompt includes Stage 1 Pillars, Trade-Offs, and Preceding Feature #1 Ledger with derived asset & goal
+        final secondBeat = provider.activeReleaseBeats[1];
+        final secondBeatFirstFeat =
+            provider.featuresForBeat(secondBeat.id).first;
+        await provider.synthesizeFeatureHowToStepsWithAi(
+          secondBeatFirstFeat.id,
+          forceRefresh: true,
+        );
+        expect(capturedStepSynthPrompt, isNotNull);
+        expect(capturedStepSynthPrompt, contains('Design Pillars:'));
+        expect(capturedStepSynthPrompt, contains('Trade-Offs:'));
+        expect(
+          capturedStepSynthPrompt,
+          contains('CUMULATIVE PROJECT LEDGER'),
+        );
+        expect(capturedStepSynthPrompt, contains('assets=['));
+
+        // Verify addLiveFeatureToBeat only triggers step synthesis ONCE (not twice via selectFeature + _enrichLiveFeatureWithAi)
+        final welderFeatId = provider.addLiveFeatureToBeat(
+          provider.activeReleaseBeats.first.id,
+          'Hull Breach Welder',
+        );
+        expect(welderFeatId, isNotNull);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(
+          sonarStepSynthCalls,
+          lessThanOrEqualTo(1),
+          reason:
+              'addLiveFeatureToBeat must not fire duplicate synthesizeFeatureHowToStepsWithAi calls',
+        );
+
+        // Verify tailorTaskHowToSubSteps encodes 3-Area notes (area1Hierarchy & area2Inspector)
+        final winchStates =
+            FeatureStateNode.getStatesForDocument(secondBeatFirstFeat);
+        final tailoredOk = await provider.tailorTaskHowToSubSteps(
+          featureId: secondBeatFirstFeat.id,
+          states: winchStates,
+          checkpointIndex: 0,
+          taskIndex: 0,
+          userContext: 'HarpoonWinch with WinchCableJoint',
+        );
+        expect(tailoredOk, isTrue);
+        final tailoredSub = FeatureStateNode.getStatesForDocument(
+          secondBeatFirstFeat,
+        ).first.checklist.first.children.first;
+        final decodedThreeArea =
+            TaskHowToBlueprint.decodeThreeAreaNotes(tailoredSub.specNotes);
+        expect(
+          decodedThreeArea.area1Hierarchy,
+          equals('HarpoonWinch\n └─ WinchCableJoint'),
+        );
+        expect(
+          decodedThreeArea.area2Inspector,
+          equals('maxReelForce: 450 N | cableDamping: 0.8'),
+        );
       },
     );
   });
