@@ -281,6 +281,71 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
   }
 
+  /// Remaps `targetBeatId` and `targetFeatureId` inside a serialized `feature_inbox_json` payload.
+  String _remapSerializedFeatureInboxJson(
+    String rawJson,
+    String Function(String oldId) remapId,
+  ) {
+    try {
+      final decoded = jsonDecode(rawJson);
+      if (decoded is! List) return rawJson;
+      final remapped = <Map<String, dynamic>>[];
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final oldBeatId = map['targetBeatId']?.toString();
+        if (oldBeatId != null && oldBeatId.isNotEmpty) {
+          map['targetBeatId'] = remapId(oldBeatId);
+        }
+        final oldFeatId = map['targetFeatureId']?.toString();
+        if (oldFeatId != null && oldFeatId.isNotEmpty) {
+          map['targetFeatureId'] = remapId(oldFeatId);
+        }
+        remapped.add(map);
+      }
+      return jsonEncode(remapped);
+    } catch (_) {
+      return rawJson;
+    }
+  }
+
+  /// Collects all document IDs belonging to [projectId]'s 4-tier tree (including superseded features).
+  Set<String> _collectProjectDocumentTreeIds(String projectId) {
+    final proj = documents[projectId];
+    if (proj == null) return <String>{};
+
+    final childrenByParent = <String, List<String>>{};
+    for (final doc in documents.values) {
+      if (doc.parentId != null) {
+        childrenByParent.putIfAbsent(doc.parentId!, () => []).add(doc.id);
+      }
+    }
+
+    final collectedIds = <String>{proj.id};
+    final queue = <String>[proj.id, ...proj.childrenIds];
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeLast();
+      collectedIds.add(currentId);
+      final doc = documents[currentId];
+      if (doc != null) {
+        for (final childId in doc.childrenIds) {
+          if (collectedIds.add(childId)) {
+            queue.add(childId);
+          }
+        }
+      }
+      final directChildren = childrenByParent[currentId];
+      if (directChildren != null) {
+        for (final childId in directChildren) {
+          if (collectedIds.add(childId)) {
+            queue.add(childId);
+          }
+        }
+      }
+    }
+    return collectedIds;
+  }
+
   /// Deep-clones an existing project across all 4 tiers (Project -> Release -> Beat -> Feature)
   /// including all Checkpoints and How-To Sub-Steps, persists to LocalStorage & Firestore, and switches to the copy.
   String? duplicateProject(String projectId) {
@@ -420,6 +485,13 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       copiedSections['release_blueprint_json'] =
           _remapSerializedReleaseBlueprintJson(rawProjRelBp, remapClonedId);
     }
+    final rawInbox = copiedSections['feature_inbox_json'];
+    if (rawInbox != null && rawInbox.isNotEmpty) {
+      copiedSections['feature_inbox_json'] = _remapSerializedFeatureInboxJson(
+        rawInbox,
+        remapClonedId,
+      );
+    }
 
     if (newReleaseIds.isNotEmpty) {
       copiedSections['active_release_id'] =
@@ -459,35 +531,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final proj = documents[targetId];
     if (proj == null) return '';
 
-    final childrenByParent = <String, List<String>>{};
-    for (final doc in documents.values) {
-      if (doc.parentId != null) {
-        childrenByParent.putIfAbsent(doc.parentId!, () => []).add(doc.id);
-      }
-    }
-
-    final collectedIds = <String>{proj.id};
-    final queue = <String>[proj.id, ...proj.childrenIds];
-    while (queue.isNotEmpty) {
-      final currentId = queue.removeLast();
-      collectedIds.add(currentId);
-      final doc = documents[currentId];
-      if (doc != null) {
-        for (final childId in doc.childrenIds) {
-          if (collectedIds.add(childId)) {
-            queue.add(childId);
-          }
-        }
-      }
-      final directChildren = childrenByParent[currentId];
-      if (directChildren != null) {
-        for (final childId in directChildren) {
-          if (collectedIds.add(childId)) {
-            queue.add(childId);
-          }
-        }
-      }
-    }
+    final collectedIds = _collectProjectDocumentTreeIds(proj.id);
 
     final bundleDocs = <Map<String, dynamic>>[
       for (final id in collectedIds)
@@ -586,6 +630,11 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           if (oldSelFeat != null && idMap.containsKey(oldSelFeat)) {
             newSections['selected_feature_id'] = idMap[oldSelFeat]!;
           }
+          final rawInbox = newSections['feature_inbox_json'];
+          if (rawInbox != null && rawInbox.isNotEmpty) {
+            newSections['feature_inbox_json'] =
+                _remapSerializedFeatureInboxJson(rawInbox, remapId);
+          }
         }
         if (d.tier == TierType.project || d.tier == TierType.release) {
           final rawRelBp = newSections['release_blueprint_json'];
@@ -617,38 +666,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
   /// Deletes a project and its child documents from LocalVaultService and Cloud Firestore.
   void deleteProject(String projectId) {
-    final proj = documents[projectId];
-    if (proj == null) return;
-
-    final childrenByParent = <String, List<String>>{};
-    for (final doc in documents.values) {
-      if (doc.parentId != null) {
-        childrenByParent.putIfAbsent(doc.parentId!, () => []).add(doc.id);
-      }
-    }
-
-    final idsToRemove = <String>{projectId};
-    final queue = <String>[projectId, ...proj.childrenIds];
-    while (queue.isNotEmpty) {
-      final currentId = queue.removeLast();
-      idsToRemove.add(currentId);
-      final doc = documents[currentId];
-      if (doc != null) {
-        for (final childId in doc.childrenIds) {
-          if (idsToRemove.add(childId)) {
-            queue.add(childId);
-          }
-        }
-      }
-      final directChildren = childrenByParent[currentId];
-      if (directChildren != null) {
-        for (final childId in directChildren) {
-          if (idsToRemove.add(childId)) {
-            queue.add(childId);
-          }
-        }
-      }
-    }
+    final idsToRemove = _collectProjectDocumentTreeIds(projectId);
+    if (idsToRemove.isEmpty) return;
 
     final user = _authService.currentUser;
     for (final id in idsToRemove) {

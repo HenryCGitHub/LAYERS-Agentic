@@ -2550,7 +2550,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
   }
 
   void _showFeatureInboxModal(BuildContext context, {String? preferredBeatId}) {
-    final captureCtrl = TextEditingController();
+    _inboxCaptureCtrl.clear();
     bool isSubmitting = false;
 
     showDialog<void>(
@@ -2567,7 +2567,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
             final clean = text.trim();
             if (clean.isEmpty || isSubmitting) return;
             setModalState(() => isSubmitting = true);
-            captureCtrl.clear();
+            _inboxCaptureCtrl.clear();
             await widget.workbench.submitFeatureIdeaToInbox(
               clean,
               preferredBeatId: preferredBeatId,
@@ -2651,7 +2651,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                           Expanded(
                             child: TextField(
                               key: const ValueKey('inbox_capture_input'),
-                              controller: captureCtrl,
+                              controller: _inboxCaptureCtrl,
                               autofocus: pendingItems.isEmpty,
                               style: GoogleFonts.inter(
                                 fontSize: 12.5,
@@ -2686,7 +2686,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             ),
                             onPressed: isSubmitting
                                 ? null
-                                : () => handleCapture(captureCtrl.text),
+                                : () => handleCapture(_inboxCaptureCtrl.text),
                             child: Text(
                               isSubmitting
                                   ? 'Triaging...'

@@ -67,6 +67,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   String? _activeStage2InlineEditKey;
   final TextEditingController _stage2InlineEditController =
       TextEditingController();
+  final TextEditingController _inboxCaptureCtrl = TextEditingController();
 
   @override
   void dispose() {
@@ -74,6 +75,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     _progressiveNewFeatCtrl.dispose();
     _inlineTuningEditController.dispose();
     _stage2InlineEditController.dispose();
+    _inboxCaptureCtrl.dispose();
     super.dispose();
   }
 
@@ -315,6 +317,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
   int _computeCheckpointRemainingMinutes(FeatureStateNode cpNode) {
     final hint = _engineHint;
+    final phase = widget.workbench.currentPhase;
     int rem = 0;
     for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
       final bp = TaskHowToBlueprint.resolve(
@@ -323,6 +326,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         checkpointNode: cpNode,
         engineHint: hint,
         unrealCppMode: _unrealCppMode,
+        phase: phase,
       );
       rem += bp.remainingTaskMinutes;
     }

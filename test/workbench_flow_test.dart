@@ -4993,6 +4993,69 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               .any((f) => f.id == createdNowFeatId),
           isTrue,
         );
+
+        // 6. Verify duplicateProject and importProjectFromJson remap feature_inbox_json targetBeatId & targetFeatureId
+        final scheduledFollowup = await provider.submitFeatureIdeaToInbox(
+          'Add grappling hook rope swing momentum upgrade',
+          preferredBeatId: beats.first.id,
+        );
+        expect(scheduledFollowup, isNotNull);
+        provider.updateFeatureInboxItemTriage(
+          scheduledFollowup!.id,
+          timingMode: InboxReleaseTimingMode.futureRelease,
+          targetFuturePhase: ProductionPhase.verticalSlice,
+          integrationMode: InboxIntegrationMode.upgradeExistingFeature,
+          targetFeatureId: createdNowFeatId,
+        );
+        provider.acceptFeatureInboxTriage(scheduledFollowup.id);
+        expect(
+          provider.scheduledInboxUpgradesForFeature(createdNowFeatId),
+          isNotEmpty,
+        );
+
+        final srcProjectId = provider.activeProjectId!;
+        final exportedBundle = provider.exportProjectToJson(srcProjectId);
+        final clonedProjId = provider.duplicateProject(srcProjectId);
+        expect(clonedProjId, isNotNull);
+        expect(clonedProjId, isNot(equals(srcProjectId)));
+
+        final clonedBeats = provider.activeReleaseBeats;
+        final clonedGrappleFeat = provider
+            .featuresForBeat(clonedBeats.first.id)
+            .firstWhere((f) => f.title.toLowerCase().contains('grappling'));
+        expect(clonedGrappleFeat.id, isNot(equals(createdNowFeatId)));
+        final clonedScheduledUpgrades =
+            provider.scheduledInboxUpgradesForFeature(clonedGrappleFeat.id);
+        expect(clonedScheduledUpgrades, isNotEmpty);
+        expect(
+          clonedScheduledUpgrades.first.targetBeatId,
+          equals(clonedBeats.first.id),
+        );
+        expect(
+          clonedScheduledUpgrades.first.targetFeatureId,
+          equals(clonedGrappleFeat.id),
+        );
+
+        // Importing the exported bundle while srcProjectId still exists triggers ID-collision remapping
+        final importedProjId = provider.importProjectFromJson(exportedBundle);
+        expect(importedProjId, isNotNull);
+        expect(importedProjId, isNot(equals(srcProjectId)));
+        final importedBeats = provider.activeReleaseBeats;
+        final importedGrappleFeat = provider
+            .featuresForBeat(importedBeats.first.id)
+            .firstWhere((f) => f.title.toLowerCase().contains('grappling'));
+        expect(importedGrappleFeat.id, isNot(equals(createdNowFeatId)));
+        final importedScheduledUpgrades =
+            provider.scheduledInboxUpgradesForFeature(importedGrappleFeat.id);
+        expect(importedScheduledUpgrades, isNotEmpty);
+        expect(
+          importedScheduledUpgrades.first.targetBeatId,
+          equals(importedBeats.first.id),
+        );
+        expect(
+          importedScheduledUpgrades.first.targetFeatureId,
+          equals(importedGrappleFeat.id),
+        );
       },
     );
   });

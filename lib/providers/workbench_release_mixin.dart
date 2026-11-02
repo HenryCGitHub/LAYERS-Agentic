@@ -3955,18 +3955,33 @@ Return ONLY valid JSON:
   // ===========================================================================
 
   /// All Feature Inbox items persisted on the active project (`feature_inbox_json`).
+  /// Memoized by `(projectDoc.id, raw.hashCode)` to avoid repeated `jsonDecode` calls during UI rebuilds.
   List<FeatureInboxItem> get featureInboxItems {
     final proj = activeProject;
     if (proj == null) return const [];
     final raw = proj.sections['feature_inbox_json'];
-    if (raw == null || raw.trim().isEmpty) return const [];
+    if (raw == null || raw.trim().isEmpty) {
+      _cachedInboxProjectId = proj.id;
+      _cachedInboxRawHash = 0;
+      _cachedInboxItems = const [];
+      return const [];
+    }
+    final rawHash = raw.hashCode;
+    if (_cachedInboxProjectId == proj.id && _cachedInboxRawHash == rawHash) {
+      return _cachedInboxItems;
+    }
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return const [];
-      return decoded
-          .whereType<Map>()
-          .map((m) => FeatureInboxItem.fromJson(Map<String, dynamic>.from(m)))
-          .toList();
+      final parsed = List<FeatureInboxItem>.unmodifiable(
+        decoded
+            .whereType<Map>()
+            .map((m) => FeatureInboxItem.fromJson(Map<String, dynamic>.from(m))),
+      );
+      _cachedInboxProjectId = proj.id;
+      _cachedInboxRawHash = rawHash;
+      _cachedInboxItems = parsed;
+      return parsed;
     } catch (_) {
       return const [];
     }
@@ -3989,9 +4004,11 @@ Return ONLY valid JSON:
 
   /// Returns any scheduled future Inbox upgrades linked to [featureId].
   List<FeatureInboxItem> scheduledInboxUpgradesForFeature(String featureId) {
+    final scheduled = scheduledFeatureInboxItems;
+    if (scheduled.isEmpty) return const [];
     final featDoc = documents[featureId];
     final normTitle = featDoc?.title.toLowerCase().trim() ?? '';
-    return scheduledFeatureInboxItems.where((item) {
+    return scheduled.where((item) {
       if (item.targetFeatureId == featureId) return true;
       if (normTitle.isNotEmpty &&
           item.targetFeatureTitle != null &&
@@ -4005,8 +4022,11 @@ Return ONLY valid JSON:
   void _saveFeatureInboxItems(List<FeatureInboxItem> items) {
     final proj = activeProject;
     if (proj == null) return;
-    proj.sections['feature_inbox_json'] =
-        jsonEncode(items.map((i) => i.toJson()).toList());
+    final encoded = jsonEncode(items.map((i) => i.toJson()).toList());
+    proj.sections['feature_inbox_json'] = encoded;
+    _cachedInboxProjectId = proj.id;
+    _cachedInboxRawHash = encoded.hashCode;
+    _cachedInboxItems = List<FeatureInboxItem>.unmodifiable(items);
     _persistDocument(proj);
     notifyListeners();
   }
@@ -4015,17 +4035,25 @@ Return ONLY valid JSON:
     r'^(?:i\s+want\s+to\s+add|i\s+d\s+like\s+to\s+add|add\s+a|add\s+an|add|implement|create|build|we\s+need\s+a|we\s+need)\s+',
     caseSensitive: false,
   );
+  static final RegExp _inboxClauseSplitRegex = RegExp(
+    r'\b(?:that|which|so\s+that|with|when|where|for)\b',
+    caseSensitive: false,
+  );
+  static final RegExp _inboxTrailingPunctRegex = RegExp(r'[.!?]+$');
+  static final RegExp _inboxWhitespaceRegex = RegExp(r'\s+');
+  static final RegExp _inboxNonAlnumSplitRegex = RegExp(r'[^a-z0-9]+');
 
   String _cleanShortFeatureTitle(String rawIdea) {
     var cleaned = rawIdea
         .trim()
         .replaceFirst(_inboxStripPrefixRegex, '')
-        .split(RegExp(r'\b(?:that|which|so\s+that|with|when|where|for)\b', caseSensitive: false))
+        .split(_inboxClauseSplitRegex)
         .first
-        .replaceAll(RegExp(r'[.!?]+$'), '')
+        .replaceAll(_inboxTrailingPunctRegex, '')
         .trim();
     if (cleaned.isEmpty) cleaned = rawIdea.trim();
-    final words = cleaned.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final words =
+        cleaned.split(_inboxWhitespaceRegex).where((w) => w.isNotEmpty).toList();
     final capped = words.length > 4 ? words.take(4).join(' ') : words.join(' ');
     return capped
         .split(' ')
@@ -4050,7 +4078,7 @@ Return ONLY valid JSON:
     TierDocument? matchedExistingFeature;
 
     final ideaTokens = lowerIdea
-        .split(RegExp(r'[^a-z0-9]+'))
+        .split(_inboxNonAlnumSplitRegex)
         .where((w) => w.length >= 3 && !const {'add', 'the', 'and', 'for', 'with', 'into', 'from', 'player', 'game'}.contains(w))
         .toSet();
 
@@ -4059,7 +4087,7 @@ Return ONLY valid JSON:
       for (final f in featuresForBeat(b.id)) {
         final fTokens = f.title
             .toLowerCase()
-            .split(RegExp(r'[^a-z0-9]+'))
+            .split(_inboxNonAlnumSplitRegex)
             .where((w) => w.length >= 3)
             .toSet();
         final overlap = ideaTokens.intersection(fTokens).length;

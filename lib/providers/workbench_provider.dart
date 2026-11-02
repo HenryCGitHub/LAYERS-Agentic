@@ -148,6 +148,10 @@ class WorkbenchProvider extends ChangeNotifier {
   List<String> get pendingFeatureStepQueue =>
       List.unmodifiable(_pendingFeatureStepQueue);
   bool _isPrewarmingReleaseBlueprint = false;
+
+  String? _cachedInboxProjectId;
+  int? _cachedInboxRawHash;
+  List<FeatureInboxItem> _cachedInboxItems = const [];
   bool get isPrewarmingReleaseBlueprint => _isPrewarmingReleaseBlueprint;
   String? _prewarmedConceptSignature;
   Future<void>? _inFlightPrewarmFuture;

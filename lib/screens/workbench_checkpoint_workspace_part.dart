@@ -204,6 +204,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           checkpointNode: prevCp,
           engineHint: _engineHint,
           unrealCppMode: _unrealCppMode,
+          phase: widget.workbench.currentPhase,
         );
         final prevLastStepIdx =
             prevBp.subSteps.isNotEmpty ? prevBp.subSteps.length - 1 : 0;
@@ -274,6 +275,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
     // Resolve Checkable How-To Blueprints for all parent tasks in this checkpoint
     final engineHint = _engineHint;
+    final currentPhase = widget.workbench.currentPhase;
     final howToBlueprints = <TaskHowToBlueprint>[
       for (int tIdx = 0; tIdx < node.checklist.length; tIdx++)
         TaskHowToBlueprint.resolve(
@@ -282,6 +284,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           checkpointNode: node,
           engineHint: engineHint,
           unrealCppMode: _unrealCppMode,
+          phase: currentPhase,
         ),
     ];
 
@@ -817,6 +820,40 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Tooltip(
+                                  message:
+                                      'Feature Inbox — Capture & Triage Ideas (WHEN · WHERE · HOW)',
+                                  child: InkWell(
+                                    key: ValueKey(
+                                      'halfscreen_open_feature_inbox_btn_${node.id}',
+                                    ),
+                                    onTap: () => _showFeatureInboxModal(
+                                      context,
+                                      preferredBeatId: feat.parentId,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 3,
+                                      ),
+                                      child: Text(
+                                        widget.workbench.activeFeatureInboxCount > 0
+                                            ? '📥 ${widget.workbench.activeFeatureInboxCount}'
+                                            : '📥',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: widget.workbench
+                                                  .pendingFeatureInboxItems
+                                                  .isNotEmpty
+                                              ? accentEmerald
+                                              : textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Tooltip(
                                   message: 'Copy Single-Feature AI Prompt',
                                   child: InkWell(
                                     key: ValueKey(
@@ -1045,7 +1082,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               },
                             ),
                           ),
-                        if (states.length > 1)
+                        if (states.length > 1 ||
+                            widget.workbench
+                                .scheduledInboxUpgradesForFeature(feat.id)
+                                .isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 6, bottom: 2),
                             child: Wrap(
@@ -1092,6 +1132,43 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               : (states[cpIdx].isCompleted
                                                   ? textMuted
                                                   : textSecondary),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                for (final upg in widget.workbench
+                                    .scheduledInboxUpgradesForFeature(feat.id))
+                                  InkWell(
+                                    key: ValueKey(
+                                      'halfscreen_scheduled_inbox_chip_${feat.id}_${upg.id}',
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: () => _showFeatureInboxModal(
+                                      context,
+                                      preferredBeatId: feat.parentId,
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: accentEmerald.withValues(
+                                          alpha: 0.1,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: accentEmerald.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '🗓 Queued · ${upg.targetFuturePhase.shortName}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 8.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: accentEmerald,
                                         ),
                                       ),
                                     ),

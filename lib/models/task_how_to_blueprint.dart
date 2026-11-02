@@ -277,13 +277,23 @@ class TaskHowToBlueprint {
     'with',
   };
 
+  static final RegExp _hasLowercaseRegex = RegExp(r'[a-z]');
+  static final RegExp _inOrderToPrefixRegex = RegExp(
+    r'^In order to [^,]+,\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _verifyPrefixRegex = RegExp(
+    r'^(?:Confirm\s+that|Verify\s+that|Ensure\s+that|Make\s+sure\s+that)\s+',
+    caseSensitive: false,
+  );
+
   /// Formats a step title into Telegraphic Title Case (e.g. `"CREATE PLAYER CHARACTER FOUNDATION"`
   /// -> `"Create Player Character Foundation"`), preserving engine asset identifiers and acronyms.
   static String formatTelegraphicStepTitle(String raw) {
     final stripped = raw.trim().replaceFirst(_stepHeaderPrefixRegex, '').trim();
     if (stripped.isEmpty) return raw.trim();
     // If it already contains lowercase letters (already Title-Cased or mixed-case), return as-is
-    if (stripped.contains(RegExp(r'[a-z]'))) {
+    if (stripped.contains(_hasLowercaseRegex)) {
       return stripped;
     }
     final words = stripped.split(_whitespaceRegex);
@@ -328,12 +338,7 @@ class TaskHowToBlueprint {
   static String formatConciseStepInstruction(String raw) {
     var clean = raw.trim();
     if (clean.isEmpty) return clean;
-    clean = clean
-        .replaceFirst(
-          RegExp(r'^In order to [^,]+,\s*', caseSensitive: false),
-          '',
-        )
-        .trim();
+    clean = clean.replaceFirst(_inOrderToPrefixRegex, '').trim();
     if (clean.isNotEmpty) {
       clean = clean[0].toUpperCase() + clean.substring(1);
     }
@@ -344,15 +349,7 @@ class TaskHowToBlueprint {
   static String formatConciseVerifySentence(String raw) {
     var clean = raw.trim();
     if (clean.isEmpty) return clean;
-    clean = clean
-        .replaceFirst(
-          RegExp(
-            r'^(?:Confirm\s+that|Verify\s+that|Ensure\s+that|Make\s+sure\s+that)\s+',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .trim();
+    clean = clean.replaceFirst(_verifyPrefixRegex, '').trim();
     if (clean.isNotEmpty) {
       clean = clean[0].toUpperCase() + clean.substring(1);
     }

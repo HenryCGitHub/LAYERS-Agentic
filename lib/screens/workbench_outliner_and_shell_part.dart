@@ -162,6 +162,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       checkpointNode: cpNode,
       engineHint: widget.workbench.conceptDraft?.techSpec.join(' '),
       unrealCppMode: _unrealCppMode,
+      phase: widget.workbench.currentPhase,
     );
     widget.workbench.updateFeatureStates(feat.id, states);
     widget.workbench.synthesizeFeatureHowToStepsWithAi(
@@ -472,6 +473,85 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               ),
                             );
                           }
+                        }
+
+                        if (builtReleases.length > 1 ||
+                            widget.workbench.releaseViewFilter != 'active') {
+                          final currentFilter =
+                              widget.workbench.releaseViewFilter;
+                          menuItems.add(const PopupMenuDivider());
+                          menuItems.add(
+                            PopupMenuItem<String>(
+                              value: 'active',
+                              height: 32,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '🎯 Active Milestone Only ($activeVer)',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        fontWeight: currentFilter == 'active'
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: currentFilter == 'active'
+                                            ? textPrimary
+                                            : textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (currentFilter == 'active')
+                                    Text(
+                                      '✓',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                          menuItems.add(
+                            PopupMenuItem<String>(
+                              value: 'all',
+                              height: 32,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '🌐 All Live Game Features (Include STABLE ✓)',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        fontWeight: currentFilter == 'all'
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: currentFilter == 'all'
+                                            ? textPrimary
+                                            : textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (currentFilter == 'all')
+                                    Text(
+                                      '✓',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
                         }
 
                         if (archivedFeats.isNotEmpty) {
@@ -1475,6 +1555,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     int totalDoneSteps = 0;
     int totalStepsCount = 0;
 
+    final currentPhase = widget.workbench.currentPhase;
+    final scheduledUpgrades =
+        widget.workbench.scheduledInboxUpgradesForFeature(feat.id);
+
     for (int tIdx = 0; tIdx < node.checklist.length; tIdx++) {
       final bp = tIdx < howToBlueprints.length
           ? howToBlueprints[tIdx]
@@ -1484,6 +1568,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               checkpointNode: node,
               engineHint: engineHint,
               unrealCppMode: _unrealCppMode,
+              phase: currentPhase,
             );
       totalStepsCount += bp.subSteps.length;
       totalDoneSteps += bp.subSteps.where((s) => s.subtask.completed).length;
@@ -1560,7 +1645,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               ],
             ),
           ),
-          if (states.length == 1)
+          if (states.length == 1 && scheduledUpgrades.isEmpty)
             Offstage(
               offstage: true,
               child: InkWell(
@@ -1573,7 +1658,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 child: const SizedBox.shrink(),
               ),
             )
-          else if (states.length > 1)
+          else if (states.length > 1 || scheduledUpgrades.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -1620,6 +1705,35 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             color: cpIdx == checkpointIndex
                                 ? textPrimary
                                 : textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  for (final upg in scheduledUpgrades)
+                    InkWell(
+                      key: ValueKey(
+                        'outline_scheduled_inbox_chip_${feat.id}_${upg.id}',
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () => _showFeatureInboxModal(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accentEmerald.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: accentEmerald.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          '🗓 Queued · ${upg.targetFuturePhase.shortName}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: accentEmerald,
                           ),
                         ),
                       ),
