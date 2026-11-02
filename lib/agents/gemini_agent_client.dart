@@ -120,6 +120,9 @@ RULES:
     String preferredModel = 'gemini-flash-latest',
     String thinkingLevel = 'HIGH',
     double temperature = 0.5,
+    List<Map<String, dynamic>>? functionDeclarations,
+    String functionCallingMode = 'ANY',
+    Map<String, dynamic>? responseSchema,
   }) async {
     const resolvedModel = 'gemini-flash-latest';
     if (testMockResponder != null) {
@@ -136,6 +139,8 @@ RULES:
     const modelsToTry = <String>[resolvedModel];
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
+    final hasTools =
+        functionDeclarations != null && functionDeclarations.isNotEmpty;
     final contentsPayload = [
       {
         'parts': [
@@ -153,7 +158,9 @@ RULES:
           'temperature': temperature,
           if (_cachedModelOutputTokenLimit != null)
             'maxOutputTokens': _cachedModelOutputTokenLimit,
-          'responseMimeType': 'application/json',
+          if (!hasTools) 'responseMimeType': 'application/json',
+          if (!hasTools && responseSchema != null)
+            'responseSchema': responseSchema,
         };
         if (normalizedThinking.isNotEmpty) {
           genConfig['thinkingConfig'] = _buildNativeThinkingConfig(
@@ -161,6 +168,19 @@ RULES:
             useThinkingLevelEnum: _cachedSupportsThinkingLevel,
           );
         }
+
+        final requestPayload = <String, dynamic>{
+          'contents': contentsPayload,
+          'generationConfig': genConfig,
+          if (hasTools)
+            'tools': [
+              {'functionDeclarations': functionDeclarations},
+            ],
+          if (hasTools)
+            'toolConfig': {
+              'functionCallingConfig': {'mode': functionCallingMode},
+            },
+        };
 
         final isHeavyPlanningModel = model.contains('pro');
         final timeoutDuration =
@@ -170,10 +190,7 @@ RULES:
             .post(
               uri,
               headers: _jsonHeaders,
-              body: jsonEncode({
-                'contents': contentsPayload,
-                'generationConfig': genConfig,
-              }),
+              body: jsonEncode(requestPayload),
             )
             .timeout(timeoutDuration);
 
@@ -189,10 +206,7 @@ RULES:
               .post(
                 uri,
                 headers: _jsonHeaders,
-                body: jsonEncode({
-                  'contents': contentsPayload,
-                  'generationConfig': genConfig,
-                }),
+                body: jsonEncode(requestPayload),
               )
               .timeout(timeoutDuration);
         }
@@ -206,6 +220,29 @@ RULES:
                 candidates.first['content'] as Map<String, dynamic>?;
             final parts = content?['parts'] as List?;
             if (parts != null && parts.isNotEmpty) {
+              final toolCalls = <Map<String, dynamic>>[];
+              for (final part in parts) {
+                if (part is Map && part['functionCall'] is Map) {
+                  final fc =
+                      Map<String, dynamic>.from(part['functionCall'] as Map);
+                  final fnName = (fc['name'] ?? '').toString().trim();
+                  final rawArgs = fc['args'];
+                  final argsMap = rawArgs is Map
+                      ? Map<String, dynamic>.from(rawArgs)
+                      : <String, dynamic>{};
+                  toolCalls.add({
+                    'name': fnName,
+                    'args': argsMap,
+                  });
+                }
+              }
+              if (toolCalls.isNotEmpty) {
+                final primaryArgs =
+                    Map<String, dynamic>.from(toolCalls.first['args'] as Map);
+                primaryArgs['_toolName'] = toolCalls.first['name'];
+                primaryArgs['_toolCalls'] = toolCalls;
+                return primaryArgs;
+              }
               for (final part in parts.reversed) {
                 if (part is Map && part['thought'] != true) {
                   final rawText = part['text']?.toString() ?? '';

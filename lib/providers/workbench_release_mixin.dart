@@ -2239,10 +2239,21 @@ Return ONLY a JSON object:
           }(),
       ].join(' | ');
 
+      final specCorpusLower = '$gameSpec $techSpec'.toLowerCase();
+      final is2dFix = specCorpusLower.contains('2d') ||
+          specCorpusLower.contains('sprite') ||
+          specCorpusLower.contains('pixel') ||
+          specCorpusLower.contains('tilemap');
+      final dimensionRule = is2dFix
+          ? 'Dimension Rule: 2D ONLY (use CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
+          : (specLine.isNotEmpty
+              ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
+              : '');
+
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize a concrete 3-step engine fix:
-${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
+${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}$dimensionRule${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
@@ -2394,10 +2405,21 @@ Return ONLY a JSON object with 3 concrete fix steps:
             }(),
       ].join(' | ');
 
+      final specCorpusLower = '$gameSpec $techSpec'.toLowerCase();
+      final is2dTailor = specCorpusLower.contains('2d') ||
+          specCorpusLower.contains('sprite') ||
+          specCorpusLower.contains('pixel') ||
+          specCorpusLower.contains('tilemap');
+      final dimensionRule = is2dTailor
+          ? 'Dimension Rule: 2D ONLY (use CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
+          : (specLine.isNotEmpty
+              ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
+              : '');
+
       final prompt = '''
 You are a senior game engine programmer assisting with a concrete implementation task.
 Engine: $engineLabel
-${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
+${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}${dimensionRule}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
 Playtest Gate: "${cpNode.playtestCondition}"
 Target Task ($taskNum of ${cpNode.checklist.length}): "${parentTask.text}"
 ${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
@@ -2612,6 +2634,87 @@ Return ONLY a JSON object with this schema:
   static final RegExp _ledgerAssetTokenRegex = RegExp(
     r'\b(?:BP_[A-Za-z0-9_]+|IA_[A-Za-z0-9_]+|IMC_[A-Za-z0-9_]+|WBP_[A-Za-z0-9_]+|[A-Z][A-Za-z0-9_]+(?:Character|Controller|Pawn|Actor|Component|Spawner|Projectile|Weapon|Manager)\b|[A-Za-z0-9_]+\.(?:cs|gd|tscn|h|cpp))\b',
   );
+
+  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 3-Area How-To synthesis (`synthesizeFeatureHowToStepsWithAi`).
+  /// Enforces a single shared `primarySharedScriptOrScene` across all tasks and typed 3-Area sub-steps.
+  static const Map<String, dynamic> commitFeatureHowToStepsTool = {
+    'name': 'commit_feature_howto_steps',
+    'description':
+        'Commits the concrete, engine-specific 3-Area How-To sub-steps (Hierarchy, Inspector, Code, Verify) for every task in the active Feature checkpoint on one shared asset.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['primarySharedScriptOrScene', 'tasks'],
+      'properties': {
+        'primarySharedScriptOrScene': {
+          'type': 'STRING',
+          'description':
+              'The single shared Actor Blueprint, Prefab/MonoBehaviour, or Godot Scene/Script used across Task 1..N (e.g., "BP_PlayerCharacter", "PlayerController.cs", or "player.tscn / player.gd").',
+        },
+        'tasks': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['taskIndex', 'subSteps'],
+            'properties': {
+              'taskIndex': {'type': 'INTEGER'},
+              'subSteps': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': [
+                    'title',
+                    'stepPath',
+                    'instruction',
+                    'area1Hierarchy',
+                    'area2Inspector',
+                    'codeFormula',
+                    'verifyResult',
+                  ],
+                  'properties': {
+                    'title': {
+                      'type': 'STRING',
+                      'description':
+                          'STEP X.Y · Short Title-Case Telegraphic Step Title (3-5 words)',
+                    },
+                    'stepPath': {
+                      'type': 'STRING',
+                      'description':
+                          'Exact editor panel/menu/inspector/script path breadcrumb',
+                    },
+                    'instruction': {
+                      'type': 'STRING',
+                      'description':
+                          '1 concise sentence explaining what to click or type in the engine',
+                    },
+                    'area1Hierarchy': {
+                      'type': 'STRING',
+                      'description':
+                          'Optional Scene/Component hierarchy tree using ├─ / └─ when adding or modifying nodes/components (or "" if pure code step)',
+                    },
+                    'area2Inspector': {
+                      'type': 'STRING',
+                      'description':
+                          'Inspector/Details bindings formatted as "Property: Value | Property2: Value2" using exact tuning parameter names',
+                    },
+                    'codeFormula': {
+                      'type': 'STRING',
+                      'description':
+                          '2-6 lines of concrete engine code or node graph wiring using exact tuning variables and guard checks',
+                    },
+                    'verifyResult': {
+                      'type': 'STRING',
+                      'description':
+                          '1 concise observable verification check in the editor or Play mode',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
 
   /// Extracts a compact Cumulative Project Ledger entry for an already-synthesized feature
   /// so subsequent features reuse exact Actor/Scene/Script names, tuning variables, and guards.
@@ -3025,6 +3128,7 @@ Return ONLY valid JSON:
         preferredModel: _conversationModel,
         thinkingLevel: _thinkingLevel,
         temperature: 0.25,
+        functionDeclarations: const [commitFeatureHowToStepsTool],
       );
       final rawTasks = json?['tasks'];
       if (rawTasks is! List || rawTasks.isEmpty) return;

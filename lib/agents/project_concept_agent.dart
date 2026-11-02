@@ -156,6 +156,187 @@ class ProjectConceptAgent {
     return cards;
   }
 
+  /// Native Gemini Tool Declaration for `startConceptInterview` (`commit_concept_blueprint`).
+  /// Enforces the 4-cell `gameSpec`, concrete `engine` enum in `techSpec`, `pillarName: playerFeeling`
+  /// pairs, and `priorityX over overAlternativeY` rules at the schema level.
+  static const Map<String, dynamic> commitConceptBlueprintTool = {
+    'name': 'commit_concept_blueprint',
+    'description':
+        'Commits the structured 8-section Stage 1 Concept Blueprint for the game prototype.',
+    'parameters': {
+      'type': 'OBJECT',
+      'properties': {
+        'title': {
+          'type': 'STRING',
+          'description': 'Short 2-3 word plain game title.',
+        },
+        'goal': {
+          'type': 'STRING',
+          'description':
+              'Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3].',
+        },
+        'gameSpec': {
+          'type': 'OBJECT',
+          'properties': {
+            'cameraView': {'type': 'STRING'},
+            'controls': {'type': 'STRING'},
+            'playerMode': {'type': 'STRING'},
+            'arenaStructure': {'type': 'STRING'},
+          },
+          'required': [
+            'cameraView',
+            'controls',
+            'playerMode',
+            'arenaStructure',
+          ],
+        },
+        'techSpec': {
+          'type': 'OBJECT',
+          'properties': {
+            'engine': {
+              'type': 'STRING',
+              'enum': [
+                'Godot 4 (GDScript)',
+                'Unity 6 (C#)',
+                'Unreal Engine 5 (Blueprints / C++)',
+              ],
+            },
+            'platform': {'type': 'STRING'},
+            'assetPipeline': {'type': 'STRING'},
+            'saveMode': {'type': 'STRING'},
+          },
+          'required': ['engine', 'platform', 'assetPipeline', 'saveMode'],
+        },
+        'designPillars': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'STRING',
+            'description':
+                '2-3 Word Pillar Name: Concise 1-sentence player feeling (never a feature or genre).',
+          },
+        },
+        'tradeOffs': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'STRING',
+            'description':
+                'Explicit X over Y boundary rule (e.g. "Immediate arcade movement over realistic physics inertia").',
+          },
+        },
+        'coreLoopBeats': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'STRING',
+            'description':
+                'Beat Name: Concise 1-sentence observable player action and system response.',
+          },
+        },
+        'exclusions': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'STRING',
+            'description': 'No 2-4 word prototype cut.',
+          },
+        },
+        'doneWhen': {
+          'type': 'STRING',
+          'description':
+              'Concise 1-sentence playtest completion condition without FPS targets.',
+        },
+        'releaseTrainTitles': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+      },
+      'required': [
+        'title',
+        'goal',
+        'gameSpec',
+        'techSpec',
+        'designPillars',
+        'tradeOffs',
+        'coreLoopBeats',
+        'exclusions',
+        'doneWhen',
+      ],
+    },
+  };
+
+  /// Native Gemini Tool Declaration for `sendConceptChatTurn` (`update_concept_section`).
+  static const Map<String, dynamic> updateConceptSectionTool = {
+    'name': 'update_concept_section',
+    'description':
+        'Updates only the modified section(s) of the Live Concept Blueprint in response to the developer.',
+    'parameters': {
+      'type': 'OBJECT',
+      'properties': {
+        'reply': {
+          'type': 'STRING',
+          'description': '1-sentence confirmation of what changed.',
+        },
+        'updatedFields': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'title': {'type': 'STRING'},
+        'goal': {'type': 'STRING'},
+        'goalOptions': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'gameSpec': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+          'description':
+              '4 cells: ["Camera View", "Controls", "Player Mode", "Arena Structure"].',
+        },
+        'techSpec': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+          'description':
+              '4 cells: ["Godot 4 (GDScript) | Unity 6 (C#) | Unreal Engine 5 (Blueprints / C++)", "Platform", "Asset Pipeline", "Network / Save"].',
+        },
+        'designPillars': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'tradeOffs': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'coreLoopBeats': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'exclusions': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'doneWhen': {'type': 'STRING'},
+        'releaseTrainTitles': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+      },
+      'required': ['reply', 'updatedFields'],
+    },
+  };
+
+  static List<String> _parseSpecCells(
+    dynamic raw,
+    List<String> keysOrder,
+  ) {
+    if (raw is Map) {
+      final cells = <String>[];
+      for (final k in keysOrder) {
+        final v = (raw[k] ?? '').toString().trim();
+        if (v.isNotEmpty) cells.add(v);
+      }
+      if (cells.isNotEmpty) return cells;
+    }
+    return _parseStringList(raw);
+  }
+
   /// Step 1B: Generates the initial 9-section Concept Blueprint from a spark idea via Gemini AI.
   /// Returns `null` if offline or if Gemini AI cannot be reached.
   static Future<ProjectConceptBlueprint?> startConceptInterview(
@@ -202,13 +383,11 @@ $promptLead
 ${GeminiAgentClient.compactStyleRules}
 - Decompose `coreLoopBeats` into 4 to 6 sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:
   1. Beat 1 MUST be the immediate in-game player control & primary action (e.g. Walking & Tank Inspection, Grapple/Dash Traversal, Vehicle Handling, or Grid Placement—never a pre-match menu).
-  2. Middle Beats cover the core simulation/action and reactive challenge (e.g. chemical drift & plant stress, active enemy/hazard pressure, or resource processing) in the exact chronological sequence the player experiences them.
+  2. Middle Beats cover the core simulation/action and reactive challenge in the exact chronological sequence the player experiences them.
   3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.
-- Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
-- In `techSpec[0]`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
-- PRE-OUTPUT THINKING CHECK: (1) `designPillars` = 3 player feelings, never features/genres; (2) `tradeOffs` = 3 explicit "X over Y" boundaries; (3) `coreLoopBeats` = 4–6 chronological beats starting with in-game control; (4) `doneWhen` = observable loop completion without FPS targets.
+- In `techSpec`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
 
-Return ONLY valid JSON:
+Call `commit_concept_blueprint` (or return valid JSON):
 {
   "title": "Short 2-3 word title",
   "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
@@ -229,6 +408,7 @@ Return ONLY valid JSON:
       preferredModel: modelName,
       thinkingLevel: thinkingLevel,
       temperature: 0.55,
+      functionDeclarations: const [commitConceptBlueprintTool],
     );
 
     if (json == null) return null;
@@ -237,9 +417,15 @@ Return ONLY valid JSON:
     final resolvedTitle = aiTitle.isNotEmpty ? aiTitle : cleanSpark;
     final parsedSectionOptions = _parseSectionOptions(json['sectionOptions']);
     final releaseTitles = _parseStringList(json['releaseTrainTitles']);
-    final parsedGameSpec = _parseStringList(json['gameSpec']);
+    final parsedGameSpec = _parseSpecCells(
+      json['gameSpec'],
+      const ['cameraView', 'controls', 'playerMode', 'arenaStructure'],
+    );
     final parsedTechSpec = _normalizeTechSpecEngine(
-      _parseStringList(json['techSpec']),
+      _parseSpecCells(
+        json['techSpec'],
+        const ['engine', 'platform', 'assetPipeline', 'saveMode'],
+      ),
       parsedGameSpec,
       cleanSpark,
     );
@@ -318,10 +504,9 @@ Developer Direction: "$cleanMsg"
 
 ${GeminiAgentClient.compactStyleRules}
 - Synthesize and rewrite the affected field(s) into natural, polished game-dev English. NEVER copy-paste the developer's raw phrasing ("instead of...", "but in a...") verbatim.
-- Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
-- DELTA-ONLY OUTPUT: Include ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (valid keys: `title`, `goal`, `goalOptions`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Omit all unchanged keys! If `goal` or `title` changed, also include 3 updated `goalOptions`.$sectionScopeRule
+- DELTA-ONLY OUTPUT: Call `update_concept_section` (or return JSON) including ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (valid keys: `title`, `goal`, `goalOptions`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Omit all unchanged keys! If `goal` or `title` changed, also include 3 updated `goalOptions`.$sectionScopeRule
 
-Return ONLY valid JSON (example when Goal changed):
+Call `update_concept_section` (or return ONLY valid JSON):
 {
   "reply": "1-sentence confirmation of what changed",
   "updatedFields": ["Goal"],
@@ -336,12 +521,13 @@ Return ONLY valid JSON (example when Goal changed):
       preferredModel: conversationModel,
       thinkingLevel: thinkingLevel,
       temperature: 0.45,
+      functionDeclarations: const [updateConceptSectionTool],
     );
 
     if (json == null) return false;
 
     List<String>? cleanList(dynamic raw) {
-      if (raw is! List) return null;
+      if (raw is! List && raw is! Map) return null;
       final list = _parseStringList(raw);
       return list.isNotEmpty ? list : null;
     }
@@ -352,13 +538,19 @@ Return ONLY valid JSON (example when Goal changed):
       draft.title = newTitle;
       updated.add('Title');
     }
-    final game = cleanList(json['gameSpec']);
-    if (game != null && game.length >= 2) {
+    final game = _parseSpecCells(
+      json['gameSpec'],
+      const ['cameraView', 'controls', 'playerMode', 'arenaStructure'],
+    );
+    if (game.length >= 2) {
       draft.gameSpec = game;
       updated.add('Game Spec');
     }
-    final tech = cleanList(json['techSpec']);
-    if (tech != null && tech.length >= 2) {
+    final tech = _parseSpecCells(
+      json['techSpec'],
+      const ['engine', 'platform', 'assetPipeline', 'saveMode'],
+    );
+    if (tech.length >= 2) {
       draft.techSpec = _normalizeTechSpecEngine(
         tech,
         draft.gameSpec,

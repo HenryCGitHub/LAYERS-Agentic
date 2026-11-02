@@ -37,6 +37,247 @@ class ReleasePlannerAgent {
         .toList();
   }
 
+  static List<String> _extractCheckpointTasksFromMap(Map cMap) {
+    final t1 = (cMap['task1_entityAndCollisionFoundation'] ?? '').toString().trim();
+    final t2 = (cMap['task2_coreActionAndMath'] ?? '').toString().trim();
+    final t3 = (cMap['task3_feedbackAndBoundaryGuard'] ?? '').toString().trim();
+    final extra = _parseStringList(cMap['additionalTasks']);
+    final explicitTasks = <String>[
+      if (t1.isNotEmpty) t1,
+      if (t2.isNotEmpty) t2,
+      if (t3.isNotEmpty) t3,
+      ...extra,
+    ];
+    if (explicitTasks.isNotEmpty) return explicitTasks;
+    return _parseStringList(cMap['tasks']);
+  }
+
+  /// Native Gemini Tool Declaration for `planRelease` (`commit_release_plan`).
+  /// Enforces Foundation-First task roles (`task1_entityAndCollisionFoundation`,
+  /// `task2_coreActionAndMath`, `task3_feedbackAndBoundaryGuard` + optional `additionalTasks`),
+  /// non-empty `tuningParams`, and `edgeCases` at the schema level.
+  static const Map<String, dynamic> commitReleasePlanTool = {
+    'name': 'commit_release_plan',
+    'description':
+        'Commits the structured Epic and Feature Release Plan Blueprint.',
+    'parameters': {
+      'type': 'OBJECT',
+      'properties': {
+        'releasePhase': {'type': 'STRING'},
+        'releaseTitle': {'type': 'STRING'},
+        'builtSoFar': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'missingGaps': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'agentReasoning': {'type': 'STRING'},
+        'questions': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'properties': {
+              'id': {'type': 'STRING'},
+              'question': {'type': 'STRING'},
+              'options': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+            },
+            'required': ['question', 'options'],
+          },
+        },
+        'goal': {'type': 'STRING'},
+        'doneWhen': {'type': 'STRING'},
+        'explicitExclusions': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'beats': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'properties': {
+              'id': {'type': 'STRING'},
+              'title': {'type': 'STRING'},
+              'goal': {'type': 'STRING'},
+              'doneWhen': {'type': 'STRING'},
+              'features': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'id': {'type': 'STRING'},
+                    'title': {
+                      'type': 'STRING',
+                      'description':
+                          '2-3 plain game-dev words naming 1 observable action or object.',
+                    },
+                    'goal': {'type': 'STRING'},
+                    'doneWhen': {'type': 'STRING'},
+                    'estimatedHours': {'type': 'INTEGER'},
+                    'lifecycle': {
+                      'type': 'STRING',
+                      'enum': ['new', 'upgrade', 'superseded'],
+                    },
+                    'inScope': {
+                      'type': 'ARRAY',
+                      'items': {'type': 'STRING'},
+                    },
+                    'tuningParams': {
+                      'type': 'ARRAY',
+                      'items': {
+                        'type': 'STRING',
+                        'description': 'paramName: numericValue unit',
+                      },
+                    },
+                    'edgeCases': {
+                      'type': 'ARRAY',
+                      'items': {'type': 'STRING'},
+                    },
+                    'checkpoints': {
+                      'type': 'ARRAY',
+                      'items': {
+                        'type': 'OBJECT',
+                        'properties': {
+                          'title': {'type': 'STRING'},
+                          'playtestCriteria': {'type': 'STRING'},
+                          'task1_entityAndCollisionFoundation': {
+                            'type': 'STRING',
+                            'description':
+                                'Task 1: Entity/Scene/Collision foundation in the level (e.g. "Capsule Body & Camera (2h)"). Never Input/Keybind.',
+                          },
+                          'task2_coreActionAndMath': {
+                            'type': 'STRING',
+                            'description':
+                                'Task 2: Core interaction, movement, or simulation math on Task 1 asset (e.g. "WASD Velocity & Look (2h)").',
+                          },
+                          'task3_feedbackAndBoundaryGuard': {
+                            'type': 'STRING',
+                            'description':
+                                'Task 3: Observable cue & boundary clamp on Task 1 asset (e.g. "Wall Slide & Pitch Clamp (1h)").',
+                          },
+                          'additionalTasks': {
+                            'type': 'ARRAY',
+                            'items': {'type': 'STRING'},
+                          },
+                          'tasks': {
+                            'type': 'ARRAY',
+                            'items': {'type': 'STRING'},
+                          },
+                        },
+                        'required': ['title', 'playtestCriteria'],
+                      },
+                    },
+                  },
+                  'required': [
+                    'id',
+                    'title',
+                    'goal',
+                    'doneWhen',
+                    'estimatedHours',
+                    'lifecycle',
+                    'tuningParams',
+                    'edgeCases',
+                    'checkpoints',
+                  ],
+                },
+              },
+            },
+            'required': ['id', 'title', 'goal', 'doneWhen', 'features'],
+          },
+        },
+      },
+      'required': ['releaseTitle', 'goal', 'doneWhen', 'beats'],
+    },
+  };
+
+  /// Native Gemini Tool Declaration for `sendReleasePlanChatTurn` (`mutate_release_plan`).
+  static const Map<String, dynamic> mutateReleasePlanTool = {
+    'name': 'mutate_release_plan',
+    'description':
+        'Applies delta updates to the Release Plan Blueprint in response to a developer request or strategic focus selection.',
+    'parameters': {
+      'type': 'OBJECT',
+      'properties': {
+        'reply': {'type': 'STRING'},
+        'goal': {'type': 'STRING'},
+        'doneWhen': {'type': 'STRING'},
+        'explicitExclusions': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'beats': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'properties': {
+              'id': {'type': 'STRING'},
+              'title': {'type': 'STRING'},
+              'goal': {'type': 'STRING'},
+              'doneWhen': {'type': 'STRING'},
+              'features': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'id': {'type': 'STRING'},
+                    'title': {'type': 'STRING'},
+                    'goal': {'type': 'STRING'},
+                    'doneWhen': {'type': 'STRING'},
+                    'estimatedHours': {'type': 'INTEGER'},
+                    'lifecycle': {
+                      'type': 'STRING',
+                      'enum': ['new', 'upgrade', 'stable', 'superseded'],
+                    },
+                    'inScope': {
+                      'type': 'ARRAY',
+                      'items': {'type': 'STRING'},
+                    },
+                    'tuningParams': {
+                      'type': 'ARRAY',
+                      'items': {'type': 'STRING'},
+                    },
+                    'edgeCases': {
+                      'type': 'ARRAY',
+                      'items': {'type': 'STRING'},
+                    },
+                    'checkpoints': {
+                      'type': 'ARRAY',
+                      'items': {
+                        'type': 'OBJECT',
+                        'properties': {
+                          'title': {'type': 'STRING'},
+                          'playtestCriteria': {'type': 'STRING'},
+                          'task1_entityAndCollisionFoundation': {
+                            'type': 'STRING',
+                          },
+                          'task2_coreActionAndMath': {'type': 'STRING'},
+                          'task3_feedbackAndBoundaryGuard': {'type': 'STRING'},
+                          'additionalTasks': {
+                            'type': 'ARRAY',
+                            'items': {'type': 'STRING'},
+                          },
+                          'tasks': {
+                            'type': 'ARRAY',
+                            'items': {'type': 'STRING'},
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      'required': ['reply', 'beats'],
+    },
+  };
+
   static String extractReleaseVersionTag(String releaseTitle) {
     final match = _releaseVersionRegex.firstMatch(releaseTitle);
     if (match != null) {
@@ -226,9 +467,7 @@ class ReleasePlannerAgent {
           '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
     } else {
       phaseInstruction =
-          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into 4 to 5 major Epics required to build ${releaseDoc.title} end-to-end across the Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n'
-          '- GREYBOX LEVEL / ARENA BLOCKOUT FIRST IN EPIC 1: Epic 1 (`beat_1`) MUST start at Feature #1 (`feat_1_1`) with a dedicated Greybox Environment / Arena Blockout Feature matching `02 Game Spec` and `08 Done When` so floor and wall colliders exist BEFORE Character/Vehicle Movement (`feat_1_2`) and Primary Action (`feat_1_3`).\n'
-          '- COHESIVE SINGULAR-FOCUSED FEATURES (2–3 FEATURES PER EPIC): Break each Epic into 2 to 3 cohesive Playable Features where each Feature owns one distinct gameplay mechanic or interactive object (never bundle two separate mechanics like "Target Spawner + Weapon Fire" or "Shop Buy + Equipment Mount" into one Feature).';
+          '- PHASE 1 PLAYABLE PROTOTYPE (`v0.1` GREYBOX CORE LOOP): Organize `beats` into 4 to 5 major Epics required to build ${releaseDoc.title} end-to-end across the Concept Blueprint (`01 Goal` through `08 Done When`), with 2 to 3 singular-focused greybox Features per Epic.';
     }
 
     final targetPhase = switch (releasePhase) {
@@ -430,6 +669,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       preferredModel: effectiveModel,
       thinkingLevel: thinkingLevel == 'LOW' ? 'HIGH' : thinkingLevel,
       temperature: 0.35,
+      functionDeclarations: const [commitReleasePlanTool],
     );
 
     if (json == null) return null;
@@ -796,7 +1036,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                 .trim();
             final cpVer = versionTag;
             final cpTasks = normalizeFoundationFirstTasks(
-              _parseStringList(cMap['tasks']),
+              _extractCheckpointTasksFromMap(cMap),
               featureTitle: fTitle,
               beatTitle: bTitle,
               isFirstFeatureOfRelease: bIdx == 0 && fIdx == 0 && cIdx == 0,
@@ -1749,6 +1989,7 @@ Return ONLY valid JSON:
       preferredModel: modelName,
       thinkingLevel: thinkingLevel,
       temperature: 0.35,
+      functionDeclarations: const [mutateReleasePlanTool],
     );
 
     if (json == null) return false;

@@ -6222,6 +6222,28 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           ),
         );
         expect(capturedRelChatPrompt, contains('Unity 6 (C#)'));
+
+        // Verify Native Gemini Function Calling tool schemas & typed argument parsers
+        expect(
+          ProjectConceptAgent.commitConceptBlueprintTool['name'],
+          equals('commit_concept_blueprint'),
+        );
+        expect(
+          ProjectConceptAgent.updateConceptSectionTool['name'],
+          equals('update_concept_section'),
+        );
+        expect(
+          ReleasePlannerAgent.commitReleasePlanTool['name'],
+          equals('commit_release_plan'),
+        );
+        expect(
+          ReleasePlannerAgent.mutateReleasePlanTool['name'],
+          equals('mutate_release_plan'),
+        );
+        expect(
+          WorkbenchReleaseMixin.commitFeatureHowToStepsTool['name'],
+          equals('commit_feature_howto_steps'),
+        );
       },
     );
   });
