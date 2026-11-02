@@ -537,13 +537,10 @@ extension _ShellDialogsExt on WorkbenchShell {
                       for (final m in WorkbenchProvider.availableConversationModels)
                         _buildModelOptionTile(
                           modelId: m,
-                          subtitle: m == 'gemini-flash-latest'
-                              ? 'Default — Latest Gemini Flash for fast Concept Blueprints'
-                              : m == 'gemini-3.8-flash'
-                                  ? 'Gemini 3.8 Flash'
-                                  : 'Ultra-lightweight Flash-Lite',
+                          subtitle:
+                              'Always Latest — Gemini Flash Latest with Full Thinking Budget (24,576 tokens)',
                           isSelected: selectedConversationModel == m,
-                          isRecommended: m == 'gemini-flash-latest',
+                          isRecommended: true,
                           onTap: () => setModalState(() => selectedConversationModel = m),
                         ),
                       const SizedBox(height: 14),
@@ -560,13 +557,10 @@ extension _ShellDialogsExt on WorkbenchShell {
                       for (final m in WorkbenchProvider.availablePlanningModels)
                         _buildModelOptionTile(
                           modelId: m,
-                          subtitle: m == 'gemini-flash-latest'
-                              ? 'Default — Gemini Flash Latest with HIGH thinking (2048 token reasoning)'
-                              : m == 'gemini-3.8-flash'
-                                  ? 'Gemini 3.8 Flash'
-                                  : 'Ultra-lightweight Flash-Lite',
+                          subtitle:
+                              'Always Latest — Gemini Flash Latest with Full Thinking Budget (24,576 tokens)',
                           isSelected: selectedPlanningModel == m,
-                          isRecommended: m == 'gemini-flash-latest',
+                          isRecommended: true,
                           onTap: () => setModalState(() => selectedPlanningModel = m),
                         ),
                       const SizedBox(height: 14),

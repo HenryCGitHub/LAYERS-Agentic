@@ -162,7 +162,7 @@ class ProjectConceptAgent {
     String rawSpark, {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'MEDIUM',
+    String thinkingLevel = 'HIGH',
   }) async {
     final cleanSpark = ProjectConceptBlueprint.normalizeCommonTypos(
       rawSpark.trim(),
@@ -197,6 +197,7 @@ ${GeminiAgentClient.compactStyleRules}
   3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.
 - Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
 - In `techSpec[0]`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
+- PRE-OUTPUT THINKING CHECK: (1) `designPillars` = 3 player feelings, never features/genres; (2) `tradeOffs` = 3 explicit "X over Y" boundaries; (3) `coreLoopBeats` = 4–6 chronological beats starting with in-game control; (4) `doneWhen` = observable loop completion without FPS targets.
 
 Return ONLY valid JSON:
 {
@@ -217,7 +218,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: thinkingLevel == 'HIGH' ? 'MEDIUM' : thinkingLevel,
+      thinkingLevel: thinkingLevel,
       temperature: 0.55,
     );
 
@@ -278,7 +279,7 @@ Return ONLY valid JSON:
     String apiKey = '',
     String conversationModel = 'gemini-flash-latest',
     String planningModel = 'gemini-flash-latest',
-    String thinkingLevel = 'MEDIUM',
+    String thinkingLevel = 'HIGH',
   }) async {
     final cleanMsg = ProjectConceptBlueprint.normalizeCommonTypos(
       userMessage.trim(),
@@ -304,23 +305,14 @@ Developer Direction: "$cleanMsg"
 ${GeminiAgentClient.compactStyleRules}
 - Synthesize and rewrite the affected field(s) into natural, polished game-dev English. NEVER copy-paste the developer's raw phrasing ("instead of...", "but in a...") verbatim.
 - Format `goal` as: "Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]."
-- DELTA-ONLY OUTPUT: Include ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (omit all unchanged arrays!). If `goal` or `title` changed, also include 3 updated `goalOptions`.
+- DELTA-ONLY OUTPUT: Include ONLY `reply`, `updatedFields`, and the specific Blueprint key(s) that actually changed (valid keys: `title`, `goal`, `goalOptions`, `gameSpec`, `techSpec`, `designPillars`, `tradeOffs`, `coreLoopBeats`, `exclusions`, `doneWhen`, `releaseTrainTitles`). Omit all unchanged keys! If `goal` or `title` changed, also include 3 updated `goalOptions`.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (example when Goal changed):
 {
   "reply": "1-sentence confirmation of what changed",
   "updatedFields": ["Goal"],
-  "title": "Only if title changed",
-  "goal": "Only if goal changed",
-  "goalOptions": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."],
-  "gameSpec": ["Only if changed"],
-  "techSpec": ["Only if changed"],
-  "designPillars": ["Only if changed"],
-  "tradeOffs": ["Only if changed"],
-  "coreLoopBeats": ["Only if changed"],
-  "exclusions": ["Only if changed"],
-  "doneWhen": "Only if changed",
-  "releaseTrainTitles": ["Only if changed"]
+  "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
+  "goalOptions": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."]
 }
 ''';
 
@@ -328,7 +320,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: conversationModel,
-      thinkingLevel: thinkingLevel == 'HIGH' ? 'MEDIUM' : thinkingLevel,
+      thinkingLevel: thinkingLevel,
       temperature: 0.45,
     );
 
@@ -491,7 +483,7 @@ Return ONLY valid JSON:
     int suggestionVariantOffset = 0,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'HIGH',
   }) async {
     final cleanInput = userInput.trim();
     final seedIdea =
@@ -539,7 +531,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: 'LOW',
+      thinkingLevel: thinkingLevel,
       temperature: 0.45,
     );
     if (json == null) return null;
@@ -581,7 +573,7 @@ Return ONLY valid JSON:
     required int suggestionVariantOffset,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'HIGH',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
 
@@ -612,7 +604,7 @@ $_kExpansionCardsJsonSchema
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: 'LOW',
+      thinkingLevel: thinkingLevel,
       temperature: 0.65,
     );
     if (json == null) return null;
@@ -649,7 +641,7 @@ $_kExpansionCardsJsonSchema
     required List<String> currentOptions,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'HIGH',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
 
@@ -684,7 +676,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: modelName,
-      thinkingLevel: 'LOW',
+      thinkingLevel: thinkingLevel,
       temperature: 0.65,
     );
     final rawList = json?['options'];
@@ -704,7 +696,7 @@ Return ONLY valid JSON:
     String rawGdd, {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'MEDIUM',
+    String thinkingLevel = 'HIGH',
   }) async {
     final cleanDoc = rawGdd.trim();
     if (cleanDoc.isEmpty || !GeminiAgentClient.hasKey(apiKey)) return null;

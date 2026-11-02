@@ -226,9 +226,9 @@ class ReleasePlannerAgent {
           '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
     } else {
       phaseInstruction =
-          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into 4 to 6 major Epics (big bodies of work, e.g. 1. Station Layout, Traversal & Physical Controls, 2. Environment/Tank Simulation & Alarms, 3. Resource/Crop Lifecycle & Harvesting, 4. Cargo Delivery, Shop & Upgrade Mounting) required to build ${releaseDoc.title} across the entire Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n'
-          '- GREYBOX LEVEL / ARENA BLOCKOUT FIRST IN EPIC 1: Epic 1 (`beat_1`) MUST start at Feature #1 (`feat_1_1`) with a dedicated Greybox Environment / Arena Blockout Feature matching `02 Game Spec` and `08 Done When` (e.g., `"Station Corridor Blockout"` connecting the four growth bays and cargo airlock, or `"Greybox Arena Layout"`) so floor and wall colliders exist BEFORE Character/Vehicle Movement (`feat_1_2`), Interaction Raycast/Aim (`feat_1_3`), and Primary Control (`feat_1_4`).\n'
-          '- ONE ATOMIC MECHANIC PER FEATURE (MINIMUM 4 FEATURES PER EPIC, 16–20 TOTAL): Audit every verb and clause across `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When`. Every distinct greybox room/corridor layout, player locomotion mechanic, interaction raycast/prompt, valve rotation, canister injection, simulation drift rule, gauge readout, alarm/wilt feedback state, container unsealing/depressurization step, seed planting step, crop growth timer, mature crop harvest, crate loading step, airlock terminal sale, shop purchase, and physical equipment mounting + second-cycle reset MUST be its own separate Feature card (4 to 5 Features per Epic, 16 to 20 Features total across the release). NEVER bundle two distinct devices or sequential steps (like "Valve + Canister", "Growth + Harvest", or "Shop Purchase + Equipment Mounting") into a single Feature!';
+          '- EPICS AS BIG BODIES OF WORK (SYNTHESIZED FROM THE FULL CONCEPT 01–08): Organize `beats` into 4 to 5 major Epics required to build ${releaseDoc.title} end-to-end across the Concept Blueprint (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`).\n'
+          '- GREYBOX LEVEL / ARENA BLOCKOUT FIRST IN EPIC 1: Epic 1 (`beat_1`) MUST start at Feature #1 (`feat_1_1`) with a dedicated Greybox Environment / Arena Blockout Feature matching `02 Game Spec` and `08 Done When` so floor and wall colliders exist BEFORE Character/Vehicle Movement (`feat_1_2`) and Primary Action (`feat_1_3`).\n'
+          '- COHESIVE SINGULAR-FOCUSED FEATURES (2–3 FEATURES PER EPIC): Break each Epic into 2 to 3 cohesive Playable Features where each Feature owns one distinct gameplay mechanic or interactive object (never bundle two separate mechanics like "Target Spawner + Weapon Fire" or "Shop Buy + Equipment Mount" into one Feature).';
     }
 
     final targetPhase = switch (releasePhase) {
@@ -284,22 +284,19 @@ class ReleasePlannerAgent {
           }
           final states = FeatureStateNode.getStatesForDocument(f);
           final originVer = f.sections['originVersion'] ?? 'v0.1';
-          final cpSummaries = <String>[];
           final allTuning = <String>{};
           final allFixesAndGuards = <String>{};
           for (final s in states) {
-            final taskNames =
-                s.checklist.map((t) => t.text).take(4).join(', ');
-            cpSummaries.add('${s.releaseVersion} "${s.cleanStageTitle}" [$taskNames]');
             allTuning.addAll(s.tuningParams);
-            for (final g in s.edgeCases) {
-              allFixesAndGuards.add(g);
-            }
+            allFixesAndGuards.addAll(s.edgeCases);
           }
+          final latestCp = states.isNotEmpty
+              ? '${states.last.releaseVersion} "${states.last.cleanStageTitle}"'
+              : originVer;
           existingTreeSummary.writeln(
-            '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints verified: ${cpSummaries.join(' -> ')}]'
-            '${allTuning.isNotEmpty ? ' | Live Variables: ${allTuning.take(5).join(', ')}' : ''}'
-            '${allFixesAndGuards.isNotEmpty ? ' | Playtest Guards: ${allFixesAndGuards.take(3).join('; ')}' : ''}',
+            '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints (latest: $latestCp)]'
+            '${allTuning.isNotEmpty ? ' | Live Variables: ${allTuning.take(3).join(', ')}' : ''}'
+            '${allFixesAndGuards.isNotEmpty ? ' | Guards: ${allFixesAndGuards.take(2).join('; ')}' : ''}',
           );
         }
         final queuedDeferred =
@@ -371,14 +368,14 @@ $progressiveDiagnosticInstructions
 - THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into 2 to 3 cohesive Playable Features (`"included": true`, across 4 to 5 Epics for a full prototype loop) needed to complete that Epic end-to-end for ${releaseDoc.title}. Group closely related controls, physics, and feedback into cohesive playable units; only split into separate Feature cards inside an Epic when they represent distinct mechanics (e.g., planting vs. harvesting, or target spawner vs. weapon fire)!
 - ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
-- PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Station Corridor Blockout"`, `"First Person Movement"`, `"Object Interaction Raycast"`, `"Manual Valve Turn"`, `"Tank Readout Gauge"`, `"Nutrient Canister Inject"`, `"Plant Wilt Stress"`, `"Seed Planting"`, `"Crop Growth Timer"`, `"Mature Crop Harvest"`, `"Tank Seal Depressurize"`, `"Cargo Crate Loading"`, `"Airlock Terminal Sale"`, `"Upgrade Shop Purchase"`, `"Pump Upgrade Mount"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
+- PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Greybox Arena Layout"`, `"Player Dash"`, `"Enemy Wave Spawner"`, `"Loot Pickup"`, `"Upgrade Terminal"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
-- MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"plantSnapRadius: 0.4 m"`, `"slotsPerTank: 4 slots"`, `"crateCapacity: 8 crops"`, `"depressurizeDuration: 1.5 s"`). NEVER return an empty `"tuningParams": []` array on any feature.
-- NATURAL, CONCRETE TASKS ON ONE SHARED ASSET (NO REPETITIVE "SETUP / LOGIC / GUARD" SUFFIXES): Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2–4` words + duration tag) that name the actual node/mesh, behavior, and boundary condition WITHOUT mechanically ending every task in the words `"Setup"`, `"Logic"`, or `"Guard"` (e.g., use `"Capsule Body & Camera (2h)"` -> `"WASD Velocity & Pitch (2h)"` -> `"Wall Slide & Pitch Clamp (1h)"`, or `"Tank Mesh & Pipe Ports (2h)"` -> `"Canister Snap & Refill (2h)"` -> `"Full Tank Overflow Stop (1h)"`):
-  * `Task 1` (Entity / Node / Scene Foundation): Create or place the specific playable Character, Greybox Room, Emitter, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Corridor & Bay Colliders (2h)"`, `"Steam Vent Emitter (1h)"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in `Task 1`'s title.
-  * `Task 2` (Core Interaction, Movement, or Simulation Math): Wire the specific interaction, movement, or simulation behavior onto `Task 1`'s asset (e.g., `"WASD Velocity & Look (2h)"`, `"Hold-E Valve Rotation (2h)"`, `"Wilt Color Lerp (2h)"`).
-  * `Task 3` (Observable Feedback & Boundary Condition): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Full Tank Overflow Stop (1h)"`, `"Occupied Slot Reject (1h)"`).
+- MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"moveSpeed: 6.0 m/s"`, `"dashCooldown: 0.8 s"`, `"pickupRadius: 1.5 m"`). NEVER return an empty `"tuningParams": []` array on any feature.
+- NATURAL, CONCRETE TASKS ON ONE SHARED ASSET (NO REPETITIVE "SETUP / LOGIC / GUARD" SUFFIXES): Give each Feature checkpoint 3 to 4 concrete, mechanic-specific tasks (`2–4` words + duration tag) that name the actual node/mesh, behavior, and boundary condition WITHOUT mechanically ending every task in the words `"Setup"`, `"Logic"`, or `"Guard"`:
+  * `Task 1` (Entity / Node / Scene Foundation): Create or place the specific playable Character, Greybox Room, Emitter, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Arena Floor & Walls (2h)"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in `Task 1`'s title.
+  * `Task 2` (Core Interaction, Movement, or Simulation Math): Wire the specific interaction, movement, or simulation behavior onto `Task 1`'s asset (e.g., `"WASD Velocity & Look (2h)"`, `"Burst Impulse & Trail (2h)"`).
+  * `Task 3` (Observable Feedback & Boundary Condition): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Cooldown Lock & Flash (1h)"`).
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
 - THINKING VERIFICATION BEFORE EMITTING JSON:
   1. 100% Concept Coverage: Verify every action in `01 Goal`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When` has a dedicated Feature while honoring `07 Out of Scope`.
@@ -402,41 +399,19 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       "features": [
         {
           "id": "feat_1_1",
-          "title": "First Feature Title",
+          "title": "Plain Feature Title",
           "goal": "Literal feature goal",
           "doneWhen": "Literal feature doneWhen",
           "estimatedHours": 5,
-          "included": true,
           "lifecycle": "new",
           "inScope": ["Specific scope item 1", "Specific scope item 2"],
-          "outOfScope": ["Deferred item"],
           "tuningParams": ["walkSpeed: 4.5 m/s", "lookSensitivity: 0.15 deg/px"],
-          "edgeCases": ["[COLLISION] Prevent player capsule from clipping through corridor walls"],
+          "edgeCases": ["[COLLISION] Prevent player capsule from clipping through walls"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
               "tasks": ["Capsule Body & Camera (2h)", "WASD Velocity & Look (2h)", "Wall Slide & Pitch Clamp (1h)"]
-            }
-          ]
-        },
-        {
-          "id": "feat_1_2",
-          "title": "Second Feature Title",
-          "goal": "Literal feature goal",
-          "doneWhen": "Literal feature doneWhen",
-          "estimatedHours": 4,
-          "included": true,
-          "lifecycle": "new",
-          "inScope": ["Specific scope item"],
-          "outOfScope": ["Deferred item"],
-          "tuningParams": ["interactDistance: 2.2 m", "highlightOutlineWidth: 2.0 px"],
-          "edgeCases": ["[OCCLUSION] Block interaction raycast when a wall or closed door is in between"],
-          "checkpoints": [
-            {
-              "title": "Plain Checkpoint Title",
-              "playtestCriteria": "Action -> observable result on screen",
-              "tasks": ["Center Aim Raycast (1h)", "Hover Outline & Prompt (2h)", "Line-of-Sight Occlusion Stop (1h)"]
             }
           ]
         }
@@ -1675,9 +1650,10 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
   static Future<bool> sendReleasePlanChatTurn({
     required ReleaseBlueprint blueprint,
     required String userMessage,
+    TierDocument? projectDoc,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'MEDIUM',
+    String thinkingLevel = 'HIGH',
   }) async {
     final cleanMsg = userMessage.trim();
     if (cleanMsg.isEmpty || !GeminiAgentClient.hasKey(apiKey)) return false;
@@ -1685,13 +1661,17 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     final currentBeatsSummary = blueprint.beats
         .map(
           (b) => '- ${b.id} "${b.title}" (${b.goal}): '
-              '${b.features.map((f) => '"${f.title}" [${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h]').join(', ')}',
+              '${b.features.map((f) => '"${f.title}" [${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
         )
         .join('\n');
 
+    final conceptHeader = projectDoc == null
+        ? ''
+        : 'Concept Context: Game Spec: ${(projectDoc.sections['gameSpec'] ?? '').replaceAll('\n', ' · ')} | Tech Spec: ${(projectDoc.sections['techSpec'] ?? '').replaceAll('\n', ' · ')} | Pillars: ${(projectDoc.sections['designPillars'] ?? '').replaceAll('\n', ' | ')} | Trade-Offs: ${(projectDoc.sections['tradeOffs'] ?? '').replaceAll('\n', ' | ')}\n';
+
     final prompt = '''
 You are the Antigravity Release Planner Agent updating "${blueprint.releaseTitle}" (${blueprint.releaseVersionTag}).
-Current Plan:
+${conceptHeader}Current Plan:
 - Goal: "${blueprint.goal}"
 - Done When: "${blueprint.doneWhen}"
 - Exclusions: ${blueprint.explicitExclusions.join(', ')}
@@ -1701,6 +1681,7 @@ $currentBeatsSummary
 Developer Request: "$cleanMsg"
 ${GeminiAgentClient.compactStyleRules}
 - DELTA-ONLY BEATS: In `beats`, return ONLY the specific Beat(s) that were modified or added by the developer's request (untouched Beats are preserved automatically).
+- Keep `Task 1` focused on Scene/Entity/Collision foundation (never Input/Keybind) and include 2–3 `"paramName: value unit"` entries in `tuningParams`.
 
 Return ONLY valid JSON:
 {
@@ -1721,17 +1702,15 @@ Return ONLY valid JSON:
           "goal": "1-sentence literal feature goal",
           "doneWhen": "1-sentence literal feature doneWhen",
           "estimatedHours": 6,
-          "included": true,
           "lifecycle": "new",
           "inScope": ["Scope item"],
-          "outOfScope": ["Deferred item"],
-          "tuningParams": ["paramOne: 10.0 m/s"],
+          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 1.5 s"],
           "edgeCases": ["[TAG] Specific edge case behavior"],
           "checkpoints": [
             {
               "title": "Plain Checkpoint Title",
               "playtestCriteria": "Action -> observable result on screen",
-              "tasks": ["Task 1 (2h)", "Task 2 (2h)"]
+              "tasks": ["Entity & Collision Body (2h)", "Core Action Velocity (2h)", "Boundary Clamp & Cue (2h)"]
             }
           ]
         }

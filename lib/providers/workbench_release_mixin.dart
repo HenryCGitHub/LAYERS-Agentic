@@ -1383,6 +1383,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       final ok = await ReleasePlannerAgent.sendReleasePlanChatTurn(
         blueprint: bp,
         userMessage: message,
+        projectDoc: activeProject,
         apiKey: _apiKey,
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
@@ -1856,9 +1857,27 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (states.isEmpty) return;
     final projTitle = activeProject?.title ?? 'Game Prototype';
     final engineLabel = _activeEngineLabel;
+    final gameSpecSummary = (activeProject?.sections['game_spec'] ??
+            activeProject?.sections['gameSpec'] ??
+            _conceptDraft?.gameSpec.join(' · ') ??
+            '')
+        .trim();
+    final pillarsSummary = (activeProject?.sections['design_pillars'] ??
+            activeProject?.sections['designPillars'] ??
+            _conceptDraft?.designPillars.join(' | ') ??
+            '')
+        .trim();
+    final siblingTitles = featDoc.parentId == null
+        ? const <String>[]
+        : featuresForBeat(featDoc.parentId!)
+            .where((s) => s.id != featureId)
+            .map((s) => '"${s.title}"')
+            .toList();
     final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
 Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
+${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- Keep Task 1 focused on Scene/Entity/Collision foundation (never Input/Keybind) and include 2–3 "paramName: numericValue unit" entries in tuningParams.
 Return ONLY a JSON object:
 {
   "goal": "<1 plain-English sentence starting with Build/Implement>",
@@ -1866,9 +1885,9 @@ Return ONLY a JSON object:
   "checkpointTitle": "<2-4 word playable checkpoint title>",
   "playtestGate": "<Action -> Observable result>",
   "tasks": [
-    "<Task 1 title> (2h)",
-    "<Task 2 title> (1h)",
-    "<Task 3 title> (1h)"
+    "<Task 1 entity/collision foundation> (2h)",
+    "<Task 2 core mechanic velocity/action> (1h)",
+    "<Task 3 observable feedback & boundary clamp> (1h)"
   ],
   "tuningParams": [
     "<param1: numericValue unit>",
@@ -1925,11 +1944,20 @@ Return ONLY a JSON object:
         cp.trigger = 'Playtest: $aiGate';
       }
       if (rawTasks is List && rawTasks.isNotEmpty) {
+        final normalizedTasks =
+            ReleasePlannerAgent.normalizeFoundationFirstTasks(
+          rawTasks
+              .map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList(),
+          featureTitle: featDoc.title,
+          beatTitle: beatTitle,
+        );
         cp.checklist = [
-          for (int i = 0; i < rawTasks.length; i++)
+          for (int i = 0; i < normalizedTasks.length; i++)
             Subtask(
               id: '${featureId}_ai_t${i + 1}',
-              text: rawTasks[i].toString().trim(),
+              text: normalizedTasks[i],
               completed: false,
             ),
         ];
@@ -2184,7 +2212,7 @@ Return ONLY a JSON object with 3 concrete fix steps:
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _planningModel,
-        thinkingLevel: 'MEDIUM',
+        thinkingLevel: _thinkingLevel,
         temperature: 0.3,
       );
       if (json == null) return;
@@ -2323,7 +2351,7 @@ Return ONLY a JSON object with this schema:
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _conversationModel,
-        thinkingLevel: 'MEDIUM',
+        thinkingLevel: _thinkingLevel,
         temperature: 0.25,
       );
       final rawSubs = json?['subSteps'];
@@ -2685,14 +2713,38 @@ Return ONLY a JSON object with this schema:
               .map((f) => '"${f.title}"')
               .toList()
           : const <String>[];
+      final engineAssetHint = engineLabel == 'UNREAL 5'
+          ? 'BP_PlayerCharacter / Actor Blueprint and IMC_Default'
+          : (engineLabel == 'UNITY C#'
+              ? 'PlayerController.cs / MonoBehaviour Prefab and Rigidbody/Collider'
+              : 'player.tscn / CharacterBody + GDScript and Project Input Map');
       final projectBuildStateContext = isGreenfieldFirstFeature
-          ? 'Project Build State: FEATURE #1 OF THE ENTIRE PROJECT (Greenfield). No Character Blueprint, Pawn, or Input Mapping Context exists yet. You MUST create the playable character/foundation asset (e.g., BP_PlayerCharacter inheriting from ACharacter with CapsuleComponent, CameraComponent, and CharacterMovement) and possess it in the level before or alongside wiring input and physics.'
-          : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: ${precedingFeatureTitles.join(', ')}). Reuse and extend the existing player character (e.g., BP_PlayerCharacter and IMC_Default) for player-attached mechanics, or create this feature\'s dedicated Actor and connect it to the existing player character.';
+          ? 'Project Build State: FEATURE #1 OF THE ENTIRE PROJECT (Greenfield). Create the foundational scene/character/arena asset ($engineAssetHint) and place it in the active level before wiring input and physics.'
+          : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: ${precedingFeatureTitles.join(', ')}). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
 
-      // Build Cumulative Project Ledger from all preceding features (0 .. featOrderIdx - 1)
+      // Build Focused Cumulative Project Ledger (max 5 relevant preceding features:
+      // Epic 1 foundational #1-#2 + same-Epic earlier siblings + immediate predecessor)
       final cumulativeLedgerLines = <String>[];
       if (featOrderIdx > 0) {
-        for (int pIdx = 0; pIdx < featOrderIdx; pIdx++) {
+        final selectedPrecedingIndices = <int>{
+          0,
+          if (featOrderIdx > 1) 1,
+          for (int pIdx = 0; pIdx < featOrderIdx; pIdx++)
+            if (feat.parentId != null &&
+                allReleaseFeatures[pIdx].parentId == feat.parentId)
+              pIdx,
+          featOrderIdx - 1,
+        }.toList()
+          ..sort();
+        final cappedIndices = selectedPrecedingIndices.length <= 5
+            ? selectedPrecedingIndices
+            : <int>[
+                selectedPrecedingIndices[0],
+                selectedPrecedingIndices[1],
+                ...selectedPrecedingIndices
+                    .sublist(selectedPrecedingIndices.length - 3),
+              ];
+        for (final pIdx in cappedIndices) {
           cumulativeLedgerLines.add(
             _summarizeFeatureForProjectLedger(
               allReleaseFeatures[pIdx],
@@ -2827,10 +2879,21 @@ Return ONLY a JSON object with this schema:
         if (tradeOffsText.isNotEmpty) 'Trade-Offs: $tradeOffsText',
       ].join('\n');
 
+      final featureGoalText = SectionTextUtils.resolveGoal(feat.sections);
+      final featureInScopeItems =
+          SectionTextUtils.resolveInScope(feat.sections);
+      final featureOwnScopeBlock = [
+        if (featureGoalText.isNotEmpty) 'Feature Goal: "$featureGoalText"',
+        if (featureInScopeItems.isNotEmpty)
+          'Feature In Scope: ${featureInScopeItems.join(' | ')}',
+        if (cpNode.playtestCondition.isNotEmpty)
+          'Checkpoint Playtest Gate: "${cpNode.playtestCondition}"',
+      ].join('\n');
+
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
-${projectPillarsAndTradeOffsBlock.isNotEmpty ? '$projectPillarsAndTradeOffsBlock\n' : ''}$dimensionInstructionBlock
+${projectPillarsAndTradeOffsBlock.isNotEmpty ? '$projectPillarsAndTradeOffsBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$dimensionInstructionBlock
 $phaseInstructionBlock
 $projectBuildStateContext
 ${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Already Built in Earlier Features — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
@@ -2842,10 +2905,11 @@ Active Guards (MUST enforce in code without raw [TAG] brackets in prose): ${clea
 ${priorCheckpointsSummary.isNotEmpty ? 'Previous Checkpoints & Project Variable Context (reuse exact identifiers):\n${priorCheckpointsSummary.join('\n')}' : ''}
 
 CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
-- ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" (e.g., BP_PlayerCharacter / PlayerCharacter.cs / player_character.tscn for player movement/actions, or a single Actor/Scene for world mechanics). NEVER create a throwaway Actor (such as "BP_InputMappingBasic" or "BP_InputMappingMovement") just to replace it with BP_PlayerCharacter in the next task, and NEVER use the word "canonical" in step titles or instructions.
-- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF (NO BLEEDING OR SHIFTING): Each task's subSteps MUST strictly implement that specific task's title while building cumulatively on the preceding task:
-  * If Task 1 is Asset/Pawn/Character/Actor Setup: Step 1.1 creates the main asset (e.g., BP_PlayerCharacter inheriting from ACharacter with CapsuleComponent, CameraComponent, CharacterMovement), configures its base variables, and places/possesses it in the level. Then Task 2 creates/binds the Input Actions (IA_Move, IA_Sprint, IA_Slide) and IMC_Default inside that same asset and wires the core mechanic velocity/action logic. Then Task 3 stays inside that same asset to tune physics/capsule/friction (${cpNode.tuningParams.join(', ')}) and enforce the guards (${cleanEdgeCases.join(', ')}).
-  * If Task 1 is Input Mapping: Task 1 creates and verifies the Enhanced Input Action(s) (IA_...) and Input Mapping Context (IMC_Default) in /Game/Input (NEVER a throwaway Actor). Then Task 2 Step 2.1 creates/opens BP_PlayerCharacter (ACharacter with CapsuleComponent, CameraComponent, CharacterMovement), registers IMC_Default from Task 1 on BeginPlay, and wires Task 1's Input Action into the core velocity/physics logic. Then Task 3 extends that same BP_PlayerCharacter with the remaining physics/animation/guard steps.
+- ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
+- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF:
+  * Task 1 builds the primary scene/node/actor/prefab hierarchy and collision foundation in the level.
+  * Task 2 binds input/signals and wires the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
+  * Task 3 stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
 
 For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
 1. "title": "STEP X.Y · Short Title-Case Telegraphic Step Title (3-5 words)"
@@ -2880,7 +2944,7 @@ Return ONLY valid JSON:
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _conversationModel,
-        thinkingLevel: 'HIGH',
+        thinkingLevel: _thinkingLevel,
         temperature: 0.25,
       );
       final rawTasks = json?['tasks'];
@@ -4524,6 +4588,24 @@ Return ONLY valid JSON:
             '')
         .trim();
 
+    final pillarsSummary = (proj?.sections['design_pillars'] ??
+            proj?.sections['designPillars'] ??
+            draft?.designPillars.join(' | ') ??
+            'Core gameplay clarity')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final tradeOffsSummary = (proj?.sections['trade_offs'] ??
+            proj?.sections['tradeOffs'] ??
+            draft?.tradeOffs.join(' | ') ??
+            'Playable feel over complexity')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final exclusionsSummary = (proj?.sections['exclusions'] ??
+            draft?.exclusions.join(' | ') ??
+            'None')
+        .replaceAll('\n', ' | ')
+        .trim();
+
     final prompt = '''
 You are the Principal Game Producer & Lead Systems Architect ($engineLabel) for "${proj?.title ?? 'Game Project'}".
 Triage this developer feature request captured in the Feature Inbox across 3 dimensions:
@@ -4535,11 +4617,14 @@ Developer Request: "${item.rawIdea}"
 Active Release: $activeVer (${_currentPhase.label})
 Game Spec: $gameSpecSummary
 Tech Spec: $techSpecSummary
-Design Pillars: ${draft?.designPillars.join(' | ') ?? 'Core gameplay clarity'}
-Trade-Offs: ${draft?.tradeOffs.join(' | ') ?? 'Playable feel over complexity'}
-Out of Scope Rules: ${draft?.exclusions.join(' | ') ?? 'None'}
+Design Pillars: $pillarsSummary
+Trade-Offs: $tradeOffsSummary
+Out of Scope Rules: $exclusionsSummary
 Existing Epics & Live Features:
 ${beatCatalogLines.join('\n')}
+
+${GeminiAgentClient.compactStyleRules}
+- If `releaseTimingMode` is `"now"`, omit `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, and `"futureTasks"`.
 
 Return ONLY valid JSON:
 {
@@ -4563,9 +4648,9 @@ Return ONLY valid JSON:
   "checkpointTitle": "<2-4 word immediate checkpoint title>",
   "playtestGate": "<Action -> Observable result>",
   "tasks": [
-    "<Task 1> (2h)",
-    "<Task 2> (1h)",
-    "<Task 3> (1h)"
+    "<Task 1 entity/collision foundation> (2h)",
+    "<Task 2 core mechanic velocity/action> (1h)",
+    "<Task 3 observable feedback & clamp> (1h)"
   ],
   "tuningParams": ["<param1: value unit>", "<param2: value unit>"],
   "edgeCases": ["[STATE GUARD] <concise guard rule>"],
@@ -4583,7 +4668,7 @@ Return ONLY valid JSON:
       prompt: prompt,
       apiKey: _apiKey,
       preferredModel: _conversationModel,
-      thinkingLevel: 'LOW',
+      thinkingLevel: _thinkingLevel,
       temperature: 0.25,
     );
     if (json == null) return;

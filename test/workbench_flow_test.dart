@@ -6074,9 +6074,29 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           secondBeatFirstFeat.id,
           forceRefresh: true,
         );
+        expect(
+          WorkbenchProvider.availableConversationModels,
+          equals(const ['gemini-flash-latest']),
+        );
+        expect(
+          WorkbenchProvider.availablePlanningModels,
+          equals(const ['gemini-flash-latest']),
+        );
         expect(capturedStepSynthPrompt, isNotNull);
         expect(capturedStepSynthPrompt, contains('Design Pillars:'));
         expect(capturedStepSynthPrompt, contains('Trade-Offs:'));
+        expect(capturedStepSynthPrompt, contains('Feature Goal:'));
+        expect(capturedStepSynthPrompt, contains('Checkpoint Playtest Gate:'));
+        expect(
+          capturedStepSynthPrompt,
+          contains('PlayerController.cs / MonoBehaviour Prefab'),
+        );
+        expect(
+          capturedStepSynthPrompt,
+          isNot(contains('BP_PlayerCharacter')),
+          reason:
+              'Unity 6 step synthesis prompt must not contain hardcoded Unreal 5 BP_PlayerCharacter instructions',
+        );
         expect(
           capturedStepSynthPrompt,
           contains('CUMULATIVE PROJECT LEDGER'),

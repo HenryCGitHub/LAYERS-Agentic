@@ -159,19 +159,11 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _apiKey = loaded.apiKey!.trim();
       }
       if (loaded.modelName != null && loaded.modelName!.trim().isNotEmpty) {
-        final rawModel = loaded.modelName!.trim();
-        // Guard Stage 1 _conversationModel against stale localStorage 'argon' values
-        _conversationModel = rawModel.contains('argon')
-            ? 'gemini-flash-latest'
-            : rawModel;
+        _conversationModel = 'gemini-flash-latest';
       }
       if (loaded.planningModel != null &&
           loaded.planningModel!.trim().isNotEmpty) {
-        final rawPlanModel = loaded.planningModel!.trim();
-        // Auto-migrate any legacy 'argon' planning model setting in localStorage to gemini-flash-latest
-        _planningModel = rawPlanModel.contains('argon')
-            ? 'gemini-flash-latest'
-            : rawPlanModel;
+        _planningModel = 'gemini-flash-latest';
       }
       if (loaded.thinkingLevel != null &&
           loaded.thinkingLevel!.trim().isNotEmpty) {

@@ -15,18 +15,18 @@ class GeminiAgentClient {
   static const Map<String, String> _jsonHeaders = {
     'Content-Type': 'application/json',
   };
-  static const Duration _heavyModelTimeout = Duration(seconds: 45);
-  static const Duration _standardModelTimeout = Duration(seconds: 30);
-  static const int _maxOutputTokens = 8192;
+  static const Duration _heavyModelTimeout = Duration(seconds: 60);
+  static const Duration _standardModelTimeout = Duration(seconds: 60);
+  static const int _maxOutputTokens = 65536;
 
-  /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~55 tokens vs ~220 tokens).
+  /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~85 tokens).
   static const String compactStyleRules = '''
 RULES:
-- Use plain, literal 2-4 word game-dev titles naming the observable player or world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").
-- Write in straightforward, everyday English—never roleplay the genre's slang or lore. Use game terms only when they name a specific mechanic or tactic ("kite", "dash", "parry", "cooldown"); never use subculture slang ("gib", "frag"), archaic/lore words ("Husbandry", "Homestead", "Expedition"), or corporate/engineering buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly") when a plain word ("main", "blast", "clear", "defeat") means the same thing.
+- Use plain, literal 2-4 word game-dev titles naming the observable player/world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").
+- Write in everyday English—never roleplay lore or slang. Never use archaic/lore words ("Husbandry", "Homestead", "Expedition") or corporate buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
 - NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").
 - Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.
-- `doneWhen` must describe an observable gameplay loop completion condition (spawning, executing core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").
+- `doneWhen` must describe an observable gameplay loop completion condition (spawning, core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").
 - Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.''';
 
   /// Records the last non-200 status hint (e.g., HTTP 402 prepayment credits depleted) for diagnostics.
@@ -63,11 +63,12 @@ RULES:
     required String prompt,
     required String apiKey,
     String preferredModel = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'HIGH',
     double temperature = 0.5,
   }) async {
+    const resolvedModel = 'gemini-flash-latest';
     if (testMockResponder != null) {
-      return testMockResponder!(prompt, preferredModel);
+      return testMockResponder!(prompt, resolvedModel);
     }
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
     if (key.isEmpty) {
@@ -75,12 +76,7 @@ RULES:
       return null;
     }
 
-    final modelsToTry = <String>{
-      preferredModel,
-      'gemini-flash-latest',
-      'gemini-3-flash-preview',
-      'gemini-3.1-flash-lite-preview',
-    }.toList();
+    const modelsToTry = <String>[resolvedModel];
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
     final contentsPayload = [
@@ -105,9 +101,9 @@ RULES:
           final isFlash25 = model == 'gemini-flash-latest' ||
               model.startsWith('gemini-2.5');
           final flashThinkingBudget = switch (normalizedThinking) {
-            'LOW' => 0,
-            'MEDIUM' => 1024,
-            _ => 2048,
+            'LOW' => 1024,
+            'MEDIUM' => 8192,
+            _ => 24576,
           };
           genConfig['thinkingConfig'] = isFlash25
               ? <String, dynamic>{
