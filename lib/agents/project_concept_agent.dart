@@ -278,6 +278,40 @@ class ProjectConceptAgent {
           'type': 'OBJECT',
           'description':
               'Upfront Option Cards keyed by section (goal, gameSpec, techSpec, designPillars, tradeOffs, coreLoop, exclusions, doneWhen).',
+          'properties': {
+            'goal': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'gameSpec': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'techSpec': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'designPillars': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'tradeOffs': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'coreLoop': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'exclusions': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'doneWhen': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+          },
         },
       },
       'required': [

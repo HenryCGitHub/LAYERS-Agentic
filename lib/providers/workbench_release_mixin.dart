@@ -1717,6 +1717,18 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
             _conceptDraft?.techSpec.join(' · ') ??
             '')
         .trim();
+    final pillarsSummary = (activeProject?.sections['design_pillars'] ??
+            activeProject?.sections['designPillars'] ??
+            _conceptDraft?.designPillars.join(' | ') ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final tradeOffsSummary = (activeProject?.sections['trade_offs'] ??
+            activeProject?.sections['tradeOffs'] ??
+            _conceptDraft?.tradeOffs.join(' | ') ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
     final specCorpusLower = '$gameSpecSummary $techSpecSummary'.toLowerCase();
     final is2d = specCorpusLower.contains('2d') ||
         specCorpusLower.contains('sprite') ||
@@ -1727,15 +1739,40 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         : 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n';
     final siblingTitles = targetBeat.features
         .where((s) => s.id != featureId)
-        .map((s) => '"${s.title}"')
+        .map((s) {
+          final pAsset = (s.primarySharedScriptOrScene ?? '').trim();
+          return pAsset.isNotEmpty
+              ? '"${s.title}" [shared asset: $pAsset]'
+              : '"${s.title}"';
+        })
         .toList();
 
     final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
 Enrich this newly proposed Feature ("${targetFeat.title}" inside Epic "$beatTitle" for ${bp.releaseVersionTag}) so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
-${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate; reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
 - Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
-Call `commit_live_feature_enrichment` (or return ONLY a JSON object).''';
+Call `commit_live_feature_enrichment` (or return ONLY a JSON object):
+{
+  "goal": "<1 plain-English sentence starting with Build/Implement>",
+  "inScope": ["<in-scope deliverable 1>", "<in-scope deliverable 2>"],
+  "doneWhen": "<1 observable playtest completion condition>",
+  "primarySharedScriptOrScene": "<Canonical shared $engineLabel script/scene for this feature>",
+  "checkpointTitle": "<2-4 word playable checkpoint title>",
+  "playtestGate": "<Action -> Observable result>",
+  "tasks": [
+    {"role": "entity_and_collision_foundation", "title": "<Entity/collision foundation task> (2h)"},
+    {"role": "core_action_and_math", "title": "<Core mechanic velocity/action task 1..N> (1h)"},
+    {"role": "feedback_and_boundary_guard", "title": "<Observable feedback & boundary clamp task> (1h)"}
+  ],
+  "tuningParams": [
+    "<param1: numericValue unit>",
+    "<param2: numericValue unit>"
+  ],
+  "edgeCases": [
+    "[STATE GUARD] <concise guard rule>"
+  ]
+}''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -2721,11 +2758,33 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
     notifyListeners();
     try {
       final projectDoc = activeProject;
-      final gameSpec = (projectDoc?.sections['game_spec'] ?? '').trim();
-      final techSpec = (projectDoc?.sections['tech_spec'] ?? '').trim();
+      final gameSpec = (projectDoc?.sections['game_spec'] ??
+              projectDoc?.sections['gameSpec'] ??
+              _conceptDraft?.gameSpec.join(' · ') ??
+              '')
+          .trim();
+      final techSpec = (projectDoc?.sections['tech_spec'] ??
+              projectDoc?.sections['techSpec'] ??
+              _conceptDraft?.techSpec.join(' · ') ??
+              '')
+          .trim();
+      final pillarsText = (projectDoc?.sections['design_pillars'] ??
+              projectDoc?.sections['designPillars'] ??
+              _conceptDraft?.designPillars.join(' | ') ??
+              '')
+          .replaceAll('\n', ' | ')
+          .trim();
+      final tradeOffsText = (projectDoc?.sections['trade_offs'] ??
+              projectDoc?.sections['tradeOffs'] ??
+              _conceptDraft?.tradeOffs.join(' | ') ??
+              '')
+          .replaceAll('\n', ' | ')
+          .trim();
       final specLine = [
         if (gameSpec.isNotEmpty) 'Game Spec: $gameSpec',
         if (techSpec.isNotEmpty) 'Tech Spec: $techSpec',
+        if (pillarsText.isNotEmpty) 'Design Pillars: $pillarsText',
+        if (tradeOffsText.isNotEmpty) 'Trade-Offs: $tradeOffsText',
       ].join(' | ');
       final featGoal = featDoc != null
           ? SectionTextUtils.resolveGoal(featDoc.sections).trim()
@@ -2756,8 +2815,10 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
               ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
               : '');
 
-      final primaryAsset =
-          (featDoc?.sections['primary_asset'] ?? '').trim();
+      final primaryAsset = (cpNode.parameters['primarySharedScriptOrScene'] ??
+              featDoc?.sections['primary_asset'] ??
+              '')
+          .trim();
       final primaryAssetLine = primaryAsset.isNotEmpty
           ? 'Primary Shared Asset (modify this exact script/scene): $primaryAsset\n'
           : '';
@@ -2775,6 +2836,7 @@ Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 Break this task down into the exact number of checkable How-To Sub-Steps (Step $taskNum.1 through Step $taskNum.N — e.g., 3 steps for a simple hook/guard task or up to 6 steps for a multi-part mechanic) specifically using the developer's node/script names from "$cleanContext".
 Return ONLY a JSON object with this schema:
 {
+  "primarySharedScriptOrScene": "<Shared $engineLabel script/scene for this feature>",
   "subSteps": [
     {
       "title": "STEP $taskNum.1 · SHORT LITERAL SUB-STEP TITLE",
@@ -2796,6 +2858,14 @@ Return ONLY a JSON object with this schema:
         temperature: 0.25,
         functionDeclarations: const [commitTailoredTaskSubStepsTool],
       );
+      final tailoredPrimaryAsset =
+          (json?['primarySharedScriptOrScene'] ?? '').toString().trim();
+      if (tailoredPrimaryAsset.isNotEmpty) {
+        if (featDoc != null) {
+          featDoc.sections['primary_asset'] = tailoredPrimaryAsset;
+        }
+        cpNode.parameters['primarySharedScriptOrScene'] = tailoredPrimaryAsset;
+      }
       final rawSubs = json?['subSteps'];
       if (rawSubs is List && rawSubs.isNotEmpty) {
         final newChildren = <Subtask>[];
@@ -3072,6 +3142,11 @@ Return ONLY a JSON object with this schema:
       'type': 'OBJECT',
       'required': ['subSteps'],
       'properties': {
+        'primarySharedScriptOrScene': {
+          'type': 'STRING',
+          'description':
+              'Optional shared Actor Blueprint, Prefab/MonoBehaviour, or Godot Scene/Script specified by the developer.',
+        },
         'subSteps': {
           'type': 'ARRAY',
           'items': {
@@ -3769,6 +3844,7 @@ For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequent
 
 Return ONLY valid JSON:
 {
+  "primarySharedScriptOrScene": "...",
   "tasks": [
     {
       "taskIndex": 0,

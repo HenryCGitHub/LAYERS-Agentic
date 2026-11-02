@@ -169,7 +169,7 @@ class ReleasePlannerAgent {
                     },
                     'lifecycle': {
                       'type': 'STRING',
-                      'enum': ['new', 'upgrade', 'superseded'],
+                      'enum': ['new', 'upgrade', 'stable', 'superseded'],
                     },
                     'supersedesFeatureTitle': {
                       'type': 'STRING',
@@ -489,7 +489,7 @@ class ReleasePlannerAgent {
             isSubsequentRelease &&
             !isPhaseLocked)) {
       phaseInstruction =
-          '- PHASE 1 SPLIT PROTOTYPE (PART 2 OF 2 — FULL CORE LOOP): Keep all existing `v0.1` Beats & Features `"lifecycle": "stable"` (0h, empty checkpoints) and add the remaining Stage 1 Core Loop Beats as `"lifecycle": "new"` so the complete greybox loop connects end-to-end.';
+          '- PHASE 1 SPLIT PROTOTYPE (PART 2 OF 2 — FULL CORE LOOP): Output ONLY the remaining Stage 1 Core Loop Beats as `"lifecycle": "new"` so the complete greybox loop connects end-to-end (omit untouched `v0.1` Beats & Features from JSON—they are automatically preserved as `STABLE ✓` (`0h`)).';
     } else if (isAgentReasoned ||
         (releasePhase == ProductionPhase.mvp.name &&
             targetMvpEpicIndex == null)) {
@@ -526,7 +526,7 @@ class ReleasePlannerAgent {
         targetMvpEpicIndex != null) {
       final epicNum = (targetMvpEpicIndex ?? 0) + 1;
       phaseInstruction =
-          '- PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC $epicNum ONLY): Upgrade ONLY Beat/Epic #$epicNum from greybox to MVP (`"lifecycle": "upgrade"` with delta MVP checkpoints, plus any queued deferred features for Epic #$epicNum). Keep all other Epics (`!= $epicNum`) strictly `"lifecycle": "stable"` (0h, empty checkpoints).';
+          '- PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC $epicNum ONLY): Output ONLY Beat/Epic #$epicNum with its `"lifecycle": "upgrade"` delta MVP checkpoints and any queued `"lifecycle": "new"` features for Epic #$epicNum (omit untouched Epics `!= $epicNum` from JSON—they are automatically preserved as `STABLE ✓` (`0h`)).';
     } else if (releasePhase == ProductionPhase.verticalSlice.name ||
         preset == ReleaseScope.verticalSlice) {
       phaseInstruction =

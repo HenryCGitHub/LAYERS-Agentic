@@ -6592,6 +6592,42 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           syncedBpFeat.checkpoints.last.tasks,
           contains('Synced Task Title (2h)'),
         );
+
+        // 6. Pass 3 AI & Workflow Refinements
+        // 6a. commitConceptBlueprintTool defines explicit OpenAPI properties on sectionOptions
+        final conceptBpProps =
+            (ProjectConceptAgent.commitConceptBlueprintTool['parameters']
+                as Map)['properties'] as Map;
+        final sectionOptsSchema = conceptBpProps['sectionOptions'] as Map;
+        expect(sectionOptsSchema.containsKey('properties'), isTrue);
+        final sectionOptsProps = sectionOptsSchema['properties'] as Map;
+        expect(sectionOptsProps.containsKey('gameSpec'), isTrue);
+        expect(sectionOptsProps.containsKey('techSpec'), isTrue);
+        expect(sectionOptsProps.containsKey('coreLoop'), isTrue);
+
+        // 6b. commitReleasePlanTool lifecycle enum includes 'stable'
+        final relPlanBeatItems = (((ReleasePlannerAgent
+                    .commitReleasePlanTool['parameters'] as Map)['properties']
+                as Map)['beats'] as Map)['items'] as Map;
+        final relPlanFeatItems = (((relPlanBeatItems['properties']
+                as Map)['features'] as Map)['items']
+            as Map);
+        final relPlanLifecycleEnum =
+            ((relPlanFeatItems['properties'] as Map)['lifecycle']
+                as Map)['enum'] as List<dynamic>;
+        expect(
+          relPlanLifecycleEnum,
+          equals(['new', 'upgrade', 'stable', 'superseded']),
+        );
+
+        // 6c. commitTailoredTaskSubStepsTool supports primarySharedScriptOrScene
+        final tailorToolProps =
+            (WorkbenchReleaseMixin.commitTailoredTaskSubStepsTool['parameters']
+                as Map)['properties'] as Map;
+        expect(
+          tailorToolProps.containsKey('primarySharedScriptOrScene'),
+          isTrue,
+        );
       },
     );
   });
