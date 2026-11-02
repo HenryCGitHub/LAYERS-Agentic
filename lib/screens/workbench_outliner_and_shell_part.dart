@@ -171,6 +171,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     );
     _rebuild(() {
       _manualCheckpointFocusIndex = cpIdx;
+      _manualCheckpointFocusFeatureId = feat.id;
       _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
       _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
     });
@@ -1653,6 +1654,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 onTap: () {
                   _rebuild(() {
                     _manualCheckpointFocusIndex = 0;
+                    _manualCheckpointFocusFeatureId = feat.id;
                   });
                 },
                 child: const SizedBox.shrink(),
@@ -1678,6 +1680,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       onTap: () {
                         _rebuild(() {
                           _manualCheckpointFocusIndex = cpIdx;
+                          _manualCheckpointFocusFeatureId = feat.id;
                         });
                       },
                       child: Container(
@@ -1831,6 +1834,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                 onTap: () {
                                   _rebuild(() {
                                     _manualCheckpointFocusIndex = cpIdx;
+                                    _manualCheckpointFocusFeatureId = feat.id;
                                     _selectedTaskIndexByCheckpoint[cpNode.id] =
                                         tIdx;
                                   });
@@ -1982,6 +1986,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 _rebuild(() {
                                                   _manualCheckpointFocusIndex =
                                                       cpIdx;
+                                                  _manualCheckpointFocusFeatureId =
+                                                      feat.id;
                                                   _selectedTaskIndexByCheckpoint[
                                                       cpNode.id] = tIdx;
                                                   _selectedSubStepIndexByTask[
@@ -2112,6 +2118,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     onTap: () {
                                       _rebuild(() {
                                         _manualCheckpointFocusIndex = cpIdx;
+                                        _manualCheckpointFocusFeatureId =
+                                            feat.id;
                                         _selectedTaskIndexByCheckpoint[
                                             cpNode.id] = tIdx;
                                         _selectedSubStepIndexByTask[
@@ -2219,7 +2227,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     if (activeFocusIndex == -1 && states.isNotEmpty) {
       activeFocusIndex = states.length - 1;
     }
-    final effectiveFocusIndex = (_manualCheckpointFocusIndex != null &&
+    final effectiveFocusIndex = (_manualCheckpointFocusFeatureId == feat.id &&
+            _manualCheckpointFocusIndex != null &&
             _manualCheckpointFocusIndex! >= 0 &&
             _manualCheckpointFocusIndex! < states.length)
         ? _manualCheckpointFocusIndex!

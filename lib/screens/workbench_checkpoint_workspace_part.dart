@@ -51,22 +51,35 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
     // All tasks & steps in this Checkpoint are 100% done! Verify Checkpoint & Continue
     _completeAllCheckpointTasks(node);
+    final activeVer = widget.workbench.activeReleaseVersionTag;
+    int nextCpIdx = states.indexWhere(
+      (s) => s.releaseVersion == activeVer && !s.isCompleted,
+    );
+    if (nextCpIdx == -1) {
+      nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+    }
     _rebuild(() {
       _awaitingPlaytestVerification.remove(node.id);
-      final nextCpIdx = states.indexWhere((s) => !s.isCompleted);
       if (nextCpIdx != -1) {
         _manualCheckpointFocusIndex = nextCpIdx;
+        _manualCheckpointFocusFeatureId = feat.id;
         final nextCp = states[nextCpIdx];
         _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
         _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
       } else {
         _manualCheckpointFocusIndex = null;
+        _manualCheckpointFocusFeatureId = null;
       }
     });
     widget.workbench.updateFeatureStates(feat.id, states);
 
-    // If all Checkpoints in this Feature are now complete, advance to the next incomplete Feature
-    if (states.every((s) => s.isCompleted)) {
+    // If all active-release Checkpoints in this Feature are now complete, advance to the next incomplete Feature
+    if (widget.workbench.getDocumentProgress(feat.id) >= 100 ||
+        states.every((s) => s.isCompleted)) {
+      _rebuild(() {
+        _manualCheckpointFocusIndex = null;
+        _manualCheckpointFocusFeatureId = null;
+      });
       final nextFeat = widget.workbench.nextIncompleteFeature;
       if (nextFeat != null) {
         widget.workbench.selectFeature(nextFeat.id);
@@ -100,8 +113,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       }
     }
 
-    // 2. Check other checkpoints in the current feature
-    final nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+    // 2. Check other checkpoints in the current feature (prioritizing active release)
+    final activeVer = widget.workbench.activeReleaseVersionTag;
+    int nextCpIdx = states.indexWhere(
+      (s) => s.releaseVersion == activeVer && !s.isCompleted,
+    );
+    if (nextCpIdx == -1 && widget.workbench.getDocumentProgress(feat.id) < 100) {
+      nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+    }
     if (nextCpIdx != -1) {
       final nextCp = states[nextCpIdx];
       int targetTask = nextCp.checklist.indexWhere((t) => !t.completed);
@@ -112,6 +131,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       if (targetStep == -1) targetStep = 0;
       _rebuild(() {
         _manualCheckpointFocusIndex = nextCpIdx;
+        _manualCheckpointFocusFeatureId = feat.id;
         _selectedTaskIndexByCheckpoint[nextCp.id] = targetTask;
         _selectedSubStepIndexByTask['${nextCp.id}_$targetTask'] = targetStep;
       });
@@ -123,6 +143,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     if (nextFeat != null) {
       _rebuild(() {
         _manualCheckpointFocusIndex = null;
+        _manualCheckpointFocusFeatureId = null;
       });
       widget.workbench.selectFeature(nextFeat.id);
     }
@@ -210,6 +231,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             prevBp.subSteps.isNotEmpty ? prevBp.subSteps.length - 1 : 0;
         _rebuild(() {
           _manualCheckpointFocusIndex = prevCpIdx;
+          _manualCheckpointFocusFeatureId = widget.workbench.selectedFeatureId;
           _selectedTaskIndexByCheckpoint[prevCp.id] = prevTaskIdx;
           _selectedSubStepIndexByTask['${prevCp.id}_$prevTaskIdx'] =
               prevLastStepIdx;
@@ -251,6 +273,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       final nextCp = states[nextCpIdx];
       _rebuild(() {
         _manualCheckpointFocusIndex = nextCpIdx;
+        _manualCheckpointFocusFeatureId = widget.workbench.selectedFeatureId;
         _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
         _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
       });
@@ -1103,6 +1126,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     onTap: () {
                                       _rebuild(() {
                                         _manualCheckpointFocusIndex = cpIdx;
+                                        _manualCheckpointFocusFeatureId =
+                                            feat.id;
                                       });
                                     },
                                     child: Container(

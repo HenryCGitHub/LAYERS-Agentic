@@ -1348,6 +1348,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         thinkingLevel: _thinkingLevel,
       );
       if (ok) {
+        _injectDueScheduledInboxItemsIntoBlueprint(bp, _currentPhase);
+        final relDoc = activeRelease;
+        if (relDoc != null) {
+          relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+          _persistDocument(relDoc);
+        }
         _offlineErrorMessage = null;
         _syncActiveProjectMetadata();
       } else {
@@ -4634,6 +4640,24 @@ Return ONLY valid JSON:
         _persistDocument(relDoc);
         item.targetBeatId = newBeatId;
         item.targetBeatTitle = epicTitle;
+        final bp = _releaseBlueprint;
+        if (bp != null &&
+            !bp.beats.any(
+              (b) =>
+                  b.id == newBeatId ||
+                  b.title.toLowerCase().trim() ==
+                      epicTitle.toLowerCase().trim(),
+            )) {
+          bp.beats.add(
+            ProposedBeatBlueprint(
+              id: newBeatId,
+              title: epicTitle,
+              goal: item.goal,
+              doneWhen: item.doneWhen,
+              features: [],
+            ),
+          );
+        }
       } else {
         final fallbackBeats = activeReleaseBeats;
         if (fallbackBeats.isEmpty) return null;
@@ -4683,6 +4707,36 @@ Return ONLY valid JSON:
       }
       updateFeatureStates(featDoc.id, states);
       _persistDocument(featDoc);
+      final bp = _releaseBlueprint;
+      if (bp != null) {
+        for (final b in bp.beats) {
+          for (final f in b.features) {
+            if (f.id == featDoc.id ||
+                f.title.toLowerCase().trim() ==
+                    featDoc.title.toLowerCase().trim()) {
+              f.lifecycle = FeatureLifecycleStatus.upgrade;
+              f.included = true;
+              f.estimatedHours = 4;
+              f.checkpoints = [
+                ...f.checkpoints,
+                ProposedCheckpointBlueprint(
+                  title: cpTitle,
+                  playtestCriteria: item.playtestGate,
+                  tasks: tasks,
+                  coveredScope:
+                      item.inScope.isNotEmpty ? item.inScope : [cpTitle],
+                  tuningParams: item.tuningParams,
+                  edgeCases: item.edgeCases,
+                  releaseVersion: activeVer,
+                ),
+              ];
+              break;
+            }
+          }
+        }
+        relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+        _persistDocument(relDoc);
+      }
       _syncActiveProjectMetadata();
       return featDoc.id;
     }
@@ -4789,9 +4843,35 @@ Return ONLY valid JSON:
           break;
         }
       }
+      relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+      _persistDocument(relDoc);
     }
     _syncActiveProjectMetadata();
     return featId;
+  }
+
+  /// Pulls a pending or later-phase Inbox item directly into the active Release Blueprint draft
+  /// (e.g. inside the `+ New Release ✦` Co-Pilot) and marks it scheduled for the draft's phase.
+  bool pullInboxItemIntoReleaseDraft(String inboxItemId) {
+    final bp = _releaseBlueprint;
+    if (bp == null) return false;
+    final items = List<FeatureInboxItem>.from(featureInboxItems);
+    final idx = items.indexWhere((i) => i.id == inboxItemId);
+    if (idx == -1) return false;
+    final item = items[idx];
+    item.status = FeatureInboxStatus.scheduledForFuture;
+    item.releaseTimingMode = InboxReleaseTimingMode.futureRelease;
+    item.targetFuturePhase = _currentPhase;
+    _saveFeatureInboxItems(items);
+    _injectDueScheduledInboxItemsIntoBlueprint(bp, _currentPhase);
+    final relDoc = activeRelease;
+    if (relDoc != null) {
+      relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+      _persistDocument(relDoc);
+    }
+    _syncActiveProjectMetadata();
+    notifyListeners();
+    return true;
   }
 
   /// Automatically injects any `scheduledForFuture` (or pending-for-future-phase) Inbox items

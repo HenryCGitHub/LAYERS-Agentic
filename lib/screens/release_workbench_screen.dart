@@ -47,6 +47,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
   final Set<String> _awaitingPlaytestVerification = {};
   int? _manualCheckpointFocusIndex;
+  String? _manualCheckpointFocusFeatureId;
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
   bool _unrealCppMode = false;

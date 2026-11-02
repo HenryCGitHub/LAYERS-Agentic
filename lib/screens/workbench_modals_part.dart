@@ -1764,6 +1764,122 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       );
                     },
                   ),
+                  Builder(
+                    builder: (context) {
+                      final activeInbox = widget.workbench.featureInboxItems
+                          .where(
+                            (i) => i.status != FeatureInboxStatus.implemented,
+                          )
+                          .toList();
+                      if (activeInbox.isEmpty) return const SizedBox.shrink();
+                      final activePhase = widget.workbench.currentPhase;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Container(
+                          key: const ValueKey(
+                            'progressive_release_inbox_queue_card',
+                          ),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: bgSurface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '📥 FEATURE INBOX QUEUE (${activeInbox.length}) — CLICK TO PULL INTO ${nextVer.toUpperCase()}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final item in activeInbox)
+                                    Builder(
+                                      builder: (context) {
+                                        final isAutoIncluded = (item.status ==
+                                                    FeatureInboxStatus
+                                                        .scheduledForFuture ||
+                                                (item.status ==
+                                                        FeatureInboxStatus
+                                                            .triagePending &&
+                                                    item.releaseTimingMode ==
+                                                        InboxReleaseTimingMode
+                                                            .futureRelease)) &&
+                                            item.targetFuturePhase.index <=
+                                                activePhase.index;
+                                        final title = item.futureCheckpointTitle
+                                                .trim()
+                                                .isNotEmpty
+                                            ? item.futureCheckpointTitle.trim()
+                                            : item.featureTitle;
+                                        return InkWell(
+                                          key: ValueKey(
+                                            'progressive_pull_inbox_chip_${item.id}',
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          onTap: isAutoIncluded
+                                              ? null
+                                              : () {
+                                                  widget.workbench
+                                                      .pullInboxItemIntoReleaseDraft(
+                                                    item.id,
+                                                  );
+                                                  _rebuild(() {});
+                                                },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isAutoIncluded
+                                                  ? accentEmerald.withValues(
+                                                      alpha: 0.1,
+                                                    )
+                                                  : bgRecessed,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: isAutoIncluded
+                                                    ? accentEmerald.withValues(
+                                                        alpha: 0.4,
+                                                      )
+                                                    : borderSubtle,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              isAutoIncluded
+                                                  ? '✓ Auto-Included in $nextVer · $title'
+                                                  : '+ Pull into $nextVer · $title (${item.targetFuturePhase.shortName})',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: isAutoIncluded
+                                                    ? accentEmerald
+                                                    : textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                         if (bp.explicitExclusions.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Container(
@@ -3196,7 +3312,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           setModalState(() {});
                                         }
                                       }
-                                      _rebuild(() {});
+                                      _rebuild(() {
+                                        _manualCheckpointFocusIndex = null;
+                                        _manualCheckpointFocusFeatureId = null;
+                                      });
                                     },
                                     child: Text(
                                       switch (item.releaseTimingMode) {
@@ -3281,7 +3400,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                   if (ctx.mounted) {
                                     Navigator.of(ctx).pop();
                                   }
-                                  _rebuild(() {});
+                                  _rebuild(() {
+                                    _manualCheckpointFocusIndex = null;
+                                    _manualCheckpointFocusFeatureId = null;
+                                  });
                                 },
                                 child: Text(
                                   '⚡ Pull into $activeVer Now',

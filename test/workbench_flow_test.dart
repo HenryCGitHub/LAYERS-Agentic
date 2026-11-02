@@ -4966,7 +4966,27 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(upgradedSplitFeatInBp.included, isTrue);
 
-        // Build v0.2 -> the 02 · MVP scheduled Inbox item marks implemented, while the 03 · Vertical Slice item remains scheduled
+        // Also test 1-click `pullInboxItemIntoReleaseDraft` inside the Progressive Release Co-Pilot:
+        // Add a Full Production Inbox item and pull it into v0.2 draft, while leaving `vsItem` for Vertical Slice
+        final fpItem = await provider.submitFeatureIdeaToInbox(
+          'Add Steam Achievements & Cloud Save Sync',
+          preferredBeatId: beats.last.id,
+        );
+        expect(fpItem, isNotNull);
+        provider.updateFeatureInboxItemTriage(
+          fpItem!.id,
+          timingMode: InboxReleaseTimingMode.futureRelease,
+          targetFuturePhase: ProductionPhase.fullProduction,
+        );
+        expect(provider.pullInboxItemIntoReleaseDraft(fpItem.id), isTrue);
+        expect(
+          v2Bp.beats
+              .expand((b) => b.features)
+              .any((f) => f.id == 'feat_v0.2_inbox_${fpItem.id}'),
+          isTrue,
+        );
+
+        // Build v0.2 -> the 02 · MVP scheduled Inbox item and pulled `fpItem` mark implemented, while the 03 · Vertical Slice item (`vsItem`) remains scheduled
         await provider.approveAndExecuteReleasePlan();
         expect(
           provider.scheduledInboxUpgradesForFeature(splitCoreFeatId),
@@ -4976,6 +4996,46 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(
           provider.scheduledFeatureInboxItems.first.targetFuturePhase,
           equals(ProductionPhase.verticalSlice),
+        );
+
+        // Verify immediate `upgradeExistingFeature` and `newEpicAndFeature` via `acceptFeatureInboxTriage` sync with `_releaseBlueprint`
+        final liveUpgradeItem = await provider.submitFeatureIdeaToInbox(
+          'Add grappling hook air-dash cancel boost',
+          preferredBeatId: beats.first.id,
+        );
+        expect(liveUpgradeItem, isNotNull);
+        provider.updateFeatureInboxItemTriage(
+          liveUpgradeItem!.id,
+          timingMode: InboxReleaseTimingMode.now,
+          integrationMode: InboxIntegrationMode.upgradeExistingFeature,
+          targetFeatureId: splitCoreFeatId,
+        );
+        final upgradedId =
+            await provider.acceptFeatureInboxTriage(liveUpgradeItem.id);
+        expect(upgradedId, equals(splitCoreFeatId));
+        final syncedBpFeat = provider.releaseBlueprint!.beats
+            .expand((b) => b.features)
+            .firstWhere((f) => f.id == splitCoreFeatId);
+        expect(syncedBpFeat.checkpoints.length, greaterThanOrEqualTo(2));
+
+        final newEpicItem = await provider.submitFeatureIdeaToInbox(
+          'Add Co-Op Lobby Matchmaking Browser',
+          preferredBeatId: beats.first.id,
+        );
+        expect(newEpicItem, isNotNull);
+        provider.updateFeatureInboxItemTriage(
+          newEpicItem!.id,
+          timingMode: InboxReleaseTimingMode.now,
+          integrationMode: InboxIntegrationMode.newEpicAndFeature,
+        );
+        final newEpicFeatId =
+            await provider.acceptFeatureInboxTriage(newEpicItem.id);
+        expect(newEpicFeatId, isNotNull);
+        expect(
+          provider.releaseBlueprint!.beats
+              .expand((b) => b.features)
+              .any((f) => f.id == newEpicFeatId),
+          isTrue,
         );
 
         // Even after v0.2 executeBlueprint rebuilt beatDoc.childrenIds, the v0.1 superseded feature
