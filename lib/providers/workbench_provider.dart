@@ -158,6 +158,18 @@ class WorkbenchProvider extends ChangeNotifier {
   String? get synthesizingBeatId => _synthesizingBeatId;
   bool isSynthesizingBeatFeatures(String beatId) =>
       _synthesizingBeatId == beatId;
+  bool _isSynthesizingProgressiveFocus = false;
+  bool get isSynthesizingProgressiveFocus => _isSynthesizingProgressiveFocus;
+  String? _synthesizingProgressiveBeatId;
+  String? get synthesizingProgressiveBeatId => _synthesizingProgressiveBeatId;
+  final Set<String> _queuedProgressiveBeatIds = <String>{};
+  bool isSynthesizingProgressiveBeat(String beatId) =>
+      _synthesizingProgressiveBeatId == beatId;
+  bool isQueuedProgressiveBeat(String beatId) =>
+      _queuedProgressiveBeatIds.contains(beatId);
+  ReleaseBlueprint? _prewarmedProgressiveBlueprint;
+  String? _prewarmedProgressiveSignature;
+  Future<void>? _inFlightProgressivePrewarmFuture;
   List<String> get pendingFeatureStepQueue =>
       List.unmodifiable(_pendingFeatureStepQueue);
   bool _isPrewarmingReleaseBlueprint = false;

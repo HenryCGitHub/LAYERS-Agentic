@@ -1600,13 +1600,51 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (relDoc == null) return;
     _syncCurrentPhaseFromRelease(relDoc);
 
-    // Clear _releaseBlueprint while gemini-4-argon is synthesizing so the UI shows an honest
-    // Agent Architectural Synthesis state rather than a pre-baked or prior-release plan.
     _stepQueueGeneration++;
     _pendingFeatureStepQueue.clear();
-    _releaseBlueprint = null;
     final verTag = releaseVersionTagFor(relDoc);
     relDoc.sections['versionTag'] = verTag;
+
+    // Fast Path 1: Reuse background pre-warmed Progressive Release Blueprint (`0ms` instant open!)
+    if (!isFirstPrototypeRelease &&
+        existingBeats.isNotEmpty &&
+        GeminiAgentClient.testMockResponder == null) {
+      final currentPrewarmSig = _computeProgressivePrewarmSignature(
+        targetRelId: targetRelId,
+        phaseOverride: _currentPhase,
+      );
+      if (_prewarmedProgressiveBlueprint != null &&
+          _prewarmedProgressiveSignature == currentPrewarmSig) {
+        final rawJson =
+            jsonDecode(jsonEncode(_prewarmedProgressiveBlueprint!.toJson()))
+                as Map<String, dynamic>;
+        rawJson['releaseDocId'] = relDoc.id;
+        rawJson['releaseVersionTag'] = verTag;
+        final clonedPrewarmed = ReleaseBlueprint.fromJson(rawJson);
+        clonedPrewarmed.releaseVersionTag = verTag;
+        if (clonedPrewarmed.releaseTitle.isNotEmpty) {
+          relDoc.title = clonedPrewarmed.releaseTitle;
+        }
+        _injectDueScheduledInboxItemsIntoBlueprint(
+          clonedPrewarmed,
+          _currentPhase,
+        );
+        relDoc.sections.remove('used_baseline_fallback');
+        relDoc.sections['release_blueprint_json'] =
+            jsonEncode(clonedPrewarmed.toJson());
+        _persistDocument(relDoc);
+        _releaseBlueprint = clonedPrewarmed;
+        _offlineErrorMessage = null;
+        if (transitionToGateStage) {
+          _currentStage = WorkbenchStage.releaseWorkbench;
+        }
+        _syncActiveProjectMetadata();
+        notifyListeners();
+        return;
+      }
+    }
+
+    _releaseBlueprint = null;
     _isAgentBusy = true;
     final displayPlanModel = (isFirstPrototypeRelease &&
             _planningModel == 'gemini-4-argon')
@@ -1614,23 +1652,63 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         : _planningModel;
     _agentProgressStep =
         'Synthesizing $verTag Release Architecture ($displayPlanModel)...';
+
+    // Step 0 (`0ms` Live-Tree Skeleton): When opening a Progressive Release (`v0.2+`) in live mode,
+    // immediately populate `_releaseBlueprint` with the existing `E01..EN` Epics and `STABLE` features
+    // so the 3-Step Progressive Release canvas opens in `0ms` while Section 1 and Section 2 stream in.
+    if (!isFirstPrototypeRelease &&
+        existingBeats.isNotEmpty &&
+        GeminiAgentClient.hasKey(_apiKey) &&
+        GeminiAgentClient.testMockResponder == null) {
+      final skeletonBp =
+          ReleasePlannerAgent.buildProgressiveLiveTreeSkeletonBlueprint(
+        projectDoc: proj,
+        releaseDoc: relDoc,
+        existingBeats: existingBeats,
+        existingFeaturesByBeat: existingFeaturesByBeat,
+        deferredByBeatIndex: deferredByBeatIndex,
+      );
+      if (skeletonBp != null) {
+        _injectDueScheduledInboxItemsIntoBlueprint(skeletonBp, _currentPhase);
+        _releaseBlueprint = skeletonBp;
+        _isSynthesizingProgressiveFocus = true;
+        _synthesizingProgressiveBeatId = null;
+        _queuedProgressiveBeatIds.clear();
+        _agentProgressStep =
+            'Synthesizing Section 1 · $verTag Focus & 3 Strategic Options ($_conversationModel)...';
+      }
+    }
     notifyListeners();
 
     try {
       final completedPriorReleases = projectReleases
           .where((r) => r.id != targetRelId && r.childrenIds.isNotEmpty)
           .toList();
-      final planned = await ReleasePlannerAgent.planRelease(
-        projectDoc: proj,
-        releaseDoc: relDoc,
-        completedReleases: completedPriorReleases,
-        existingBeats: existingBeats,
-        existingFeaturesByBeat: existingFeaturesByBeat,
-        deferredByBeatIndex: deferredByBeatIndex,
-        apiKey: _apiKey,
-        modelName: _planningModel,
-        thinkingLevel: _thinkingLevel,
-      );
+      final ReleaseBlueprint? planned;
+      if (!isFirstPrototypeRelease &&
+          existingBeats.isNotEmpty &&
+          GeminiAgentClient.testMockResponder == null) {
+        planned = await planProgressiveReleaseSectionBySection(
+          projectDoc: proj,
+          releaseDoc: relDoc,
+          completedReleases: completedPriorReleases,
+          existingBeats: existingBeats,
+          existingFeaturesByBeat: existingFeaturesByBeat,
+          deferredByBeatIndex: deferredByBeatIndex,
+        );
+      } else {
+        planned = await ReleasePlannerAgent.planRelease(
+          projectDoc: proj,
+          releaseDoc: relDoc,
+          completedReleases: completedPriorReleases,
+          existingBeats: existingBeats,
+          existingFeaturesByBeat: existingFeaturesByBeat,
+          deferredByBeatIndex: deferredByBeatIndex,
+          apiKey: _apiKey,
+          modelName: _planningModel,
+          thinkingLevel: _thinkingLevel,
+        );
+      }
       if (planned != null) {
         if (planned.releaseTitle.isNotEmpty &&
             planned.releaseTitle != relDoc.title) {
@@ -1652,6 +1730,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
         _syncActiveProjectMetadata();
       } else {
+        _releaseBlueprint = null;
         if (!isFirstPrototypeRelease && existingBeats.isNotEmpty) {
           final fallbackProgressive =
               ReleasePlannerAgent.buildImmediateProgressiveBaselineBlueprint(
@@ -1695,10 +1774,275 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
       }
     } finally {
+      _isSynthesizingProgressiveFocus = false;
+      _synthesizingProgressiveBeatId = null;
+      _queuedProgressiveBeatIds.clear();
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
     }
+  }
+
+  String _computeProgressivePrewarmSignature({
+    String? targetRelId,
+    ProductionPhase? phaseOverride,
+  }) {
+    final proj = activeProject;
+    if (proj == null) return '';
+    final phase = phaseOverride ?? inferNextProgressivePhase();
+    final completedIds = <String>[
+      for (final r in projectReleases)
+        if (r.id != targetRelId && r.childrenIds.isNotEmpty)
+          '${r.id}:${r.title}:${getDocumentProgress(r.id)}',
+    ];
+    final inboxSig = proj.sections['feature_inbox_json']?.hashCode ?? 0;
+    final exSig = (proj.sections['exclusions'] ?? '').hashCode;
+    return '${proj.id}::${phase.name}::${completedIds.join("|")}::$inboxSig::$exSig';
+  }
+
+  /// True when the next Progressive Release Blueprint (`v0.2+`) is already pre-warmed in memory.
+  bool get hasPrewarmedProgressiveBlueprint {
+    final sig = _computeProgressivePrewarmSignature();
+    return sig.isNotEmpty &&
+        _prewarmedProgressiveBlueprint != null &&
+        _prewarmedProgressiveSignature == sig;
+  }
+
+  /// Automatically pre-warms the next Progressive Release Blueprint (`v0.2+`) in the background
+  /// as soon as `isActiveReleaseComplete` reaches `100%` so clicking `+ New Release (v0.X) ✦`
+  /// opens in `0ms` with Section 1 and Section 2 already synthesized.
+  Future<void> prewarmProgressiveNextReleaseIfNeeded() async {
+    if (!GeminiAgentClient.hasKey(_apiKey) ||
+        GeminiAgentClient.testMockResponder != null) {
+      return;
+    }
+    if (_isAgentBusy || !isActiveReleaseComplete) return;
+    if (_inFlightProgressivePrewarmFuture != null) {
+      return _inFlightProgressivePrewarmFuture!;
+    }
+    final proj = activeProject;
+    if (proj == null) return;
+    final nextPhase = inferNextProgressivePhase();
+    final sig = _computeProgressivePrewarmSignature(phaseOverride: nextPhase);
+    if (sig.isEmpty ||
+        (_prewarmedProgressiveBlueprint != null &&
+            _prewarmedProgressiveSignature == sig)) {
+      return;
+    }
+
+    final existingBeats = <TierDocument>[];
+    final existingFeaturesByBeat = <String, List<TierDocument>>{};
+    for (final rel in projectReleases) {
+      if (rel.childrenIds.isNotEmpty) {
+        for (final beatId in rel.childrenIds) {
+          final bDoc = documents[beatId];
+          if (bDoc != null && !existingBeats.any((b) => b.id == bDoc.id)) {
+            existingBeats.add(bDoc);
+            existingFeaturesByBeat[bDoc.id] = featuresForBeat(
+              bDoc.id,
+              includeSuperseded: true,
+            );
+          }
+        }
+      }
+    }
+    if (existingBeats.isEmpty) return;
+
+    final completer = Completer<void>();
+    _inFlightProgressivePrewarmFuture = completer.future;
+    try {
+      final nextVer = nextProgressiveVersionLabel;
+      final nextScope = _releaseScopeForPhase(nextPhase);
+      final tempRelDoc = TierDocument(
+        id: 'prewarm_rel_$nextVer',
+        title: '$nextVer: Progressive Release',
+        tier: TierType.release,
+        parentId: proj.id,
+        sections: {
+          'versionTag': nextVer,
+          'releaseScope': nextScope.name,
+          'phase': nextPhase.name,
+          'agentReasoned': 'true',
+        },
+      );
+      final completedPriorReleases = projectReleases
+          .where((r) => r.childrenIds.isNotEmpty)
+          .toList();
+      final planned = await planProgressiveReleaseSectionBySection(
+        projectDoc: proj,
+        releaseDoc: tempRelDoc,
+        completedReleases: completedPriorReleases,
+        existingBeats: existingBeats,
+        existingFeaturesByBeat: existingFeaturesByBeat,
+        deferredByBeatIndex: const {},
+        isBackgroundPrewarm: true,
+      );
+      if (planned != null &&
+          _computeProgressivePrewarmSignature(phaseOverride: nextPhase) ==
+              sig) {
+        _prewarmedProgressiveBlueprint = planned;
+        _prewarmedProgressiveSignature = sig;
+      }
+    } catch (_) {
+    } finally {
+      _inFlightProgressivePrewarmFuture = null;
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+  }
+
+  /// Section-by-Section Progressive Release Orchestrator (`Step 0: 0ms Live-Tree Skeleton` ->
+  /// `Pass 1: Section 1 Focus & 3 Strategic Options (~1.5s)` -> `Pass 2: Section 2 Target Epics One-by-One`).
+  Future<ReleaseBlueprint?> planProgressiveReleaseSectionBySection({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    required List<TierDocument> completedReleases,
+    required List<TierDocument> existingBeats,
+    required Map<String, List<TierDocument>> existingFeaturesByBeat,
+    required Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex,
+    bool isBackgroundPrewarm = false,
+  }) async {
+    if (!GeminiAgentClient.hasKey(_apiKey) || existingBeats.isEmpty) {
+      return null;
+    }
+    final verTag = releaseVersionTagFor(releaseDoc);
+    final workingBp = (!isBackgroundPrewarm &&
+            _releaseBlueprint != null &&
+            _releaseBlueprint!.releaseDocId == releaseDoc.id)
+        ? _releaseBlueprint!
+        : ReleasePlannerAgent.buildProgressiveLiveTreeSkeletonBlueprint(
+            projectDoc: projectDoc,
+            releaseDoc: releaseDoc,
+            existingBeats: existingBeats,
+            existingFeaturesByBeat: existingFeaturesByBeat,
+            deferredByBeatIndex: deferredByBeatIndex,
+          );
+    if (workingBp == null) return null;
+
+    if (!isBackgroundPrewarm) {
+      _releaseBlueprint = workingBp;
+      _isSynthesizingProgressiveFocus = true;
+      _synthesizingProgressiveBeatId = null;
+      _queuedProgressiveBeatIds.clear();
+      _agentProgressStep =
+          'Synthesizing Section 1 · $verTag Focus & 3 Strategic Options ($_conversationModel)...';
+      notifyListeners();
+    }
+
+    // Pass 1 (~1.5s): Synthesize Section 1 (`1. Choose v0.X Focus`, `Done When`, & 3 Strategic Options)
+    final focusResult =
+        await ReleasePlannerAgent.planProgressiveReleaseFocusSection(
+      projectDoc: projectDoc,
+      releaseDoc: releaseDoc,
+      completedReleases: completedReleases,
+      existingBeats: existingBeats,
+      existingFeaturesByBeat: existingFeaturesByBeat,
+      deferredByBeatIndex: deferredByBeatIndex,
+      apiKey: _apiKey,
+      modelName: _conversationModel,
+      thinkingLevel: 'LOW',
+    );
+    if (focusResult == null) return null;
+    if (focusResult.fullBlueprint != null) {
+      if (!isBackgroundPrewarm) {
+        _isSynthesizingProgressiveFocus = false;
+        _releaseBlueprint = focusResult.fullBlueprint;
+        notifyListeners();
+      }
+      return focusResult.fullBlueprint;
+    }
+
+    if (focusResult.releaseTitle.isNotEmpty) {
+      workingBp.releaseTitle = focusResult.releaseTitle;
+      releaseDoc.title = focusResult.releaseTitle;
+    }
+    if (focusResult.goal.isNotEmpty) {
+      workingBp.goal = focusResult.goal;
+    }
+    if (focusResult.doneWhen.isNotEmpty) {
+      workingBp.doneWhen = focusResult.doneWhen;
+    }
+    workingBp.builtSoFar = focusResult.builtSoFar;
+    workingBp.missingGaps = focusResult.missingGaps;
+    if (focusResult.questions.isNotEmpty) {
+      workingBp.questions = focusResult.questions;
+    }
+    if (focusResult.agentReasoning.isNotEmpty) {
+      workingBp.lastAgentReply = focusResult.agentReasoning;
+    }
+
+    if (!isBackgroundPrewarm) {
+      _isSynthesizingProgressiveFocus = false;
+      _queuedProgressiveBeatIds.clear();
+      for (final idx in focusResult.targetEpicIndices) {
+        if (idx >= 0 && idx < workingBp.beats.length) {
+          _queuedProgressiveBeatIds.add(workingBp.beats[idx].id);
+        }
+      }
+      notifyListeners();
+    }
+
+    // Pass 2 (Epic-by-Epic): Synthesize Section 2 (`2. Epics & Features in v0.X`) one target Epic at a time
+    final alreadyPlannedChanges = <String>[];
+    for (final bIdx in focusResult.targetEpicIndices) {
+      if (bIdx < 0 ||
+          bIdx >= existingBeats.length ||
+          bIdx >= workingBp.beats.length) {
+        continue;
+      }
+      final eb = existingBeats[bIdx];
+      final eCode = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
+      if (!isBackgroundPrewarm) {
+        _queuedProgressiveBeatIds.remove(eb.id);
+        _synthesizingProgressiveBeatId = eb.id;
+        _agentProgressStep =
+            'Synthesizing Section 2 · EPIC $eCode (${eb.title}) features ($_conversationModel)...';
+        notifyListeners();
+      }
+
+      final updatedBeat = await ReleasePlannerAgent.planProgressiveEpicChanges(
+        projectDoc: projectDoc,
+        releaseDoc: releaseDoc,
+        epicDoc: eb,
+        epicIndex: bIdx,
+        totalEpicsCount: existingBeats.length,
+        existingFeaturesInEpic:
+            existingFeaturesByBeat[eb.id] ?? const <TierDocument>[],
+        queuedDeferredInEpic:
+            deferredByBeatIndex[bIdx] ?? const <ProposedFeatureBlueprint>[],
+        section1Goal: workingBp.goal,
+        section1DoneWhen: workingBp.doneWhen,
+        missingGaps: workingBp.missingGaps,
+        alreadyPlannedChanges: alreadyPlannedChanges,
+        apiKey: _apiKey,
+        modelName: _conversationModel,
+        thinkingLevel: 'LOW',
+      );
+      if (updatedBeat != null) {
+        workingBp.beats[bIdx] = updatedBeat;
+        for (final f in updatedBeat.features) {
+          if (!f.isStable && !f.isSuperseded) {
+            alreadyPlannedChanges.add(f.title);
+          }
+        }
+        if (!isBackgroundPrewarm) {
+          _injectDueScheduledInboxItemsIntoBlueprint(workingBp, _currentPhase);
+          notifyListeners();
+        }
+      }
+    }
+
+    if (!isBackgroundPrewarm) {
+      _synthesizingProgressiveBeatId = null;
+      _queuedProgressiveBeatIds.clear();
+    }
+
+    final hasAnyActiveChange = workingBp.beats.any(
+      (b) => b.features.any((f) => !f.isStable && !f.isSuperseded),
+    );
+    if (!hasAnyActiveChange) return null;
+    return workingBp;
   }
 
   /// Sends a user turn in the Stage 2 Release Plan Gate Chat to refine Beats, Features, or Scope.
@@ -5413,6 +5757,11 @@ Return ONLY valid JSON:
     TaskHowToBlueprint.clearCache();
     _persistDocument(feat, debounce: true);
     notifyListeners();
+    if (isActiveReleaseComplete &&
+        GeminiAgentClient.testMockResponder == null &&
+        GeminiAgentClient.hasKey(_apiKey)) {
+      unawaited(prewarmProgressiveNextReleaseIfNeeded());
+    }
   }
 
   /// Propagates a variable identifier rename (`oldIdentifier` -> `newIdentifier`)

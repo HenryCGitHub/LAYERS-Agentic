@@ -7077,6 +7077,198 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           e01CreatedFeats.first.id,
           isNot(equals(e02CreatedFeats.first.id)),
         );
+
+        // 11e. Section-by-Section Progressive Release builds 0ms skeleton, Section 1 Focus, and Epic-by-Epic Section 2 changes
+        final secExistingBeats = List<TierDocument>.from(
+          provider.activeReleaseBeats,
+        );
+        final secExistingFeaturesByBeat = <String, List<TierDocument>>{
+          for (final b in secExistingBeats)
+            b.id: provider.featuresForBeat(b.id),
+        };
+        final secFirstBeat = secExistingBeats.first;
+        final secFirstFeat = secExistingFeaturesByBeat[secFirstBeat.id]!.first;
+
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final observedSection1States = <bool>[];
+        final observedEpicIds = <String?>[];
+        void progListener() {
+          observedSection1States.add(provider.isSynthesizingProgressiveFocus);
+          observedEpicIds.add(provider.synthesizingProgressiveBeatId);
+        }
+
+        provider.addListener(progListener);
+        try {
+          GeminiAgentClient.testMockResponder = (
+            String prompt,
+            String preferredModel,
+          ) async {
+            if (prompt.contains('commit_progressive_release_focus')) {
+              return {
+                'inferredPhase': 'mvp',
+                'releaseTitle': 'v0.2: Arena Wave Loop & Dash Upgrade',
+                'goal':
+                    'Build multi-wave arena escalation and upgrade hovertank dash recharge.',
+                'doneWhen':
+                    'Playtester clears 3 escalating waves and verifies dash cooldown indicator.',
+                'whatWeBuiltSoFar': [
+                  'v0.1 (${secExistingBeats.length} Epics): Hovertank movement and primary cannon.',
+                ],
+                'missingGaps': [
+                  'Missing dash cooldown HUD bar and wave escalation spawner.',
+                ],
+                'explicitExclusions': ['No online multiplayer'],
+                'questions': [
+                  {
+                    'id': 'rel_q_focus',
+                    'question': 'Which direction should anchor v0.2?',
+                    'options': [
+                      '(Recommended) Wave Escalation & Dash: Upgrade ${secFirstFeat.title} and add Wave Spawner',
+                      'Hazard Rooms: Add arena laser traps and shield recharge',
+                      'Boss Encounter: Focus v0.2 on a single multi-phase boss tank',
+                    ],
+                  },
+                ],
+                'targetEpicNumbers': [1, 2],
+              };
+            }
+            if (prompt.contains('commit_progressive_epic_changes')) {
+              if (prompt.contains('Target Epic E01')) {
+                return {
+                  'epicNumber': 1,
+                  'epicGoal': 'Upgrade hovertank dash with recharge bar.',
+                  'epicDoneWhen': 'Dash recharge bar fills in 1.2s.',
+                  'features': [
+                    {
+                      'id': secFirstFeat.id,
+                      'title': secFirstFeat.title,
+                      'lifecycle': 'upgrade',
+                      'goal':
+                          'Add dash recharge bar and invulnerability window.',
+                      'doneWhen':
+                          'Playtester dashes through projectiles and sees cooldown bar.',
+                      'estimatedHours': 3,
+                      'primarySharedScriptOrScene': 'PlayerTank.gd',
+                      'inScope': ['Dash recharge bar', 'I-frame window'],
+                      'outOfScope': ['Skill tree perks'],
+                      'tuningParams': ['dashCooldown: 1.2 s'],
+                      'edgeCases': [
+                        '[INPUT GUARD] Ignore dash input while cooldown > 0',
+                      ],
+                      'checkpointTitle': 'Dash Cooldown & I-Frames',
+                      'playtestCriteria':
+                          'Press Space -> dash triggers i-frames -> bar refills in 1.2s',
+                      'tasks': [
+                        {
+                          'role': 'entity_and_collision_foundation',
+                          'title': 'Cooldown Timer & Bar Node',
+                        },
+                        {
+                          'role': 'core_action_and_math',
+                          'title': 'I-Frame Collision Toggle',
+                        },
+                        {
+                          'role': 'feedback_and_boundary_guard',
+                          'title': 'Ready Flash & Input Guard',
+                        },
+                      ],
+                    },
+                  ],
+                };
+              }
+              return {
+                'epicNumber': 2,
+                'epicGoal': 'Spawn escalating enemy tank waves.',
+                'epicDoneWhen': '3 enemy waves spawn and clear cleanly.',
+                'features': [
+                  {
+                    'id': 'feat_wave_escalation_v02',
+                    'title': 'Enemy Wave Spawner',
+                    'lifecycle': 'new',
+                    'goal': 'Spawn 3 escalating enemy waves in the arena.',
+                    'doneWhen':
+                        'Clearing wave 1 spawns wave 2 and wave 3 in sequence.',
+                    'estimatedHours': 4,
+                    'primarySharedScriptOrScene': 'WaveDirector.gd',
+                    'inScope': ['3-wave table', 'Spawn perimeter points'],
+                    'outOfScope': ['Endless leaderboard'],
+                    'tuningParams': ['waveSpawnDelay: 2.5 s'],
+                    'edgeCases': [
+                      '[BOUNDS GUARD] Clamp spawn points inside arena navmesh',
+                    ],
+                    'checkpointTitle': '3-Wave Escalation Loop',
+                    'playtestCriteria':
+                        'Destroy wave 1 -> wave 2 spawns after 2.5s',
+                    'tasks': [
+                      {
+                        'role': 'entity_and_collision_foundation',
+                        'title': 'Spawn Point Array & Wave Table',
+                      },
+                      {
+                        'role': 'core_action_and_math',
+                        'title': 'Wave Counter & Enemy Instantiation',
+                      },
+                      {
+                        'role': 'feedback_and_boundary_guard',
+                        'title': 'Wave Banner & Bounds Guard',
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+            return prevMock!(prompt, preferredModel);
+          };
+
+          final relV02 = TierDocument(
+            id: 'rel_v02_sec_test',
+            tier: TierType.release,
+            title: 'v0.2: Progressive Release',
+            parentId: provider.activeProject!.id,
+            sections: {'versionTag': 'v0.2', 'phase': 'mvp'},
+          );
+
+          final planned = await provider.planProgressiveReleaseSectionBySection(
+            projectDoc: provider.activeProject!,
+            releaseDoc: relV02,
+            completedReleases: provider.projectReleases,
+            existingBeats: secExistingBeats,
+            existingFeaturesByBeat: secExistingFeaturesByBeat,
+            deferredByBeatIndex: const {},
+          );
+
+          expect(planned, isNotNull);
+          expect(
+            planned!.goal,
+            contains('Build multi-wave arena escalation'),
+          );
+          expect(planned.questions, isNotEmpty);
+          expect(planned.questions.first.options.length, equals(3));
+
+          // Verify Section 1 synthesis flag toggled true then false
+          expect(observedSection1States, contains(true));
+          expect(provider.isSynthesizingProgressiveFocus, isFalse);
+
+          // Verify Epic-by-Epic synthesis visited E01 and E02
+          expect(observedEpicIds, contains(secExistingBeats[0].id));
+          expect(observedEpicIds, contains(secExistingBeats[1].id));
+
+          // Verify E01 has the UPGRADE feature and E02 has the NEW feature, while other features remain STABLE
+          final e01Upgrades = planned.beats[0].features
+              .where((f) => f.lifecycle == FeatureLifecycleStatus.upgrade)
+              .toList();
+          expect(e01Upgrades.length, equals(1));
+          expect(e01Upgrades.first.id, equals(secFirstFeat.id));
+
+          final e02NewFeats = planned.beats[1].features
+              .where((f) => f.lifecycle == FeatureLifecycleStatus.newFeature)
+              .toList();
+          expect(e02NewFeats.length, equals(1));
+          expect(e02NewFeats.first.title, equals('Enemy Wave Spawner'));
+        } finally {
+          provider.removeListener(progListener);
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
       },
     );
   });

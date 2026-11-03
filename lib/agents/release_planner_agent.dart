@@ -363,6 +363,140 @@ class ReleasePlannerAgent {
     },
   };
 
+  /// Native Gemini Tool Declaration for Pass 1 of Section-by-Section Progressive Release (`commit_progressive_release_focus`).
+  /// Synthesizes ONLY Section 1 (`releaseTitle`, `goal`, `doneWhen`, `missingGaps`, 3 Strategic Options, and `targetEpicNumbers`)
+  /// so Section 1 renders in ~1.5 seconds before Section 2 streams Epic-by-Epic.
+  static const Map<String, dynamic> commitProgressiveReleaseFocusTool = {
+    'name': 'commit_progressive_release_focus',
+    'description':
+        'Commits Section 1 of the Progressive Release Plan (Release Title, Goal, Done When, Lacking Now gaps, 3 Strategic Focus Options, and Target Epic Numbers).',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': [
+        'releasePhase',
+        'releaseTitle',
+        'goal',
+        'doneWhen',
+        'missingGaps',
+        'questions',
+        'targetEpicNumbers',
+      ],
+      'properties': {
+        'releasePhase': {'type': 'STRING'},
+        'releaseTitle': {'type': 'STRING'},
+        'builtSoFar': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'missingGaps': {
+          'type': 'ARRAY',
+          'items': {'type': 'STRING'},
+        },
+        'agentReasoning': {'type': 'STRING'},
+        'goal': {'type': 'STRING'},
+        'doneWhen': {'type': 'STRING'},
+        'targetEpicNumbers': {
+          'type': 'ARRAY',
+          'description':
+              '1-based Epic numbers (1..N) that this release will upgrade or add new features to.',
+          'items': {'type': 'INTEGER'},
+        },
+        'questions': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['question', 'options'],
+            'properties': {
+              'id': {'type': 'STRING'},
+              'question': {'type': 'STRING'},
+              'options': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  /// Native Gemini Tool Declaration for Pass 2 of Section-by-Section Progressive Release (`commit_progressive_epic_changes`).
+  /// Synthesizes the `upgrade` and `new` Features for a SINGLE target Epic in the Progressive Release Co-Pilot.
+  static const Map<String, dynamic> commitProgressiveEpicChangesTool = {
+    'name': 'commit_progressive_epic_changes',
+    'description':
+        'Commits the active UPGRADE and NEW features for a single target Epic in the Progressive Release Co-Pilot.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['features'],
+      'properties': {
+        'features': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': [
+              'title',
+              'lifecycle',
+              'goal',
+              'doneWhen',
+              'estimatedHours',
+              'inScope',
+              'tuningParams',
+              'edgeCases',
+              'checkpointTitle',
+              'playtestCriteria',
+              'tasks',
+            ],
+            'properties': {
+              'id': {'type': 'STRING'},
+              'title': {'type': 'STRING'},
+              'lifecycle': {
+                'type': 'STRING',
+                'enum': ['upgrade', 'new', 'superseded'],
+              },
+              'goal': {'type': 'STRING'},
+              'doneWhen': {'type': 'STRING'},
+              'estimatedHours': {'type': 'INTEGER'},
+              'primarySharedScriptOrScene': {'type': 'STRING'},
+              'inScope': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+              'tuningParams': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+              'edgeCases': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+              'checkpointTitle': {'type': 'STRING'},
+              'playtestCriteria': {'type': 'STRING'},
+              'tasks': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': ['role', 'title'],
+                  'properties': {
+                    'role': {
+                      'type': 'STRING',
+                      'enum': [
+                        'entity_and_collision_foundation',
+                        'core_action_and_math',
+                        'feedback_and_boundary_guard',
+                      ],
+                    },
+                    'title': {'type': 'STRING'},
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
   /// Native Gemini Tool Declaration for `sendReleasePlanChatTurn` (`mutate_release_plan`).
   static const Map<String, dynamic> mutateReleasePlanTool = {
     'name': 'mutate_release_plan',
@@ -1322,6 +1456,571 @@ Call `commit_epic_features` (or return ONLY valid JSON):
       rawDescPart: epicBlueprint.goal,
       versionTag: versionTag,
     );
+  }
+
+  /// Step 0 (`0ms`) of Section-by-Section Progressive Release:
+  /// Builds an instant in-memory `ReleaseBlueprint` shell containing the existing `E01..EN` Epics,
+  /// `STABLE` built features, and `projectExclusions` so the 3-Step Progressive Release modal opens
+  /// immediately at `0ms` while Section 1 (Focus & 3 Options) and Section 2 (Epic Changes) stream in.
+  static ReleaseBlueprint? buildProgressiveLiveTreeSkeletonBlueprint({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    required List<TierDocument> existingBeats,
+    required Map<String, List<TierDocument>> existingFeaturesByBeat,
+    required Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex,
+  }) {
+    if (existingBeats.isEmpty) return null;
+    final preset = releaseDoc.releaseScope;
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
+    final projectExclusions = SectionTextUtils.resolveExclusions(
+      projectDoc.sections,
+      splitSingleSentence: false,
+    );
+
+    final beats = <ProposedBeatBlueprint>[];
+    for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
+      final eb = existingBeats[bIdx];
+      final existingFeats =
+          existingFeaturesByBeat[eb.id] ?? const <TierDocument>[];
+      final proposedFeats = <ProposedFeatureBlueprint>[];
+      for (final ef in existingFeats) {
+        final isSuperseded =
+            ef.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
+        final existingAsset = (ef.sections['primary_asset'] ?? '').trim();
+        proposedFeats.add(
+          ProposedFeatureBlueprint(
+            id: ef.id,
+            title: ef.title,
+            goal: SectionTextUtils.resolveGoal(ef.sections),
+            doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
+            estimatedHours: 0,
+            included: !isSuperseded,
+            lifecycle: isSuperseded
+                ? FeatureLifecycleStatus.superseded
+                : FeatureLifecycleStatus.stable,
+            originVersion: ef.sections['originVersion'] ?? 'v0.1',
+            primarySharedScriptOrScene:
+                existingAsset.isNotEmpty ? existingAsset : null,
+            inScope: SectionTextUtils.resolveInScope(ef.sections),
+            outOfScope: const [],
+            tuningParams: const [],
+            edgeCases: const [],
+            checkpoints: const [],
+          ),
+        );
+      }
+      final deferredList = deferredByBeatIndex[bIdx];
+      if (deferredList != null) {
+        for (final defFeat in deferredList) {
+          defFeat.included = true;
+          defFeat.lifecycle = FeatureLifecycleStatus.newFeature;
+          defFeat.originVersion = versionTag;
+          proposedFeats.add(defFeat);
+        }
+      }
+      beats.add(
+        ProposedBeatBlueprint(
+          id: eb.id,
+          title: eb.title,
+          goal: SectionTextUtils.resolveGoal(eb.sections),
+          doneWhen: SectionTextUtils.resolveDoneWhen(eb.sections),
+          features: proposedFeats,
+        ),
+      );
+    }
+
+    return ReleaseBlueprint(
+      releaseDocId: releaseDoc.id,
+      releaseTitle: releaseDoc.title,
+      releaseVersionTag: versionTag,
+      preset: preset,
+      goal: '',
+      doneWhen: '',
+      questions: const <AgentQuestion>[],
+      beats: beats,
+      explicitExclusions: projectExclusions,
+      lastAgentReply:
+          'Synthesizing Section 1: Analyzing completed features and Design Pillars to recommend $versionTag focus & options...',
+    );
+  }
+
+  /// Pass 1 (`~1.5s`) of Section-by-Section Progressive Release:
+  /// Synthesizes ONLY Section 1 (`releaseTitle`, `goal`, `doneWhen`, `missingGaps`, 3 Strategic Options,
+  /// and `targetEpicIndices`) using fast `gemini-flash-latest` (`thinkingLevel: "LOW"`).
+  /// If the responder returns a full `beats` payload (e.g. in unit tests), returns `fullBlueprint` directly.
+  static Future<({
+    ReleaseBlueprint? fullBlueprint,
+    String releasePhase,
+    String releaseTitle,
+    String goal,
+    String doneWhen,
+    List<String> builtSoFar,
+    List<String> missingGaps,
+    String agentReasoning,
+    List<AgentQuestion> questions,
+    List<int> targetEpicIndices,
+  })?> planProgressiveReleaseFocusSection({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    List<TierDocument> completedReleases = const [],
+    List<TierDocument> existingBeats = const [],
+    Map<String, List<TierDocument>> existingFeaturesByBeat = const {},
+    Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex = const {},
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
+  }) async {
+    if (!GeminiAgentClient.hasKey(apiKey) || existingBeats.isEmpty) {
+      return null;
+    }
+
+    final preset = releaseDoc.releaseScope;
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
+    final releasePhase = (releaseDoc.sections['phase'] ?? 'mvp').trim();
+    final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
+    final mvpEpicMatch = _mvpEpicNumRegex.firstMatch(releaseDoc.title);
+    final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
+    final int? explicitTargetEpicIdx = isAgentReasoned
+        ? null
+        : (rawTargetEpicIdx != null
+            ? int.tryParse(rawTargetEpicIdx)
+            : (mvpEpicMatch != null
+                ? (int.tryParse(mvpEpicMatch.group(1)!) ?? 1) - 1
+                : null));
+
+    final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
+    final projectExclusions = SectionTextUtils.resolveExclusions(
+      projectDoc.sections,
+      splitSingleSentence: false,
+    );
+    final gameSpecText =
+        projectDoc.sections['game_spec'] ?? projectDoc.sections['gameSpec'] ?? '';
+    final techSpecText =
+        projectDoc.sections['tech_spec'] ?? projectDoc.sections['techSpec'] ?? '';
+    final pillarsText = projectDoc.sections['design_pillars'] ??
+        projectDoc.sections['designPillars'] ??
+        '';
+    final tradeOffsText = projectDoc.sections['trade_offs'] ??
+        projectDoc.sections['tradeOffs'] ??
+        '';
+    final projectGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
+    final projectDoneWhen =
+        SectionTextUtils.resolveDoneWhen(projectDoc.sections);
+
+    final historyAndTree = StringBuffer();
+    if (completedReleases.isNotEmpty) {
+      historyAndTree.writeln(
+        'Completed Prior Releases History (chronological):',
+      );
+      for (final priorRel in completedReleases) {
+        final pVer = extractReleaseVersionTag(
+          priorRel.sections['versionTag']?.isNotEmpty == true
+              ? priorRel.sections['versionTag']!
+              : priorRel.title,
+        );
+        final pPhase =
+            priorRel.sections['phase'] ?? priorRel.releaseScope.name;
+        final pGoal = SectionTextUtils.resolveGoal(priorRel.sections);
+        historyAndTree.writeln(
+          '- $pVer [$pPhase] "${priorRel.title}": ${pGoal.isNotEmpty ? pGoal : "Completed milestone"}',
+        );
+      }
+    }
+    historyAndTree.writeln(
+      'Existing Live Game Tree (Epics E01..E${existingBeats.length.toString().padLeft(2, '0')}):',
+    );
+    final unupgradedEpicNums = <int>[];
+    for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
+      final b = existingBeats[bIdx];
+      final eNum = bIdx + 1;
+      final eCode = 'E${eNum.toString().padLeft(2, '0')}';
+      final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
+      bool hasPostV01Upgrade = false;
+      final featSummaries = <String>[];
+      for (final f in feats) {
+        if (f.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name) {
+          featSummaries.add('${f.title} [SUPERSEDED]');
+          continue;
+        }
+        final states = FeatureStateNode.getStatesForDocument(f);
+        final originVer = f.sections['originVersion'] ?? 'v0.1';
+        if (originVer.toLowerCase() != 'v0.1' ||
+            states.any((s) => s.releaseVersion.toLowerCase() != 'v0.1')) {
+          hasPostV01Upgrade = true;
+        }
+        final cpChain = states.isNotEmpty
+            ? states.map((s) => s.releaseVersion).join('->')
+            : originVer;
+        featSummaries.add('${f.title} ($cpChain)');
+      }
+      if (!hasPostV01Upgrade) {
+        unupgradedEpicNums.add(eNum);
+      }
+      historyAndTree.writeln(
+        '- Epic $eNum ($eCode · "${b.title}", id: ${b.id}): ${featSummaries.join(', ')}',
+      );
+    }
+
+    final prompt = '''
+You are the Lead Game Architect planning **Section 1 (Focus & Strategic Options)** for Progressive Release "$versionTag" (${releaseDoc.title}, Phase: $releasePhase) of "${projectDoc.title}".
+Concept Blueprint:
+- 01 Goal: "$projectGoal"
+- 02 Game Spec: $gameSpecText
+- 03 Tech Spec: $techSpecText
+- 04 Design Pillars: $pillarsText
+- 05 Trade-Offs: $tradeOffsText
+- 06 Core Loop: ${coreLoopItems.join(' -> ')}
+- 07 Out of Scope: ${projectExclusions.join(' | ')}
+- 08 Done When: "$projectDoneWhen"
+$historyAndTree
+${unupgradedEpicNums.isNotEmpty ? 'Still-Greybox v0.1 Epics needing upgrade coverage: ${unupgradedEpicNums.map((n) => "E${n.toString().padLeft(2, '0')}").join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- Return ONLY Section 1 of the $versionTag Progressive Release Plan:
+  1. `"releasePhase"`: `"$releasePhase"`
+  2. `"releaseTitle"`: `"$versionTag: <2-5 Word Concrete Focus>"`
+  3. `"goal"`: 1 plain-English sentence stating what $versionTag upgrades/adds and why.
+  4. `"doneWhen"`: 1 observable playtest completion condition for $versionTag.
+  5. `"builtSoFar"`: 2–4 short phrases summarizing what is already built.
+  6. `"missingGaps"`: 2–4 concise 1-line statements prefixed with `E0#:` naming what is lacking right now.
+  7. `"targetEpicNumbers"`: Array of 1-based Epic numbers (`1..${existingBeats.length}`) that $versionTag will upgrade or add features to (e.g. `[2, 3]`).
+  8. `"questions"`: 1 strategic question with 3 concrete options tailored to "${projectDoc.title}" (Option 1 prefixed with `(Recommended)` matching your primary focus; Options 2 and 3 offering distinct alternative focuses).
+
+Call `commit_progressive_release_focus` (or return ONLY valid JSON):
+{
+  "releasePhase": "$releasePhase",
+  "releaseTitle": "$versionTag: Concrete Focus Title",
+  "goal": "Upgrade ... and add ... so the player can ...",
+  "doneWhen": "Playtester verifies ... in Play mode.",
+  "builtSoFar": ["...", "..."],
+  "missingGaps": ["E02: ...", "E03: ..."],
+  "agentReasoning": "1-2 concise sentences explaining why these Epics are prioritized next.",
+  "targetEpicNumbers": [2, 3],
+  "questions": [
+    {
+      "id": "rel_q_1",
+      "question": "Which gameplay focus should $versionTag prioritize?",
+      "options": [
+        "(Recommended) Focus A: 1-sentence game-specific description",
+        "Focus B: 1-sentence game-specific description",
+        "Focus C: 1-sentence game-specific description"
+      ]
+    }
+  ]
+}''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: 'gemini-flash-latest',
+      thinkingLevel: 'LOW',
+      temperature: 0.35,
+      functionDeclarations: const [commitProgressiveReleaseFocusTool],
+    );
+    if (json == null) return null;
+
+    // Backward-compatible fast path: if a mock or model returned a full `beats` array, parse & reconcile immediately
+    final rawBeats = json['beats'];
+    if (rawBeats is List && rawBeats.isNotEmpty) {
+      final parsed = _parseDynamicReleaseBlueprint(
+        json: json,
+        releaseDoc: releaseDoc,
+        preset: preset,
+        versionTag: versionTag,
+        fallbackExclusions: projectExclusions,
+      );
+      if (parsed != null) {
+        final reconciled = reconcileReleaseBlueprintWithPhaseRules(
+          parsed: parsed,
+          releaseDoc: releaseDoc,
+          preset: preset,
+          versionTag: versionTag,
+          existingBeats: existingBeats,
+          existingFeaturesByBeat: existingFeaturesByBeat,
+          deferredByBeatIndex: deferredByBeatIndex,
+          projectExclusions: projectExclusions,
+          allCoreLoopItems: coreLoopItems,
+        );
+        return (
+          fullBlueprint: reconciled,
+          releasePhase: releasePhase,
+          releaseTitle: reconciled.releaseTitle,
+          goal: reconciled.goal,
+          doneWhen: reconciled.doneWhen,
+          builtSoFar: reconciled.builtSoFar,
+          missingGaps: reconciled.missingGaps,
+          agentReasoning: reconciled.lastAgentReply ?? '',
+          questions: reconciled.questions,
+          targetEpicIndices: const <int>[],
+        );
+      }
+    }
+
+    final questions = <AgentQuestion>[];
+    final rawQs = json['questions'];
+    if (rawQs is List) {
+      for (int i = 0; i < rawQs.length; i++) {
+        final item = rawQs[i];
+        if (item is Map) {
+          final qText = (item['question'] ?? '').toString().trim();
+          final opts = _parseStringList(item['options']);
+          if (qText.isNotEmpty && opts.length >= 2) {
+            questions.add(
+              AgentQuestion(
+                id: (item['id'] ?? 'rel_q_${i + 1}').toString(),
+                question: qText,
+                options: opts,
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    final rawTargetNums = json['targetEpicNumbers'];
+    final targetIndices = <int>[];
+    if (explicitTargetEpicIdx != null &&
+        explicitTargetEpicIdx >= 0 &&
+        explicitTargetEpicIdx < existingBeats.length) {
+      targetIndices.add(explicitTargetEpicIdx);
+    } else if (rawTargetNums is List) {
+      for (final item in rawTargetNums) {
+        final n = int.tryParse(item.toString().trim());
+        if (n != null && n >= 1 && n <= existingBeats.length) {
+          final idx = n - 1;
+          if (!targetIndices.contains(idx)) {
+            targetIndices.add(idx);
+          }
+        }
+      }
+    }
+    final missingGaps = _parseStringList(json['missingGaps']);
+    if (targetIndices.isEmpty && missingGaps.isNotEmpty) {
+      final eRegex = RegExp(r'\bE0?(\d+)\b', caseSensitive: false);
+      for (final gap in missingGaps) {
+        final m = eRegex.firstMatch(gap);
+        if (m != null) {
+          final n = int.tryParse(m.group(1)!);
+          if (n != null && n >= 1 && n <= existingBeats.length) {
+            final idx = n - 1;
+            if (!targetIndices.contains(idx)) {
+              targetIndices.add(idx);
+            }
+          }
+        }
+      }
+    }
+    if (targetIndices.isEmpty) {
+      if (unupgradedEpicNums.isNotEmpty) {
+        for (final n in unupgradedEpicNums.take(2)) {
+          targetIndices.add(n - 1);
+        }
+      } else {
+        targetIndices.add(0);
+      }
+    }
+
+    final rawTitle = (json['releaseTitle'] ?? '').toString().trim();
+    final effectiveTitle = rawTitle.isNotEmpty
+        ? (rawTitle.startsWith('$versionTag:')
+            ? rawTitle
+            : '$versionTag: ${rawTitle.replaceFirst(_versionPrefixStripRegex, '')}')
+        : releaseDoc.title;
+
+    return (
+      fullBlueprint: null,
+      releasePhase: (json['releasePhase'] ?? releasePhase).toString().trim(),
+      releaseTitle: effectiveTitle,
+      goal: (json['goal'] ?? '').toString().trim(),
+      doneWhen: (json['doneWhen'] ?? '').toString().trim(),
+      builtSoFar: _parseStringList(json['builtSoFar']),
+      missingGaps: missingGaps,
+      agentReasoning: (json['agentReasoning'] ?? '').toString().trim(),
+      questions: questions,
+      targetEpicIndices: targetIndices,
+    );
+  }
+
+  /// Pass 2 (Epic-by-Epic) of Section-by-Section Progressive Release:
+  /// Synthesizes the `upgrade` and `new` Features for a SINGLE target Epic (`existingBeats[epicIndex]`)
+  /// and reconciles them with that Epic's existing `STABLE` features.
+  static Future<ProposedBeatBlueprint?> planProgressiveEpicChanges({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    required TierDocument epicDoc,
+    required int epicIndex,
+    required int totalEpicsCount,
+    required List<TierDocument> existingFeaturesInEpic,
+    required List<ProposedFeatureBlueprint> queuedDeferredInEpic,
+    required String section1Goal,
+    required String section1DoneWhen,
+    required List<String> missingGaps,
+    required List<String> alreadyPlannedChanges,
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'LOW',
+  }) async {
+    if (!GeminiAgentClient.hasKey(apiKey)) return null;
+    final preset = releaseDoc.releaseScope;
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
+    final releasePhase = (releaseDoc.sections['phase'] ?? 'mvp').trim();
+    final projectExclusions = SectionTextUtils.resolveExclusions(
+      projectDoc.sections,
+      splitSingleSentence: false,
+    );
+    final gameSpecText =
+        projectDoc.sections['game_spec'] ?? projectDoc.sections['gameSpec'] ?? '';
+    final techSpecText =
+        projectDoc.sections['tech_spec'] ?? projectDoc.sections['techSpec'] ?? '';
+    final pillarsText = projectDoc.sections['design_pillars'] ??
+        projectDoc.sections['designPillars'] ??
+        '';
+    final tradeOffsText = projectDoc.sections['trade_offs'] ??
+        projectDoc.sections['tradeOffs'] ??
+        '';
+    final epicCode = 'E${(epicIndex + 1).toString().padLeft(2, '0')}';
+
+    final existingFeatLines = <String>[];
+    for (final f in existingFeaturesInEpic) {
+      if (f.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name) {
+        existingFeatLines.add(
+          '- SUPERSEDED: "${f.title}" [id: ${f.id}]',
+        );
+        continue;
+      }
+      final states = FeatureStateNode.getStatesForDocument(f);
+      final latestCp = states.isNotEmpty
+          ? '${states.last.releaseVersion} "${states.last.cleanStageTitle}"'
+          : (f.sections['originVersion'] ?? 'v0.1');
+      final tuning = <String>{
+        for (final s in states) ...s.tuningParams,
+      };
+      final asset = (f.sections['primary_asset'] ?? '').trim();
+      existingFeatLines.add(
+        '- Existing Feature: "${f.title}" [id: "${f.id}", latest: $latestCp${asset.isNotEmpty ? ', asset: $asset' : ''}${tuning.isNotEmpty ? ', vars: ${tuning.take(3).join(", ")}' : ''}]',
+      );
+    }
+
+    final prompt = '''
+You are the Systems Designer planning the **$versionTag (`$releasePhase`) UPGRADE and NEW features** inside **Epic $epicCode · ${epicDoc.title}** for "${projectDoc.title}".
+Section 1 Release Focus:
+- Release Goal: "$section1Goal"
+- Release Done When: "$section1DoneWhen"
+${missingGaps.isNotEmpty ? '- Identified Gaps: ${missingGaps.join(" | ")}\n' : ''}- Game & Tech Spec: $gameSpecText | $techSpecText
+- Design Pillars & Trade-Offs: $pillarsText | $tradeOffsText
+- Out of Scope (DO NOT BUILD): ${projectExclusions.join(' | ')}
+${alreadyPlannedChanges.isNotEmpty ? '- Already Planned in Earlier Epics for $versionTag (DO NOT DUPLICATE): ${alreadyPlannedChanges.join(", ")}\n' : ''}
+Target Epic $epicCode ("${epicDoc.title}", id: "${epicDoc.id}"):
+${existingFeatLines.isNotEmpty ? existingFeatLines.join('\n') : '(No existing features)'}
+
+${GeminiAgentClient.compactStyleRules}
+- Return ONLY the active `"upgrade"` or `"new"` features needed inside **Epic $epicCode · ${epicDoc.title}** for $versionTag:
+  * When upgrading an existing feature, set `"lifecycle": "upgrade"` and use its EXACT `"id"` and `"title"` from the list above, describing only the $versionTag delta upgrade in `"goal"`, `"inScope"`, and `"tasks"`.
+  * When introducing a brand-new feature in Epic $epicCode, set `"lifecycle": "new"` with a 2–3 word plain action/object title (never identical to "${epicDoc.title}").
+  * Omit any existing feature in Epic $epicCode that stays untouched (`"stable"`) in $versionTag.
+  * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"`, 1–2 `[STATE GUARD]` rules in `"edgeCases"`, and foundation-first `"tasks"` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
+
+Call `commit_progressive_epic_changes` (or return ONLY valid JSON):
+{
+  "features": [
+    {
+      "id": "${existingFeaturesInEpic.isNotEmpty ? existingFeaturesInEpic.first.id : 'feat_${epicIndex + 1}_1'}",
+      "title": "${existingFeaturesInEpic.isNotEmpty ? existingFeaturesInEpic.first.title : '2-3 Word Feature Title'}",
+      "lifecycle": "upgrade",
+      "goal": "Upgrade ... with ...",
+      "doneWhen": "Playtester verifies ... in Play mode.",
+      "estimatedHours": 4,
+      "inScope": ["Delta deliverable 1", "Delta deliverable 2"],
+      "tuningParams": ["paramOne: 1.5 s", "paramTwo: 250.0 px"],
+      "edgeCases": ["[STATE GUARD] Prevent duplicate trigger while active"],
+      "checkpointTitle": "2-4 Word Delta Stage Title",
+      "playtestCriteria": "Action -> observable result on screen",
+      "tasks": [
+        {"role": "entity_and_collision_foundation", "title": "Component & Collision Extension (2h)"},
+        {"role": "core_action_and_math", "title": "Delta Velocity & Signal Math (1h)"},
+        {"role": "feedback_and_boundary_guard", "title": "HUD Cue & State Clamp (1h)"}
+      ]
+    }
+  ]
+}''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: 'gemini-flash-latest',
+      thinkingLevel: 'LOW',
+      temperature: 0.35,
+      functionDeclarations: const [commitProgressiveEpicChangesTool],
+    );
+    final rawFeatures = json?['features'];
+    if (rawFeatures is! List || rawFeatures.isEmpty) return null;
+
+    final singleBeatJson = <String, dynamic>{
+      'releasePhase': releasePhase,
+      'releaseTitle': releaseDoc.title,
+      'goal': section1Goal,
+      'doneWhen': section1DoneWhen,
+      'beats': [
+        {
+          'id': epicDoc.id,
+          'title': epicDoc.title,
+          'goal': SectionTextUtils.resolveGoal(epicDoc.sections),
+          'doneWhen': SectionTextUtils.resolveDoneWhen(epicDoc.sections),
+          'features': [
+            for (final item in rawFeatures)
+              if (item is Map)
+                {
+                  ...item,
+                  if (item['checkpoints'] == null)
+                    'checkpoints': [
+                      {
+                        'title': item['checkpointTitle'] ??
+                            '${item['title'] ?? 'Feature'} ($versionTag)',
+                        'playtestCriteria': item['playtestCriteria'] ??
+                            item['doneWhen'] ??
+                            'Verify in Play mode',
+                        'tasks': item['tasks'] ?? const [],
+                      },
+                    ],
+                },
+          ],
+        },
+      ],
+    };
+
+    final parsedSingle = _parseDynamicReleaseBlueprint(
+      json: singleBeatJson,
+      releaseDoc: releaseDoc,
+      preset: preset,
+      versionTag: versionTag,
+      fallbackExclusions: projectExclusions,
+      capV01Checkpoints: false,
+    );
+    if (parsedSingle == null || parsedSingle.beats.isEmpty) return null;
+
+    final reconciledSingle = reconcileReleaseBlueprintWithPhaseRules(
+      parsed: parsedSingle,
+      releaseDoc: releaseDoc,
+      preset: preset,
+      versionTag: versionTag,
+      existingBeats: <TierDocument>[epicDoc],
+      existingFeaturesByBeat: <String, List<TierDocument>>{
+        epicDoc.id: existingFeaturesInEpic,
+      },
+      deferredByBeatIndex: <int, List<ProposedFeatureBlueprint>>{
+        if (queuedDeferredInEpic.isNotEmpty) 0: queuedDeferredInEpic,
+      },
+      projectExclusions: projectExclusions,
+      allCoreLoopItems: const <String>[],
+    );
+    return reconciledSingle.beats.firstOrNull;
   }
 
   /// Ensures checkpoint tasks follow a strict Foundation-First progression (`01` Asset/Character Setup ->

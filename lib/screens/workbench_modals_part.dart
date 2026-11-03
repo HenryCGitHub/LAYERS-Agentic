@@ -593,303 +593,346 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         ],
                                       ),
                                       const SizedBox(height: 10),
-                                      LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final isWide =
-                                              constraints.maxWidth >= 700;
-                                          final optionCards = <Widget>[
-                                            for (int oIdx = 0;
-                                                oIdx < dynamicOptions.length;
-                                                oIdx++)
-                                              Builder(
-                                                builder: (context) {
-                                                  final rawOpt =
-                                                      dynamicOptions[oIdx];
-                                                  final isSelected =
-                                                      _selectedProgressiveTrackIndex ==
-                                                      oIdx;
-                                                  final isRec = rawOpt
-                                                      .toLowerCase()
-                                                      .startsWith(
-                                                        '(recommended)',
-                                                      );
-                                                  final stripped = rawOpt
-                                                      .replaceFirst(
-                                                        _recommendedPrefixRegex,
-                                                        '',
-                                                      )
-                                                      .trim();
-                                                  final colonIdx =
-                                                      stripped.indexOf(':');
-                                                  final optTitle = colonIdx > 0
-                                                      ? stripped
-                                                          .substring(
-                                                            0,
-                                                            colonIdx,
-                                                          )
-                                                          .trim()
-                                                      : stripped;
-                                                  final optDesc = colonIdx > 0
-                                                      ? stripped
-                                                          .substring(
-                                                            colonIdx + 1,
-                                                          )
-                                                          .trim()
-                                                      : '';
-                                                  return InkWell(
-                                                    key: ValueKey(
-                                                      'progressive_preset_chip_$oIdx',
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                    onTap: widget
-                                                            .workbench
-                                                            .isAgentBusy
-                                                        ? null
-                                                        : () async {
-                                                            final prevIdx =
-                                                                _selectedProgressiveTrackIndex;
-                                                            if (prevIdx ==
-                                                                oIdx) {
-                                                              return;
-                                                            }
-                                                            _rebuild(() {
-                                                              _selectedProgressiveTrackIndex =
-                                                                  oIdx;
-                                                            });
-                                                            if (prevIdx != 0) {
-                                                              widget.workbench
-                                                                  .restoreInitialProgressiveDraftBlueprint();
-                                                            }
-                                                            if (oIdx > 0) {
-                                                              await submitDirective(
-                                                                'Re-architect $nextVer around this strategic option: $rawOpt',
-                                                              );
-                                                            } else {
-                                                              _rebuild(() {});
-                                                            }
-                                                          },
-                                                    child: Container(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                            12,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: isSelected
-                                                            ? bgRecessed
-                                                            : Colors.transparent,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
-                                                        border: Border.all(
-                                                          color: isSelected
-                                                              ? textPrimary
-                                                                  .withValues(
-                                                                    alpha: 0.6,
-                                                                  )
-                                                              : borderSubtle,
-                                                        ),
+                                      if (widget
+                                          .workbench
+                                          .isSynthesizingProgressiveFocus)
+                                        Container(
+                                          key: const ValueKey(
+                                            'progressive_section_1_loading',
+                                          ),
+                                          padding: const EdgeInsets.all(14),
+                                          decoration: BoxDecoration(
+                                            color: bgRecessed,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: borderSubtle,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: textPrimary,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  'Synthesizing Section 1 · Analyzing completed $prevVer features & Design Pillars to recommend $nextVer focus and 3 strategic options...',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      else ...[
+                                        LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final isWide =
+                                                constraints.maxWidth >= 700;
+                                            final optionCards = <Widget>[
+                                              for (int oIdx = 0;
+                                                  oIdx < dynamicOptions.length;
+                                                  oIdx++)
+                                                Builder(
+                                                  builder: (context) {
+                                                    final rawOpt =
+                                                        dynamicOptions[oIdx];
+                                                    final isSelected =
+                                                        _selectedProgressiveTrackIndex ==
+                                                        oIdx;
+                                                    final isRec = rawOpt
+                                                        .toLowerCase()
+                                                        .startsWith(
+                                                          '(recommended)',
+                                                        );
+                                                    final stripped = rawOpt
+                                                        .replaceFirst(
+                                                          _recommendedPrefixRegex,
+                                                          '',
+                                                        )
+                                                        .trim();
+                                                    final colonIdx =
+                                                        stripped.indexOf(':');
+                                                    final optTitle = colonIdx > 0
+                                                        ? stripped
+                                                            .substring(
+                                                              0,
+                                                              colonIdx,
+                                                            )
+                                                            .trim()
+                                                        : stripped;
+                                                    final optDesc = colonIdx > 0
+                                                        ? stripped
+                                                            .substring(
+                                                              colonIdx + 1,
+                                                            )
+                                                            .trim()
+                                                        : '';
+                                                    return InkWell(
+                                                      key: ValueKey(
+                                                        'progressive_preset_chip_$oIdx',
                                                       ),
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          Row(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              Text(
-                                                                isSelected
-                                                                    ? '●'
-                                                                    : '○',
-                                                                style: GoogleFonts
-                                                                    .jetBrainsMono(
-                                                                  fontSize: 11,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  color: isSelected
-                                                                      ? textPrimary
-                                                                      : textMuted,
-                                                                ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      onTap: widget
+                                                              .workbench
+                                                              .isAgentBusy
+                                                          ? null
+                                                          : () async {
+                                                              final prevIdx =
+                                                                  _selectedProgressiveTrackIndex;
+                                                              if (prevIdx ==
+                                                                  oIdx) {
+                                                                return;
+                                                              }
+                                                              _rebuild(() {
+                                                                _selectedProgressiveTrackIndex =
+                                                                    oIdx;
+                                                              });
+                                                              if (prevIdx != 0) {
+                                                                widget.workbench
+                                                                    .restoreInitialProgressiveDraftBlueprint();
+                                                              }
+                                                              if (oIdx > 0) {
+                                                                await submitDirective(
+                                                                  'Re-architect $nextVer around this strategic option: $rawOpt',
+                                                                );
+                                                              } else {
+                                                                _rebuild(() {});
+                                                              }
+                                                            },
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                              12,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: isSelected
+                                                              ? bgRecessed
+                                                              : Colors.transparent,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
                                                               ),
-                                                              const SizedBox(
-                                                                width: 8,
-                                                              ),
-                                                              Expanded(
-                                                                child: Text(
-                                                                  optTitle,
+                                                          border: Border.all(
+                                                            color: isSelected
+                                                                ? textPrimary
+                                                                    .withValues(
+                                                                      alpha: 0.6,
+                                                                    )
+                                                                : borderSubtle,
+                                                          ),
+                                                        ),
+                                                        child: Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            Row(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Text(
+                                                                  isSelected
+                                                                      ? '●'
+                                                                      : '○',
                                                                   style: GoogleFonts
-                                                                      .inter(
-                                                                    fontSize:
-                                                                        12.5,
-                                                                    fontWeight: isSelected
-                                                                        ? FontWeight
-                                                                            .w700
-                                                                        : FontWeight
-                                                                            .w600,
+                                                                      .jetBrainsMono(
+                                                                    fontSize: 11,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
                                                                     color: isSelected
                                                                         ? textPrimary
-                                                                        : textSecondary,
+                                                                        : textMuted,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(
+                                                                  width: 8,
+                                                                ),
+                                                                Expanded(
+                                                                  child: Text(
+                                                                    optTitle,
+                                                                    style: GoogleFonts
+                                                                        .inter(
+                                                                      fontSize:
+                                                                          12.5,
+                                                                      fontWeight: isSelected
+                                                                          ? FontWeight
+                                                                              .w700
+                                                                          : FontWeight
+                                                                              .w600,
+                                                                      color: isSelected
+                                                                          ? textPrimary
+                                                                          : textSecondary,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            if (isRec) ...[
+                                                              const SizedBox(
+                                                                height: 4,
+                                                              ),
+                                                              Padding(
+                                                                padding:
+                                                                    const EdgeInsets.only(
+                                                                  left: 19,
+                                                                ),
+                                                                child: Text(
+                                                                  '★ RECOMMENDED',
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize: 9,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    color:
+                                                                        textMuted,
                                                                   ),
                                                                 ),
                                                               ),
                                                             ],
-                                                          ),
-                                                          if (isRec) ...[
-                                                            const SizedBox(
-                                                              height: 4,
-                                                            ),
-                                                            Padding(
-                                                              padding:
-                                                                  const EdgeInsets.only(
-                                                                left: 19,
+                                                            if (optDesc
+                                                                .isNotEmpty) ...[
+                                                              const SizedBox(
+                                                                height: 5,
                                                               ),
-                                                              child: Text(
-                                                                '★ RECOMMENDED',
-                                                                style: GoogleFonts
-                                                                    .jetBrainsMono(
-                                                                  fontSize: 9,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  color:
-                                                                      textMuted,
+                                                              Padding(
+                                                                padding:
+                                                                    const EdgeInsets.only(
+                                                                  left: 19,
+                                                                ),
+                                                                child: Text(
+                                                                    optDesc,
+                                                                    style: GoogleFonts
+                                                                        .inter(
+                                                                      fontSize:
+                                                                          11.5,
+                                                                      height: 1.35,
+                                                                      color:
+                                                                          textMuted,
+                                                                    ),
                                                                 ),
                                                               ),
-                                                            ),
+                                                            ],
                                                           ],
-                                                          if (optDesc
-                                                              .isNotEmpty) ...[
-                                                            const SizedBox(
-                                                              height: 5,
-                                                            ),
-                                                            Padding(
-                                                              padding:
-                                                                  const EdgeInsets.only(
-                                                                left: 19,
-                                                              ),
-                                                              child: Text(
-                                                                optDesc,
-                                                                style: GoogleFonts
-                                                                    .inter(
-                                                                  fontSize:
-                                                                      11.5,
-                                                                  height: 1.35,
-                                                                  color:
-                                                                      textMuted,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ],
+                                                        ),
                                                       ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                          ];
-                                          if (isWide &&
-                                              optionCards.length > 1) {
-                                            return IntrinsicHeight(
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.stretch,
-                                                children: [
-                                                  for (int i = 0;
-                                                      i < optionCards.length;
-                                                      i++) ...[
-                                                    if (i > 0)
-                                                      const SizedBox(width: 10),
-                                                    Expanded(
-                                                      child: optionCards[i],
-                                                    ),
+                                                    );
+                                                  },
+                                                ),
+                                            ];
+                                            if (isWide &&
+                                                optionCards.length > 1) {
+                                              return IntrinsicHeight(
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.stretch,
+                                                  children: [
+                                                    for (int i = 0;
+                                                        i < optionCards.length;
+                                                        i++) ...[
+                                                      if (i > 0)
+                                                        const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: optionCards[i],
+                                                      ),
+                                                    ],
                                                   ],
+                                                ),
+                                              );
+                                            }
+                                            return Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                for (int i = 0;
+                                                    i < optionCards.length;
+                                                    i++) ...[
+                                                  if (i > 0)
+                                                    const SizedBox(height: 8),
+                                                  optionCards[i],
                                                 ],
-                                              ),
-                                            );
-                                          }
-                                          return Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              for (int i = 0;
-                                                  i < optionCards.length;
-                                                  i++) ...[
-                                                if (i > 0)
-                                                  const SizedBox(height: 8),
-                                                optionCards[i],
                                               ],
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 11,
+                                            );
+                                          },
                                         ),
-                                        decoration: BoxDecoration(
-                                          color: bgRecessed,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                          border: Border.all(
-                                            color: borderSubtle,
+                                        const SizedBox(height: 12),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 11,
                                           ),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              heroGoal,
-                                              style: GoogleFonts.inter(
-                                                fontSize: 13.5,
-                                                height: 1.4,
-                                                fontWeight: FontWeight.w700,
-                                                color: textPrimary,
-                                              ),
+                                          decoration: BoxDecoration(
+                                            color: bgRecessed,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: borderSubtle,
                                             ),
-                                            if (bp.doneWhen
-                                                .trim()
-                                                .isNotEmpty) ...[
-                                              const SizedBox(height: 6),
-                                              Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    '✓ DONE WHEN: ',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 10.5,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: textSecondary,
-                                                    ),
-                                                  ),
-                                                  Expanded(
-                                                    child: Text(
-                                                      bp.doneWhen.trim(),
-                                                      style: GoogleFonts.inter(
-                                                        fontSize: 12,
-                                                        height: 1.35,
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                heroGoal,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 13.5,
+                                                  height: 1.4,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: textPrimary,
+                                                ),
+                                              ),
+                                              if (bp.doneWhen
+                                                  .trim()
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(height: 6),
+                                                Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      '✓ DONE WHEN: ',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
                                                         color: textSecondary,
                                                       ),
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
+                                                    Expanded(
+                                                      child: Text(
+                                                        bp.doneWhen.trim(),
+                                                        style: GoogleFonts.inter(
+                                                          fontSize: 12,
+                                                          height: 1.35,
+                                                          color: textSecondary,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
                                             ],
-                                          ],
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -935,6 +978,53 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         ],
                                       ),
                                       const SizedBox(height: 10),
+                                      if (widget
+                                              .workbench
+                                              .isSynthesizingProgressiveFocus &&
+                                          selectedChangesCount == 0)
+                                        Container(
+                                          key: const ValueKey(
+                                            'progressive_section_2_waiting',
+                                          ),
+                                          margin: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 11,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: bgRecessed,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: borderSubtle,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 12,
+                                                height: 12,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 1.6,
+                                                  color: textMuted,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  'Waiting for Section 1 focus before populating target Epics for $nextVer...',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 11.5,
+                                                    color: textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       for (int bIdx = 0;
                                           bIdx < bp.beats.length;
                                           bIdx++)
@@ -956,8 +1046,20 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 .toList();
                                             final isAddingHere =
                                                 _addingFeatureToBeatId == b.id;
+                                            final isSynthesizingEpic = widget
+                                                .workbench
+                                                .isSynthesizingProgressiveBeat(
+                                                  b.id,
+                                                );
+                                            final isQueuedEpic = widget
+                                                .workbench
+                                                .isQueuedProgressiveBeat(
+                                                  b.id,
+                                                );
                                             if (activeEpicFeats.isEmpty &&
-                                                !isAddingHere) {
+                                                !isAddingHere &&
+                                                !isSynthesizingEpic &&
+                                                !isQueuedEpic) {
                                               return const SizedBox.shrink();
                                             }
                                             final incCount = activeEpicFeats
@@ -1089,18 +1191,62 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                           mainAxisSize:
                                                               MainAxisSize.min,
                                                           children: [
-                                                            Text(
-                                                              '$incCount ${incCount == 1 ? 'Feature' : 'Features'} · ${epicHours}h',
-                                                              style: GoogleFonts
-                                                                  .jetBrainsMono(
-                                                                fontSize: 9.5,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                                color:
-                                                                    textMuted,
+                                                            if (isSynthesizingEpic) ...[
+                                                              SizedBox(
+                                                                width: 10,
+                                                                height: 10,
+                                                                child:
+                                                                    CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      1.6,
+                                                                  color:
+                                                                      accentAmber,
+                                                                ),
                                                               ),
-                                                            ),
+                                                              const SizedBox(
+                                                                width: 6,
+                                                              ),
+                                                              Text(
+                                                                'Planning $nextVer changes...',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 9.5,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  color:
+                                                                      accentAmber,
+                                                                ),
+                                                              ),
+                                                            ] else if (isQueuedEpic &&
+                                                                activeEpicFeats
+                                                                    .isEmpty) ...[
+                                                              Text(
+                                                                'Queued',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 9.5,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color:
+                                                                      textMuted,
+                                                                ),
+                                                              ),
+                                                            ] else ...[
+                                                              Text(
+                                                                '$incCount ${incCount == 1 ? 'Feature' : 'Features'} · ${epicHours}h',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 9.5,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color:
+                                                                      textMuted,
+                                                                ),
+                                                              ),
+                                                            ],
                                                             const SizedBox(
                                                               width: 8,
                                                             ),
@@ -1186,6 +1332,51 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                           CrossAxisAlignment
                                                               .stretch,
                                                       children: [
+                                                        if (activeEpicFeats
+                                                                .isEmpty &&
+                                                            (isSynthesizingEpic ||
+                                                                isQueuedEpic))
+                                                          Padding(
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                              vertical: 4,
+                                                            ),
+                                                            child: Row(
+                                                              children: [
+                                                                if (isSynthesizingEpic) ...[
+                                                                  SizedBox(
+                                                                    width: 11,
+                                                                    height: 11,
+                                                                    child:
+                                                                        CircularProgressIndicator(
+                                                                      strokeWidth:
+                                                                          1.5,
+                                                                      color:
+                                                                          accentAmber,
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 8,
+                                                                  ),
+                                                                ],
+                                                                Expanded(
+                                                                  child: Text(
+                                                                    isSynthesizingEpic
+                                                                        ? '✦ Synthesizing UPGRADE / NEW features for EPIC $epicCode...'
+                                                                        : 'Queued for $nextVer feature synthesis',
+                                                                    style: GoogleFonts
+                                                                        .inter(
+                                                                      fontSize:
+                                                                          11.5,
+                                                                      color: isSynthesizingEpic
+                                                                          ? textSecondary
+                                                                          : textMuted,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
                                                         for (int fIdx = 0;
                                                             fIdx <
                                                                 activeEpicFeats
