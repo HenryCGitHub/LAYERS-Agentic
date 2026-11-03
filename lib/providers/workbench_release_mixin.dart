@@ -410,6 +410,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       for (final fDoc in createdE01Features) {
         documents[fDoc.id] = fDoc;
         _persistDocument(fDoc);
+        if (!_pendingFeatureStepQueue.contains(fDoc.id)) {
+          _pendingFeatureStepQueue.add(fDoc.id);
+        }
       }
       _persistDocument(e01Doc);
       relDoc.sections['synced_engine_label'] = _activeEngineLabel;
@@ -457,10 +460,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         ? featuresForBeat(e01BeatDoc.id)
         : const <TierDocument>[];
     final firstFeatureId = e01FeatDocs.firstOrNull?.id;
-    final remainingFeatureIds = <String>[
-      for (final f in e01FeatDocs.skip(1)) f.id,
-    ];
-    _pendingFeatureStepQueue.addAll(remainingFeatureIds);
+    for (final f in e01FeatDocs.skip(1)) {
+      if (!_pendingFeatureStepQueue.contains(f.id)) {
+        _pendingFeatureStepQueue.add(f.id);
+      }
+    }
 
     // Step 3: Immediately synthesize Feature 1.1's 3-Area Engine Steps BEFORE E02..EN
     if (firstFeatureId != null && !isCancelled()) {
@@ -510,8 +514,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         for (final fDoc in createdEpicFeatures) {
           documents[fDoc.id] = fDoc;
           _persistDocument(fDoc);
-          remainingFeatureIds.add(fDoc.id);
-          _pendingFeatureStepQueue.add(fDoc.id);
+          if (!_pendingFeatureStepQueue.contains(fDoc.id)) {
+            _pendingFeatureStepQueue.add(fDoc.id);
+          }
         }
         _persistDocument(targetBeatDoc);
         releaseDoc.sections['release_blueprint_json'] =
@@ -527,9 +532,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     }
 
     // Step 4B: Synthesize 3-Area Engine Steps for remaining Features (Feature 1.2, E02 Features, ...) one at a time
-    if (remainingFeatureIds.isNotEmpty && !isCancelled()) {
+    if (_pendingFeatureStepQueue.isNotEmpty && !isCancelled()) {
       await _prefetchRemainingFeatureStepsInBackground(
-        remainingFeatureIds,
+        null,
         generation,
       );
     }
@@ -2358,7 +2363,10 @@ Call `commit_live_feature_enrichment` (or return ONLY a JSON object):
     if (featDoc == null) return;
     final states = FeatureStateNode.getStatesForDocument(featDoc);
     if (states.isEmpty) return;
-    final projTitle = activeProject?.title ?? 'Game Prototype';
+    _synthesizingFeatureIds.add(featureId);
+    notifyListeners();
+    try {
+      final projTitle = activeProject?.title ?? 'Game Prototype';
     final engineLabel = _activeEngineLabel;
     final gameSpecSummary = (activeProject?.sections['game_spec'] ??
             activeProject?.sections['gameSpec'] ??
@@ -2568,6 +2576,9 @@ Return ONLY a JSON object:
         );
       }
       updateFeatureStates(featureId, states);
+      }
+    } finally {
+      _synthesizingFeatureIds.remove(featureId);
     }
     await synthesizeFeatureHowToStepsWithAi(featureId, forceRefresh: true);
   }
@@ -3477,6 +3488,19 @@ Return ONLY a JSON object with this schema:
 
   bool isFeatureQueuedForSteps(String featureId) =>
       _pendingFeatureStepQueue.contains(featureId);
+
+  bool isFeatureWaitingForStepsInLiveMode(String featureId) {
+    if (GeminiAgentClient.testMockResponder != null) return false;
+    final feat = documents[featureId];
+    return _pendingFeatureStepQueue.contains(featureId) ||
+        feat?.sections['needs_ai_enrichment'] == 'true';
+  }
+
+  bool isFeatureBeingBuiltInLiveMode(String featureId) {
+    if (GeminiAgentClient.testMockResponder != null) return false;
+    return _synthesizingFeatureIds.contains(featureId) ||
+        isFeatureWaitingForStepsInLiveMode(featureId);
+  }
 
   int get backgroundStepSynthesisRemainingCount =>
       _pendingFeatureStepQueue.length + _synthesizingFeatureIds.length;

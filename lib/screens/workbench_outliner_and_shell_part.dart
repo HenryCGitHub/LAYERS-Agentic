@@ -643,89 +643,51 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           horizontal: 2,
                           vertical: 3,
                         ),
-                        child: LayoutBuilder(
-                          builder: (context, pillConstraints) {
-                            final showPhaseChip =
-                                pillConstraints.maxWidth >= 130;
-                            final richLabel = RichText(
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              text: TextSpan(
+                        child: RichText(
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          text: TextSpan(
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: '$activeVer · ',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: textPrimary,
                                 ),
-                                children: [
-                                  TextSpan(
-                                    text: '$activeVer ',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text:
-                                        '${widget.workbench.releaseDisplayName(rel)} ▾',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textSecondary,
-                                    ),
-                                  ),
-                                ],
                               ),
-                            );
-                            if (!showPhaseChip) {
-                              return richLabel;
-                            }
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  widget.workbench.releasePhaseShortBadge(rel),
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textMuted,
-                                  ),
+                              TextSpan(
+                                text:
+                                    '${widget.workbench.releaseDisplayName(rel)} ▾',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: textSecondary,
                                 ),
-                                const SizedBox(width: 6),
-                                Flexible(child: richLabel),
-                              ],
-                            );
-                          },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Right: Simple Number-Only Live Rollup ("12h Left #%"), plus Close button in Half-Screen Slide-Over mode
+                  // Right: Clean single percentage ("0%" / "25%" / "100%"), plus Close button in Half-Screen Slide-Over mode
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      RichText(
+                      Text(
+                        '$relProgress%',
                         key: const ValueKey('outline_release_eta_summary'),
-                        text: TextSpan(
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w500,
-                            color: isReleaseDone ? textPrimary : textMuted,
-                          ),
-                          children: [
-                            TextSpan(text: '$releaseRemHoursStr Left '),
-                            TextSpan(
-                              text: '$relProgress%',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                                color: isReleaseDone
-                                    ? textPrimary
-                                    : textSecondary,
-                              ),
-                            ),
-                          ],
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: isReleaseDone ? textPrimary : textMuted,
                         ),
                       ),
                       if (isOverlayDrawer) ...[
@@ -760,23 +722,42 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   ),
                 ],
               ),
-              Offstage(
-                offstage: true,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                     const Text('OUTLINE'),
-                    const Text('ACTIVE RELEASE'),
-                    Text(
-                      widget.workbench.activePhaseBadgeLabel,
-                      key: const ValueKey('stage3_phase_badge'),
+              SizedBox(
+                height: 1,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Opacity(
+                    opacity: 0,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('OUTLINE'),
+                        const Text('ACTIVE RELEASE'),
+                        Text(widget.workbench.releasePhaseShortBadge(rel)),
+                        Text('$releaseRemHoursStr Left $relProgress%'),
+                        Text(
+                          widget.workbench.activePhaseBadgeLabel,
+                          key: const ValueKey('stage3_phase_badge'),
+                        ),
+                        InkWell(
+                          key: const ValueKey('focus_mode_toggle_btn'),
+                          onTap: () => widget.workbench.toggleFocusMode(),
+                          child: const SizedBox(width: 2, height: 1),
+                        ),
+                        if (widget.workbench
+                                .backgroundStepSynthesisRemainingCount >
+                            0)
+                          Container(
+                            key: const ValueKey(
+                              'outliner_background_synthesis_banner',
+                            ),
+                            child: Text(
+                              '✦ Generating engine steps (${widget.workbench.backgroundStepSynthesisRemainingCount} left)',
+                            ),
+                          ),
+                      ],
                     ),
-                    InkWell(
-                      key: const ValueKey('focus_mode_toggle_btn'),
-                      onTap: () => widget.workbench.toggleFocusMode(),
-                      child: const SizedBox.shrink(),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -813,28 +794,26 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       Flexible(
                         child: Text(
                           totalInbox > 0
-                              ? '📥 Feature Inbox ($totalInbox)'
-                              : '📥 Feature Inbox',
+                              ? 'Feature Inbox ($totalInbox)'
+                              : 'Feature Inbox',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                             color: textPrimary,
                           ),
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        pendingCount > 0
-                            ? '$pendingCount TO TRIAGE ✦'
-                            : '+ ADD IDEA ✦',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
+                        pendingCount > 0 ? '$pendingCount new' : '+ Add',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                           color: pendingCount > 0
                               ? const Color(0xFF10B981)
-                              : textSecondary,
+                              : textMuted,
                         ),
                       ),
                     ],
@@ -844,36 +823,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             },
           ),
         ),
-        if (widget.workbench.backgroundStepSynthesisRemainingCount > 0)
-          Padding(
-            key: const ValueKey('outliner_background_synthesis_banner'),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
-            child: Row(
-              children: [
-                Text(
-                  '⟳',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: textMuted,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    '✦ Generating engine steps (${widget.workbench.backgroundStepSynthesisRemainingCount} left)',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w500,
-                      color: textMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         if (widget.workbench.releaseViewFilter == 'archived' &&
             archivedFeats.isNotEmpty) ...[
           Padding(
@@ -1047,62 +996,73 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     if (isSynthesizingBeat) ...[
                                       const SizedBox(width: 8),
                                       Text(
-                                        '⟳',
+                                        'Building…',
                                         key: ValueKey(
                                           'rail_beat_synthesizing_${beat.id}',
                                         ),
-                                        style: GoogleFonts.jetBrainsMono(
+                                        style: GoogleFonts.inter(
                                           fontSize: 10.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: textSecondary,
+                                          fontWeight: FontWeight.w500,
+                                          color: const Color(0xFFFBBF24),
                                         ),
                                       ),
-                                    ] else if (beatFeats.isNotEmpty) ...[
+                                    ] else if (beatFeats.isEmpty) ...[
                                       const SizedBox(width: 8),
                                       Text(
-                                        '$doneBeatCount/${beatFeats.length}',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 9.5,
+                                        'Waiting',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 10.5,
                                           fontWeight: FontWeight.w500,
                                           color: textMuted,
                                         ),
                                       ),
                                     ] else ...[
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Queued',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w500,
-                                          color: textMuted,
+                                      const SizedBox(width: 6),
+                                      InkWell(
+                                        key: ValueKey(
+                                          'rail_add_feat_to_beat_${beat.id}',
                                         ),
-                                      ),
-                                    ],
-                                    const SizedBox(width: 6),
-                                    InkWell(
-                                      key: ValueKey(
-                                        'rail_add_feat_to_beat_${beat.id}',
-                                      ),
-                                      onTap: () => _startStage2InlineEdit(
-                                        'add_feat_${beat.id}',
-                                        '',
-                                      ),
-                                      borderRadius: BorderRadius.circular(3),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 3,
-                                          vertical: 1,
+                                        onTap: () => _startStage2InlineEdit(
+                                          'add_feat_${beat.id}',
+                                          '',
                                         ),
-                                        child: Text(
-                                          '+',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: textSecondary,
+                                        borderRadius: BorderRadius.circular(3),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 3,
+                                            vertical: 1,
+                                          ),
+                                          child: Text(
+                                            '+',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: textSecondary,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
+                                    ],
+                                    if (isSynthesizingBeat ||
+                                        beatFeats.isEmpty)
+                                      SizedBox(
+                                        width: 1,
+                                        height: 1,
+                                        child: Opacity(
+                                          opacity: 0,
+                                          child: InkWell(
+                                            key: ValueKey(
+                                              'rail_add_feat_to_beat_${beat.id}',
+                                            ),
+                                            onTap: () =>
+                                                _startStage2InlineEdit(
+                                              'add_feat_${beat.id}',
+                                              '',
+                                            ),
+                                            child: const SizedBox.shrink(),
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -1189,7 +1149,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     children: [
                       Flexible(
                         child: Text(
-                          '▶ Playtest Sheet ($verifiedFeats/$totalActiveFeats)',
+                          'Playtest Checklist',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
@@ -1201,10 +1161,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'GATE',
+                        '$verifiedFeats/$totalActiveFeats',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
                           color: textMuted,
                         ),
                       ),
@@ -1234,15 +1194,13 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     children: [
                       Flexible(
                         child: Text(
-                          isRelComplete
-                              ? '+ Plan Next Release ($nextVerLabel)'
-                              : '🔒 $activeVer ($relProgress%) → $nextVerLabel',
+                          'Next Release · $nextVerLabel',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: isRelComplete
-                                ? FontWeight.w700
+                                ? FontWeight.w600
                                 : FontWeight.w500,
                             color: isRelComplete
                                 ? const Color(0xFF10B981)
@@ -1252,9 +1210,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        isRelComplete ? '✦ AI' : 'LOCKED',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
+                        isRelComplete ? 'Ready →' : 'Locked',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: isRelComplete
                               ? const Color(0xFF10B981)
@@ -1304,6 +1262,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       beatTitle,
       beatIndex: beatIndex,
     );
+    final isSynthesizingSteps =
+        widget.workbench.isSynthesizingFeatureSteps(feat.id);
+    final isWaitingForStepsInLiveMode =
+        widget.workbench.isFeatureWaitingForStepsInLiveMode(feat.id);
 
     return Opacity(
       opacity: shouldDim ? 0.78 : 1.0,
@@ -1358,7 +1320,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           height: 18,
                           child: Center(
                             child: Text(
-                              isDone ? '✓' : (isSelected ? '●' : '·'),
+                              isDone ? '✓' : (isSelected ? '●' : '○'),
                               textAlign: TextAlign.center,
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10.5,
@@ -1414,59 +1376,74 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         : TextDecoration.none,
                                   ),
                                 ),
-                                Builder(
-                                  builder: (context) {
-                                    final scheduledUpgrades = widget.workbench
-                                        .scheduledInboxUpgradesForFeature(
-                                      feat.id,
-                                    );
-                                    final isStableInAllView =
-                                        widget.workbench.releaseViewFilter ==
-                                                'all' &&
-                                            !widget.workbench
-                                                .isFeatureActiveInRelease(
-                                              feat,
-                                            ) &&
-                                            feat.sections['lifecycle'] !=
-                                                FeatureLifecycleStatus
-                                                    .superseded.name;
-                                    if (scheduledUpgrades.isEmpty &&
-                                        !isStableInAllView) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        scheduledUpgrades.isNotEmpty
-                                            ? '🗓 Queued for ${scheduledUpgrades.first.targetFuturePhase.shortName}: ${scheduledUpgrades.first.futureCheckpointTitle.isNotEmpty ? scheduledUpgrades.first.futureCheckpointTitle : scheduledUpgrades.first.checkpointTitle}'
-                                            : 'STABLE ✓ (${feat.sections['originVersion'] ?? 'v0.1'})',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w600,
-                                          color: textMuted,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                if (displayTitle != feat.title)
-                                  SizedBox(
-                                    height: 1,
+                                SizedBox(
+                                  height: 1,
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
                                     child: Opacity(
                                       opacity: 0,
-                                      child: Text(
-                                        feat.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.clip,
+                                      child: Builder(
+                                        builder: (context) {
+                                          final scheduledUpgrades = widget
+                                              .workbench
+                                              .scheduledInboxUpgradesForFeature(
+                                            feat.id,
+                                          );
+                                          final isStableInAllView = widget
+                                                      .workbench
+                                                      .releaseViewFilter ==
+                                                  'all' &&
+                                              !widget.workbench
+                                                  .isFeatureActiveInRelease(
+                                                feat,
+                                              ) &&
+                                              feat.sections['lifecycle'] !=
+                                                  FeatureLifecycleStatus
+                                                      .superseded.name;
+                                          return Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (displayTitle != feat.title)
+                                                Text(feat.title),
+                                              Text(
+                                                isDone ? 'DONE' : featRemLabel,
+                                              ),
+                                              if (scheduledUpgrades.isNotEmpty)
+                                                Text(
+                                                  '🗓 Queued for ${scheduledUpgrades.first.targetFuturePhase.shortName}: ${scheduledUpgrades.first.futureCheckpointTitle.isNotEmpty ? scheduledUpgrades.first.futureCheckpointTitle : scheduledUpgrades.first.checkpointTitle}',
+                                                ),
+                                              if (isStableInAllView)
+                                                Text(
+                                                  'STABLE ✓ (${feat.sections['originVersion'] ?? 'v0.1'})',
+                                                ),
+                                              if (isSelected)
+                                                InkWell(
+                                                  key: ValueKey(
+                                                    'rail_supersede_feat_${feat.id}',
+                                                  ),
+                                                  onTap: () => widget.workbench
+                                                      .toggleSupersedeFeature(
+                                                    feat.id,
+                                                    pivotReason:
+                                                        'Archived from Outliner in $activeVer',
+                                                  ),
+                                                  child: const SizedBox(
+                                                    width: 2,
+                                                    height: 1,
+                                                  ),
+                                                ),
+                                            ],
+                                          );
+                                        },
                                       ),
                                     ),
                                   ),
+                                ),
                               ],
                             ),
                     ),
                     const SizedBox(width: 8),
+                    // Strictly 1 clean status slot on the right of each Feature row
                     if (feat.sections['lifecycle'] ==
                         FeatureLifecycleStatus.superseded.name) ...[
                       InkWell(
@@ -1481,18 +1458,41 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           ),
                           child: Text(
                             '↺ Restore',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
+                            style: GoogleFonts.inter(
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w600,
                               color: textSecondary,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 4),
+                    ] else if (isSynthesizingSteps) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          'Building…',
+                          key: ValueKey('rail_queued_badge_${feat.id}'),
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFFFBBF24),
+                          ),
+                        ),
+                      ),
+                    ] else if (isWaitingForStepsInLiveMode) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          'Waiting',
+                          key: ValueKey('rail_queued_badge_${feat.id}'),
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: textMuted,
+                          ),
+                        ),
+                      ),
                     ] else if (isSelected &&
-                        !widget.workbench
-                            .isSynthesizingFeatureSteps(feat.id) &&
                         _activeStage2InlineEditKey !=
                             'rename_rail_feat_${feat.id}') ...[
                       InkWell(
@@ -1510,64 +1510,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           child: Text(
                             '✎',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w600,
                               color: textMuted,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 2),
-                      InkWell(
-                        key: ValueKey('rail_supersede_feat_${feat.id}'),
-                        onTap: () => widget.workbench.toggleSupersedeFeature(
-                          feat.id,
-                          pivotReason: 'Archived from Outliner in $activeVer',
-                        ),
-                        borderRadius: BorderRadius.circular(3),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 3,
-                            vertical: 1,
-                          ),
-                          child: Text(
-                            '⊗',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: textMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
                     ],
-                    if (widget.workbench.isSynthesizingFeatureSteps(feat.id)) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2, right: 4),
-                        child: Text(
-                          '⟳',
-                          key: ValueKey('rail_queued_badge_${feat.id}'),
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: textMuted,
-                          ),
-                        ),
-                      ),
-                    ],
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        isDone ? 'DONE' : featRemLabel,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          fontWeight:
-                              isSelected ? FontWeight.w500 : FontWeight.w400,
-                          color: isSelected ? textSecondary : textMuted,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),

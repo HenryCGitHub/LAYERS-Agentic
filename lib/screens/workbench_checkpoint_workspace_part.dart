@@ -535,6 +535,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             .replaceFirst(_ReleaseWorkbenchScreenState._leadingBracketTagRegex, '')
         : '';
 
+    final isSynthesizingFeatureNow =
+        widget.workbench.isSynthesizingFeatureSteps(feat.id);
+    final isFeatureBeingBuiltInLiveMode =
+        widget.workbench.isFeatureBeingBuiltInLiveMode(feat.id);
+
     final pinnedActiveStepWindow = (selectedParentTask != null &&
             selectedHowTo != null &&
             activeSubStep != null &&
@@ -689,71 +694,53 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        if ((activeSubStep.subtask.completed ||
-                                node.isCompleted) &&
-                            !widget.workbench.isActiveReleaseComplete) ...[
-                          InkWell(
-                            key: const ValueKey(
-                              'resume_next_incomplete_step_btn',
+                        if (isFeatureBeingBuiltInLiveMode)
+                          Text(
+                            isSynthesizingFeatureNow
+                                ? 'Building…'
+                                : 'Waiting',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isSynthesizingFeatureNow
+                                  ? const Color(0xFFFBBF24)
+                                  : textMuted,
                             ),
-                            onTap: () => _jumpToNextIncompleteStep(
-                              feat,
-                              states,
-                              node,
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 4,
+                          )
+                        else ...[
+                          if ((activeSubStep.subtask.completed ||
+                                  node.isCompleted) &&
+                              !widget.workbench.isActiveReleaseComplete) ...[
+                            InkWell(
+                              key: const ValueKey(
+                                'resume_next_incomplete_step_btn',
                               ),
-                              child: Text(
-                                '▶ Next Incomplete',
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                        ],
-                        InkWell(
-                          key: ValueKey('copy_feature_ai_prompt_btn_${feat.id}'),
-                          onTap: () => _copyActiveFeaturePrompt(feat),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
-                            child: Text(
-                              '⧉ AI Prompt',
-                              style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (!node.isCompleted) ...[
-                          const SizedBox(width: 10),
-                          InkWell(
-                            key: ValueKey(
-                              'fast_track_checkpoint_btn_${node.id}',
-                            ),
-                            onTap: () {
-                              _completeAllCheckpointTasks(node);
-                              _advanceToNextStep(
+                              onTap: () => _jumpToNextIncompleteStep(
                                 feat,
                                 states,
                                 node,
-                                node.checklist.length - 1,
-                                node.checklist.last.children.length - 1,
-                              );
-                            },
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 4,
+                                ),
+                                child: Text(
+                                  '▶ Next Incomplete',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          InkWell(
+                            key: ValueKey('copy_feature_ai_prompt_btn_${feat.id}'),
+                            onTap: () => _copyActiveFeaturePrompt(feat),
                             borderRadius: BorderRadius.circular(4),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
@@ -761,7 +748,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                 vertical: 4,
                               ),
                               child: Text(
-                                '✓ Complete Feature',
+                                '⧉ AI Prompt',
                                 style: GoogleFonts.inter(
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w600,
@@ -770,6 +757,39 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               ),
                             ),
                           ),
+                          if (!node.isCompleted) ...[
+                            const SizedBox(width: 10),
+                            InkWell(
+                              key: ValueKey(
+                                'fast_track_checkpoint_btn_${node.id}',
+                              ),
+                              onTap: () {
+                                _completeAllCheckpointTasks(node);
+                                _advanceToNextStep(
+                                  feat,
+                                  states,
+                                  node,
+                                  node.checklist.length - 1,
+                                  node.checklist.last.children.length - 1,
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 4,
+                                ),
+                                child: Text(
+                                  '✓ Complete Feature',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ],
                     ),
@@ -960,110 +980,125 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   ),
                                 ),
-                                if (!node.isCompleted) ...[
-                                  Tooltip(
-                                    message: 'Complete Feature',
-                                    child: InkWell(
-                                      key: ValueKey(
-                                        'fast_track_checkpoint_btn_${node.id}',
-                                      ),
-                                      onTap: () {
-                                        _completeAllCheckpointTasks(node);
-                                        _advanceToNextStep(
-                                          feat,
-                                          states,
-                                          node,
-                                          node.checklist.length - 1,
-                                          node.checklist.last.children.length - 1,
-                                        );
-                                      },
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 3,
-                                          vertical: 3,
+                                if (isFeatureBeingBuiltInLiveMode)
+                                  Text(
+                                    isSynthesizingFeatureNow
+                                        ? 'Building…'
+                                        : 'Waiting',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSynthesizingFeatureNow
+                                          ? const Color(0xFFFBBF24)
+                                          : textMuted,
+                                    ),
+                                  )
+                                else ...[
+                                  if (!node.isCompleted) ...[
+                                    Tooltip(
+                                      message: 'Complete Feature',
+                                      child: InkWell(
+                                        key: ValueKey(
+                                          'fast_track_checkpoint_btn_${node.id}',
                                         ),
-                                        child: Text(
-                                          '✓ Done',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: textSecondary,
+                                        onTap: () {
+                                          _completeAllCheckpointTasks(node);
+                                          _advanceToNextStep(
+                                            feat,
+                                            states,
+                                            node,
+                                            node.checklist.length - 1,
+                                            node.checklist.last.children.length - 1,
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 3,
+                                            vertical: 3,
                                           ),
+                                          child: Text(
+                                            '✓ Done',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: textSecondary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(width: 2),
+                                  stepDropdownTrigger,
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '|',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10,
+                                      color: borderBright,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  InkWell(
+                                    onTap: canGoToPreviousStep
+                                        ? () => _retreatToPreviousStep(
+                                              states,
+                                              index,
+                                              node,
+                                              howToBlueprints,
+                                              selectedTaskIdx,
+                                              activeSubStepIdx,
+                                            )
+                                        : null,
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        '‹',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: canGoToPreviousStep
+                                              ? textSecondary
+                                              : textMuted.withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: canGoToNextStep
+                                        ? () => _browseToNextStep(
+                                              states,
+                                              index,
+                                              node,
+                                              howToBlueprints,
+                                              selectedTaskIdx,
+                                              activeSubStepIdx,
+                                            )
+                                        : null,
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        '›',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: canGoToNextStep
+                                              ? textSecondary
+                                              : textMuted.withValues(alpha: 0.4),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ],
-                                const SizedBox(width: 2),
-                                stepDropdownTrigger,
-                                const SizedBox(width: 4),
-                                Text(
-                                  '|',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10,
-                                    color: borderBright,
-                                  ),
-                                ),
-                                const SizedBox(width: 2),
-                                InkWell(
-                                  onTap: canGoToPreviousStep
-                                      ? () => _retreatToPreviousStep(
-                                            states,
-                                            index,
-                                            node,
-                                            howToBlueprints,
-                                            selectedTaskIdx,
-                                            activeSubStepIdx,
-                                          )
-                                      : null,
-                                  borderRadius: BorderRadius.circular(3),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 2,
-                                    ),
-                                    child: Text(
-                                      '‹',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: canGoToPreviousStep
-                                            ? textSecondary
-                                            : textMuted.withValues(alpha: 0.4),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                InkWell(
-                                  onTap: canGoToNextStep
-                                      ? () => _browseToNextStep(
-                                            states,
-                                            index,
-                                            node,
-                                            howToBlueprints,
-                                            selectedTaskIdx,
-                                            activeSubStepIdx,
-                                          )
-                                      : null,
-                                  borderRadius: BorderRadius.circular(3),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 2,
-                                    ),
-                                    child: Text(
-                                      '›',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: canGoToNextStep
-                                            ? textSecondary
-                                            : textMuted.withValues(alpha: 0.4),
-                                      ),
-                                    ),
-                                  ),
-                                ),
                               ],
                             ),
                           ],
@@ -1232,7 +1267,269 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     isHalfScreenOverlayMode ? 16 : 24,
                     28,
                   ),
-                  child: Row(
+                  child: isFeatureBeingBuiltInLiveMode
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (!isHalfScreenOverlayMode) ...[
+                              Expanded(
+                                flex: 4,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 16),
+                                  child: Container(
+                                    key: ValueKey(
+                                      'feature_steps_in_progress_${feat.id}',
+                                    ),
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: bgRecessed,
+                                      borderRadius: BorderRadius.circular(11),
+                                      border: Border.all(color: borderSubtle),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Container(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 10),
+                                          decoration: BoxDecoration(
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: borderSubtle,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '01  STEPS',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 28,
+                                            horizontal: 8,
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color:
+                                                      isSynthesizingFeatureNow
+                                                          ? const Color(
+                                                              0xFFFBBF24,
+                                                            )
+                                                          : textMuted,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              Text(
+                                                isSynthesizingFeatureNow
+                                                    ? 'In Progress'
+                                                    : 'Waiting in Queue',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 12.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textPrimary,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                isSynthesizingFeatureNow
+                                                    ? 'Building tasks and steps for this feature…'
+                                                    : 'Steps will generate automatically in order.',
+                                                textAlign: TextAlign.center,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  height: 1.4,
+                                                  color: textMuted,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            Expanded(
+                              flex: 8,
+                              child: Container(
+                                key: ValueKey(
+                                  'task_sheet_active_step_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                                ),
+                                padding: EdgeInsets.fromLTRB(
+                                  isHalfScreenOverlayMode ? 16 : 20,
+                                  14,
+                                  isHalfScreenOverlayMode ? 16 : 20,
+                                  16,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: bgSurface,
+                                  borderRadius: BorderRadius.circular(13),
+                                  border: Border.all(color: borderSubtle),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Container(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 11),
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: borderSubtle,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            '02  IMPLEMENTATION',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                          Text(
+                                            isSynthesizingFeatureNow
+                                                ? 'Building…'
+                                                : 'Waiting',
+                                            key: isSynthesizingFeatureNow
+                                                ? ValueKey(
+                                                    'synthesizing_steps_badge_${feat.id}',
+                                                  )
+                                                : null,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: isSynthesizingFeatureNow
+                                                  ? const Color(0xFFFBBF24)
+                                                  : textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 36,
+                                        horizontal: 16,
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.2,
+                                              color: isSynthesizingFeatureNow
+                                                  ? const Color(0xFFFBBF24)
+                                                  : textMuted,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          Text(
+                                            isSynthesizingFeatureNow
+                                                ? 'Building ${feat.title}…'
+                                                : '${feat.title} — Waiting to Build',
+                                            textAlign: TextAlign.center,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            isSynthesizingFeatureNow
+                                                ? 'Generating ${selectedHowTo.engineLabel} scene hierarchy, inspector values, and script steps.'
+                                                : 'Currently building an earlier section. Click below to build this feature right now.',
+                                            textAlign: TextAlign.center,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              height: 1.45,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                          if (!isSynthesizingFeatureNow) ...[
+                                            const SizedBox(height: 14),
+                                            OutlinedButton(
+                                              key: ValueKey(
+                                                'build_queued_feature_now_btn_${feat.id}',
+                                              ),
+                                              onPressed: () {
+                                                widget.workbench
+                                                    .synthesizeFeatureHowToStepsWithAi(
+                                                  feat.id,
+                                                  unrealCppMode: _unrealCppMode,
+                                                );
+                                              },
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: textPrimary,
+                                                backgroundColor: bgRecessed,
+                                                side: BorderSide(
+                                                  color: borderBright,
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 14,
+                                                  vertical: 9,
+                                                ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'Build Now',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.only(top: 10),
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          top: BorderSide(color: borderSubtle),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Steps will appear automatically when ready',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11.5,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (!isHalfScreenOverlayMode) ...[
