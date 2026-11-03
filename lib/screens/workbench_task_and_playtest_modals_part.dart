@@ -314,7 +314,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Describe your exact Scene / Node / Script setup for "${parentTask.text}". The Agent will rewrite all sub-steps in Task ${(pIdx + 1).toString().padLeft(2, '0')} using your exact node and script names:',
+                'Enter your exact Scene / Node / Script names for "${parentTask.text}" to rewrite Task ${(pIdx + 1).toString().padLeft(2, '0')} sub-steps:',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   height: 1.4,
@@ -683,7 +683,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Describe the bug or feel issue observed in the game viewport. The Agent will append a 3-step [FIX] task group and a [PLAYTEST GUARD] rule:',
+                'Describe the viewport bug or feel issue to append a 3-step [FIX] task and [PLAYTEST GUARD]:',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   height: 1.4,
@@ -1160,7 +1160,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                           if (cpNode != null) ...[
                                             const SizedBox(height: 8),
                                             Text(
-                                              'Playtest Gate: ${cpNode.playtestCondition}',
+                                              'Playtest Gate: ${TaskHowToBlueprint.formatConciseVerifySentence(cpNode.playtestCondition)}',
                                               style: GoogleFonts.inter(
                                                 fontSize: 12,
                                                 color: textSecondary,
@@ -1175,7 +1175,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                   for (final g
                                                       in cpNode.edgeCases)
                                                     Text(
-                                                      '• $g',
+                                                      '• ${TaskHowToBlueprint.formatTelegraphicGuardChip(g)}',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
                                                         fontSize: 9.5,
@@ -1237,7 +1237,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Paste your modified GDScript (.gd), Unity C# (.cs), or Unreal C++ (.h / .cpp) script below. Updated variable values and new [GUARD] checks will sync into "${node.cleanStageTitle}".',
+                'Paste your GDScript (.gd), Unity C# (.cs), or Unreal C++ (.h/.cpp) script to sync variable values and [GUARD] checks into "${node.cleanStageTitle}".',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   color: textSecondary,

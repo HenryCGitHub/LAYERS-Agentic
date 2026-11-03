@@ -455,7 +455,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           WrapCrossAlignment.center,
                                       children: [
                                         Text(
-                                          '${remainingCodes.length} of $totalCount Epics are not yet $phaseName Complete (${remainingCodes.join(", ")}). Finish upgrading remaining Epics first, or override.',
+                                          '${remainingCodes.length}/$totalCount Epics incomplete in $phaseName (${remainingCodes.join(", ")}) — finish remaining Epics first or override.',
                                           style: GoogleFonts.inter(
                                             fontSize: 11.5,
                                             fontWeight: FontWeight.w600,
@@ -639,7 +639,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                   Expanded(
                                     child: Text(
                                       widget.workbench.agentProgressStep ??
-                                          '✦ Agent is analyzing your completed $prevVer build state and synthesizing $nextVer...',
+                                          'Planning $nextVer Epic upgrades…',
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
@@ -649,17 +649,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                   ),
                                 ],
                               ),
-                              if (bp == null) ...[
-                                const SizedBox(height: 10),
-                                Text(
-                                  'Inspecting your completed $prevVer features, verified checkpoints, live tuning variables, playtest fixes, and Stage 1 Design Pillars to determine which features to upgrade or introduce in $nextVer...',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    height: 1.45,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -1693,8 +1682,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                 Expanded(
                                                                   child: Text(
                                                                     isSynthesizingEpic
-                                                                        ? '✦ Synthesizing UPGRADE / NEW features for EPIC $epicCode...'
-                                                                        : 'Queued for $nextVer feature synthesis',
+                                                                        ? 'Synthesizing $epicCode upgrades…'
+                                                                        : 'Queued',
                                                                     style: GoogleFonts
                                                                         .inter(
                                                                       fontSize:

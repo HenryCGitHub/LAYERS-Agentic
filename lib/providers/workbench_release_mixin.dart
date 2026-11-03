@@ -1363,39 +1363,57 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     r'^(?:build|create|implement|add|upgrade|extend|configure|wire|setup|set up|enable|establish|allow|support)\s+(?:the|a|an)?\s*',
     caseSensitive: false,
   );
+  static final RegExp _changelogInlineArticlesRegex = RegExp(
+    r'\b(?:a|an|the|your|our)\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _changelogTrailingFillerRegex = RegExp(
+    r'\s+(?:in\s+(?:the\s+)?(?:arena|scene|level|game|viewport)|for\s+(?:the\s+)?player|on\s+screen)$',
+    caseSensitive: false,
+  );
 
   String _shortBeatName(String rawTitle, int idx) {
     final cleaned = rawTitle.replaceFirst(_epicPrefixStripper, '').trim();
     return cleaned.isNotEmpty ? cleaned : 'Epic ${idx + 1}';
   }
 
-  /// Formats a feature's scope/goal into a concise **Changelog Delta (`+Delta`)** string for `UPGRADE`
+  String _formatTelegraphicDeltaItem(String raw, {required bool isUpgrade}) {
+    var cleaned = raw
+        .trim()
+        .replaceFirst(RegExp(r'^\+\s*'), '')
+        .replaceFirst(_leadingVerbStripper, '')
+        .replaceFirst(_changelogTrailingFillerRegex, '')
+        .replaceAll(_changelogInlineArticlesRegex, '')
+        .replaceAll(RegExp(r'\.$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (cleaned.isEmpty) return '';
+    cleaned = cleaned[0].toUpperCase() + cleaned.substring(1);
+    return isUpgrade ? '+$cleaned' : cleaned;
+  }
+
+  /// Formats a feature's scope/goal into a concise **Telegraphic Changelog Delta (`+Delta`)** string for `UPGRADE`
   /// features or a clean telegraphic phrase for `NEW` features.
   String formatChangelogDeltaForFeature(ProposedFeatureBlueprint feat) {
     final isUpg = feat.lifecycle == FeatureLifecycleStatus.upgrade;
     final items = <String>[];
     for (final raw in feat.inScope) {
-      final cleaned = raw
-          .replaceFirst(_leadingVerbStripper, '')
-          .replaceAll(RegExp(r'\.$'), '')
-          .trim();
+      final cleaned = _formatTelegraphicDeltaItem(raw, isUpgrade: isUpg);
       if (cleaned.isNotEmpty &&
-          cleaned.toLowerCase() != feat.title.toLowerCase()) {
-        items.add(isUpg && !cleaned.startsWith('+') ? '+$cleaned' : cleaned);
+          cleaned.replaceFirst('+', '').toLowerCase() !=
+              feat.title.toLowerCase()) {
+        items.add(cleaned);
       }
       if (items.length >= 2) break;
     }
     if (items.isNotEmpty) {
       return items.join(', ');
     }
-    final cleanGoal = feat.goal
-        .replaceFirst(_leadingVerbStripper, '')
-        .replaceAll(RegExp(r'\.$'), '')
-        .trim();
+    final cleanGoal = _formatTelegraphicDeltaItem(feat.goal, isUpgrade: isUpg);
     if (cleanGoal.isEmpty) {
       return isUpg ? '+MVP functional upgrade & tuning' : feat.title;
     }
-    return isUpg && !cleanGoal.startsWith('+') ? '+$cleanGoal' : cleanGoal;
+    return cleanGoal;
   }
 
   /// Generates the 3 selectable **EPICS** option cards for the Progressive Release Co-Pilot
@@ -1911,11 +1929,29 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       if (skeletonBp != null) {
         _injectDueScheduledInboxItemsIntoBlueprint(skeletonBp, _currentPhase);
         _releaseBlueprint = skeletonBp;
-        _isSynthesizingProgressiveFocus = true;
+        _isSynthesizingProgressiveFocus = false;
         _synthesizingProgressiveBeatId = null;
         _queuedProgressiveBeatIds.clear();
-        _agentProgressStep =
-            'Synthesizing Section 1 · $verTag Focus & 3 Strategic Options ($_conversationModel)...';
+        final initialCards = epicFocusOptionsForBlueprint(skeletonBp);
+        final initialRec = initialCards.isNotEmpty ? initialCards.first : null;
+        final rawTargetEpicIdx = relDoc.sections['targetEpicIndex'];
+        final isAgentReasoned = relDoc.sections['agentReasoned'] == 'true';
+        final explicitIdx = !isAgentReasoned && rawTargetEpicIdx != null
+            ? int.tryParse(rawTargetEpicIdx)
+            : null;
+        final initialTargetIndices = (explicitIdx != null &&
+                explicitIdx >= 0 &&
+                explicitIdx < existingBeats.length)
+            ? <int>[explicitIdx]
+            : (initialRec != null && initialRec.targetBeatIndices.isNotEmpty
+                ? initialRec.targetBeatIndices
+                : <int>[0]);
+        for (final idx in initialTargetIndices) {
+          if (idx >= 0 && idx < skeletonBp.beats.length) {
+            _queuedProgressiveBeatIds.add(skeletonBp.beats[idx].id);
+          }
+        }
+        _agentProgressStep = 'Planning $verTag Epic upgrades…';
       }
     }
     notifyListeners();
@@ -2155,8 +2191,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       if (!isBackgroundPrewarm) {
         _queuedProgressiveBeatIds.remove(eb.id);
         _synthesizingProgressiveBeatId = eb.id;
-        _agentProgressStep =
-            'Synthesizing Section 2 · EPIC $eCode (${eb.title}) features ($_conversationModel)...';
+        _agentProgressStep = 'Synthesizing $eCode (${eb.title}) upgrades…';
         notifyListeners();
       }
 
@@ -2530,6 +2565,103 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     return null;
   }
 
+  /// Builds a DRY, pre-formatted compact project spec context block (Game Spec, Tech Spec,
+  /// 2D/3D Dimension Rule, Design Pillars, and Trade-Offs) shared across all Stage 2 Workbench AI tools.
+  String _buildCompactWorkbenchSpecContext({
+    bool singleLineProjectSpecsHeader = false,
+    bool includeFullDimensionBanner = false,
+    bool includeExclusions = false,
+    String? targetEngineMode,
+  }) {
+    final proj = activeProject;
+    final draft = _conceptDraft;
+    final engineLabel = _activeEngineLabel;
+    final gameSpec = (proj?.sections['game_spec'] ??
+            proj?.sections['gameSpec'] ??
+            draft?.gameSpec.join(' · ') ??
+            '')
+        .trim();
+    final techSpec = (proj?.sections['tech_spec'] ??
+            proj?.sections['techSpec'] ??
+            draft?.techSpec.join(' · ') ??
+            '')
+        .trim();
+    final pillars = (proj?.sections['design_pillars'] ??
+            proj?.sections['designPillars'] ??
+            draft?.designPillars.join(' | ') ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final tradeOffs = (proj?.sections['trade_offs'] ??
+            proj?.sections['tradeOffs'] ??
+            draft?.tradeOffs.join(' | ') ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final exclusions = (proj?.sections['exclusions'] ??
+            draft?.exclusions.join(' | ') ??
+            'None')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final specCorpusLower = '$gameSpec $techSpec'.toLowerCase();
+    final is2d = specCorpusLower.contains('2d') ||
+        specCorpusLower.contains('sprite') ||
+        specCorpusLower.contains('pixel') ||
+        specCorpusLower.contains('tilemap') ||
+        (specCorpusLower.contains('top-down') &&
+            !specCorpusLower.contains('3d')) ||
+        (specCorpusLower.contains('side-scroll') &&
+            !specCorpusLower.contains('3d'));
+
+    if (includeFullDimensionBanner) {
+      final modeLabel = targetEngineMode ?? engineLabel;
+      final projectGoal = (proj != null
+              ? SectionTextUtils.resolveGoal(proj.sections)
+              : (draft?.goal ?? ''))
+          .trim();
+      final lines = <String>[
+        if (projectGoal.isNotEmpty) 'Project Goal: "$projectGoal"',
+        if (pillars.isNotEmpty) 'Design Pillars: $pillars',
+        if (tradeOffs.isNotEmpty) 'Trade-Offs: $tradeOffs',
+        is2d
+            ? 'PROJECT DIMENSION & CAMERA SPEC: 2D GAME ($gameSpec | $techSpec)\n'
+                '- STRICT 2D ENGINE NODE RULE: Use ONLY 2D scenes/nodes/Vector2 (Node2D, CharacterBody2D, Area2D, Sprite2D, CollisionShape2D; or Unity Rigidbody2D, Collider2D, SpriteRenderer). NEVER use 3D nodes or Vector3!'
+            : 'PROJECT DIMENSION & CAMERA SPEC: 3D GAME ($gameSpec | $techSpec)\n'
+                '- Use 3D actors/nodes/components and Vector3/FVector math matching $modeLabel.',
+      ];
+      return lines.join('\n');
+    }
+
+    if (singleLineProjectSpecsHeader) {
+      final specLine = [
+        if (gameSpec.isNotEmpty) 'Game Spec: $gameSpec',
+        if (techSpec.isNotEmpty) 'Tech Spec: $techSpec',
+        if (pillars.isNotEmpty) 'Design Pillars: $pillars',
+        if (tradeOffs.isNotEmpty) 'Trade-Offs: $tradeOffs',
+      ].join(' | ');
+      final dimLine = is2d
+          ? 'Dimension Rule: 2D ONLY (CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
+          : (specLine.isNotEmpty
+              ? 'Dimension Rule: 3D ($engineLabel 3D actors/nodes/Vector3).\n'
+              : '');
+      return '${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}$dimLine';
+    }
+
+    final dimLine = is2d
+        ? 'Dimension Rule: 2D ONLY (2D scenes/nodes/colliders/Vector2; NEVER 3D nodes or Vector3).\n'
+        : (gameSpec.isNotEmpty || techSpec.isNotEmpty
+            ? 'Dimension Rule: 3D ($engineLabel 3D actors/nodes/Vector3).\n'
+            : '');
+    final sb = StringBuffer();
+    if (gameSpec.isNotEmpty) sb.writeln('Game Spec: $gameSpec');
+    if (techSpec.isNotEmpty) sb.writeln('Tech Spec: $techSpec');
+    sb.write(dimLine);
+    if (pillars.isNotEmpty) sb.writeln('Design Pillars: $pillars');
+    if (tradeOffs.isNotEmpty) sb.writeln('Trade-Offs: $tradeOffs');
+    if (includeExclusions) sb.writeln('Out of Scope Rules: $exclusions');
+    return sb.toString();
+  }
+
   Future<void> _enrichProposedBlueprintFeatureWithAi({
     required String beatId,
     required String featureId,
@@ -2554,36 +2686,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (targetBeat == null || targetFeat == null) return;
     final projTitle = activeProject?.title ?? 'Game Prototype';
     final engineLabel = _activeEngineLabel;
-    final gameSpecSummary = (activeProject?.sections['game_spec'] ??
-            activeProject?.sections['gameSpec'] ??
-            _conceptDraft?.gameSpec.join(' · ') ??
-            '')
-        .trim();
-    final techSpecSummary = (activeProject?.sections['tech_spec'] ??
-            activeProject?.sections['techSpec'] ??
-            _conceptDraft?.techSpec.join(' · ') ??
-            '')
-        .trim();
-    final pillarsSummary = (activeProject?.sections['design_pillars'] ??
-            activeProject?.sections['designPillars'] ??
-            _conceptDraft?.designPillars.join(' | ') ??
-            '')
-        .replaceAll('\n', ' | ')
-        .trim();
-    final tradeOffsSummary = (activeProject?.sections['trade_offs'] ??
-            activeProject?.sections['tradeOffs'] ??
-            _conceptDraft?.tradeOffs.join(' | ') ??
-            '')
-        .replaceAll('\n', ' | ')
-        .trim();
-    final specCorpusLower = '$gameSpecSummary $techSpecSummary'.toLowerCase();
-    final is2d = specCorpusLower.contains('2d') ||
-        specCorpusLower.contains('sprite') ||
-        specCorpusLower.contains('pixel') ||
-        specCorpusLower.contains('tilemap');
-    final dimensionRule = is2d
-        ? 'Dimension Rule: 2D ONLY (use 2D scenes/nodes/colliders/Vector2; NEVER 3D nodes or Vector3).\n'
-        : 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n';
+    final specContext = _buildCompactWorkbenchSpecContext();
     final siblingTitles = targetBeat.features
         .where((s) => s.id != featureId)
         .map((s) {
@@ -2597,8 +2700,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
 Enrich this newly proposed Feature ("${targetFeat.title}" inside Epic "$beatTitle" for ${bp.releaseVersionTag}) so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
-${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate; reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
-- Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
+$specContext${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- Return the exact number of tasks required: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
 Call `commit_live_feature_enrichment` with the enriched feature details.''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -2878,55 +2981,24 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     notifyListeners();
     try {
       final projTitle = activeProject?.title ?? 'Game Prototype';
-    final engineLabel = _activeEngineLabel;
-    final gameSpecSummary = (activeProject?.sections['game_spec'] ??
-            activeProject?.sections['gameSpec'] ??
-            _conceptDraft?.gameSpec.join(' · ') ??
-            '')
-        .trim();
-    final techSpecSummary = (activeProject?.sections['tech_spec'] ??
-            activeProject?.sections['techSpec'] ??
-            _conceptDraft?.techSpec.join(' · ') ??
-            '')
-        .trim();
-    final pillarsSummary = (activeProject?.sections['design_pillars'] ??
-            activeProject?.sections['designPillars'] ??
-            _conceptDraft?.designPillars.join(' | ') ??
-            '')
-        .replaceAll('\n', ' | ')
-        .trim();
-    final tradeOffsSummary = (activeProject?.sections['trade_offs'] ??
-            activeProject?.sections['tradeOffs'] ??
-            _conceptDraft?.tradeOffs.join(' | ') ??
-            '')
-        .replaceAll('\n', ' | ')
-        .trim();
-    final siblingTitles = featDoc.parentId == null
-        ? const <String>[]
-        : featuresForBeat(featDoc.parentId!)
-            .where((s) => s.id != featureId)
-            .map((s) {
-              final pAsset = (s.sections['primary_asset'] ?? '').trim();
-              return pAsset.isNotEmpty
-                  ? '"${s.title}" [shared asset: $pAsset]'
-                  : '"${s.title}"';
-            })
-            .toList();
-    final specCorpusLower = '$gameSpecSummary $techSpecSummary'.toLowerCase();
-    final is2dLive = specCorpusLower.contains('2d') ||
-        specCorpusLower.contains('sprite') ||
-        specCorpusLower.contains('pixel') ||
-        specCorpusLower.contains('tilemap');
-    final dimensionRule = is2dLive
-        ? 'Dimension Rule: 2D ONLY (use CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
-        : (gameSpecSummary.isNotEmpty || techSpecSummary.isNotEmpty
-            ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
-            : '');
-    final prompt = '''
+      final engineLabel = _activeEngineLabel;
+      final specContext = _buildCompactWorkbenchSpecContext();
+      final siblingTitles = featDoc.parentId == null
+          ? const <String>[]
+          : featuresForBeat(featDoc.parentId!)
+              .where((s) => s.id != featureId)
+              .map((s) {
+                final pAsset = (s.sections['primary_asset'] ?? '').trim();
+                return pAsset.isNotEmpty
+                    ? '"${s.title}" [shared asset: $pAsset]'
+                    : '"${s.title}"';
+              })
+              .toList();
+      final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
 Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
-${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate; reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
-- Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
+$specContext${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- Return the exact number of tasks required: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
 Call `commit_live_feature_enrichment` with the enriched feature details.''';
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -3359,36 +3431,9 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     _synthesizingFeatureIds.add(featureId);
     notifyListeners();
     try {
-      final projectDoc = activeProject;
-      final draft = _conceptDraft;
-      final gameSpec = (projectDoc?.sections['game_spec'] ??
-              projectDoc?.sections['gameSpec'] ??
-              draft?.gameSpec.join(' · ') ??
-              '')
-          .trim();
-      final techSpec = (projectDoc?.sections['tech_spec'] ??
-              projectDoc?.sections['techSpec'] ??
-              draft?.techSpec.join(' · ') ??
-              '')
-          .trim();
-      final pillarsSummary = (projectDoc?.sections['design_pillars'] ??
-              projectDoc?.sections['designPillars'] ??
-              draft?.designPillars.join(' | ') ??
-              '')
-          .replaceAll('\n', ' | ')
-          .trim();
-      final tradeOffsSummary = (projectDoc?.sections['trade_offs'] ??
-              projectDoc?.sections['tradeOffs'] ??
-              draft?.tradeOffs.join(' | ') ??
-              '')
-          .replaceAll('\n', ' | ')
-          .trim();
-      final specLine = [
-        if (gameSpec.isNotEmpty) 'Game Spec: $gameSpec',
-        if (techSpec.isNotEmpty) 'Tech Spec: $techSpec',
-        if (pillarsSummary.isNotEmpty) 'Design Pillars: $pillarsSummary',
-        if (tradeOffsSummary.isNotEmpty) 'Trade-Offs: $tradeOffsSummary',
-      ].join(' | ');
+      final specContext = _buildCompactWorkbenchSpecContext(
+        singleLineProjectSpecsHeader: true,
+      );
       final existingTasksSummary = [
         for (int i = 0; i < fixTaskIndex; i++)
           () {
@@ -3403,17 +3448,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           }(),
       ].join(' | ');
 
-      final specCorpusLower = '$gameSpec $techSpec'.toLowerCase();
-      final is2dFix = specCorpusLower.contains('2d') ||
-          specCorpusLower.contains('sprite') ||
-          specCorpusLower.contains('pixel') ||
-          specCorpusLower.contains('tilemap');
-      final dimensionRule = is2dFix
-          ? 'Dimension Rule: 2D ONLY (use CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
-          : (specLine.isNotEmpty
-              ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
-              : '');
-
       final primaryAsset = (documents[featureId]?.sections['primary_asset'] ??
               cpNode.parameters['primarySharedScriptOrScene'] ??
               '')
@@ -3425,7 +3459,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize the exact number of concrete engine fix steps needed to resolve and verify it:
-${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}$dimensionRule$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
+$specContext$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
@@ -3591,35 +3625,9 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
     _synthesizingFeatureIds.add(featureId);
     notifyListeners();
     try {
-      final projectDoc = activeProject;
-      final gameSpec = (projectDoc?.sections['game_spec'] ??
-              projectDoc?.sections['gameSpec'] ??
-              _conceptDraft?.gameSpec.join(' · ') ??
-              '')
-          .trim();
-      final techSpec = (projectDoc?.sections['tech_spec'] ??
-              projectDoc?.sections['techSpec'] ??
-              _conceptDraft?.techSpec.join(' · ') ??
-              '')
-          .trim();
-      final pillarsText = (projectDoc?.sections['design_pillars'] ??
-              projectDoc?.sections['designPillars'] ??
-              _conceptDraft?.designPillars.join(' | ') ??
-              '')
-          .replaceAll('\n', ' | ')
-          .trim();
-      final tradeOffsText = (projectDoc?.sections['trade_offs'] ??
-              projectDoc?.sections['tradeOffs'] ??
-              _conceptDraft?.tradeOffs.join(' | ') ??
-              '')
-          .replaceAll('\n', ' | ')
-          .trim();
-      final specLine = [
-        if (gameSpec.isNotEmpty) 'Game Spec: $gameSpec',
-        if (techSpec.isNotEmpty) 'Tech Spec: $techSpec',
-        if (pillarsText.isNotEmpty) 'Design Pillars: $pillarsText',
-        if (tradeOffsText.isNotEmpty) 'Trade-Offs: $tradeOffsText',
-      ].join(' | ');
+      final specContext = _buildCompactWorkbenchSpecContext(
+        singleLineProjectSpecsHeader: true,
+      );
       final featGoal = featDoc != null
           ? SectionTextUtils.resolveGoal(featDoc.sections).trim()
           : '';
@@ -3638,17 +3646,6 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
             }(),
       ].join(' | ');
 
-      final specCorpusLower = '$gameSpec $techSpec'.toLowerCase();
-      final is2dTailor = specCorpusLower.contains('2d') ||
-          specCorpusLower.contains('sprite') ||
-          specCorpusLower.contains('pixel') ||
-          specCorpusLower.contains('tilemap');
-      final dimensionRule = is2dTailor
-          ? 'Dimension Rule: 2D ONLY (use CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
-          : (specLine.isNotEmpty
-              ? 'Dimension Rule: 3D (match $engineLabel 3D actors/nodes/Vector3).\n'
-              : '');
-
       final primaryAsset = (cpNode.parameters['primarySharedScriptOrScene'] ??
               featDoc?.sections['primary_asset'] ??
               '')
@@ -3660,7 +3657,7 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
       final prompt = '''
 You are a senior game engine programmer assisting with a concrete implementation task.
 Engine: $engineLabel
-${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}${dimensionRule}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
+${specContext}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
 Playtest Gate: "${cpNode.playtestCondition}"
 Target Task ($taskNum of ${cpNode.checklist.length}): "${parentTask.text}"
 $primaryAssetLine${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
@@ -3950,8 +3947,37 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
   bool isFeatureQueuedForSteps(String featureId) =>
       _pendingFeatureStepQueue.contains(featureId);
 
+  bool hasSynthesizedFeatureStepsForActiveRelease(String featureId) {
+    final feat = documents[featureId];
+    if (feat == null || feat.sections['needs_ai_enrichment'] == 'true') {
+      return false;
+    }
+    final engineLabel = _activeEngineLabel;
+    final activeVer = activeReleaseVersionTag;
+    final plainKey = '${featureId}_${activeVer}_$engineLabel';
+    final bpKey = '${plainKey}_BP';
+    final cppKey = '${plainKey}_CPP';
+    if (_aiSynthesizedFeatureSteps.contains(plainKey) ||
+        _aiSynthesizedFeatureSteps.contains(bpKey) ||
+        _aiSynthesizedFeatureSteps.contains(cppKey)) {
+      return true;
+    }
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    if (states.isEmpty) return false;
+    final activeCp =
+        states.where((s) => s.releaseVersion == activeVer).lastOrNull ??
+            states.last;
+    return activeCp.checklist.isNotEmpty &&
+        activeCp.checklist.every(
+          (t) =>
+              t.children.isNotEmpty &&
+              t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
+        );
+  }
+
   bool isFeatureWaitingForStepsInLiveMode(String featureId) {
     if (GeminiAgentClient.testMockResponder != null) return false;
+    if (hasSynthesizedFeatureStepsForActiveRelease(featureId)) return false;
     final feat = documents[featureId];
     return _pendingFeatureStepQueue.contains(featureId) ||
         feat?.sections['needs_ai_enrichment'] == 'true';
@@ -4009,17 +4035,17 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
                     'title': {
                       'type': 'STRING',
                       'description':
-                          'STEP X.Y · Short Title-Case Telegraphic Step Title (3-5 words)',
+                          LayersTextStyleGuide.runbookStepTitleSchemaDesc,
                     },
                     'stepPath': {
                       'type': 'STRING',
                       'description':
-                          'Exact editor panel/menu/inspector/script path breadcrumb',
+                          LayersTextStyleGuide.runbookStepPathSchemaDesc,
                     },
                     'instruction': {
                       'type': 'STRING',
                       'description':
-                          '1 concise sentence explaining what to click or type in the engine',
+                          LayersTextStyleGuide.runbookInstructionSchemaDesc,
                     },
                     'area1Hierarchy': {
                       'type': 'STRING',
@@ -4039,7 +4065,7 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
                     'verifyResult': {
                       'type': 'STRING',
                       'description':
-                          '1 concise observable verification check in the editor or Play mode',
+                          LayersTextStyleGuide.causalTriggerResultSchemaDesc,
                     },
                   },
                 },
@@ -4079,13 +4105,27 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               'verifyResult',
             ],
             'properties': {
-              'title': {'type': 'STRING'},
-              'stepPath': {'type': 'STRING'},
-              'instruction': {'type': 'STRING'},
+              'title': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.runbookStepTitleSchemaDesc,
+              },
+              'stepPath': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.runbookStepPathSchemaDesc,
+              },
+              'instruction': {
+                'type': 'STRING',
+                'description':
+                    LayersTextStyleGuide.runbookInstructionSchemaDesc,
+              },
               'area1Hierarchy': {'type': 'STRING'},
               'area2Inspector': {'type': 'STRING'},
               'codeFormula': {'type': 'STRING'},
-              'verifyResult': {'type': 'STRING'},
+              'verifyResult': {
+                'type': 'STRING',
+                'description':
+                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+              },
             },
           },
         },
@@ -4105,11 +4145,11 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         'fixTaskTitle': {
           'type': 'STRING',
           'description':
-              'Optional concise 2-4 word fix task title (e.g., "[FIX] Wall Clip Velocity Clamp (1h)").',
+              'Optional concise 2-4 word Title-Case fix task title (e.g., "[FIX] Wall Clip Clamp").',
         },
         'playtestGuard': {
           'type': 'STRING',
-          'description': '[PLAYTEST GUARD] 1 concise rule preventing this bug',
+          'description': LayersTextStyleGuide.playtestGuardSchemaDesc,
         },
         'tuningUpdates': {
           'type': 'ARRAY',
@@ -4138,13 +4178,27 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               'verifyResult',
             ],
             'properties': {
-              'title': {'type': 'STRING'},
-              'stepPath': {'type': 'STRING'},
-              'instruction': {'type': 'STRING'},
+              'title': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.runbookStepTitleSchemaDesc,
+              },
+              'stepPath': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.runbookStepPathSchemaDesc,
+              },
+              'instruction': {
+                'type': 'STRING',
+                'description':
+                    LayersTextStyleGuide.runbookInstructionSchemaDesc,
+              },
               'area1Hierarchy': {'type': 'STRING'},
               'area2Inspector': {'type': 'STRING'},
               'codeFormula': {'type': 'STRING'},
-              'verifyResult': {'type': 'STRING'},
+              'verifyResult': {
+                'type': 'STRING',
+                'description':
+                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+              },
             },
           },
         },
@@ -4169,15 +4223,25 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         'edgeCases',
       ],
       'properties': {
-        'goal': {'type': 'STRING'},
+        'goal': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.changelogDeltaGoalSchemaDesc,
+        },
         'inScope': {
           'type': 'ARRAY',
+          'description': LayersTextStyleGuide.changelogDeltaInScopeSchemaDesc,
           'items': {'type': 'STRING'},
         },
-        'doneWhen': {'type': 'STRING'},
+        'doneWhen': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+        },
         'primarySharedScriptOrScene': {'type': 'STRING'},
         'checkpointTitle': {'type': 'STRING'},
-        'playtestGate': {'type': 'STRING'},
+        'playtestGate': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+        },
         'tasks': {
           'type': 'ARRAY',
           'items': {
@@ -4192,16 +4256,23 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
                   'feedback_and_boundary_guard',
                 ],
               },
-              'title': {'type': 'STRING'},
+              'title': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+              },
             },
           },
         },
         'tuningParams': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'items': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.tuningParamSchemaDesc,
+          },
         },
         'edgeCases': {
           'type': 'ARRAY',
+          'description': LayersTextStyleGuide.stateGuardSchemaDesc,
           'items': {'type': 'STRING'},
         },
       },
@@ -4217,7 +4288,6 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
       'type': 'OBJECT',
       'required': [
         'releaseTimingMode',
-        'targetFuturePhase',
         'releaseTimingReasoning',
         'integrationMode',
         'targetBeatId',
@@ -4240,6 +4310,8 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         },
         'targetFuturePhase': {
           'type': 'STRING',
+          'description':
+              'Required ONLY when releaseTimingMode is splitNowAndFuture or futureRelease; omit when releaseTimingMode is now.',
           'enum': ['mvp', 'verticalSlice', 'fullProduction', 'postLaunch'],
         },
         'releaseTimingReasoning': {'type': 'STRING'},
@@ -4253,22 +4325,38 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         },
         'targetBeatId': {'type': 'STRING'},
         'targetFeatureId': {'type': 'STRING'},
-        'newEpicTitle': {'type': 'STRING'},
+        'newEpicTitle': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.epicTitleSchemaDesc,
+        },
         'placementReasoning': {'type': 'STRING'},
-        'featureTitle': {'type': 'STRING'},
-        'goal': {'type': 'STRING'},
+        'featureTitle': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.featureTitleSchemaDesc,
+        },
+        'goal': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.changelogDeltaGoalSchemaDesc,
+        },
         'inScope': {
           'type': 'ARRAY',
+          'description': LayersTextStyleGuide.changelogDeltaInScopeSchemaDesc,
           'items': {'type': 'STRING'},
         },
-        'doneWhen': {'type': 'STRING'},
+        'doneWhen': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+        },
         'primarySharedScriptOrScene': {'type': 'STRING'},
         'architectureHowSummary': {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
         },
         'checkpointTitle': {'type': 'STRING'},
-        'playtestGate': {'type': 'STRING'},
+        'playtestGate': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+        },
         'tasks': {
           'type': 'ARRAY',
           'description':
@@ -4285,21 +4373,34 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
                   'feedback_and_boundary_guard',
                 ],
               },
-              'title': {'type': 'STRING'},
+              'title': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+              },
             },
           },
         },
         'tuningParams': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'items': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.tuningParamSchemaDesc,
+          },
         },
         'edgeCases': {
           'type': 'ARRAY',
+          'description': LayersTextStyleGuide.stateGuardSchemaDesc,
           'items': {'type': 'STRING'},
         },
         'futureCheckpointTitle': {'type': 'STRING'},
-        'futureGoal': {'type': 'STRING'},
-        'futurePlaytestGate': {'type': 'STRING'},
+        'futureGoal': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.changelogDeltaGoalSchemaDesc,
+        },
+        'futurePlaytestGate': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+        },
         'futureTasks': {
           'type': 'ARRAY',
           'description':
@@ -4316,16 +4417,23 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
                   'feedback_and_boundary_guard',
                 ],
               },
-              'title': {'type': 'STRING'},
+              'title': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+              },
             },
           },
         },
         'futureTuningParams': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'items': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.tuningParamSchemaDesc,
+          },
         },
         'futureEdgeCases': {
           'type': 'ARRAY',
+          'description': LayersTextStyleGuide.stateGuardSchemaDesc,
           'items': {'type': 'STRING'},
         },
       },
@@ -4370,7 +4478,7 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
   };
 
   /// Extracts a compact Cumulative Project Ledger entry for an already-synthesized feature
-  /// so subsequent features reuse exact Actor/Scene/Script names, tuning variables, and guards.
+  /// so subsequent features reuse exact Actor/Scene/Script names and tuning variables without prose bloat.
   String _summarizeFeatureForProjectLedger(
     TierDocument featDoc,
     int orderNumber,
@@ -4383,16 +4491,11 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
     }
     final pathTokens = <String>{};
     final tuningTokens = <String>{};
-    final guardTokens = <String>{};
 
     for (final cp in states) {
       for (final param in cp.tuningParams) {
         final clean = param.trim();
         if (clean.isNotEmpty) tuningTokens.add(clean);
-      }
-      for (final g in cp.edgeCases) {
-        final clean = g.replaceAll(_leadingBracketTagsRegex, '').trim();
-        if (clean.isNotEmpty) guardTokens.add(clean);
       }
       for (final task in cp.checklist) {
         for (final sub in task.children) {
@@ -4438,21 +4541,14 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
       }
     }
 
-    final featGoal = SectionTextUtils.resolveGoal(featDoc.sections).trim();
     final parts = <String>[];
-    if (featGoal.isNotEmpty) {
-      parts.add('goal="$featGoal"');
-    }
     if (assetTokens.isNotEmpty) {
-      parts.add('assets=[${assetTokens.take(6).join(', ')}]');
+      parts.add('assets=[${assetTokens.take(5).join(', ')}]');
     } else if (pathTokens.isNotEmpty) {
-      parts.add('paths=[${pathTokens.take(3).join(', ')}]');
+      parts.add('paths=[${pathTokens.take(2).join(', ')}]');
     }
     if (tuningTokens.isNotEmpty) {
-      parts.add('vars=[${tuningTokens.take(6).join(', ')}]');
-    }
-    if (guardTokens.isNotEmpty) {
-      parts.add('guards=[${guardTokens.take(3).join('; ')}]');
+      parts.add('vars=[${tuningTokens.take(5).join(', ')}]');
     }
     final summaryTail =
         parts.isNotEmpty ? parts.join(' | ') : 'foundation initialized';
@@ -4629,24 +4725,13 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
             }
           }
           if (beatSiblings.length > 1) {
-            final sibScopeRaw = (sib.sections['scope'] ?? '').trim();
-            final sibGoalLine = sibScopeRaw
-                .split('\n')
-                .firstWhere(
-                  (l) => l.toLowerCase().startsWith('goal:'),
-                  orElse: () => '',
-                )
-                .replaceFirst(_goalPrefixRegex, '')
-                .trim();
-            final goalSuffix =
-                sibGoalLine.isNotEmpty ? ' ("$sibGoalLine")' : '';
             if (isEarlierInEpic) {
               sameEpicSiblingBoundaryLines.add(
-                '- Earlier Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}"$goalSuffix -> ALREADY BUILT. Reuse & extend the shared Actor/Script created in "${sib.title}" rather than creating a duplicate Actor.',
+                '- Earlier Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}" -> ALREADY BUILT (reuse shared Actor/Script).',
               );
             } else {
               sameEpicSiblingBoundaryLines.add(
-                '- Later Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}"$goalSuffix -> QUEUED LATER IN THIS EPIC. Do NOT implement "${sib.title}" inside "${feat.title}"; keep "${feat.title}" strictly scoped to its own mechanic.',
+                '- Later Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}" -> QUEUED LATER IN THIS EPIC (do not implement here).',
               );
             }
           }
@@ -4664,30 +4749,10 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               ? 'UNITY C# (MonoBehaviour)'
               : 'GODOT 4 (GDScript 2.0)');
 
-      final gameSpecText = (activeProject?.sections['game_spec'] ??
-              activeProject?.sections['gameSpec'] ??
-              _conceptDraft?.gameSpec.join(' · ') ??
-              '')
-          .trim();
-      final techSpecText = (activeProject?.sections['tech_spec'] ??
-              activeProject?.sections['techSpec'] ??
-              _conceptDraft?.techSpec.join(' · ') ??
-              '')
-          .trim();
-      final specCorpusLower = '$gameSpecText $techSpecText'.toLowerCase();
-      final is2dProject = specCorpusLower.contains('2d') ||
-          specCorpusLower.contains('sprite') ||
-          specCorpusLower.contains('pixel') ||
-          specCorpusLower.contains('tilemap') ||
-          (specCorpusLower.contains('top-down') &&
-              !specCorpusLower.contains('3d')) ||
-          (specCorpusLower.contains('side-scroll') &&
-              !specCorpusLower.contains('3d'));
-      final dimensionInstructionBlock = is2dProject
-          ? 'PROJECT DIMENSION & CAMERA SPEC: 2D GAME ($gameSpecText | $techSpecText)\n'
-              '- STRICT 2D ENGINE NODE RULE: Use ONLY 2D scenes, nodes, and math (e.g., Node2D, CharacterBody2D, StaticBody2D, Area2D, Sprite2D, CollisionShape2D, RectangleShape2D/CircleShape2D, Vector2 in Godot 4; Rigidbody2D, BoxCollider2D, CircleCollider2D, SpriteRenderer, Vector2 in Unity). NEVER use 3D nodes or classes (NEVER use Node3D, MeshInstance3D, StaticBody3D, CharacterBody3D, Area3D, CapsuleShape3D, or Vector3)!'
-          : 'PROJECT DIMENSION & CAMERA SPEC: 3D GAME ($gameSpecText | $techSpecText)\n'
-              '- Use 3D actors/nodes/components and Vector3/FVector math matching $targetEngineMode.';
+      final compactSpecBlock = _buildCompactWorkbenchSpecContext(
+        includeFullDimensionBanner: true,
+        targetEngineMode: targetEngineMode,
+      );
 
       final phaseInstructionBlock = switch (_currentPhase) {
         ProductionPhase.prototype =>
@@ -4701,26 +4766,6 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         ProductionPhase.postLaunch =>
           'ACTIVE PRODUCTION PHASE: 05 · POST-LAUNCH & LIVE OPS (PATCH & EXPANSION)\n- Apply surgical balance parameter adjustments, modular DLC/biome hooks, and regression guards without breaking existing save/state schemas.',
       };
-
-      final projectGoalText = (activeProject != null
-              ? SectionTextUtils.resolveGoal(activeProject!.sections)
-              : (_conceptDraft?.goal ?? ''))
-          .trim();
-      final pillarsText = (activeProject?.sections['design_pillars'] ??
-              activeProject?.sections['designPillars'] ??
-              _conceptDraft?.designPillars.join(' | ') ??
-              '')
-          .trim();
-      final tradeOffsText = (activeProject?.sections['trade_offs'] ??
-              activeProject?.sections['tradeOffs'] ??
-              _conceptDraft?.tradeOffs.join(' | ') ??
-              '')
-          .trim();
-      final projectPillarsAndTradeOffsBlock = [
-        if (projectGoalText.isNotEmpty) 'Project Goal: "$projectGoalText"',
-        if (pillarsText.isNotEmpty) 'Design Pillars: $pillarsText',
-        if (tradeOffsText.isNotEmpty) 'Trade-Offs: $tradeOffsText',
-      ].join('\n');
 
       final featureGoalText = SectionTextUtils.resolveGoal(feat.sections);
       final featureInScopeItems =
@@ -4742,8 +4787,7 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
-${projectPillarsAndTradeOffsBlock.isNotEmpty ? '$projectPillarsAndTradeOffsBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$dimensionInstructionBlock
-$phaseInstructionBlock
+${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$phaseInstructionBlock
 $projectBuildStateContext
 ${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Already Built in Earlier Features — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
 ${sameEpicSiblingBoundaryLines.isNotEmpty ? sameEpicSiblingBoundaryLines.join('\n') : ''}
@@ -4761,13 +4805,13 @@ CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
   * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
 
 For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
-1. "title": "STEP X.Y · Short Title-Case Telegraphic Step Title (3-5 words)"
+1. "title": "3-4 Title-Case Imperative Runbook words (Verb + Object, e.g. 'Spawn 6 Pellet Raycasts', 'Add Hazard Detection Component'; do NOT include 'STEP X.Y' prefix)"
 2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path (telegraphic breadcrumb)
-3. "instruction": 1 concise sentence explaining what to click or type in $targetEngineMode
+3. "instruction": 1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value
 4. "area1Hierarchy": Optional Scene/Component hierarchy tree using ├─ / └─ when the step adds or modifies nodes/components (or "" if pure code step)
 5. "area2Inspector": Inspector/Details bindings formatted as "Property: Value | Property2: Value2" using the exact tuning parameter names
 6. "codeFormula": 2-6 lines of concrete $targetEngineMode code or node graph wiring using the exact tuning variables and guard checks
-7. "verifyResult": 1 concise observable verification check in the editor or Play mode
+7. "verifyResult": Causal Trigger -> Result check formatted as "<Player Action> -> <Observable Screen Result>" (<= 14 words)
 
 Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each task.''';
 
@@ -5483,8 +5527,78 @@ Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each
     final extractedGuards = <String>[];
     String? extractedPrimaryAsset;
 
-    // 1. Fast AI extraction pass via gemini-flash-latest when key is available
-    if (GeminiAgentClient.hasKey(_apiKey)) {
+    // 1. Deterministic multi-line regex extraction FIRST (0 LLM tokens; handles Godot 4 @export, Unity [SerializeField], Unreal UPROPERTY across line breaks)
+    String cleanNumericValue(String raw) {
+      var val = raw
+          .split('//')
+          .first
+          .split('#')
+          .first
+          .trim()
+          .replaceAll(_trailingSemicolonRegex, '')
+          .trim();
+      // Strip trailing C#/C++ float 'f' suffix on numeric literals (e.g. 600.0f -> 600.0, 6f -> 6.0)
+      final floatMatch = _floatSuffixRegex.firstMatch(val);
+      if (floatMatch != null) {
+        final numPart = floatMatch.group(1)!;
+        val = numPart.contains('.') ? numPart : '$numPart.0';
+      }
+      return val;
+    }
+
+    // 1a. Multi-line Unity [SerializeField] / Unreal UPROPERTY(...) attribute on same or preceding line
+    for (final m in _attrFieldRegex.allMatches(trimmedCode)) {
+      final k = m.group(1)?.trim() ?? '';
+      final v = cleanNumericValue(m.group(2) ?? '');
+      if (k.isNotEmpty && v.isNotEmpty) {
+        extractedTuning.putIfAbsent(k, () => v);
+      }
+    }
+
+    // 1b. Godot 4 @export var / typed var declarations
+    for (final m in _gdVarRegex.allMatches(trimmedCode)) {
+      final k = m.group(1)?.trim() ?? '';
+      final v = cleanNumericValue(m.group(2) ?? '');
+      if (k.isNotEmpty && v.isNotEmpty) {
+        extractedTuning.putIfAbsent(k, () => v);
+      }
+    }
+
+    // 1c. Direct assignment match for any existing tuningParams keys
+    for (final existing in cpNode.tuningParams) {
+      final existingKey = existing.split(':').first.trim();
+      if (existingKey.isEmpty) continue;
+      final keyRegex = RegExp(
+        r'\b' +
+            RegExp.escape(existingKey) +
+            r'\b(?:\s*:\s*[\w.]+)?\s*=\s*([^\n;#/]+)',
+        multiLine: true,
+        caseSensitive: false,
+      );
+      final match = keyRegex.firstMatch(trimmedCode);
+      if (match != null) {
+        final v = cleanNumericValue(match.group(1) ?? '');
+        if (v.isNotEmpty) {
+          extractedTuning[existingKey] = v;
+        }
+      }
+    }
+
+    // 1d. Guard comment extraction (// [GUARD] ..., # [GUARD] ..., // GUARD: ...)
+    for (final m in _guardCommentRegex.allMatches(trimmedCode)) {
+      final gText = m.group(1)?.trim() ?? '';
+      if (gText.isNotEmpty) {
+        final formatted = gText.startsWith('[') ? gText : '[GUARD] $gText';
+        if (!extractedGuards.contains(formatted)) {
+          extractedGuards.add(formatted);
+        }
+      }
+    }
+
+    // 2. AI fallback extraction pass via gemini-flash-latest ONLY when regex extracted 0 updates and 0 guards
+    if (extractedTuning.isEmpty &&
+        extractedGuards.isEmpty &&
+        GeminiAgentClient.hasKey(_apiKey)) {
       final currentAsset = (feat.sections['primary_asset'] ??
               cpNode.parameters['primarySharedScriptOrScene'] ??
               '')
@@ -5552,74 +5666,6 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
               text.startsWith('[') ? text : '[GUARD] $text',
             );
           }
-        }
-      }
-    }
-
-    // 2. Deterministic multi-line regex extraction (handles Godot 4 @export, Unity [SerializeField], Unreal UPROPERTY across line breaks)
-    String cleanNumericValue(String raw) {
-      var val = raw
-          .split('//')
-          .first
-          .split('#')
-          .first
-          .trim()
-          .replaceAll(_trailingSemicolonRegex, '')
-          .trim();
-      // Strip trailing C#/C++ float 'f' suffix on numeric literals (e.g. 600.0f -> 600.0, 6f -> 6.0)
-      final floatMatch = _floatSuffixRegex.firstMatch(val);
-      if (floatMatch != null) {
-        final numPart = floatMatch.group(1)!;
-        val = numPart.contains('.') ? numPart : '$numPart.0';
-      }
-      return val;
-    }
-
-    // 2a. Multi-line Unity [SerializeField] / Unreal UPROPERTY(...) attribute on same or preceding line
-    for (final m in _attrFieldRegex.allMatches(trimmedCode)) {
-      final k = m.group(1)?.trim() ?? '';
-      final v = cleanNumericValue(m.group(2) ?? '');
-      if (k.isNotEmpty && v.isNotEmpty) {
-        extractedTuning.putIfAbsent(k, () => v);
-      }
-    }
-
-    // 2b. Godot 4 @export var / typed var declarations
-    for (final m in _gdVarRegex.allMatches(trimmedCode)) {
-      final k = m.group(1)?.trim() ?? '';
-      final v = cleanNumericValue(m.group(2) ?? '');
-      if (k.isNotEmpty && v.isNotEmpty) {
-        extractedTuning.putIfAbsent(k, () => v);
-      }
-    }
-
-    // 2c. Direct assignment match for any existing tuningParams keys
-    for (final existing in cpNode.tuningParams) {
-      final existingKey = existing.split(':').first.trim();
-      if (existingKey.isEmpty) continue;
-      final keyRegex = RegExp(
-        r'\b' +
-            RegExp.escape(existingKey) +
-            r'\b(?:\s*:\s*[\w.]+)?\s*=\s*([^\n;#/]+)',
-        multiLine: true,
-        caseSensitive: false,
-      );
-      final match = keyRegex.firstMatch(trimmedCode);
-      if (match != null) {
-        final v = cleanNumericValue(match.group(1) ?? '');
-        if (v.isNotEmpty) {
-          extractedTuning[existingKey] = v;
-        }
-      }
-    }
-
-    // 2d. Guard comment extraction (// [GUARD] ..., # [GUARD] ..., // GUARD: ...)
-    for (final m in _guardCommentRegex.allMatches(trimmedCode)) {
-      final gText = m.group(1)?.trim() ?? '';
-      if (gText.isNotEmpty) {
-        final formatted = gText.startsWith('[') ? gText : '[GUARD] $gText';
-        if (!extractedGuards.contains(formatted)) {
-          extractedGuards.add(formatted);
         }
       }
     }
@@ -5721,6 +5767,10 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
         (GeminiAgentClient.hasKey(_apiKey) ||
             GeminiAgentClient.testMockResponder != null)) {
       if (_synthesizingFeatureIds.contains(featureId)) {
+        return;
+      }
+      if (hasSynthesizedFeatureStepsForActiveRelease(featureId)) {
+        _pendingFeatureStepQueue.remove(featureId);
         return;
       }
       if (_synthesizingFeatureIds.isNotEmpty) {
@@ -6655,7 +6705,6 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
     final item = items[idx];
 
     final proj = activeProject;
-    final draft = _conceptDraft;
     final beats = activeReleaseBeats;
     final activeVer = activeReleaseVersionTag;
     final engineLabel = _activeEngineLabel;
@@ -6677,42 +6726,9 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
       );
     }
 
-    final gameSpecSummary = (proj?.sections['game_spec'] ??
-            proj?.sections['gameSpec'] ??
-            draft?.gameSpec.join(' · ') ??
-            '')
-        .trim();
-    final techSpecSummary = (proj?.sections['tech_spec'] ??
-            proj?.sections['techSpec'] ??
-            draft?.techSpec.join(' · ') ??
-            '')
-        .trim();
-    final specCorpusLower = '$gameSpecSummary $techSpecSummary'.toLowerCase();
-    final is2dProject = specCorpusLower.contains('2d') ||
-        specCorpusLower.contains('sprite') ||
-        specCorpusLower.contains('pixel') ||
-        specCorpusLower.contains('tilemap');
-    final dimensionRule = is2dProject
-        ? 'Dimension Rule: 2D ONLY (Node2D / CharacterBody2D / Vector2; NEVER 3D nodes or Vector3).\n'
-        : 'Dimension Rule: 3D (Node3D / CharacterBody3D / Vector3).\n';
-
-    final pillarsSummary = (proj?.sections['design_pillars'] ??
-            proj?.sections['designPillars'] ??
-            draft?.designPillars.join(' | ') ??
-            'Core gameplay clarity')
-        .replaceAll('\n', ' | ')
-        .trim();
-    final tradeOffsSummary = (proj?.sections['trade_offs'] ??
-            proj?.sections['tradeOffs'] ??
-            draft?.tradeOffs.join(' | ') ??
-            'Playable feel over complexity')
-        .replaceAll('\n', ' | ')
-        .trim();
-    final exclusionsSummary = (proj?.sections['exclusions'] ??
-            draft?.exclusions.join(' | ') ??
-            'None')
-        .replaceAll('\n', ' | ')
-        .trim();
+    final compactSpecBlock = _buildCompactWorkbenchSpecContext(
+      includeExclusions: true,
+    );
 
     final prompt = '''
 You are the Principal Game Producer & Lead Systems Architect ($engineLabel) for "${proj?.title ?? 'Game Project'}".
@@ -6723,16 +6739,12 @@ Triage this developer feature request captured in the Feature Inbox across 3 dim
 
 Developer Request: "${item.rawIdea}"
 Active Release: $activeVer (${_currentPhase.label})
-Game Spec: $gameSpecSummary
-Tech Spec: $techSpecSummary
-${dimensionRule}Design Pillars: $pillarsSummary
-Trade-Offs: $tradeOffsSummary
-Out of Scope Rules: $exclusionsSummary
+$compactSpecBlock
 Existing Epics & Live Features:
 ${beatCatalogLines.join('\n')}
 
 ${GeminiAgentClient.compactStyleRules}
-- If `releaseTimingMode` is `"now"`, omit `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTasks"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
+- If `releaseTimingMode` is `"now"`, omit `"targetFuturePhase"`, `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTasks"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
 
 Invoke `commit_inbox_feature_triage` with the structured triage recommendation.''';
 

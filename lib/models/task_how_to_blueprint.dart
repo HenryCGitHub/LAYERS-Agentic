@@ -85,7 +85,27 @@ class TaskHowToBlueprint {
   static final RegExp _trailingForBeatSuffixRegex =
       RegExp(r'\s+for\s+[A-Z][\w\s&\-\/]*$');
   static final RegExp _leadingVerbPrefixRegex = RegExp(
-    r'^(?:Create|Implement|Hook up|Hook|Wire|Subscribe|Enforce|Spawn|Apply|Bind)\s+',
+    r'^(?:Create|Implement|Build|Configure|Set\s+up|Setup|Code|Write|Add|Hook\s+up|Hook|Wire|Subscribe|Enforce|Spawn|Apply|Bind|Trigger|Update|Extend|Upgrade|Define|Declare|Attach|Connect|Handle|Polish)\s+(?:(?:a|an|the)\s+)?',
+    caseSensitive: false,
+  );
+  static final RegExp _inlineAmpersandVerbRegex = RegExp(
+    r'(&|,)\s*(?:and\s+)?(?:create|implement|build|configure|set\s+up|setup|code|write|add|hook\s+up|hook|wire|subscribe|enforce|spawn|apply|bind|trigger|update|extend|upgrade|define|declare|attach|connect|handle|polish)\s+(?:(?:a|an|the)\s+)?',
+    caseSensitive: false,
+  );
+  static final RegExp _trailingSubordinateClauseRegex = RegExp(
+    r'\s+(?:while|when|during|so\s+that|in\s+order\s+to)\s+.*$',
+    caseSensitive: false,
+  );
+  static final RegExp _progressiveGoalPreambleRegex = RegExp(
+    r'^(?:Goal:\s*)?(?:Upgrade|Polish|Extend|Scale|Tune)\s+[\w\s\-&/]{1,36}?(?:\s+from\s+v\d+\.\d+(?:\s+greybox)?)?\s+(?:(?:into|to)\s+(?:(?:a|an|the|full|complete)\s+)?[\w\s\-]{1,28}?\s+with\s+|with\s+)',
+    caseSensitive: false,
+  );
+  static final RegExp _leadingArticlePrefixRegex = RegExp(
+    r'^(?:a|an|the)\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _inlineArticlesRegex = RegExp(
+    r'\b(?:a|an|the)\s+',
     caseSensitive: false,
   );
   static final RegExp _digitsOnlyRegex = RegExp(r'^\d+$');
@@ -222,22 +242,77 @@ class TaskHowToBlueprint {
     if (lower.startsWith('wire active state readout')) {
       return 'State Readout & Viewport Test';
     }
-    // Strip redundant trailing " for <Beat/Feature Name>"
-    text = text.replaceFirst(
-      _trailingForBeatSuffixRegex,
-      '',
-    );
-    if (text.length > 32) {
-      text = text
-          .replaceFirst(
-            _leadingVerbPrefixRegex,
-            '',
-          )
-          .replaceAll(' and ', ' & ')
-          .trim();
-      if (text.isNotEmpty) {
-        text = text[0].toUpperCase() + text.substring(1);
+    // Strip redundant trailing " for <Beat/Feature Name>" and subordinate clauses ("while ...", "when ...")
+    text = text
+        .replaceFirst(_trailingForBeatSuffixRegex, '')
+        .replaceFirst(_trailingSubordinateClauseRegex, '');
+    text = text
+        .replaceFirst(_leadingVerbPrefixRegex, '')
+        .replaceFirst(_leadingArticlePrefixRegex, '')
+        .replaceAllMapped(
+          _inlineAmpersandVerbRegex,
+          (m) => '${m.group(1)} ',
+        )
+        .replaceAll(_inlineArticlesRegex, '')
+        .replaceAll(' and ', ' & ')
+        .trim();
+    if (text.contains(',') || text.length > 40) {
+      final rawClauses = text
+          .split(RegExp(r'\s*(?:,|&)\s*'))
+          .map((c) => c.trim())
+          .where((c) => c.isNotEmpty)
+          .take(2)
+          .toList();
+      if (rawClauses.isNotEmpty) {
+        final condensedClauses = <String>[];
+        for (final clause in rawClauses) {
+          final strippedClause = clause
+              .replaceFirst(_leadingVerbPrefixRegex, '')
+              .replaceFirst(_leadingArticlePrefixRegex, '')
+              .trim();
+          final rawWords = strippedClause
+              .split(_whitespaceRegex)
+              .where((w) => w.isNotEmpty && w.toLowerCase() != 'response')
+              .toList();
+          // Check if duplicate trailing word exists (e.g. "Ghost trail particle trail" -> "Ghost trail")
+          final seenLower = <String>{};
+          final hasDuplicateWord =
+              rawWords.any((w) => !seenLower.add(w.toLowerCase()));
+          final List<String> coreWords;
+          if (rawWords.length <= 2) {
+            coreWords = rawWords;
+          } else if (hasDuplicateWord) {
+            final deduped = <String>[];
+            final seen = <String>{};
+            for (final w in rawWords) {
+              if (seen.add(w.toLowerCase())) {
+                deduped.add(w);
+              }
+            }
+            coreWords = deduped.take(2).toList();
+          } else {
+            coreWords = rawWords.sublist(rawWords.length - 2);
+          }
+          if (coreWords.isNotEmpty) {
+            final titleCased = coreWords
+                .map((w) {
+                  final upper = w.toUpperCase();
+                  if (_kAcronymWords.contains(upper)) return upper;
+                  return w.length == 1
+                      ? upper
+                      : w[0].toUpperCase() + w.substring(1);
+                })
+                .join(' ');
+            condensedClauses.add(titleCased);
+          }
+        }
+        if (condensedClauses.isNotEmpty) {
+          return condensedClauses.join(' & ');
+        }
       }
+    }
+    if (text.isNotEmpty) {
+      text = text[0].toUpperCase() + text.substring(1);
     }
     return text.isEmpty ? rawCleanTitle : text;
   }
@@ -277,30 +352,68 @@ class TaskHowToBlueprint {
     'with',
   };
 
+  static const Set<String> _kTelegraphicDropWords = <String>{
+    'a',
+    'an',
+    'the',
+    'your',
+    'our',
+  };
+
   static final RegExp _hasLowercaseRegex = RegExp(r'[a-z]');
-  static final RegExp _inOrderToPrefixRegex = RegExp(
-    r'^In order to [^,]+,\s*',
+  static final RegExp _stepTrailingContextFillerRegex = RegExp(
+    r'\s+(?:in\s+(?:the\s+)?(?:scene|level|editor|viewport|hierarchy|inspector)|for\s+(?:the\s+)?player|to\s+(?:the\s+)?scene)$',
+    caseSensitive: false,
+  );
+  static final RegExp _instructionPreambleRegex = RegExp(
+    r'^(?:In\s+order\s+to\s+[^,]+,\s*|To\s+(?:set\s+up|configure|implement|create|build)\s+[^,]+,\s*|In\s+this\s+step(?:,\s*you\s+will|\s+we\s+will)?\s*,?\s*|Next,\s*you\s+will\s+|First,\s*we\s+need\s+to\s+|Make\s+sure\s+to\s+)',
     caseSensitive: false,
   );
   static final RegExp _verifyPrefixRegex = RegExp(
-    r'^(?:Confirm\s+that|Verify\s+that|Ensure\s+that|Make\s+sure\s+that)\s+',
+    r'^(?:(?:Confirm|Verify|Ensure|Make\s+sure|Check)\s+that\s+|Make\s+sure\s+)',
+    caseSensitive: false,
+  );
+  static final RegExp _verifyWhenClauseRegex = RegExp(
+    r'^(?:when|after)\s+(?:you\s+|the\s+player\s+)?([^,]+),\s*(.+)$',
+    caseSensitive: false,
+  );
+  static final RegExp _featureGoalPreambleRegex = RegExp(
+    r'^(?:Goal:\s*)?(?:(?:Build|Implement|Create|Develop|Add|Deliver)\s+(?:a\s+|an\s+|the\s+)?(?:playable\s+|responsive\s+|modular\s+|tactile\s+)?[\w\s\-&/]{0,42}?(?:prototype|feature|mechanic|system|loop)\s+(?:that\s+allows\s+(?:the\s+)?player\s+to|where\s+(?:the\s+)?player\s+can|where\s+you\s+can|where\s+you|so\s+(?:the\s+)?player\s+can|to)\s+|(?:Allow|Enable)\s+(?:the\s+)?player\s+to\s+)',
+    caseSensitive: false,
+  );
+  static final RegExp _guardLeadInPreventFromRegex = RegExp(
+    r'^Prevent\s+(?:the\s+)?(.+?)\s+from\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _guardLeadInPrefixRegex = RegExp(
+    r'^(?:Prevent|Ensure\s+that|Ensure|Make\s+sure\s+that|Make\s+sure|Do\s+not\s+allow)\s+(?:the\s+)?',
     caseSensitive: false,
   );
 
-  /// Formats a step title into Telegraphic Title Case (e.g. `"CREATE PLAYER CHARACTER FOUNDATION"`
-  /// -> `"Create Player Character Foundation"`), preserving engine asset identifiers and acronyms.
+  /// Formats a step title into Telegraphic Title Case (e.g. `"CREATE THE PLAYER CHARACTERBODY2D IN THE SCENE"`
+  /// -> `"Create Player CharacterBody2D"`), stripping articles/pronouns and preserving engine identifiers.
   static String formatTelegraphicStepTitle(String raw) {
-    final stripped = raw.trim().replaceFirst(_stepHeaderPrefixRegex, '').trim();
+    var stripped = raw
+        .trim()
+        .replaceFirst(_stepHeaderPrefixRegex, '')
+        .replaceAll(_anyDurationTagRe, '')
+        .trim();
     if (stripped.isEmpty) return raw.trim();
-    // If it already contains lowercase letters (already Title-Cased or mixed-case), return as-is
-    if (stripped.contains(_hasLowercaseRegex)) {
-      return stripped;
-    }
+    stripped = stripped.replaceFirst(_stepTrailingContextFillerRegex, '').trim();
+    final isMixedCase = stripped.contains(_hasLowercaseRegex);
     final words = stripped.split(_whitespaceRegex);
     final formatted = <String>[];
     for (int i = 0; i < words.length; i++) {
       final w = words[i];
       if (w.isEmpty) continue;
+      final lower = w.toLowerCase();
+      if (i > 0 && _kTelegraphicDropWords.contains(lower)) {
+        continue;
+      }
+      if (isMixedCase) {
+        formatted.add(w);
+        continue;
+      }
       if (_kAcronymWords.contains(w.toUpperCase())) {
         formatted.add(w.toUpperCase());
         continue;
@@ -320,7 +433,6 @@ class TaskHowToBlueprint {
         formatted.add('${prefix}_$rest');
         continue;
       }
-      final lower = w.toLowerCase();
       if (i > 0 && _kMinorTitleWords.contains(lower)) {
         formatted.add(lower);
       } else {
@@ -331,25 +443,82 @@ class TaskHowToBlueprint {
         );
       }
     }
-    return formatted.join(' ');
+    final result = formatted.join(' ').trim();
+    if (result.isEmpty) return stripped;
+    return result[0].toUpperCase() + result.substring(1);
   }
 
-  /// Formats a step instruction into Concise Messaging (1–2 direct sentences).
-  static String formatConciseStepInstruction(String raw) {
+  /// Formats an edge-case guard into Telegraphic Style for the 1-Line Spec Bar and Area 2 Inspector
+  /// (strips `[TAG]`, verbose lead-ins like `"Prevent the ... from "`, and articles `a/an/the`).
+  static String formatTelegraphicGuardChip(String raw) {
+    var clean = raw.replaceFirst(_leadingBracketTagRegex, '').trim();
+    if (clean.isEmpty) return raw.trim();
+    final preventFromMatch = _guardLeadInPreventFromRegex.firstMatch(clean);
+    if (preventFromMatch != null) {
+      final subject = preventFromMatch.group(1)!.trim();
+      final rest = clean.substring(preventFromMatch.end).trim();
+      clean = 'Block $subject $rest';
+    } else {
+      clean = clean.replaceFirst(_guardLeadInPrefixRegex, '').trim();
+    }
+    clean = clean.replaceAll(_inlineArticlesRegex, '').replaceAll(_whitespaceRegex, ' ').trim();
+    if (clean.endsWith('.')) {
+      clean = clean.substring(0, clean.length - 1).trim();
+    }
+    if (clean.isNotEmpty) {
+      clean = clean[0].toUpperCase() + clean.substring(1);
+    }
+    return clean.isEmpty ? raw.trim() : clean;
+  }
+
+  /// Formats a Feature Header Goal into Concise Messaging (BLUF — Bottom-Line Up Front),
+  /// stripping repetitive `"Build a playable ... feature that allows the player to "` preambles.
+  static String formatConciseFeatureGoal(String raw) {
     var clean = raw.trim();
     if (clean.isEmpty) return clean;
-    clean = clean.replaceFirst(_inOrderToPrefixRegex, '').trim();
+    clean = clean
+        .replaceFirst(_featureGoalPreambleRegex, '')
+        .replaceFirst(_progressiveGoalPreambleRegex, '')
+        .trim();
+    if (clean.startsWith('Goal:')) {
+      clean = clean.substring(5).trim();
+    }
     if (clean.isNotEmpty) {
       clean = clean[0].toUpperCase() + clean.substring(1);
     }
     return clean;
   }
 
-  /// Formats a verify sentence into a direct observable check.
+  /// Formats a step instruction into Concise Messaging (1–2 direct imperative sentences).
+  static String formatConciseStepInstruction(String raw) {
+    var clean = raw.trim();
+    if (clean.isEmpty) return clean;
+    clean = clean.replaceFirst(_instructionPreambleRegex, '').trim();
+    if (clean.isNotEmpty) {
+      clean = clean[0].toUpperCase() + clean.substring(1);
+    }
+    return clean;
+  }
+
+  /// Formats a verify sentence into a direct causal `Action → Result` check.
   static String formatConciseVerifySentence(String raw) {
     var clean = raw.trim();
     if (clean.isEmpty) return clean;
     clean = clean.replaceFirst(_verifyPrefixRegex, '').trim();
+    if (!clean.contains('→') && !clean.contains('->')) {
+      final whenMatch = _verifyWhenClauseRegex.firstMatch(clean);
+      if (whenMatch != null) {
+        var action = whenMatch.group(1)!.trim();
+        var result = whenMatch.group(2)!.trim();
+        if (action.isNotEmpty && result.isNotEmpty) {
+          action = action[0].toUpperCase() + action.substring(1);
+          result = result[0].toUpperCase() + result.substring(1);
+          return '$action → $result';
+        }
+      }
+    } else if (clean.contains(' -> ')) {
+      clean = clean.replaceAll(' -> ', ' → ');
+    }
     if (clean.isNotEmpty) {
       clean = clean[0].toUpperCase() + clean.substring(1);
     }

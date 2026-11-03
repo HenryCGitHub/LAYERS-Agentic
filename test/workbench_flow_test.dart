@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/release_planner_agent.dart';
+import 'package:layers_agentic/constants/text_style_guide.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -7349,6 +7350,198 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         } finally {
           provider.removeListener(progListener);
           GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
+
+    test(
+      'Workbench & Progressive Release text style formatters (Telegraphic, Micro-Communications, Concise BLUF & Causal) and Regex-First Code Sync',
+      () async {
+        // 1. Telegraphic Task Group Header (strips leading verbs + articles even on short titles)
+        expect(
+          TaskHowToBlueprint.formatConciseTaskTitle(
+            'Create the Capsule Body and Camera (2h)',
+          ),
+          equals('Capsule Body & Camera'),
+        );
+        expect(
+          TaskHowToBlueprint.formatConciseTaskTitle('Create the HUD (1h)'),
+          equals('HUD'),
+        );
+
+        // 2. Telegraphic Step Title (strips articles a/an/the and trailing prepositional filler while preserving engine identifiers)
+        expect(
+          TaskHowToBlueprint.formatTelegraphicStepTitle(
+            'STEP 1.1 · Attach a RayCast2D to the Player in the scene (15m)',
+          ),
+          equals('Attach RayCast2D to Player'),
+        );
+        expect(
+          TaskHowToBlueprint.formatTelegraphicStepTitle(
+            'STEP 1.2 · CREATE THE BP_PLAYER_CHARACTER ACTOR IN THE LEVEL',
+          ),
+          equals('Create BP_Player_Character Actor'),
+        );
+
+        // 3. Telegraphic Guard Chip (converts "Prevent <X> from <Y>ing" -> "Block <X> <Y>ing" and strips articles)
+        expect(
+          TaskHowToBlueprint.formatTelegraphicGuardChip(
+            '[STATE GUARD] Prevent the player from dashing while stunned.',
+          ),
+          equals('Block player dashing while stunned'),
+        );
+
+        // 4. Concise BLUF Feature Goal Subtitle (strips "Build a playable ... that allows the player to ")
+        expect(
+          TaskHowToBlueprint.formatConciseFeatureGoal(
+            'Build a playable prototype that allows the player to dash across gaps with cooldown.',
+          ),
+          equals('Dash across gaps with cooldown.'),
+        );
+
+        // 5. Concise Imperative Step Instruction (strips preamble clauses)
+        expect(
+          TaskHowToBlueprint.formatConciseStepInstruction(
+            'In order to configure movement, open Player.gd and export dashSpeed.',
+          ),
+          equals('Open Player.gd and export dashSpeed.'),
+        );
+
+        // 6. Concise Causal VERIFY Sentence ("When you <action>, <result>" -> "<Action> → <Result>")
+        expect(
+          TaskHowToBlueprint.formatConciseVerifySentence(
+            'Confirm that when you press Spacebar, the character dashes 4m forward.',
+          ),
+          equals('Press Spacebar → The character dashes 4m forward.'),
+        );
+
+        // 7. Telegraphic Progressive Release Feature +Delta Summary
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final sampleUpgradeFeat = ProposedFeatureBlueprint(
+          id: 'feat_upg_delta_test',
+          title: 'Player Dash',
+          goal: 'Upgrade Player Dash with invulnerability frames and ghost trail.',
+          doneWhen: 'Press Shift -> dash with trail',
+          estimatedHours: 4,
+          included: true,
+          lifecycle: FeatureLifecycleStatus.upgrade,
+          originVersion: 'v0.1',
+          inScope: const [
+            'Add a dash cooldown bar on screen',
+            'Implement the ghost trail particles in the arena',
+          ],
+          outOfScope: const [],
+          tuningParams: const ['dashSpeed: 900'],
+          edgeCases: const ['[STATE GUARD] Block dash while stunned'],
+          checkpoints: const [],
+        );
+        final deltaSummary = provider.formatChangelogDeltaForFeature(
+          sampleUpgradeFeat,
+        );
+        expect(
+          deltaSummary,
+          equals('+Dash cooldown bar, +Ghost trail particles'),
+        );
+
+        // 8. Regex-First Two-Way Code Sync (0 LLM calls when regex extracts tuning/guards)
+        await provider.startConceptInterview('Crop Shotgun Arena');
+        await provider.approveConceptAndBuildRelease();
+        final firstFeat = provider.selectedFeature!;
+        int llmCalls = 0;
+        final prevResponder = GeminiAgentClient.testMockResponder;
+        try {
+          GeminiAgentClient.testMockResponder = (
+            String prompt,
+            String preferredModel,
+          ) async {
+            if (prompt.contains('Code-to-Spec Synchronizer')) {
+              llmCalls++;
+            }
+            return <String, dynamic>{};
+          };
+
+          final syncRes = await provider.syncFeatureTuningAndGuardsFromCode(
+            firstFeat.id,
+            '@export var moveSpeed: float = 750.0\n# [GUARD] Block dash while airborne',
+          );
+          expect(syncRes.updatedVars, greaterThanOrEqualTo(1));
+          expect(syncRes.addedGuards, equals(1));
+          expect(llmCalls, equals(0));
+
+          // 9. Central LayersTextStyleGuide single source of truth & long task group title condensation
+          expect(
+            GeminiAgentClient.compactStyleRules,
+            equals(LayersTextStyleGuide.compactStyleRules),
+          );
+          expect(
+            TaskHowToBlueprint.formatConciseTaskTitle(
+              'Setup dash collision response layer & invulnerability state flags',
+            ),
+            equals('Collision Layer & State Flags'),
+          );
+          expect(
+            TaskHowToBlueprint.formatConciseTaskTitle(
+              'Code dash trajectory impulse, invulnerability window timer, & cooldown',
+            ),
+            equals('Trajectory Impulse & Window Timer'),
+          );
+          expect(
+            TaskHowToBlueprint.formatConciseTaskTitle(
+              'Ghost trail particle trail & trigger dash burst sound cue while dashing',
+            ),
+            equals('Ghost Trail & Sound Cue'),
+          );
+          expect(
+            TaskHowToBlueprint.formatConciseFeatureGoal(
+              'Upgrade dash burst into full combat evasion with i-frame invulnerability window, animation cues, and cooldown tuning.',
+            ),
+            equals(
+              'I-frame invulnerability window, animation cues, and cooldown tuning.',
+            ),
+          );
+
+          // 10. Built feature never flips to "Waiting" when selected while another feature is synthesizing
+          GeminiAgentClient.testMockResponder = (
+            String prompt,
+            String preferredModel,
+          ) async {
+            return {
+              'primarySharedScriptOrScene':
+                  'PlayerDashController (res://scripts/player_dash.gd)',
+              'tasks': [
+                for (int tIdx = 0; tIdx < 3; tIdx++)
+                  {
+                    'taskIndex': tIdx,
+                    'subSteps': [
+                      {
+                        'title': 'Attach Dash Raycast',
+                        'stepPath': 'Scene Dock → Player',
+                        'instruction':
+                            'Attach RayCast2D to Player and set target_position.',
+                        'area1Hierarchy': 'Player\n └─ DashRay (RayCast2D)',
+                        'area2Inspector': 'target_position = Vector2(120, 0)',
+                        'codeFormula': 'var dash_speed: float = 900.0',
+                        'verifyResult':
+                            'Press Shift → Player dashes 4m forward.',
+                      },
+                    ],
+                  },
+              ],
+            };
+          };
+          await provider.synthesizeFeatureHowToStepsWithAi(firstFeat.id);
+          expect(
+            provider.hasSynthesizedFeatureStepsForActiveRelease(firstFeat.id),
+            isTrue,
+          );
+          provider.selectFeature(firstFeat.id);
+          expect(provider.isFeatureQueuedForSteps(firstFeat.id), isFalse);
+          expect(
+            provider.isFeatureWaitingForStepsInLiveMode(firstFeat.id),
+            isFalse,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevResponder;
         }
       },
     );

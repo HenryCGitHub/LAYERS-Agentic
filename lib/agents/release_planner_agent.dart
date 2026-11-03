@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../constants/text_style_guide.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
@@ -157,10 +158,18 @@ class ReleasePlannerAgent {
                     'title': {
                       'type': 'STRING',
                       'description':
-                          '2-3 plain game-dev words naming 1 observable action or object.',
+                          LayersTextStyleGuide.featureTitleSchemaDesc,
                     },
-                    'goal': {'type': 'STRING'},
-                    'doneWhen': {'type': 'STRING'},
+                    'goal': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.changelogDeltaGoalSchemaDesc,
+                    },
+                    'doneWhen': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+                    },
                     'estimatedHours': {'type': 'INTEGER'},
                     'included': {
                       'type': 'BOOLEAN',
@@ -183,17 +192,21 @@ class ReleasePlannerAgent {
                     },
                     'inScope': {
                       'type': 'ARRAY',
+                      'description':
+                          LayersTextStyleGuide.changelogDeltaInScopeSchemaDesc,
                       'items': {'type': 'STRING'},
                     },
                     'tuningParams': {
                       'type': 'ARRAY',
                       'items': {
                         'type': 'STRING',
-                        'description': 'paramName: numericValue unit',
+                        'description':
+                            LayersTextStyleGuide.tuningParamSchemaDesc,
                       },
                     },
                     'edgeCases': {
                       'type': 'ARRAY',
+                      'description': LayersTextStyleGuide.stateGuardSchemaDesc,
                       'items': {'type': 'STRING'},
                     },
                     'checkpoints': {
@@ -202,7 +215,11 @@ class ReleasePlannerAgent {
                         'type': 'OBJECT',
                         'properties': {
                           'title': {'type': 'STRING'},
-                          'playtestCriteria': {'type': 'STRING'},
+                          'playtestCriteria': {
+                            'type': 'STRING',
+                            'description': LayersTextStyleGuide
+                                .causalTriggerResultSchemaDesc,
+                          },
                           'tasks': {
                             'type': 'ARRAY',
                             'description':
@@ -221,8 +238,8 @@ class ReleasePlannerAgent {
                                 },
                                 'title': {
                                   'type': 'STRING',
-                                  'description':
-                                      '2-4 plain words naming the concrete asset/behavior + duration tag (e.g. "Capsule Body & Camera (2h)"). Never put Input/Keybind in entity_and_collision_foundation.',
+                                  'description': LayersTextStyleGuide
+                                      .taskGroupTitleSchemaDesc,
                                 },
                               },
                             },
@@ -276,11 +293,14 @@ class ReleasePlannerAgent {
               'id': {'type': 'STRING'},
               'title': {
                 'type': 'STRING',
-                'description':
-                    '2-4 plain game-dev words naming the gameplay system or body of engineering work (never copy the 06 Core Loop beat title word-for-word).',
+                'description': LayersTextStyleGuide.epicTitleSchemaDesc,
               },
               'goal': {'type': 'STRING'},
-              'doneWhen': {'type': 'STRING'},
+              'doneWhen': {
+                'type': 'STRING',
+                'description':
+                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+              },
             },
           },
         },
@@ -317,39 +337,43 @@ class ReleasePlannerAgent {
             'properties': {
               'title': {
                 'type': 'STRING',
-                'description':
-                    '2-3 plain action/object words (never identical to the parent Epic title).',
+                'description': LayersTextStyleGuide.featureTitleSchemaDesc,
               },
               'goal': {
                 'type': 'STRING',
                 'description':
-                    'Concise 1-clause action summary (e.g. "Build Player Dash with cooldown and trail").',
+                    LayersTextStyleGuide.changelogDeltaGoalSchemaDesc,
               },
               'doneWhen': {
                 'type': 'STRING',
                 'description':
-                    'Causal Action -> Observable Result playtest condition.',
+                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
               },
               'estimatedHours': {'type': 'INTEGER'},
               'primarySharedScriptOrScene': {'type': 'STRING'},
               'inScope': {
                 'type': 'ARRAY',
                 'description':
-                    '2-3 short 2-5 word deliverables (e.g. "Dash impulse", "Cooldown timer").',
+                    LayersTextStyleGuide.changelogDeltaInScopeSchemaDesc,
                 'items': {'type': 'STRING'},
               },
               'tuningParams': {
                 'type': 'ARRAY',
-                'items': {'type': 'STRING'},
+                'items': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.tuningParamSchemaDesc,
+                },
               },
               'edgeCases': {
                 'type': 'ARRAY',
+                'description': LayersTextStyleGuide.stateGuardSchemaDesc,
                 'items': {'type': 'STRING'},
               },
               'checkpointTitle': {'type': 'STRING'},
               'playtestCriteria': {
                 'type': 'STRING',
-                'description': 'Causal Action -> Observable Result on screen.',
+                'description':
+                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
               },
               'tasks': {
                 'type': 'ARRAY',
@@ -365,7 +389,11 @@ class ReleasePlannerAgent {
                         'feedback_and_boundary_guard',
                       ],
                     },
-                    'title': {'type': 'STRING'},
+                    'title': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+                    },
                   },
                 },
               },
@@ -403,11 +431,18 @@ class ReleasePlannerAgent {
         },
         'missingGaps': {
           'type': 'ARRAY',
+          'description': LayersTextStyleGuide.progressiveMissingGapSchemaDesc,
           'items': {'type': 'STRING'},
         },
         'agentReasoning': {'type': 'STRING'},
-        'goal': {'type': 'STRING'},
-        'doneWhen': {'type': 'STRING'},
+        'goal': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.blufReleaseGoalSchemaDesc,
+        },
+        'doneWhen': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+        },
         'targetEpicNumbers': {
           'type': 'ARRAY',
           'description':
@@ -424,6 +459,8 @@ class ReleasePlannerAgent {
               'question': {'type': 'STRING'},
               'options': {
                 'type': 'ARRAY',
+                'description':
+                    LayersTextStyleGuide.progressiveEpicOptionSchemaDesc,
                 'items': {'type': 'STRING'},
               },
             },
@@ -462,7 +499,10 @@ class ReleasePlannerAgent {
             ],
             'properties': {
               'id': {'type': 'STRING'},
-              'title': {'type': 'STRING'},
+              'title': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.featureTitleSchemaDesc,
+              },
               'lifecycle': {
                 'type': 'STRING',
                 'enum': ['upgrade', 'new', 'superseded'],
@@ -470,33 +510,38 @@ class ReleasePlannerAgent {
               'goal': {
                 'type': 'STRING',
                 'description':
-                    'Concise 1-clause action summary (e.g. "Build Player Dash with cooldown and trail").',
+                    LayersTextStyleGuide.changelogDeltaGoalSchemaDesc,
               },
               'doneWhen': {
                 'type': 'STRING',
                 'description':
-                    'Causal Action -> Observable Result playtest condition.',
+                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
               },
               'estimatedHours': {'type': 'INTEGER'},
               'primarySharedScriptOrScene': {'type': 'STRING'},
               'inScope': {
                 'type': 'ARRAY',
                 'description':
-                    '2-3 short 2-5 word deliverables (e.g. "Dash impulse", "Cooldown timer").',
+                    LayersTextStyleGuide.changelogDeltaInScopeSchemaDesc,
                 'items': {'type': 'STRING'},
               },
               'tuningParams': {
                 'type': 'ARRAY',
-                'items': {'type': 'STRING'},
+                'items': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.tuningParamSchemaDesc,
+                },
               },
               'edgeCases': {
                 'type': 'ARRAY',
+                'description': LayersTextStyleGuide.stateGuardSchemaDesc,
                 'items': {'type': 'STRING'},
               },
               'checkpointTitle': {'type': 'STRING'},
               'playtestCriteria': {
                 'type': 'STRING',
-                'description': 'Causal Action -> Observable Result on screen.',
+                'description':
+                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
               },
               'tasks': {
                 'type': 'ARRAY',
@@ -512,7 +557,11 @@ class ReleasePlannerAgent {
                         'feedback_and_boundary_guard',
                       ],
                     },
-                    'title': {'type': 'STRING'},
+                    'title': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+                    },
                   },
                 },
               },
@@ -553,9 +602,21 @@ class ReleasePlannerAgent {
                   'type': 'OBJECT',
                   'properties': {
                     'id': {'type': 'STRING'},
-                    'title': {'type': 'STRING'},
-                    'goal': {'type': 'STRING'},
-                    'doneWhen': {'type': 'STRING'},
+                    'title': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.featureTitleSchemaDesc,
+                    },
+                    'goal': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.changelogDeltaGoalSchemaDesc,
+                    },
+                    'doneWhen': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+                    },
                     'estimatedHours': {'type': 'INTEGER'},
                     'included': {'type': 'BOOLEAN'},
                     'lifecycle': {
@@ -566,14 +627,21 @@ class ReleasePlannerAgent {
                     'primarySharedScriptOrScene': {'type': 'STRING'},
                     'inScope': {
                       'type': 'ARRAY',
+                      'description':
+                          LayersTextStyleGuide.changelogDeltaInScopeSchemaDesc,
                       'items': {'type': 'STRING'},
                     },
                     'tuningParams': {
                       'type': 'ARRAY',
-                      'items': {'type': 'STRING'},
+                      'items': {
+                        'type': 'STRING',
+                        'description':
+                            LayersTextStyleGuide.tuningParamSchemaDesc,
+                      },
                     },
                     'edgeCases': {
                       'type': 'ARRAY',
+                      'description': LayersTextStyleGuide.stateGuardSchemaDesc,
                       'items': {'type': 'STRING'},
                     },
                     'checkpoints': {
@@ -582,7 +650,11 @@ class ReleasePlannerAgent {
                         'type': 'OBJECT',
                         'properties': {
                           'title': {'type': 'STRING'},
-                          'playtestCriteria': {'type': 'STRING'},
+                          'playtestCriteria': {
+                            'type': 'STRING',
+                            'description': LayersTextStyleGuide
+                                .causalTriggerResultSchemaDesc,
+                          },
                           'tasks': {
                             'type': 'ARRAY',
                             'description':
@@ -599,7 +671,11 @@ class ReleasePlannerAgent {
                                     'feedback_and_boundary_guard',
                                   ],
                                 },
-                                'title': {'type': 'STRING'},
+                                'title': {
+                                  'type': 'STRING',
+                                  'description': LayersTextStyleGuide
+                                      .taskGroupTitleSchemaDesc,
+                                },
                               },
                             },
                           },
@@ -1221,7 +1297,7 @@ Call `commit_release_system_epics` with the structured system epics.
     final epicNum = (epicIndex + 1).toString().padLeft(2, '0');
     final allEpicsOverview = [
       for (int i = 0; i < allEpics.length; i++)
-        'E${(i + 1).toString().padLeft(2, '0')} · ${allEpics[i].title}: ${allEpics[i].goal}',
+        'E${(i + 1).toString().padLeft(2, '0')} · ${allEpics[i].title}',
     ].join('\n');
 
     final effectiveModel = modelName.contains('argon')
@@ -2046,29 +2122,29 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       final f = baseFeatures[i];
       if (!f.isStable || f.isSuperseded) continue;
       final defaultGoal = isVs
-          ? 'Polish ${f.title} with VFX particles, SFX cues, hit-stop/camera feedback, and HUD readability for $versionTag.'
+          ? '+VFX particles, +SFX audio cues, +HUD readability'
           : (isFullProd
-              ? 'Scale ${f.title} content tiers and encounter parameters for $versionTag.'
+              ? '+Content wave scaling, +encounter tier parameters'
               : (isPostLaunch
-                  ? 'Tune ${f.title} live balance parameters and state guards for $versionTag.'
-                  : 'Upgrade ${f.title} from v0.1 greybox to complete functional MVP depth in $versionTag.'));
+                  ? '+Live balance tuning, +regression state guards'
+                  : '+Functional MVP depth, +collision response, +HUD sync'));
       final defaultDone = isVs
-          ? 'Playtester triggers ${f.title} and verifies VFX, audio cues, and responsive game feel on screen.'
-          : 'Playtester triggers ${f.title} and verifies the $versionTag $stageSuffix in Play mode.';
+          ? 'Trigger ${f.title} → VFX particles, SFX cues, and HUD feedback appear on screen'
+          : 'Trigger ${f.title} in Play mode → $versionTag $stageSuffix responds on screen';
       final tuning = _defaultTuningParamsForFeature(f.title, defaultGoal);
       final guards = <String>[
-        '[STATE GUARD] Prevent duplicate or invalid state transition during ${f.title} ($versionTag)',
+        '[STATE GUARD] Block duplicate state transition during ${f.title}',
       ];
       final tasks = isVs
           ? <String>[
-              '${f.title} VFX & Material Setup (1h)',
-              '${f.title} Camera & Audio Feel Cues (1h)',
-              '${f.title} HUD Readability & Frame Guard (1h)',
+              'VFX & Material Nodes',
+              'Camera & Audio Cues',
+              'HUD & Frame Guard',
             ]
           : <String>[
-              '${f.title} Component & Collision Extension (1h)',
-              '${f.title} $stageSuffix Logic & Math (1h)',
-              '${f.title} Feedback Cue & State Guard (1h)',
+              'Collision & State Flags',
+              'Core Upgrade Math',
+              'Feedback & State Guard',
             ];
       baseFeatures[i] = ProposedFeatureBlueprint(
         id: f.id,
@@ -3494,7 +3570,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
 
     final currentBeatsSummary = blueprint.beats
         .map(
-          (b) => '- ${b.id} "${b.title}" (${b.goal}): '
+          (b) => '- ${b.id} "${b.title}": '
               '${b.features.map((f) => '"${f.title}" [id: ${f.id}, origin: ${f.originVersion.isNotEmpty ? f.originVersion : "v0.1"}, ${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${(f.primarySharedScriptOrScene != null && f.primarySharedScriptOrScene!.trim().isNotEmpty) ? ", asset: ${f.primarySharedScriptOrScene!.trim()}" : ""}${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
         )
         .join('\n');

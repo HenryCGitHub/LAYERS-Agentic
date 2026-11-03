@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../constants/text_style_guide.dart';
 
 /// Lightweight, resilient Gemini JSON client for LAYERS-Agentic.
 /// Supports:
@@ -23,15 +24,9 @@ class GeminiAgentClient {
   static int? _cachedModelOutputTokenLimit;
   static bool _cachedSupportsThinkingLevel = false;
 
-  /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (~85 tokens).
-  static const String compactStyleRules = '''
-RULES:
-- Use plain, literal 2-4 word game-dev titles naming the observable player/world action (e.g. "Truck Steering", "Roof Turret Fire", "Raider Ambush", "Crate Pickup").
-- Write in everyday English—never roleplay lore or slang. Never use archaic/lore words ("Husbandry", "Homestead", "Expedition") or corporate buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
-- NEVER name features or epics after code classes or architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler", "Subsystem").
-- Design Pillars describe player experience/feel (never a feature or genre). Trade-Offs use explicit "X over Y" rules.
-- `doneWhen` must describe an observable gameplay loop completion condition (spawning, core beats, win/fail resolution, clean reset) and NEVER use framerate/FPS targets ("60 FPS").
-- Start goals with concrete verbs ("Build...", "Expand...") and NEVER copy-paste raw user instructions verbatim.''';
+  /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (sourced from `LayersTextStyleGuide`).
+  static const String compactStyleRules =
+      LayersTextStyleGuide.compactStyleRules;
 
   /// Records the last non-200 status hint (e.g., HTTP 402 prepayment credits depleted) for diagnostics.
   static String? lastErrorStatus;

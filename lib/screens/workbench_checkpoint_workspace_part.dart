@@ -291,7 +291,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     final isActiveFocus = index == activeFocusIndex;
     final bool isCollapsed = !isActiveFocus;
 
-    final featureGoalText = SectionTextUtils.resolveGoal(feat.sections).trim();
+    final featureGoalText = TaskHowToBlueprint.formatConciseFeatureGoal(
+      SectionTextUtils.resolveGoal(feat.sections),
+    );
     final resolvedPlaytestCheck = node.playtestCondition.trim();
     final tuningItems = node.tuningParams;
     final edgeItems = node.edgeCases;
@@ -541,8 +543,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         ? tuningItems[selectedTaskIdx % tuningItems.length]
         : '';
     final primaryGuardLabel = edgeItems.isNotEmpty
-        ? edgeItems[selectedTaskIdx % edgeItems.length]
-            .replaceFirst(_ReleaseWorkbenchScreenState._leadingBracketTagRegex, '')
+        ? TaskHowToBlueprint.formatTelegraphicGuardChip(
+            edgeItems[selectedTaskIdx % edgeItems.length],
+          )
         : '';
 
     final isSynthesizingFeatureNow =
@@ -1365,8 +1368,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               const SizedBox(height: 4),
                                               Text(
                                                 isSynthesizingFeatureNow
-                                                    ? 'Building tasks and steps for this feature…'
-                                                    : 'Steps will generate automatically in order.',
+                                                    ? 'Building 3-Area steps…'
+                                                    : 'Queued in order',
                                                 textAlign: TextAlign.center,
                                                 style: GoogleFonts.inter(
                                                   fontSize: 11.5,
@@ -1478,8 +1481,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                           const SizedBox(height: 6),
                                           Text(
                                             isSynthesizingFeatureNow
-                                                ? 'Generating ${selectedHowTo.engineLabel} scene hierarchy, inspector values, and script steps.'
-                                                : 'Currently building an earlier section. Click below to build this feature right now.',
+                                                ? 'Generating ${selectedHowTo.engineLabel} 3-Area steps…'
+                                                : 'Queued behind active build.',
                                             textAlign: TextAlign.center,
                                             style: GoogleFonts.inter(
                                               fontSize: 12,
@@ -1517,7 +1520,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 ),
                                               ),
                                               child: Text(
-                                                'Build Now',
+                                                '⚡ Build Now',
                                                 style: GoogleFonts.inter(
                                                   fontSize: 11.5,
                                                   fontWeight: FontWeight.w600,

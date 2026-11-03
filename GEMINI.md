@@ -67,4 +67,13 @@ Whenever writing or revising any Scope, Goal, or Objective section (across Epics
 - **Non-Thematic / Literal Wording**: Describe mechanics in plain engineering/design terms (e.g., *"Spawn 3 enemy waves in the arena and drop ore on kill"* instead of *"Pit the player against aggressive demon waves in an out-of-town wasteland"*).
 - **Banned Jargon & Archaic Words**: Never use corporate filler or vague buzzwords (*leverage*, *unified*, *end-to-end loop*, *staging*, *validate*, *verified*, *deliver*, *synergy*, *seamlessly*) or flowery/archaic lore synonyms (*husbandry*, *homestead*, *expedition*, *ordinance*). State the actual concrete action instead.
 
+## 6. Canonical LAYERS Text Format Style Guide (`STYLE_GUIDE.md` & `lib/constants/text_style_guide.dart`)
+- **Single Source of Truth**: Always consult [`STYLE_GUIDE.md`](STYLE_GUIDE.md) and reference [`LayersTextStyleGuide`](lib/constants/text_style_guide.dart) across Stage 1 and Stage 2 prompts and Gemini tool schemas so the AI emits the exact target format on the first pass (zero 2-step post-formatting token waste):
+  1. **BLUF (`[2–4 Word Payoff] — [Scope]`)**: Used for Progressive Release `GOAL:` lines, `EPICS` Option Cards, and Stage 1 `01 · Goal` / `04 · Design Pillars` / `06 · Core Loop`.
+  2. **Causal `Trigger → Result` (`[Player Action] → [Observable Screen Result]`, `<= 14 words`)**: Used for `✓ END GOAL:` (`doneWhen`), `VERIFY IN ENGINE` (`verifyResult`), and Feature `doneWhen` / `playtestCriteria`.
+  3. **Changelog / Delta-Diff (`+Delta`, `5–10 words`)**: Used for Progressive Release Feature Rows (`☑ Title — +delta1, +delta2 [UPGRADE]`), Workbench Feature Goal subtitles, and `inScope` bullets (never start feature goals with `"Build/Upgrade <Feature> into/with..."`).
+  4. **Imperative Runbook (`Verb + Object + Value`)**: Used for Child Sub-Step Titles (`3–4` Title-Case words without `"STEP X.Y ·"` prefix, e.g. `"Spawn 6 Pellet Raycasts"`) and `DO` instructions (`1` imperative sentence `<= 18 words` naming the exact node/script and tuning value).
+  5. **Telegraphic Component / Micro-Labels (`2–4` Title-Case Words)**: Used for Parent Task Group Titles (`tasks[].title` in `01 STEPS`, e.g. `"Collision Layer & Flags"`, `"Impulse & Window Timer"`, `"Ghost Trail & SFX"` — no verbs, no 3-item lists, no `"while/when"` clauses, no `(2h)` tags), Epic/Feature titles, Stage 1 `02 Game Spec` / `03 Tech Spec` cells (`2–5` words), `05 Trade-Offs` (`2–4` words per side), `07 Out of Scope` (`"No [2–4 word system]"`), and `[STATE GUARD]` chips.
+
+
 

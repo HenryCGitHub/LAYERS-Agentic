@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
 import '../agents/release_planner_agent.dart';
+import '../constants/text_style_guide.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
@@ -680,9 +681,34 @@ class WorkbenchProvider extends ChangeNotifier {
       final hasCheckpointInTarget =
           states.any((s) => s.releaseVersion == targetVer);
       if (hasCheckpointInTarget) return true;
-      if (states.any((s) => s.releaseVersion.trim().isNotEmpty)) {
-        return false;
+    }
+    if (releaseVersionTag == null &&
+        activeRelease != null &&
+        activeRelease!.childrenIds.isEmpty &&
+        projectReleases.length > 1 &&
+        _releaseBlueprint != null &&
+        _releaseBlueprint!.releaseDocId == activeRelease!.id) {
+      final parentBeatId = feat.parentId;
+      if (parentBeatId != null &&
+          (_queuedProgressiveBeatIds.contains(parentBeatId) ||
+              _synthesizingProgressiveBeatId == parentBeatId)) {
+        return true;
       }
+      final featTitleLower = feat.title.trim().toLowerCase();
+      for (final b in _releaseBlueprint!.beats) {
+        if (parentBeatId != null && b.id != parentBeatId) continue;
+        for (final bf in b.features) {
+          if (bf.id == feat.id ||
+              bf.title.trim().toLowerCase() == featTitleLower) {
+            return bf.included && !bf.isStable && !bf.isSuperseded;
+          }
+        }
+      }
+      return false;
+    }
+    if (states.isNotEmpty &&
+        states.any((s) => s.releaseVersion.trim().isNotEmpty)) {
+      return false;
     }
     return lc != FeatureLifecycleStatus.stable.name;
   }

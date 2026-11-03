@@ -39,7 +39,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   static final RegExp _treeChildRegex = RegExp(
     r'[├└]─\s*([A-Za-z0-9_]+)\s*(?:\(([^)]+)\))?',
   );
-  static final RegExp _leadingBracketTagRegex = RegExp(r'^\[[^\]]+\]\s*');
   static final RegExp _tuningVarDelimiterRegex = RegExp(r'[:=]');
   static String? _cachedSpecTokenKey;
   static Map<String, String> _cachedBaseTokens = const {};

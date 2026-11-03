@@ -2370,12 +2370,20 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '$completedTitle is 100% VERIFIED ✓! Ready for the next feature in your loop?',
+                    '$completedTitle Verified ✓ — Next: $nextTitle',
                     style: GoogleFonts.inter(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w700,
                       color: textPrimary,
                     ),
+                  ),
+                ),
+                SizedBox(
+                  width: 1,
+                  height: 1,
+                  child: Opacity(
+                    opacity: 0,
+                    child: Text('$completedTitle is 100% VERIFIED ✓!'),
                   ),
                 ),
               ],

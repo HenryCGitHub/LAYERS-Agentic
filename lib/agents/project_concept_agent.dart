@@ -1,3 +1,4 @@
+import '../constants/text_style_guide.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import 'gemini_agent_client.dart';
@@ -164,20 +165,31 @@ class ProjectConceptAgent {
       'properties': {
         'title': {
           'type': 'STRING',
-          'description': 'Short 2-3 word plain game title.',
+          'description': LayersTextStyleGuide.stage1TitleSchemaDesc,
         },
         'goal': {
           'type': 'STRING',
-          'description':
-              'Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3].',
+          'description': LayersTextStyleGuide.stage1GoalSchemaDesc,
         },
         'gameSpec': {
           'type': 'OBJECT',
           'properties': {
-            'cameraView': {'type': 'STRING'},
-            'controls': {'type': 'STRING'},
-            'playerMode': {'type': 'STRING'},
-            'arenaStructure': {'type': 'STRING'},
+            'cameraView': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'controls': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'playerMode': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'arenaStructure': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
           },
           'required': [
             'cameraView',
@@ -197,9 +209,18 @@ class ProjectConceptAgent {
                 'Unreal Engine 5 (Blueprints / C++)',
               ],
             },
-            'platform': {'type': 'STRING'},
-            'assetPipeline': {'type': 'STRING'},
-            'saveMode': {'type': 'STRING'},
+            'platform': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'assetPipeline': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'saveMode': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
           },
           'required': ['engine', 'platform', 'assetPipeline', 'saveMode'],
         },
@@ -213,12 +234,11 @@ class ProjectConceptAgent {
             'properties': {
               'pillarName': {
                 'type': 'STRING',
-                'description': '2-3 Word Pillar Name',
+                'description': LayersTextStyleGuide.pillarNameSchemaDesc,
               },
               'playerExperience': {
                 'type': 'STRING',
-                'description':
-                    'Concise 1-sentence player feeling (never a feature or genre).',
+                'description': LayersTextStyleGuide.pillarExperienceSchemaDesc,
               },
             },
           },
@@ -233,13 +253,12 @@ class ProjectConceptAgent {
             'properties': {
               'priorityX': {
                 'type': 'STRING',
-                'description':
-                    '2-4 words naming what we prioritize (e.g. "Arcade dash response")',
+                'description': LayersTextStyleGuide.tradeOffPrioritySchemaDesc,
               },
               'overAlternativeY': {
                 'type': 'STRING',
                 'description':
-                    '2-4 words naming what we sacrifice (e.g. "Momentum inertia")',
+                    LayersTextStyleGuide.tradeOffAlternativeSchemaDesc,
               },
             },
           },
@@ -248,22 +267,19 @@ class ProjectConceptAgent {
           'type': 'ARRAY',
           'items': {
             'type': 'STRING',
-            'description':
-                'Beat Name: Concise observable player action and system response.',
+            'description': LayersTextStyleGuide.coreLoopBeatSchemaDesc,
           },
         },
         'exclusions': {
           'type': 'ARRAY',
           'items': {
             'type': 'STRING',
-            'description':
-                'No [2-4 word excluded system/content] (never use "Cut/Defer ... until v0.1").',
+            'description': LayersTextStyleGuide.exclusionItemSchemaDesc,
           },
         },
         'doneWhen': {
           'type': 'STRING',
-          'description':
-              'Concise 1-sentence playtest completion condition without FPS targets.',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
         },
         'releaseTrainTitles': {
           'type': 'ARRAY',
@@ -412,8 +428,14 @@ class ProjectConceptAgent {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
         },
-        'title': {'type': 'STRING'},
-        'goal': {'type': 'STRING'},
+        'title': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.stage1TitleSchemaDesc,
+        },
+        'goal': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.stage1GoalSchemaDesc,
+        },
         'goalOptions': {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
@@ -427,10 +449,22 @@ class ProjectConceptAgent {
             'arenaStructure',
           ],
           'properties': {
-            'cameraView': {'type': 'STRING'},
-            'controls': {'type': 'STRING'},
-            'playerMode': {'type': 'STRING'},
-            'arenaStructure': {'type': 'STRING'},
+            'cameraView': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'controls': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'playerMode': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'arenaStructure': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
           },
         },
         'techSpec': {
@@ -445,9 +479,18 @@ class ProjectConceptAgent {
                 'Unreal Engine 5 (Blueprints / C++)',
               ],
             },
-            'platform': {'type': 'STRING'},
-            'assetPipeline': {'type': 'STRING'},
-            'saveMode': {'type': 'STRING'},
+            'platform': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'assetPipeline': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
+            'saveMode': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.specCellSchemaDesc,
+            },
           },
         },
         'designPillars': {
@@ -456,8 +499,14 @@ class ProjectConceptAgent {
             'type': 'OBJECT',
             'required': ['pillarName', 'playerExperience'],
             'properties': {
-              'pillarName': {'type': 'STRING'},
-              'playerExperience': {'type': 'STRING'},
+              'pillarName': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.pillarNameSchemaDesc,
+              },
+              'playerExperience': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.pillarExperienceSchemaDesc,
+              },
             },
           },
         },
@@ -467,20 +516,36 @@ class ProjectConceptAgent {
             'type': 'OBJECT',
             'required': ['priorityX', 'overAlternativeY'],
             'properties': {
-              'priorityX': {'type': 'STRING'},
-              'overAlternativeY': {'type': 'STRING'},
+              'priorityX': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.tradeOffPrioritySchemaDesc,
+              },
+              'overAlternativeY': {
+                'type': 'STRING',
+                'description':
+                    LayersTextStyleGuide.tradeOffAlternativeSchemaDesc,
+              },
             },
           },
         },
         'coreLoopBeats': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'items': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.coreLoopBeatSchemaDesc,
+          },
         },
         'exclusions': {
           'type': 'ARRAY',
-          'items': {'type': 'STRING'},
+          'items': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.exclusionItemSchemaDesc,
+          },
         },
-        'doneWhen': {'type': 'STRING'},
+        'doneWhen': {
+          'type': 'STRING',
+          'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+        },
         'releaseTrainTitles': {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
@@ -1287,7 +1352,7 @@ Call `$activeToolName` with the delta update.
       tag: '[Section 01 · Goal]',
       label: '01 · Goal',
       directive:
-          'Draft the initial concise 2-3 word `title` and `goal` ("Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3].").',
+          'Draft the initial concise 2-3 word `title` and `goal` ("Build a playable [Title] prototype where you [action 1], [action 2], and [action 3].").',
     ),
     (
       tag: '[Section 02 · Game Spec]',
@@ -1599,9 +1664,9 @@ Call `propose_spark_expansion_cards` with 3 fresh expansion cards.
       'coreLoop' =>
         '- Format each option as a 4-to-5 beat chain separated by ` → `: `"Loop Label: Beat 1 Name: Action → Beat 2 Name: Action → Beat 3 Name: Action → Beat 4 Name: Action"`.',
       'exclusions' =>
-        '- Format each option as a prototype scope cut: `"Cut Label: No [deferred system/content] in v0.1 prototype"`.',
+        '- Format each option as a prototype scope cut: `"Cut Label: No [2-4 word excluded system/content]"`.',
       'doneWhen' =>
-        '- Format each option as an observable playtest gate without FPS targets: `"Playtest Gate Label: Player spawns, completes [core loop actions], and resets cleanly"`.',
+        '- Format each option in Causal Trigger -> Result style without FPS targets: `"Playtest Gate Label: [Player Action] -> [Observable Loop Resolution]"`.',
       _ =>
         '- Format each option as `"Short Label: Concrete statement tailored to ${draft.title}"`.',
     };
