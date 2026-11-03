@@ -357,7 +357,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         child: Text(
           label,
           style: GoogleFonts.jetBrainsMono(
-            fontSize: 9.5,
+            fontSize: 11.5,
             fontWeight: active ? FontWeight.w600 : FontWeight.w400,
             color: active ? textPrimary : textMuted,
           ),
@@ -370,7 +370,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       required String whereBadge,
     }) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.015),
           border: Border(
@@ -385,7 +385,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             Text(
               title,
               style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.5,
                 color: textMuted,
@@ -398,7 +398,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w400,
                   color: textMuted,
                 ),
@@ -423,7 +423,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 14,
-              vertical: 8,
+              vertical: 9,
             ),
             decoration: BoxDecoration(
               color: bgRecessed,
@@ -436,7 +436,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               children: [
                 Expanded(
                   child: Wrap(
-                    spacing: 6,
+                    spacing: 8,
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
@@ -477,7 +477,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         child: Text(
                           '⧉ Copy',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: textSecondary,
                           ),
@@ -504,7 +504,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     Text(
                       '·',
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
+                        fontSize: 12,
                         color: textMuted,
                       ),
                     ),
@@ -528,7 +528,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         child: Text(
                           'Edit',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: textSecondary,
                           ),
@@ -561,14 +561,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 12,
+                      vertical: 13,
                     ),
                     child: Text.rich(
                       _buildSemanticStepSpan(
                         text: compBody,
                         baseStyle: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.5,
-                          height: 1.55,
+                          fontSize: 13,
+                          height: 1.6,
                           color: isDark
                               ? const Color(0xFFE5E7EB)
                               : textPrimary,
@@ -603,7 +603,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 11,
+                      vertical: 12,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -611,7 +611,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
                           Padding(
                             padding: EdgeInsets.only(
-                              bottom: rIdx == inspRows.length - 1 ? 0 : 6,
+                              bottom: rIdx == inspRows.length - 1 ? 0 : 7,
                             ),
                             child: _activeStage2InlineEditKey ==
                                     'area2_tuning_${node.id}_$rIdx'
@@ -661,11 +661,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             CrossAxisAlignment.start,
                                         children: [
                                           SizedBox(
-                                            width: 196,
+                                            width: 220,
                                             child: Text(
                                               inspRows[rIdx].key,
                                               style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 11,
+                                                fontSize: 13,
                                                 fontWeight: FontWeight.w400,
                                                 color: textSecondary,
                                               ),
@@ -678,7 +678,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                 text: inspRows[rIdx].value,
                                                 baseStyle:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11,
+                                                  fontSize: 13,
                                                   fontWeight: FontWeight.w500,
                                                   color: accentCyan,
                                                 ),
@@ -692,7 +692,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           Text(
                                             '✎',
                                             style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 10,
+                                              fontSize: 11.5,
                                               color: accentCyan.withValues(
                                                 alpha: 0.75,
                                               ),
@@ -722,14 +722,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 13,
+                    vertical: 14,
                   ),
                   child: Text.rich(
                     _buildSemanticStepSpan(
                       text: codeBody,
                       baseStyle: GoogleFonts.jetBrainsMono(
-                        fontSize: 11.5,
-                        height: 1.58,
+                        fontSize: 13,
+                        height: 1.6,
                         color: isDark
                             ? const Color(0xFFE5E7EB)
                             : textPrimary,
