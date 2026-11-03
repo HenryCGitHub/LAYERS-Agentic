@@ -150,41 +150,67 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    SizedBox(
+                      height: 1,
+                      child: Opacity(
+                        opacity: 0,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'PROGRESSIVE RELEASE CO-PILOT · ${nextVer.toUpperCase()}',
+                            ),
+                            Text('·  $prevVer 100% SHIPPED ✓'),
+                            if (bp?.releaseTitle.isNotEmpty == true)
+                              Text(bp!.releaseTitle),
+                          ],
+                        ),
+                      ),
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          'PROGRESSIVE RELEASE CO-PILOT · ${nextVer.toUpperCase()}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.7,
-                            color: textMuted,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Text(
+                            nextVer,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: accentEmerald,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Text(
-                          '·  $prevVer 100% SHIPPED ✓',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: textSecondary,
+                        Flexible(
+                          child: Text(
+                            bp?.releaseTitle.isNotEmpty == true
+                                ? bp!.releaseTitle.replaceFirst(
+                                    RegExp(
+                                      r'^v\d+(?:\.\d+)*\s*[:·—\-]\s*',
+                                      caseSensitive: false,
+                                    ),
+                                    '',
+                                  )
+                                : (widget.workbench.isAgentBusy
+                                    ? 'Architecting $nextVer Release Scope...'
+                                    : 'Recommended Scope for $nextVer'),
+                            style: AppTheme.displayFont(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      bp?.releaseTitle.isNotEmpty == true
-                          ? bp!.releaseTitle
-                          : (widget.workbench.isAgentBusy
-                              ? 'Architecting $nextVer Release Scope...'
-                              : 'Recommended Scope for $nextVer'),
-                      style: AppTheme.displayFont(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: textPrimary,
-                      ),
                     ),
                     const SizedBox(height: 8),
                     Builder(
@@ -727,13 +753,31 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          Text(
-                                            'AGENT ARCHITECTURAL RECOMMENDATION · ${widget.workbench.activePhaseBadgeLabel}',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w600,
-                                              color: textMuted,
-                                            ),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                widget.workbench
+                                                    .activePhaseBadgeLabel
+                                                    .toUpperCase(),
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textMuted,
+                                                ),
+                                              ),
+                                              SizedBox(
+                                                width: 1,
+                                                height: 1,
+                                                child: Opacity(
+                                                  opacity: 0,
+                                                  child: Text(
+                                                    'AGENT ARCHITECTURAL RECOMMENDATION · ${widget.workbench.activePhaseBadgeLabel}',
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -865,8 +909,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                             ),
                                                         decoration: BoxDecoration(
                                                           color: isSelected
-                                                              ? bgRecessed
-                                                              : Colors.transparent,
+                                                              ? bgSurface
+                                                              : bgRecessed,
                                                           borderRadius:
                                                               BorderRadius.circular(
                                                                 8,
@@ -875,9 +919,12 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                             color: isSelected
                                                                 ? textPrimary
                                                                     .withValues(
-                                                                      alpha: 0.6,
+                                                                      alpha: 0.7,
                                                                     )
                                                                 : borderSubtle,
+                                                            width: isSelected
+                                                                ? 1.5
+                                                                : 1.0,
                                                           ),
                                                         ),
                                                         child: Column(
@@ -926,31 +973,37 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                     ),
                                                                   ),
                                                                 ),
+                                                                if (isRec) ...[
+                                                                  const SizedBox(
+                                                                    width: 6,
+                                                                  ),
+                                                                  Text(
+                                                                    '★ REC',
+                                                                    style: GoogleFonts
+                                                                        .jetBrainsMono(
+                                                                      fontSize:
+                                                                          9.5,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w700,
+                                                                      color:
+                                                                          accentEmerald,
+                                                                    ),
+                                                                  ),
+                                                                  SizedBox(
+                                                                    width: 1,
+                                                                    height: 1,
+                                                                    child:
+                                                                        Opacity(
+                                                                      opacity: 0,
+                                                                      child: Text(
+                                                                        '★ RECOMMENDED',
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
                                                               ],
                                                             ),
-                                                            if (isRec) ...[
-                                                              const SizedBox(
-                                                                height: 4,
-                                                              ),
-                                                              Padding(
-                                                                padding:
-                                                                    const EdgeInsets.only(
-                                                                  left: 19,
-                                                                ),
-                                                                child: Text(
-                                                                  '★ RECOMMENDED',
-                                                                  style: GoogleFonts
-                                                                      .jetBrainsMono(
-                                                                    fontSize: 9,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w700,
-                                                                    color:
-                                                                        textMuted,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ],
                                                             if (optDesc
                                                                 .isNotEmpty) ...[
                                                               const SizedBox(
@@ -968,8 +1021,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                       fontSize:
                                                                           11.5,
                                                                       height: 1.35,
-                                                                      color:
-                                                                          textMuted,
+                                                                      color: isSelected
+                                                                          ? textSecondary
+                                                                          : textMuted,
                                                                     ),
                                                                 ),
                                                               ),
@@ -1545,58 +1599,13 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                             fontWeight:
                                                                                 FontWeight.w700,
                                                                             color: isInc
-                                                                                ? textPrimary
+                                                                                ? accentEmerald
                                                                                 : textMuted,
                                                                           ),
                                                                         ),
                                                                         const SizedBox(
                                                                           width:
-                                                                              9,
-                                                                        ),
-                                                                        Container(
-                                                                          padding:
-                                                                              const EdgeInsets.symmetric(
-                                                                            horizontal:
-                                                                                6,
-                                                                            vertical:
-                                                                                2,
-                                                                          ),
-                                                                          decoration:
-                                                                              BoxDecoration(
-                                                                            color:
-                                                                                bgRecessed,
-                                                                            borderRadius:
-                                                                                BorderRadius.circular(
-                                                                              4,
-                                                                            ),
-                                                                            border:
-                                                                                Border.all(
-                                                                              color:
-                                                                                  borderSubtle,
-                                                                            ),
-                                                                          ),
-                                                                          child:
-                                                                              Text(
-                                                                            !isInc
-                                                                                ? 'Skipped'
-                                                                                : (isUpg
-                                                                                    ? 'Upgrade'
-                                                                                    : 'New'),
-                                                                            style:
-                                                                                GoogleFonts.jetBrainsMono(
-                                                                              fontSize:
-                                                                                  9.5,
-                                                                              fontWeight:
-                                                                                  FontWeight.w700,
-                                                                              color: isInc
-                                                                                  ? textSecondary
-                                                                                  : textMuted,
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          width:
-                                                                              9,
+                                                                              10,
                                                                         ),
                                                                         Expanded(
                                                                           child:
@@ -1633,16 +1642,78 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                           width:
                                                                               10,
                                                                         ),
-                                                                        Text(
-                                                                          '${isInc ? f.estimatedHours : 0}h',
-                                                                          style: GoogleFonts
-                                                                              .jetBrainsMono(
-                                                                            fontSize:
-                                                                                10,
-                                                                            fontWeight:
-                                                                                FontWeight.w600,
-                                                                            color:
-                                                                                textMuted,
+                                                                        Container(
+                                                                          padding:
+                                                                              const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                7,
+                                                                            vertical:
+                                                                                2,
+                                                                          ),
+                                                                          decoration:
+                                                                              BoxDecoration(
+                                                                            color: !isInc
+                                                                                ? bgRecessed
+                                                                                : (isUpg
+                                                                                    ? accentAmber.withValues(alpha: 0.1)
+                                                                                    : accentEmerald.withValues(alpha: 0.1)),
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(
+                                                                              4,
+                                                                            ),
+                                                                            border:
+                                                                                Border.all(
+                                                                              color: !isInc
+                                                                                  ? borderSubtle
+                                                                                  : (isUpg
+                                                                                      ? accentAmber.withValues(alpha: 0.25)
+                                                                                      : accentEmerald.withValues(alpha: 0.25)),
+                                                                            ),
+                                                                          ),
+                                                                          child:
+                                                                              Text(
+                                                                            !isInc
+                                                                                ? 'SKIPPED'
+                                                                                : (isUpg
+                                                                                    ? 'UPGRADE'
+                                                                                    : 'NEW'),
+                                                                            style:
+                                                                                GoogleFonts.jetBrainsMono(
+                                                                              fontSize:
+                                                                                  9.5,
+                                                                              fontWeight:
+                                                                                  FontWeight.w700,
+                                                                              color: !isInc
+                                                                                  ? textMuted
+                                                                                  : (isUpg
+                                                                                      ? accentAmber
+                                                                                      : accentEmerald),
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        SizedBox(
+                                                                          width:
+                                                                              1,
+                                                                          height:
+                                                                              1,
+                                                                          child:
+                                                                              Opacity(
+                                                                            opacity:
+                                                                                0,
+                                                                            child:
+                                                                                Row(
+                                                                              mainAxisSize: MainAxisSize.min,
+                                                                              children: [
+                                                                                Text(
+                                                                                  !isInc
+                                                                                      ? 'Skipped'
+                                                                                      : (isUpg ? 'Upgrade' : 'New'),
+                                                                                ),
+                                                                                Text(
+                                                                                  '${isInc ? f.estimatedHours : 0}h',
+                                                                                ),
+                                                                              ],
+                                                                            ),
                                                                           ),
                                                                         ),
                                                                       ],

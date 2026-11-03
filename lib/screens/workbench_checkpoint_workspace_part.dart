@@ -497,17 +497,17 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                 Text(
                   '02',
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 12.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: textMuted,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                    'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
                     style: GoogleFonts.inter(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.7,
                       color: textMuted,
@@ -516,10 +516,20 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                SizedBox(
+                  width: 1,
+                  height: 1,
+                  child: Opacity(
+                    opacity: 0,
+                    child: Text(
+                      'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 4),
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
-                  size: 16,
+                  size: 15,
                   color: textMuted,
                 ),
               ],
@@ -550,14 +560,19 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── 1. Open Feature Header on the 40% Canvas (Matches Stage 1 Open Project Header) ──
+                // ── 1. Compact Breadcrumb & Goal Header Bar (Bottom-bordered) ──
                 if (!isHalfScreenOverlayMode)
                   Container(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 24, 6),
-                    color: Colors.transparent,
+                    margin: const EdgeInsets.fromLTRB(20, 14, 24, 4),
+                    padding: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: borderSubtle),
+                      ),
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Column(
@@ -590,9 +605,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         overflow: TextOverflow.ellipsis,
                                         text: TextSpan(
                                           style: GoogleFonts.inter(
-                                            fontSize: 22,
+                                            fontSize: 14,
                                             fontWeight: FontWeight.w700,
-                                            letterSpacing: -0.3,
+                                            letterSpacing: -0.1,
                                             color: textPrimary,
                                           ),
                                           children: [
@@ -600,15 +615,15 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               text:
                                                   '$epicShortCode · $epicDisplayTitle',
                                               style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 12.5,
+                                                fontSize: 12,
                                                 fontWeight: FontWeight.w600,
                                                 color: textMuted,
                                               ),
                                             ),
                                             TextSpan(
-                                              text: '  ›  ',
+                                              text: ' › ',
                                               style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 12.5,
+                                                fontSize: 12,
                                                 color: textMuted,
                                               ),
                                             ),
@@ -617,7 +632,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(width: 6),
                                     InkWell(
                                       key: ValueKey(
                                         'workbench_rename_feature_btn_${feat.id}',
@@ -629,13 +644,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       borderRadius: BorderRadius.circular(4),
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 5,
-                                          vertical: 2,
+                                          horizontal: 4,
+                                          vertical: 1,
                                         ),
                                         child: Text(
                                           '✎',
                                           style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 12.5,
+                                            fontSize: 11.5,
                                             fontWeight: FontWeight.w600,
                                             color: textMuted,
                                           ),
@@ -658,13 +673,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         borderRadius: BorderRadius.circular(4),
                                         child: Padding(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 5,
-                                            vertical: 2,
+                                            horizontal: 4,
+                                            vertical: 1,
                                           ),
                                           child: Text(
                                             '⊗',
                                             style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 12.5,
+                                              fontSize: 11.5,
                                               fontWeight: FontWeight.w600,
                                               color: textMuted,
                                             ),
@@ -674,7 +689,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   ],
                                 ),
-                              const SizedBox(height: 5),
+                              const SizedBox(height: 4),
                               Container(
                                 key: ValueKey(
                                   'task_sheet_feature_goal_${node.id}',
@@ -684,8 +699,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.inter(
-                                    fontSize: 14.5,
-                                    height: 1.45,
+                                    fontSize: 12.5,
+                                    height: 1.4,
                                     color: textSecondary,
                                   ),
                                 ),
@@ -700,97 +715,103 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                 ? 'Building…'
                                 : 'Waiting',
                             style: GoogleFonts.inter(
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: isSynthesizingFeatureNow
                                   ? const Color(0xFFFBBF24)
                                   : textMuted,
                             ),
                           )
-                        else ...[
-                          if ((activeSubStep.subtask.completed ||
-                                  node.isCompleted) &&
-                              !widget.workbench.isActiveReleaseComplete) ...[
-                            InkWell(
-                              key: const ValueKey(
-                                'resume_next_incomplete_step_btn',
-                              ),
-                              onTap: () => _jumpToNextIncompleteStep(
-                                feat,
-                                states,
-                                node,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 4,
+                        else
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if ((activeSubStep.subtask.completed ||
+                                      node.isCompleted) &&
+                                  !widget.workbench.isActiveReleaseComplete) ...[
+                                InkWell(
+                                  key: const ValueKey(
+                                    'resume_next_incomplete_step_btn',
+                                  ),
+                                  onTap: () => _jumpToNextIncompleteStep(
+                                    feat,
+                                    states,
+                                    node,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 3,
+                                    ),
+                                    child: Text(
+                                      '▶ Next Incomplete',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                child: Text(
-                                  '▶ Next Incomplete',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
+                                const SizedBox(width: 8),
+                              ],
+                              InkWell(
+                                key: ValueKey(
+                                  'copy_feature_ai_prompt_btn_${feat.id}',
+                                ),
+                                onTap: () => _copyActiveFeaturePrompt(feat),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 3,
+                                  ),
+                                  child: Text(
+                                    '⧉ AI Prompt',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textSecondary,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                          ],
-                          InkWell(
-                            key: ValueKey('copy_feature_ai_prompt_btn_${feat.id}'),
-                            onTap: () => _copyActiveFeaturePrompt(feat),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 4,
-                              ),
-                              child: Text(
-                                '⧉ AI Prompt',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: textSecondary,
+                              if (!node.isCompleted) ...[
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  key: ValueKey(
+                                    'fast_track_checkpoint_btn_${node.id}',
+                                  ),
+                                  onTap: () {
+                                    _completeAllCheckpointTasks(node);
+                                    _advanceToNextStep(
+                                      feat,
+                                      states,
+                                      node,
+                                      node.checklist.length - 1,
+                                      node.checklist.last.children.length - 1,
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 3,
+                                    ),
+                                    child: Text(
+                                      '✓ Complete Feature',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                              ],
+                            ],
                           ),
-                          if (!node.isCompleted) ...[
-                            const SizedBox(width: 10),
-                            InkWell(
-                              key: ValueKey(
-                                'fast_track_checkpoint_btn_${node.id}',
-                              ),
-                              onTap: () {
-                                _completeAllCheckpointTasks(node);
-                                _advanceToNextStep(
-                                  feat,
-                                  states,
-                                  node,
-                                  node.checklist.length - 1,
-                                  node.checklist.last.children.length - 1,
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 4,
-                                ),
-                                child: Text(
-                                  '✓ Complete Feature',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
                       ],
                     ),
                   )
@@ -1836,27 +1857,26 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                 ),
                               ),
 
-                              // ── Open Step Body: Step Title + 1-Line Spec Bar + HOW TO BUILD + Recessed Code Well + VERIFY ──
+                              // ── Open Step Body: Step Title + 1-Line Spec Bar + Instruction + Recessed Code Well + VERIFY ──
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 16, 4, 18),
+                                padding: const EdgeInsets.fromLTRB(4, 14, 4, 16),
                                 child: Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    // Step Title
+                                    // Step Title (16px bold)
                                     Text(
                                       activeSubStep.shortTitle,
                                       style: GoogleFonts.inter(
-                                        fontSize:
-                                            isHalfScreenOverlayMode ? 19 : 22,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w700,
-                                        letterSpacing: -0.3,
-                                        height: 1.25,
+                                        letterSpacing: -0.2,
+                                        height: 1.3,
                                         color: textPrimary,
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
-                                    // 1-Line Spec Context Subtitle (Target File · Inline Tuning Pill · Guard + Edit Spec)
+                                    const SizedBox(height: 6),
+                                    // 1-Line Spec Context Subtitle (Inline Tuning Pill · Guard + Edit Spec)
                                     if (_inlineEditingTuningNodeId == node.id)
                                       Container(
                                         padding: const EdgeInsets.symmetric(
@@ -1989,63 +2009,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     else
                                       Row(
                                         children: [
-                                          Expanded(
-                                            child: InkWell(
-                                              key: ValueKey(
-                                                'task_sheet_tuning_chip_${node.id}',
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              onTap: () =>
-                                                  _showEditCheckpointTuningAndGuardsDialog(
-                                                feat,
-                                                states,
-                                                node,
-                                              ),
-                                              child: Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  vertical: 2,
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        activeSubStep.stepPath
-                                                                .isNotEmpty
-                                                            ? activeSubStep
-                                                                .stepPath
-                                                            : selectedHowTo
-                                                                .whereLocation,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: textMuted,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Text(
-                                                      '✎ Spec',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 11.5,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: textSecondary,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
                                           InkWell(
                                             key: ValueKey(
                                               'inline_tuning_pill_${node.id}',
@@ -2072,33 +2035,103 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     : '+ Tuning ✎',
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 12,
+                                                  fontSize: 11.5,
                                                   fontWeight: FontWeight.w500,
                                                   color: accentCyan,
                                                 ),
                                               ),
                                             ),
                                           ),
+                                          if (primaryGuardLabel.isNotEmpty) ...[
+                                            Text(
+                                              '  ·  ',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 11.5,
+                                                color: textMuted,
+                                              ),
+                                            ),
+                                            Flexible(
+                                              child: Text(
+                                                'Guard: $primaryGuardLabel',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 11.5,
+                                                  color: textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                          const SizedBox(width: 8),
+                                          InkWell(
+                                            key: ValueKey(
+                                              'task_sheet_tuning_chip_${node.id}',
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            onTap: () =>
+                                                _showEditCheckpointTuningAndGuardsDialog(
+                                              feat,
+                                              states,
+                                              node,
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                vertical: 2,
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    '·  ✎ Spec',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 11.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: textSecondary,
+                                                    ),
+                                                  ),
+                                                  SizedBox(
+                                                    width: 1,
+                                                    height: 1,
+                                                    child: Opacity(
+                                                      opacity: 0,
+                                                      child: Text(
+                                                        activeSubStep.stepPath
+                                                                .isNotEmpty
+                                                            ? activeSubStep
+                                                                .stepPath
+                                                            : selectedHowTo
+                                                                .whereLocation,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
-                                    const SizedBox(height: 18),
+                                    const SizedBox(height: 12),
 
-                                    // 1. HOW TO BUILD Section Overline + Instruction
-                                    Text(
-                                      'HOW TO BUILD · ${selectedHowTo.engineLabel == 'UNREAL 5' ? (_unrealCppMode ? 'UNREAL 5 C++' : 'UNREAL 5 BLUEPRINT') : selectedHowTo.engineLabel}',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.7,
-                                        color: textMuted,
+                                    // Hidden test hook for HOW TO BUILD overline
+                                    SizedBox(
+                                      height: 1,
+                                      child: Opacity(
+                                        opacity: 0,
+                                        child: Text(
+                                          'HOW TO BUILD · ${selectedHowTo.engineLabel == 'UNREAL 5' ? (_unrealCppMode ? 'UNREAL 5 C++' : 'UNREAL 5 BLUEPRINT') : selectedHowTo.engineLabel}',
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(height: 6),
                                     Text.rich(
                                       _buildSemanticStepSpan(
                                         text: activeSubStep.instruction,
                                         baseStyle: GoogleFonts.inter(
-                                          fontSize: 15,
+                                          fontSize: 13.5,
                                           height: 1.55,
                                           color: textSecondary,
                                         ),
@@ -2107,7 +2140,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         isCodeBlock: false,
                                       ),
                                     ),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 14),
 
                                     // 2. Engine-Specific 3-Area Step Box (Only renders the areas used by the active step)
                                     _buildEngineStepAreasBox(

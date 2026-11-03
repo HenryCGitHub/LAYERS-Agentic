@@ -174,16 +174,17 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         TaskHowToBlueprint.formatRemainingHoursShort(releaseRemMins);
     final isReleaseDone = relProgress >= 100 || releaseRemMins <= 0;
 
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.max,
-      children: [
-        Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
-          color: bgRecessed,
-          child: Stack(
+    final topHeader = Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: bgRecessed,
+        border: Border(
+          bottom: BorderSide(color: borderSubtle),
+        ),
+      ),
+      child: Stack(
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -762,294 +763,275 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               ),
             ],
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
-          child: Builder(
-            builder: (context) {
-              final pendingCount =
-                  widget.workbench.pendingFeatureInboxItems.length;
-              final scheduledCount =
-                  widget.workbench.scheduledFeatureInboxItems.length;
-              final totalInbox = pendingCount + scheduledCount;
-              return InkWell(
-                key: const ValueKey('open_feature_inbox_btn'),
-                onTap: () => _showFeatureInboxModal(context),
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: bgSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: pendingCount > 0 ? borderBright : borderSubtle,
+        );
+
+    final middleScrollable = SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: Builder(
+              builder: (context) {
+                final pendingCount =
+                    widget.workbench.pendingFeatureInboxItems.length;
+                final scheduledCount =
+                    widget.workbench.scheduledFeatureInboxItems.length;
+                final totalInbox = pendingCount + scheduledCount;
+                return InkWell(
+                  key: const ValueKey('open_feature_inbox_btn'),
+                  onTap: () => _showFeatureInboxModal(context),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
                     ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          totalInbox > 0
-                              ? 'Feature Inbox ($totalInbox)'
-                              : 'Feature Inbox',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: textPrimary,
+                    decoration: BoxDecoration(
+                      color: bgSurface,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: pendingCount > 0 ? borderBright : borderSubtle,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            totalInbox > 0
+                                ? 'Feature Inbox ($totalInbox)'
+                                : 'Feature Inbox',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                              color: textPrimary,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        pendingCount > 0 ? '$pendingCount new' : '+ Add',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: pendingCount > 0
-                              ? const Color(0xFF10B981)
-                              : textMuted,
+                        const SizedBox(width: 6),
+                        Text(
+                          pendingCount > 0 ? '$pendingCount new' : '+ Add',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: pendingCount > 0
+                                ? const Color(0xFF10B981)
+                                : textMuted,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        if (widget.workbench.releaseViewFilter == 'archived' &&
-            archivedFeats.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'ARCHIVED TESTBEDS (${archivedFeats.length})',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: textMuted,
+                      ],
                     ),
                   ),
-                ),
-                InkWell(
-                  key: const ValueKey('return_from_archive_btn'),
-                  borderRadius: BorderRadius.circular(4),
-                  onTap: () => widget.workbench.setReleaseViewFilter('active'),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 2,
-                    ),
-                    child: Text(
-                      '← Active',
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
-          for (final arch in archivedFeats)
-            _buildFeatureRailItem(arch, activeVer: activeVer),
-        ] else ...[
-          if (beats.isEmpty && widget.workbench.isAgentBusy)
+          if (widget.workbench.releaseViewFilter == 'archived' &&
+              archivedFeats.isNotEmpty) ...[
             Padding(
-              key: const ValueKey('outliner_planning_epics_row'),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               child: Row(
                 children: [
-                  Text(
-                    '⟳',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: textSecondary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      widget.workbench.agentProgressStep ??
-                          'Determining Systems & Mechanics ($activeVer)...',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      'ARCHIVED TESTBEDS (${archivedFeats.length})',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: textSecondary,
+                        fontWeight: FontWeight.w700,
+                        color: textMuted,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    key: const ValueKey('return_from_archive_btn'),
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: () =>
+                        widget.workbench.setReleaseViewFilter('active'),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        '← Active',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          Builder(
-            builder: (context) {
-              final releaseHasActiveFeats = beats.any(
-                (b) => widget.workbench.featuresForBeat(b.id).any(
-                      (f) => widget.workbench.isFeatureActiveInRelease(f),
+            for (final arch in archivedFeats)
+              _buildFeatureRailItem(arch, activeVer: activeVer),
+          ] else ...[
+            if (beats.isEmpty && widget.workbench.isAgentBusy)
+              Padding(
+                key: const ValueKey('outliner_planning_epics_row'),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Row(
+                  children: [
+                    Text(
+                      '⟳',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: textSecondary,
+                      ),
                     ),
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int bIdx = 0; bIdx < beats.length; bIdx++)
-                    Builder(
-                      builder: (context) {
-                        final beat = beats[bIdx];
-                        final allBeatFeats =
-                            widget.workbench.featuresForBeat(beat.id);
-                        final showAllLiveFeatures =
-                            widget.workbench.releaseViewFilter == 'all';
-                        final beatFeats = (!showAllLiveFeatures &&
-                                releaseHasActiveFeats)
-                            ? allBeatFeats
-                                .where(
-                                  (f) => widget.workbench
-                                      .isFeatureActiveInRelease(f),
-                                )
-                                .toList()
-                            : allBeatFeats;
-                        final isSynthesizingBeat = widget.workbench
-                            .isSynthesizingBeatFeatures(beat.id);
-                        if (beatFeats.isEmpty &&
-                            allBeatFeats.isNotEmpty &&
-                            !isSynthesizingBeat &&
-                            _activeStage2InlineEditKey !=
-                                'add_feat_${beat.id}') {
-                          return const SizedBox.shrink();
-                        }
-                        final doneBeatCount = beatFeats
-                            .where(
-                              (f) =>
-                                  widget.workbench.getDocumentProgress(f.id) >=
-                                  100,
-                            )
-                            .length;
-                        final allBeatDone = beatFeats.isNotEmpty &&
-                            doneBeatCount == beatFeats.length;
-                        final isBeatActive = beatFeats.any(
-                          (f) => f.id == widget.workbench.selectedFeatureId,
-                        );
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.workbench.agentProgressStep ??
+                            'Determining Systems & Mechanics ($activeVer)...',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Builder(
+              builder: (context) {
+                final releaseHasActiveFeats = beats.any(
+                  (b) => widget.workbench.featuresForBeat(b.id).any(
+                        (f) => widget.workbench.isFeatureActiveInRelease(f),
+                      ),
+                );
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int bIdx = 0; bIdx < beats.length; bIdx++)
+                      Builder(
+                        builder: (context) {
+                          final beat = beats[bIdx];
+                          final allBeatFeats =
+                              widget.workbench.featuresForBeat(beat.id);
+                          final showAllLiveFeatures =
+                              widget.workbench.releaseViewFilter == 'all';
+                          final beatFeats = (!showAllLiveFeatures &&
+                                  releaseHasActiveFeats)
+                              ? allBeatFeats
+                                  .where(
+                                    (f) => widget.workbench
+                                        .isFeatureActiveInRelease(f),
+                                  )
+                                  .toList()
+                              : allBeatFeats;
+                          final isSynthesizingBeat = widget.workbench
+                              .isSynthesizingBeatFeatures(beat.id);
+                          if (beatFeats.isEmpty &&
+                              allBeatFeats.isNotEmpty &&
+                              !isSynthesizingBeat &&
+                              _activeStage2InlineEditKey !=
+                                  'add_feat_${beat.id}') {
+                            return const SizedBox.shrink();
+                          }
+                          final doneBeatCount = beatFeats
+                              .where(
+                                (f) =>
+                                    widget.workbench
+                                        .getDocumentProgress(f.id) >=
+                                    100,
+                              )
+                              .length;
+                          final allBeatDone = beatFeats.isNotEmpty &&
+                              doneBeatCount == beatFeats.length;
+                          final isBeatActive = beatFeats.any(
+                            (f) => f.id == widget.workbench.selectedFeatureId,
+                          );
 
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                              padding:
-                                  const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                              child: InkWell(
-                                key: ValueKey('rail_beat_${beat.id}'),
-                                borderRadius: BorderRadius.circular(4),
-                                onTap: () {
-                                  if (beatFeats.isEmpty) return;
-                                  if (_isProgressiveModalOpen) {
-                                    _closeProgressiveReleasePlanner(
-                                      confirmed: false,
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Container(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                                child: InkWell(
+                                  key: ValueKey('rail_beat_${beat.id}'),
+                                  borderRadius: BorderRadius.circular(4),
+                                  onTap: () {
+                                    if (beatFeats.isEmpty) return;
+                                    if (_isProgressiveModalOpen) {
+                                      _closeProgressiveReleasePlanner(
+                                        confirmed: false,
+                                      );
+                                    }
+                                    final targetFeat = beatFeats.firstWhere(
+                                      (f) =>
+                                          widget.workbench
+                                              .getDocumentProgress(f.id) <
+                                          100,
+                                      orElse: () => beatFeats.first,
                                     );
-                                  }
-                                  final targetFeat = beatFeats.firstWhere(
-                                    (f) =>
-                                        widget.workbench
-                                            .getDocumentProgress(f.id) <
-                                        100,
-                                    orElse: () => beatFeats.first,
-                                  );
-                                  _rebuild(() {
-                                    _manualCheckpointFocusIndex = null;
-                                  });
-                                  widget.workbench
-                                      .selectFeature(targetFeat.id);
-                                },
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
-                                        maxLines: 2,
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.7,
-                                          height: 1.3,
-                                          color: allBeatDone
-                                              ? textMuted.withValues(alpha: 0.65)
-                                              : (isBeatActive
-                                                  ? textSecondary
-                                                  : textMuted),
-                                          decoration: allBeatDone
-                                              ? TextDecoration.lineThrough
-                                              : TextDecoration.none,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isSynthesizingBeat) ...[
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Building…',
-                                        key: ValueKey(
-                                          'rail_beat_synthesizing_${beat.id}',
-                                        ),
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: const Color(0xFFFBBF24),
-                                        ),
-                                      ),
-                                    ] else if (beatFeats.isEmpty) ...[
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Waiting',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: textMuted,
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      const SizedBox(width: 6),
-                                      InkWell(
-                                        key: ValueKey(
-                                          'rail_add_feat_to_beat_${beat.id}',
-                                        ),
-                                        onTap: () => _startStage2InlineEdit(
-                                          'add_feat_${beat.id}',
-                                          '',
-                                        ),
-                                        borderRadius: BorderRadius.circular(3),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 3,
-                                            vertical: 1,
-                                          ),
-                                          child: Text(
-                                            '+',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: textSecondary,
-                                            ),
+                                    _rebuild(() {
+                                      _manualCheckpointFocusIndex = null;
+                                    });
+                                    widget.workbench
+                                        .selectFeature(targetFeat.id);
+                                  },
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
+                                          maxLines: 2,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.7,
+                                            height: 1.3,
+                                            color: allBeatDone
+                                                ? textMuted
+                                                    .withValues(alpha: 0.65)
+                                                : (isBeatActive
+                                                    ? textSecondary
+                                                    : textMuted),
+                                            decoration: allBeatDone
+                                                ? TextDecoration.lineThrough
+                                                : TextDecoration.none,
                                           ),
                                         ),
                                       ),
-                                    ],
-                                    if (isSynthesizingBeat ||
-                                        beatFeats.isEmpty)
+                                      if (isSynthesizingBeat) ...[
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Building…',
+                                          key: ValueKey(
+                                            'rail_beat_synthesizing_${beat.id}',
+                                          ),
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: const Color(0xFFFBBF24),
+                                          ),
+                                        ),
+                                      ] else if (beatFeats.isEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Waiting',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w500,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                      ],
                                       SizedBox(
                                         width: 1,
                                         height: 1,
@@ -1068,58 +1050,73 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           ),
                                         ),
                                       ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                            if (_activeStage2InlineEditKey ==
-                                'add_feat_${beat.id}')
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(14, 2, 14, 6),
-                                child: _buildStage2InlineEditor(
-                                  editKey: 'add_feat_${beat.id}',
-                                  inputKey: const ValueKey(
-                                    'workbench_add_live_feature_input',
+                              if (_activeStage2InlineEditKey ==
+                                  'add_feat_${beat.id}')
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(14, 2, 14, 6),
+                                  child: _buildStage2InlineEditor(
+                                    editKey: 'add_feat_${beat.id}',
+                                    inputKey: const ValueKey(
+                                      'workbench_add_live_feature_input',
+                                    ),
+                                    saveBtnKey: const ValueKey(
+                                      'confirm_workbench_add_live_feature_btn',
+                                    ),
+                                    hintText:
+                                        'New feature (e.g. Shield Parry)...',
+                                    onSave: (val) {
+                                      _rebuild(() {
+                                        _manualCheckpointFocusIndex = null;
+                                        _manualCheckpointFocusFeatureId = null;
+                                      });
+                                      widget.workbench.addLiveFeatureToBeat(
+                                        beat.id,
+                                        val,
+                                      );
+                                    },
                                   ),
-                                  saveBtnKey: const ValueKey(
-                                    'confirm_workbench_add_live_feature_btn',
-                                  ),
-                                  hintText:
-                                      'New feature (e.g. Shield Parry)...',
-                                  onSave: (val) {
-                                    _rebuild(() {
-                                      _manualCheckpointFocusIndex = null;
-                                      _manualCheckpointFocusFeatureId = null;
-                                    });
-                                    widget.workbench.addLiveFeatureToBeat(
-                                      beat.id,
-                                      val,
-                                    );
-                                  },
                                 ),
-                              ),
-                            for (int fIdx = 0;
-                                fIdx < beatFeats.length;
-                                fIdx++)
-                              _buildFeatureRailItem(
-                                beatFeats[fIdx],
-                                activeVer: activeVer,
-                                beatTitle: beat.title,
-                                beatIndex: bIdx,
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                ],
-              );
-            },
-          ),
+                              for (int fIdx = 0;
+                                  fIdx < beatFeats.length;
+                                  fIdx++)
+                                _buildFeatureRailItem(
+                                  beatFeats[fIdx],
+                                  activeVer: activeVer,
+                                  beatTitle: beat.title,
+                                  beatIndex: bIdx,
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+          const SizedBox(height: 8),
         ],
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
-          child: Builder(
+      ),
+    );
+
+    final bottomFooter = Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      decoration: BoxDecoration(
+        color: bgRecessed,
+        border: Border(
+          top: BorderSide(color: borderSubtle),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Builder(
             builder: (context) {
               final releaseHasActiveFeats = beats.any(
                 (b) => widget.workbench.featuresForBeat(b.id).any(
@@ -1146,8 +1143,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 borderRadius: BorderRadius.circular(5),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 6,
+                    horizontal: 6,
+                    vertical: 5,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1158,7 +1155,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w500,
                             color: textSecondary,
                           ),
@@ -1179,10 +1176,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               );
             },
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
-          child: Builder(
+          const SizedBox(height: 2),
+          Builder(
             builder: (context) {
               final isRelComplete = widget.workbench.isActiveReleaseComplete;
               final nextVerLabel =
@@ -1193,7 +1188,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 borderRadius: BorderRadius.circular(5),
                 child: Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1203,7 +1198,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 12.5,
                             fontWeight: isRelComplete
                                 ? FontWeight.w600
                                 : FontWeight.w500,
@@ -1230,8 +1225,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               );
             },
           ),
-        ),
-      ],
+        ],
+      ),
     );
 
     return Container(
@@ -1243,7 +1238,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           ),
         ),
       ),
-      child: SingleChildScrollView(child: content),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          topHeader,
+          Expanded(child: middleScrollable),
+          bottomFooter,
+        ],
+      ),
     );
   }
 
@@ -1277,12 +1279,16 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
         decoration: BoxDecoration(
-          color: Colors.transparent,
+          color: isSelected ? bgSurface : Colors.transparent,
+          borderRadius: const BorderRadius.only(
+            topRight: Radius.circular(6),
+            bottomRight: Radius.circular(6),
+          ),
           border: isSelected
               ? Border(
                   left: BorderSide(
                     color: textPrimary,
-                    width: 2.5,
+                    width: 2.0,
                   ),
                 )
               : null,
@@ -1305,9 +1311,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               child: Container(
                 padding: const EdgeInsets.fromLTRB(
                   10,
-                  7,
+                  6,
                   10,
-                  7,
+                  6,
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1327,18 +1333,20 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         },
                         borderRadius: BorderRadius.circular(4),
                         child: SizedBox(
-                          width: 15,
-                          height: 19,
+                          width: 14,
+                          height: 18,
                           child: Center(
                             child: Text(
                               isDone ? '✓' : (isSelected ? '●' : '○'),
                               textAlign: TextAlign.center,
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11.5,
+                                fontSize: 11,
                                 fontWeight: isSelected
                                     ? FontWeight.w700
                                     : FontWeight.w500,
-                                color: isSelected ? textPrimary : textMuted,
+                                color: isDone
+                                    ? accentEmerald
+                                    : (isSelected ? textPrimary : textMuted),
                               ),
                             ),
                           ),
@@ -1372,13 +1380,13 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   displayTitle,
                                   maxLines: 2,
                                   style: GoogleFonts.inter(
-                                    fontSize: 13.5,
+                                    fontSize: 12.5,
                                     height: 1.3,
                                     fontWeight: isSelected
                                         ? FontWeight.w600
                                         : FontWeight.w400,
                                     color: isDone
-                                        ? textMuted.withValues(alpha: 0.6)
+                                        ? textMuted.withValues(alpha: 0.65)
                                         : (isSelected
                                             ? textPrimary
                                             : textSecondary),
@@ -1443,6 +1451,23 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                     height: 1,
                                                   ),
                                                 ),
+                                              if (isSelected &&
+                                                  _activeStage2InlineEditKey !=
+                                                      'rename_rail_feat_${feat.id}')
+                                                InkWell(
+                                                  key: ValueKey(
+                                                    'rail_rename_feat_${feat.id}',
+                                                  ),
+                                                  onTap: () =>
+                                                      _startStage2InlineEdit(
+                                                    'rename_rail_feat_${feat.id}',
+                                                    feat.title,
+                                                  ),
+                                                  child: const SizedBox(
+                                                    width: 2,
+                                                    height: 1,
+                                                  ),
+                                                ),
                                             ],
                                           );
                                         },
@@ -1453,10 +1478,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               ],
                             ),
                     ),
-                    const SizedBox(width: 8),
                     // Strictly 1 clean status slot on the right of each Feature row
                     if (feat.sections['lifecycle'] ==
                         FeatureLifecycleStatus.superseded.name) ...[
+                      const SizedBox(width: 6),
                       InkWell(
                         key: ValueKey('restore_archived_feat_${feat.id}'),
                         onTap: () =>
@@ -1470,7 +1495,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           child: Text(
                             '↺ Restore',
                             style: GoogleFonts.inter(
-                              fontSize: 11.5,
+                              fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: textSecondary,
                             ),
@@ -1478,53 +1503,30 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         ),
                       ),
                     ] else if (isSynthesizingSteps) ...[
+                      const SizedBox(width: 6),
                       Padding(
                         padding: const EdgeInsets.only(top: 1),
                         child: Text(
                           'Building…',
                           key: ValueKey('rail_queued_badge_${feat.id}'),
                           style: GoogleFonts.inter(
-                            fontSize: 11.5,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: const Color(0xFFFBBF24),
                           ),
                         ),
                       ),
                     ] else if (isWaitingForStepsInLiveMode) ...[
+                      const SizedBox(width: 6),
                       Padding(
                         padding: const EdgeInsets.only(top: 1),
                         child: Text(
                           'Waiting',
                           key: ValueKey('rail_queued_badge_${feat.id}'),
                           style: GoogleFonts.inter(
-                            fontSize: 11.5,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: textMuted,
-                          ),
-                        ),
-                      ),
-                    ] else if (isSelected &&
-                        _activeStage2InlineEditKey !=
-                            'rename_rail_feat_${feat.id}') ...[
-                      InkWell(
-                        key: ValueKey('rail_rename_feat_${feat.id}'),
-                        onTap: () => _startStage2InlineEdit(
-                          'rename_rail_feat_${feat.id}',
-                          feat.title,
-                        ),
-                        borderRadius: BorderRadius.circular(3),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 3,
-                            vertical: 1,
-                          ),
-                          child: Text(
-                            '✎',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: textMuted,
-                            ),
                           ),
                         ),
                       ),
@@ -1589,10 +1591,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
 
     return Container(
       key: ValueKey('work_area_step_timeline_${node.id}'),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
       decoration: BoxDecoration(
-        color: bgSurface,
-        borderRadius: BorderRadius.circular(13),
+        color: bgRecessed,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderSubtle),
       ),
       child: Column(
@@ -1600,7 +1602,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         children: [
           // Stage 1 Style Card Header Bar (01 STEPS + Done Counter + 1px Hairline)
           Container(
-            padding: const EdgeInsets.only(bottom: 11),
+            padding: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(color: borderSubtle),
@@ -1617,19 +1619,19 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       Text(
                         '01',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12.5,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           color: textMuted,
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           'STEPS',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.7,
                             color: textMuted,
@@ -1640,13 +1642,26 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  '$totalDoneSteps/$totalStepsCount Done',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: textMuted,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$totalDoneSteps/$totalStepsCount',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: textMuted,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 1,
+                      height: 1,
+                      child: Opacity(
+                        opacity: 0,
+                        child: Text('$totalDoneSteps/$totalStepsCount Done'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1774,8 +1789,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
 
                       return Container(
                         padding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: isTaskActive ? 11 : 9,
+                          horizontal: 2,
+                          vertical: isTaskActive ? 10 : 8,
                         ),
                         decoration: BoxDecoration(
                           border: gIdx == 0
@@ -1862,10 +1877,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                             children: [
                                               TextSpan(
                                                 text:
-                                                    '${isTaskActive ? '▾' : '▸'} $globalNumLabel  ',
+                                                    '${isTaskActive ? '▾' : '▸'} $globalNumLabel · ',
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 12,
+                                                  fontSize: 11.5,
                                                   fontWeight: FontWeight.w600,
                                                   color: isFixTask
                                                       ? accentCrimson
@@ -1877,7 +1892,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                               TextSpan(
                                                 text: groupTitle,
                                                 style: GoogleFonts.inter(
-                                                  fontSize: 14.5,
+                                                  fontSize: 12.5,
                                                   fontWeight: isTaskActive
                                                       ? FontWeight.w600
                                                       : FontWeight.w500,
@@ -1909,7 +1924,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           ),
                                           child: Icon(
                                             Icons.edit_outlined,
-                                            size: 12.5,
+                                            size: 12,
                                             color: isTaskActive
                                                 ? textSecondary
                                                 : textMuted,
@@ -1938,7 +1953,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 ? '✓ $doneSubCount/$totalSubCount'
                                                 : '$doneSubCount/$totalSubCount',
                                             style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11.5,
+                                              fontSize: 11,
                                               fontWeight: FontWeight.w600,
                                               color: isTaskActive
                                                   ? textSecondary
@@ -1982,7 +1997,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           return Opacity(
                                             opacity: isStepActive
                                                 ? 1.0
-                                                : (isStepDone ? 0.55 : 0.78),
+                                                : (isStepDone ? 0.65 : 0.85),
                                             child: InkWell(
                                               key: ValueKey(
                                                 'task_sheet_step_row_${cpNode.id}_${tIdx}_$sIdx',
@@ -2007,16 +2022,25 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                 ),
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 10,
-                                                  vertical: 7,
+                                                  horizontal: 9,
+                                                  vertical: 6,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.transparent,
+                                                  color: isStepActive
+                                                      ? bgSurface
+                                                      : Colors.transparent,
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                    topRight:
+                                                        Radius.circular(5),
+                                                    bottomRight:
+                                                        Radius.circular(5),
+                                                  ),
                                                   border: isStepActive
                                                       ? Border(
                                                           left: BorderSide(
                                                             color: textPrimary,
-                                                            width: 2.5,
+                                                            width: 2.0,
                                                           ),
                                                         )
                                                       : null,
@@ -2026,52 +2050,55 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                       CrossAxisAlignment.center,
                                                   children: [
                                                     SizedBox(
-                                                      width: 20,
+                                                      width: 18,
                                                       child: Text(
                                                         isStepDone &&
                                                                 !isStepActive
                                                             ? '✓'
-                                                            : (sIdx + 1)
-                                                                .toString()
-                                                                .padLeft(
-                                                                  2,
-                                                                  '0',
-                                                                ),
+                                                            : (isStepActive
+                                                                ? '●'
+                                                                : '○'),
                                                         style: GoogleFonts
                                                             .jetBrainsMono(
-                                                          fontSize: 11.5,
+                                                          fontSize: 11,
                                                           fontWeight:
                                                               isStepActive
                                                                   ? FontWeight
-                                                                      .w600
+                                                                      .w700
                                                                   : FontWeight
-                                                                      .w400,
-                                                          color: isStepActive
-                                                              ? textPrimary
-                                                              : textMuted,
+                                                                      .w500,
+                                                          color: isStepDone &&
+                                                                  !isStepActive
+                                                              ? accentEmerald
+                                                              : (isStepActive
+                                                                  ? textPrimary
+                                                                  : textMuted),
                                                         ),
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 6),
+                                                    const SizedBox(width: 4),
                                                     Expanded(
                                                       child: Text(
-                                                        stepItem.shortTitle,
+                                                        '${(sIdx + 1).toString().padLeft(2, '0')} · ${stepItem.shortTitle}',
                                                         maxLines: 1,
                                                         overflow: TextOverflow
                                                             .ellipsis,
                                                         style:
                                                             GoogleFonts.inter(
-                                                          fontSize: 13.5,
-                                                          height: 1.35,
+                                                          fontSize: 12.5,
+                                                          height: 1.3,
                                                           fontWeight:
                                                               isStepActive
                                                                   ? FontWeight
                                                                       .w600
                                                                   : FontWeight
                                                                       .w400,
-                                                          color: isStepActive
-                                                              ? textPrimary
-                                                              : textSecondary,
+                                                          color: isStepDone &&
+                                                                  !isStepActive
+                                                              ? textMuted
+                                                              : (isStepActive
+                                                                  ? textPrimary
+                                                                  : textSecondary),
                                                           decoration: isStepDone &&
                                                                   !isStepActive
                                                               ? TextDecoration
@@ -2081,25 +2108,17 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                         ),
                                                       ),
                                                     ),
-                                                    if (!isStepDone) ...[
-                                                      const SizedBox(width: 6),
-                                                      Text(
-                                                        stepItem.etaLabel,
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                              isStepActive
-                                                                  ? FontWeight
-                                                                      .w500
-                                                                  : FontWeight
-                                                                      .w400,
-                                                          color: isStepActive
-                                                              ? textSecondary
-                                                              : textMuted,
+                                                    if (!isStepDone)
+                                                      SizedBox(
+                                                        width: 1,
+                                                        height: 1,
+                                                        child: Opacity(
+                                                          opacity: 0,
+                                                          child: Text(
+                                                            stepItem.etaLabel,
+                                                          ),
                                                         ),
                                                       ),
-                                                    ],
                                                   ],
                                                 ),
                                               ),
