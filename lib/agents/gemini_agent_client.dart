@@ -99,26 +99,73 @@ RULES:
     }
   }
 
-  static Map<String, dynamic> _buildNativeThinkingConfig({
+  static Map<String, dynamic> buildNativeThinkingConfig({
     required String normalizedThinking,
     required bool useThinkingLevelEnum,
   }) {
+    final upper = normalizedThinking.trim().toUpperCase();
     if (useThinkingLevelEnum) {
       return <String, dynamic>{
-        'thinkingLevel': normalizedThinking,
+        'thinkingLevel': upper.isEmpty ? 'LOW' : upper,
       };
     }
-    // Dynamic (-1) instructs Gemini to allocate up to the model's full native thinking budget
-    return const <String, dynamic>{
-      'thinkingBudget': -1,
+    final int budget = switch (upper) {
+      'NONE' || 'MINIMAL' => 0,
+      'LOW' => 1024,
+      'MEDIUM' => 4096,
+      _ => -1,
     };
+    return <String, dynamic>{
+      'thinkingBudget': budget,
+    };
+  }
+
+  static Map<String, dynamic>? _parseCandidateResponseJson(String responseBody) {
+    final body = jsonDecode(responseBody) as Map<String, dynamic>;
+    final candidates = body['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) return null;
+    final content = candidates.first['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List?;
+    if (parts == null || parts.isEmpty) return null;
+    final toolCalls = <Map<String, dynamic>>[];
+    for (final part in parts) {
+      if (part is Map && part['functionCall'] is Map) {
+        final fc = Map<String, dynamic>.from(part['functionCall'] as Map);
+        final fnName = (fc['name'] ?? '').toString().trim();
+        final rawArgs = fc['args'];
+        final argsMap = rawArgs is Map
+            ? Map<String, dynamic>.from(rawArgs)
+            : <String, dynamic>{};
+        toolCalls.add({
+          'name': fnName,
+          'args': argsMap,
+        });
+      }
+    }
+    if (toolCalls.isNotEmpty) {
+      final primaryArgs =
+          Map<String, dynamic>.from(toolCalls.first['args'] as Map);
+      primaryArgs['_toolName'] = toolCalls.first['name'];
+      primaryArgs['_toolCalls'] = toolCalls;
+      return primaryArgs;
+    }
+    for (final part in parts.reversed) {
+      if (part is Map && part['thought'] != true) {
+        final rawText = part['text']?.toString() ?? '';
+        final cleaned = _extractJsonObject(rawText);
+        if (cleaned.isNotEmpty) {
+          return jsonDecode(cleaned) as Map<String, dynamic>;
+        }
+      }
+    }
+    return null;
   }
 
   static Future<Map<String, dynamic>?> generateJson({
     required String prompt,
     required String apiKey,
     String preferredModel = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
     double temperature = 0.5,
     List<Map<String, dynamic>>? functionDeclarations,
     String functionCallingMode = 'ANY',
@@ -150,10 +197,14 @@ RULES:
     ];
 
     for (final model in modelsToTry) {
+      final uri = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
+      );
+      final isHeavyPlanningModel = model.contains('pro');
+      final timeoutDuration =
+          isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
+
       try {
-        final uri = Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
-        );
         final genConfig = <String, dynamic>{
           'temperature': temperature,
           if (_cachedModelOutputTokenLimit != null)
@@ -163,7 +214,7 @@ RULES:
             'responseSchema': responseSchema,
         };
         if (normalizedThinking.isNotEmpty) {
-          genConfig['thinkingConfig'] = _buildNativeThinkingConfig(
+          genConfig['thinkingConfig'] = buildNativeThinkingConfig(
             normalizedThinking: normalizedThinking,
             useThinkingLevelEnum: _cachedSupportsThinkingLevel,
           );
@@ -182,10 +233,6 @@ RULES:
             },
         };
 
-        final isHeavyPlanningModel = model.contains('pro');
-        final timeoutDuration =
-            isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
-
         var response = await http
             .post(
               uri,
@@ -198,7 +245,7 @@ RULES:
         // native thinkingConfig schema, flip and retry automatically.
         if (response.statusCode == 400 && normalizedThinking.isNotEmpty) {
           _cachedSupportsThinkingLevel = !_cachedSupportsThinkingLevel;
-          genConfig['thinkingConfig'] = _buildNativeThinkingConfig(
+          genConfig['thinkingConfig'] = buildNativeThinkingConfig(
             normalizedThinking: normalizedThinking,
             useThinkingLevelEnum: _cachedSupportsThinkingLevel,
           );
@@ -213,47 +260,8 @@ RULES:
 
         if (response.statusCode == 200) {
           lastErrorStatus = null;
-          final body = jsonDecode(response.body) as Map<String, dynamic>;
-          final candidates = body['candidates'] as List?;
-          if (candidates != null && candidates.isNotEmpty) {
-            final content =
-                candidates.first['content'] as Map<String, dynamic>?;
-            final parts = content?['parts'] as List?;
-            if (parts != null && parts.isNotEmpty) {
-              final toolCalls = <Map<String, dynamic>>[];
-              for (final part in parts) {
-                if (part is Map && part['functionCall'] is Map) {
-                  final fc =
-                      Map<String, dynamic>.from(part['functionCall'] as Map);
-                  final fnName = (fc['name'] ?? '').toString().trim();
-                  final rawArgs = fc['args'];
-                  final argsMap = rawArgs is Map
-                      ? Map<String, dynamic>.from(rawArgs)
-                      : <String, dynamic>{};
-                  toolCalls.add({
-                    'name': fnName,
-                    'args': argsMap,
-                  });
-                }
-              }
-              if (toolCalls.isNotEmpty) {
-                final primaryArgs =
-                    Map<String, dynamic>.from(toolCalls.first['args'] as Map);
-                primaryArgs['_toolName'] = toolCalls.first['name'];
-                primaryArgs['_toolCalls'] = toolCalls;
-                return primaryArgs;
-              }
-              for (final part in parts.reversed) {
-                if (part is Map && part['thought'] != true) {
-                  final rawText = part['text']?.toString() ?? '';
-                  final cleaned = _extractJsonObject(rawText);
-                  if (cleaned.isNotEmpty) {
-                    return jsonDecode(cleaned) as Map<String, dynamic>;
-                  }
-                }
-              }
-            }
-          }
+          final parsed = _parseCandidateResponseJson(response.body);
+          if (parsed != null) return parsed;
         } else if (response.statusCode == 401 ||
             response.statusCode == 402 ||
             response.statusCode == 403) {
@@ -262,8 +270,47 @@ RULES:
           return null;
         }
       } catch (_) {
-        // Fall back to next model immediately on timeout or network error
-        continue;
+        // Proceed to JSON-mode fallback if tools were active, or next model
+      }
+
+      // If a deeply nested function-calling schema timed out or returned MALFORMED_FUNCTION_CALL,
+      // retry once in direct JSON mode (`responseMimeType: 'application/json'`) with LOW thinking budget.
+      if (hasTools) {
+        try {
+          final fallbackGenConfig = <String, dynamic>{
+            'temperature': temperature,
+            if (_cachedModelOutputTokenLimit != null)
+              'maxOutputTokens': _cachedModelOutputTokenLimit,
+            'responseMimeType': 'application/json',
+            'thinkingConfig': buildNativeThinkingConfig(
+              normalizedThinking: 'LOW',
+              useThinkingLevelEnum: _cachedSupportsThinkingLevel,
+            ),
+          };
+          final fallbackPayload = <String, dynamic>{
+            'contents': contentsPayload,
+            'generationConfig': fallbackGenConfig,
+          };
+          final fallbackRes = await http
+              .post(
+                uri,
+                headers: _jsonHeaders,
+                body: jsonEncode(fallbackPayload),
+              )
+              .timeout(timeoutDuration);
+          if (fallbackRes.statusCode == 200) {
+            lastErrorStatus = null;
+            final parsed = _parseCandidateResponseJson(fallbackRes.body);
+            if (parsed != null) return parsed;
+          } else if (fallbackRes.statusCode == 401 ||
+              fallbackRes.statusCode == 402 ||
+              fallbackRes.statusCode == 403) {
+            lastErrorStatus = 'HTTP ${fallbackRes.statusCode}';
+            return null;
+          }
+        } catch (_) {
+          continue;
+        }
       }
     }
     return null;

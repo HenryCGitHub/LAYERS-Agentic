@@ -6900,6 +6900,71 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             expect(provider.selectedFeatureId, equals(targetProj1FeatId));
           }
         }
+
+        // 11. Stage 2 Workbench & AI Release Architecture Audit Regressions
+        // 11a. GeminiAgentClient.buildNativeThinkingConfig maps LOW/MEDIUM/HIGH proportionally
+        expect(
+          GeminiAgentClient.buildNativeThinkingConfig(
+            normalizedThinking: 'LOW',
+            useThinkingLevelEnum: false,
+          )['thinkingBudget'],
+          equals(1024),
+        );
+        expect(
+          GeminiAgentClient.buildNativeThinkingConfig(
+            normalizedThinking: 'MEDIUM',
+            useThinkingLevelEnum: false,
+          )['thinkingBudget'],
+          equals(4096),
+        );
+        expect(
+          GeminiAgentClient.buildNativeThinkingConfig(
+            normalizedThinking: 'HIGH',
+            useThinkingLevelEnum: false,
+          )['thinkingBudget'],
+          equals(-1),
+        );
+
+        // 11b. ProjectConceptAgent.buildSectionOptionsTool('coreLoop') has zero hardcoded beat counts
+        final coreLoopToolDesc =
+            (ProjectConceptAgent.buildSectionOptionsTool('coreLoop')[
+                    'description'] ??
+                '') as String;
+        expect(coreLoopToolDesc.contains('4-6'), isFalse);
+
+        // 11c. Dynamic Beat-to-Feature decomposition splits clauses dynamically and never clones Beat title
+        final multiClauseFeats =
+            ReleasePlannerAgent.decomposeBeatIntoDynamicFeatures(
+          beatNumber: 1,
+          beatIndex: 0,
+          beatTitle: 'Debris Clearing',
+          rawBeatLine:
+              'Debris Clearing: Clear hull scrap with the laser cutter, vacuum salvage into storage, and vent excess heat',
+          rawDescPart:
+              'Clear hull scrap with the laser cutter, vacuum salvage into storage, and vent excess heat',
+          versionTag: 'v0.1',
+        );
+        expect(multiClauseFeats.length, equals(3));
+        for (final mf in multiClauseFeats) {
+          expect(
+            mf.title.toLowerCase(),
+            isNot(equals('debris clearing')),
+          );
+        }
+        final singleClauseFeats =
+            ReleasePlannerAgent.decomposeBeatIntoDynamicFeatures(
+          beatNumber: 2,
+          beatIndex: 1,
+          beatTitle: 'Debris Clearing',
+          rawBeatLine: 'Debris Clearing',
+          rawDescPart: '',
+          versionTag: 'v0.1',
+        );
+        expect(singleClauseFeats.length, equals(1));
+        expect(
+          singleClauseFeats.first.title.toLowerCase(),
+          isNot(equals('debris clearing')),
+        );
       },
     );
   });

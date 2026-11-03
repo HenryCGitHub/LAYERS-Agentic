@@ -910,7 +910,7 @@ class ProjectConceptAgent {
         return const {
           'name': 'propose_core_loop_options',
           'description':
-              'Proposes 3 fresh Core Loop Sequence Option Cards (label + 4-6 sequential playable beats).',
+              'Proposes 3 fresh Core Loop Sequence Option Cards (label + sequential playable beats).',
           'parameters': {
             'type': 'OBJECT',
             'required': ['options'],

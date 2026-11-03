@@ -710,10 +710,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         // Brand-new Core Loop Beat added in Stage 1 — create Epic + starter Playable Feature
         final newBeatId =
             'beat_${rel.id}_sync_${i + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-        final featTitle = MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+        final featTitle = ReleasePlannerAgent.disambiguateFeatureTitleFromBeat(
           sBeat.title,
           beatTitle: sBeat.title,
-          beatGoal: sBeat.description,
+          featureGoal: sBeat.description,
           beatIndex: i,
         );
         final newFeatId = 'feat_${newBeatId}_1';

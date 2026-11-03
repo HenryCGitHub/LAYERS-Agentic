@@ -638,24 +638,31 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       ),
                                     ),
                                     const SizedBox(width: 2),
-                                    InkWell(
-                                      key: ValueKey(
-                                        'workbench_remove_feature_btn_${feat.id}',
-                                      ),
-                                      onTap: () => widget.workbench
-                                          .removeLiveFeature(feat.id),
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 5,
-                                          vertical: 2,
+                                    Tooltip(
+                                      message: 'Archive / Pivot Feature',
+                                      child: InkWell(
+                                        key: ValueKey(
+                                          'workbench_remove_feature_btn_${feat.id}',
                                         ),
-                                        child: Text(
-                                          '×',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: textMuted,
+                                        onTap: () => widget.workbench
+                                            .toggleSupersedeFeature(
+                                          feat.id,
+                                          pivotReason:
+                                              'Archived from Feature Header',
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 2,
+                                          ),
+                                          child: Text(
+                                            '⊗',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: textMuted,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -856,7 +863,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     borderRadius: BorderRadius.circular(4),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
+                                        horizontal: 3,
                                         vertical: 3,
                                       ),
                                       child: Text(
@@ -886,7 +893,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     borderRadius: BorderRadius.circular(4),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
+                                        horizontal: 3,
                                         vertical: 3,
                                       ),
                                       child: Text(
@@ -913,13 +920,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     borderRadius: BorderRadius.circular(4),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
+                                        horizontal: 3,
                                         vertical: 3,
                                       ),
                                       child: Text(
                                         '✎',
                                         style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 12,
+                                          fontSize: 11.5,
                                           fontWeight: FontWeight.w700,
                                           color: textSecondary,
                                         ),
@@ -942,19 +949,18 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     borderRadius: BorderRadius.circular(4),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
+                                        horizontal: 3,
                                         vertical: 3,
                                       ),
                                       child: Icon(
                                         Icons.tune_rounded,
-                                        size: 13.5,
+                                        size: 13,
                                         color: textSecondary,
                                       ),
                                     ),
                                   ),
                                 ),
                                 if (!node.isCompleted) ...[
-                                  const SizedBox(width: 2),
                                   Tooltip(
                                     message: 'Complete Feature',
                                     child: InkWell(
@@ -974,13 +980,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       borderRadius: BorderRadius.circular(4),
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 5,
+                                          horizontal: 3,
                                           vertical: 3,
                                         ),
                                         child: Text(
                                           '✓ Done',
                                           style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10.5,
+                                            fontSize: 10,
                                             fontWeight: FontWeight.w600,
                                             color: textSecondary,
                                           ),
@@ -989,9 +995,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   ),
                                 ],
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 2),
                                 stepDropdownTrigger,
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 Text(
                                   '|',
                                   style: GoogleFonts.jetBrainsMono(
@@ -999,7 +1005,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     color: borderBright,
                                   ),
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 2),
                                 InkWell(
                                   onTap: canGoToPreviousStep
                                       ? () => _retreatToPreviousStep(

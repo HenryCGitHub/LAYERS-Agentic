@@ -367,7 +367,7 @@ class ReleasePlannerAgent {
     Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex = const {},
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) {
       return null;
@@ -685,7 +685,7 @@ $progressiveDiagnosticInstructions
 - THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into the exact number of cohesive Playable Features (`"included": true`) needed to complete that Epic end-to-end for ${releaseDoc.title}. Group closely related controls, physics, and feedback into cohesive playable units; split into separate Feature cards inside an Epic whenever they represent distinct mechanics (e.g., planting vs. harvesting, or target spawner vs. weapon fire)!
 - ZERO ARTIFICIAL COUNT LIMITS ON EPICS, FEATURES, OR TASKS: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
-- PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Greybox Arena Layout"`, `"Player Dash"`, `"Enemy Wave Spawner"`, `"Loot Pickup"`, `"Upgrade Terminal"`). NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
+- PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES & NEVER CLONE EPIC TITLE): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Greybox Arena Layout"`, `"Player Dash"`, `"Enemy Wave Spawner"`, `"Loot Pickup"`, `"Upgrade Terminal"`). NEVER name a child Feature identical to its parent Epic (`beat.title`)—each Feature inside an Epic must name the specific playable action, tool, or object inside that Epic. NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
 - MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"moveSpeed: 6.0 m/s"`, `"dashCooldown: 0.8 s"`, `"pickupRadius: 1.5 m"`). NEVER return an empty `"tuningParams": []` array on any feature.
@@ -746,7 +746,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: effectiveModel,
-      thinkingLevel: thinkingLevel == 'LOW' ? 'HIGH' : thinkingLevel,
+      thinkingLevel: thinkingLevel,
       temperature: 0.35,
       functionDeclarations: const [commitReleasePlanTool],
     );
@@ -1057,14 +1057,14 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       for (int fIdx = 0; fIdx < rawFeats.length; fIdx++) {
         final fMap = rawFeats[fIdx];
         if (fMap is! Map) continue;
-        final fTitle = MechanicArchetypeProfile.concreteFeatureTitleForBeat(
-          (fMap['title'] ?? 'Feature ${fIdx + 1}').toString().trim(),
-          beatTitle: bTitle,
-          beatGoal: bGoal,
-          beatIndex: bIdx,
-        );
         final fGoal = (fMap['goal'] ?? '').toString().trim();
         final fDone = (fMap['doneWhen'] ?? '').toString().trim();
+        final fTitle = disambiguateFeatureTitleFromBeat(
+          (fMap['title'] ?? 'Feature ${fIdx + 1}').toString().trim(),
+          beatTitle: bTitle,
+          featureGoal: fGoal.isNotEmpty ? fGoal : bGoal,
+          beatIndex: bIdx,
+        );
 
         final rawLifecycle =
             (fMap['lifecycle'] ?? 'new').toString().toLowerCase().trim();
@@ -1293,6 +1293,213 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
     );
   }
 
+  static final RegExp _beatClauseDelimiterRegex = RegExp(
+    r'\s*(?:,\s*then\s+|;\s+|,\s+and\s+|\s+and\s+|,\s+)\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _clauseWordRegex = RegExp(r'[A-Za-z0-9]+');
+  static const Set<String> _clauseStopWords = <String>{
+    'the',
+    'and',
+    'for',
+    'with',
+    'into',
+    'from',
+    'that',
+    'this',
+    'your',
+    'their',
+    'while',
+    'when',
+    'then',
+    'over',
+    'under',
+    'across',
+    'through',
+    'onto',
+    'upon',
+    'build',
+    'create',
+    'implement',
+    'verify',
+    'greybox',
+    'arena',
+    'test',
+    'scene',
+    'level',
+    'player',
+  };
+
+  static String _titleCaseWord(String word) {
+    if (word.isEmpty) return word;
+    if (word.length == 1) return word.toUpperCase();
+    return '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}';
+  }
+
+  /// Ensures a child Feature title never verbatim-clones its parent Epic (`beatTitle`).
+  /// If `rawTitle` matches `beatTitle`, derives a concrete 2–3 word mechanic title from
+  /// `featureGoal` (or appends a specific playable target/action word if `featureGoal` has no extra tokens).
+  static String disambiguateFeatureTitleFromBeat(
+    String rawTitle, {
+    required String beatTitle,
+    String featureGoal = '',
+    int beatIndex = 0,
+  }) {
+    final cleaned = MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+      rawTitle,
+      beatTitle: beatTitle,
+      beatGoal: featureGoal,
+      beatIndex: beatIndex,
+    );
+    final cleanBeat = beatTitle.trim();
+    if (cleanBeat.isEmpty ||
+        cleaned.toLowerCase() != cleanBeat.toLowerCase()) {
+      return cleaned;
+    }
+    final beatWords = _clauseWordRegex
+        .allMatches(cleanBeat.toLowerCase())
+        .map((m) => m.group(0)!)
+        .toSet();
+    final goalWords = <String>[];
+    for (final m in _clauseWordRegex.allMatches(featureGoal)) {
+      final w = m.group(0)!;
+      final lower = w.toLowerCase();
+      if (lower.length < 3 || _clauseStopWords.contains(lower)) continue;
+      if (beatWords.contains(lower)) continue;
+      if (!goalWords.any((g) => g.toLowerCase() == lower)) {
+        goalWords.add(_titleCaseWord(w));
+      }
+      if (goalWords.length >= 3) break;
+    }
+    if (goalWords.length >= 2) {
+      return MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+        goalWords.take(3).join(' '),
+        beatTitle: beatTitle,
+        beatGoal: featureGoal,
+        beatIndex: beatIndex,
+      );
+    }
+    if (goalWords.length == 1) {
+      final firstBeatWord = _clauseWordRegex.firstMatch(cleanBeat)?.group(0);
+      final prefix = firstBeatWord != null
+          ? _titleCaseWord(firstBeatWord)
+          : cleaned;
+      return '$prefix ${goalWords.first}';
+    }
+    return '$cleaned Target';
+  }
+
+  /// Dynamically decomposes a Beat's description (`rawDescPart`) into `1..N` distinct
+  /// `ProposedFeatureBlueprint` items based on the action clauses present in the Beat
+  /// (never hardcoding a feature count and never cloning `beatTitle` verbatim).
+  static List<ProposedFeatureBlueprint> decomposeBeatIntoDynamicFeatures({
+    required int beatNumber,
+    required int beatIndex,
+    required String beatTitle,
+    required String rawBeatLine,
+    required String rawDescPart,
+    required String versionTag,
+  }) {
+    final candidateClauses = <String>[];
+    if (rawDescPart.trim().isNotEmpty &&
+        rawDescPart.trim().toLowerCase() != beatTitle.trim().toLowerCase()) {
+      for (final rawClause
+          in rawDescPart.split(_beatClauseDelimiterRegex)) {
+        final c = rawClause.replaceAll(RegExp(r'\.+$'), '').trim();
+        final wordCount = _clauseWordRegex.allMatches(c).length;
+        if (wordCount >= 2) {
+          candidateClauses.add(c);
+        }
+      }
+    }
+    if (candidateClauses.isEmpty) {
+      candidateClauses.add(
+        rawDescPart.trim().isNotEmpty ? rawDescPart.trim() : beatTitle,
+      );
+    }
+
+    final features = <ProposedFeatureBlueprint>[];
+    final usedTitlesLower = <String>{beatTitle.trim().toLowerCase()};
+
+    for (int cIdx = 0; cIdx < candidateClauses.length; cIdx++) {
+      final clause = candidateClauses[cIdx].trim();
+      final clauseWords = <String>[];
+      for (final m in _clauseWordRegex.allMatches(clause)) {
+        final w = m.group(0)!;
+        final lower = w.toLowerCase();
+        if (lower.length < 3 || _clauseStopWords.contains(lower)) continue;
+        if (!clauseWords.any((cw) => cw.toLowerCase() == lower)) {
+          clauseWords.add(_titleCaseWord(w));
+        }
+        if (clauseWords.length >= 3) break;
+      }
+      final rawCandidateTitle = clauseWords.length >= 2
+          ? clauseWords.take(3).join(' ')
+          : beatTitle;
+      var fTitle = disambiguateFeatureTitleFromBeat(
+        rawCandidateTitle,
+        beatTitle: beatTitle,
+        featureGoal: clause,
+        beatIndex: beatIndex,
+      );
+      if (usedTitlesLower.contains(fTitle.toLowerCase())) {
+        fTitle = '$fTitle ${cIdx + 1}';
+      }
+      usedTitlesLower.add(fTitle.toLowerCase());
+
+      final fGoal = clause.isNotEmpty
+          ? (clause.endsWith('.') ? clause : '$clause.')
+          : 'Build $fTitle in the greybox arena.';
+      final tuning = _defaultTuningParamsForFeature(fTitle, fGoal);
+      final guards = <String>[
+        '[STATE GUARD] Prevent duplicate trigger while $fTitle is active',
+      ];
+      final tasks = normalizeFoundationFirstTasks(
+        [
+          (beatIndex == 0 && cIdx == 0)
+              ? '$fTitle Body & Collision (2h)'
+              : '$fTitle Prop & Collision (2h)',
+          '$fTitle Action & Math (1h)',
+          '$fTitle Cue & Boundary Clamp (1h)',
+        ],
+        featureTitle: fTitle,
+        beatTitle: beatTitle,
+        isFirstFeatureOfRelease: beatIndex == 0 && cIdx == 0,
+      );
+
+      features.add(
+        ProposedFeatureBlueprint(
+          id: 'feat_${beatNumber}_${cIdx + 1}',
+          title: fTitle,
+          goal: fGoal,
+          doneWhen:
+              'Playtester triggers $fTitle and verifies response on screen.',
+          estimatedHours: 4,
+          included: true,
+          lifecycle: FeatureLifecycleStatus.newFeature,
+          originVersion: versionTag,
+          inScope: [clause.isNotEmpty ? clause : rawBeatLine],
+          outOfScope: const [],
+          tuningParams: tuning,
+          edgeCases: guards,
+          checkpoints: [
+            ProposedCheckpointBlueprint(
+              title: '$fTitle Core',
+              playtestCriteria:
+                  'Trigger $fTitle in playtest -> verify immediate response on screen',
+              releaseVersion: versionTag,
+              tasks: tasks,
+              coveredScope: [clause.isNotEmpty ? clause : rawBeatLine],
+              tuningParams: tuning,
+              edgeCases: guards,
+            ),
+          ],
+        ),
+      );
+    }
+    return features;
+  }
+
   /// Builds an immediate, deterministic `v0.1` `ReleaseBlueprint` directly from the approved
   /// Stage 1 `06 · Core Loop` Beats (`projectDoc.sections`) as a safety net when a live network
   /// timeout occurs during `v0.1` planning, ensuring `Approve & Build v0.1 →` never hangs or
@@ -1327,7 +1534,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           : rawBeat;
       final rawDescPart = colonIdx > 0 && colonIdx + 1 < rawBeat.length
           ? rawBeat.substring(colonIdx + 1).trim()
-          : rawBeat;
+          : '';
 
       final bTitle = MechanicArchetypeProfile.concreteBeatDisplayTitle(
         rawTitlePart,
@@ -1336,21 +1543,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       final bGoal = rawDescPart.isNotEmpty
           ? (rawDescPart.endsWith('.') ? rawDescPart : '$rawDescPart.')
           : 'Build $bTitle in the greybox arena.';
-      final fTitle = MechanicArchetypeProfile.concreteFeatureTitleForBeat(
-        rawTitlePart,
-        beatTitle: bTitle,
-        beatGoal: bGoal,
+      final dynamicFeatures = decomposeBeatIntoDynamicFeatures(
+        beatNumber: bIdx + 1,
         beatIndex: bIdx,
-      );
-      final tasks = normalizeFoundationFirstTasks(
-        [
-          bIdx == 0 ? 'Character Setup (2h)' : 'Actor Setup (2h)',
-          'Input & State Logic (1h)',
-          'Physics & State Guard (1h)',
-        ],
-        featureTitle: fTitle,
         beatTitle: bTitle,
-        isFirstFeatureOfRelease: bIdx == 0,
+        rawBeatLine: rawBeat,
+        rawDescPart: rawDescPart,
+        versionTag: versionTag,
       );
 
       beats.add(
@@ -1359,44 +1558,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
           title: bTitle,
           goal: bGoal,
           doneWhen: 'Playtester verifies $bTitle in the test arena.',
-          features: [
-            ProposedFeatureBlueprint(
-              id: 'feat_${bIdx + 1}_1',
-              title: fTitle,
-              goal: bGoal,
-              doneWhen: 'Playtester triggers $fTitle and verifies response on screen.',
-              estimatedHours: 4,
-              included: true,
-              lifecycle: FeatureLifecycleStatus.newFeature,
-              originVersion: versionTag,
-              inScope: [rawBeat],
-              outOfScope: const [],
-              tuningParams: const [
-                'primarySpeed: 240.0 units/s',
-                'responseCooldownSec: 0.25 s',
-              ],
-              edgeCases: const [
-                '[STATE GUARD] Prevent duplicate trigger while action is active',
-              ],
-              checkpoints: [
-                ProposedCheckpointBlueprint(
-                  title: '$fTitle Core',
-                  playtestCriteria:
-                      'Trigger $fTitle in playtest -> verify immediate response on screen',
-                  releaseVersion: versionTag,
-                  tasks: tasks,
-                  coveredScope: [rawBeat],
-                  tuningParams: const [
-                    'primarySpeed: 240.0 units/s',
-                    'responseCooldownSec: 0.25 s',
-                  ],
-                  edgeCases: const [
-                    '[STATE GUARD] Prevent duplicate trigger while action is active',
-                  ],
-                ),
-              ],
-            ),
-          ],
+          features: dynamicFeatures,
         ),
       );
     }
@@ -1683,12 +1845,13 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
             final bGoal = rawDescPart.isNotEmpty
                 ? (rawDescPart.endsWith('.') ? rawDescPart : '$rawDescPart.')
                 : 'Build $bTitle in the greybox arena.';
-            final fTitle =
-                MechanicArchetypeProfile.concreteFeatureTitleForBeat(
-              rawTitlePart,
-              beatTitle: bTitle,
-              beatGoal: bGoal,
+            final dynamicFeatures = decomposeBeatIntoDynamicFeatures(
+              beatNumber: nextBeatNum,
               beatIndex: fullBeats.length,
+              beatTitle: bTitle,
+              rawBeatLine: rawCore,
+              rawDescPart: rawDescPart,
+              versionTag: versionTag,
             );
             fullBeats.add(
               ProposedBeatBlueprint(
@@ -1696,44 +1859,7 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
                 title: bTitle,
                 goal: bGoal,
                 doneWhen: 'Playtester verifies $bTitle in the test arena.',
-                features: [
-                  ProposedFeatureBlueprint(
-                    id: 'feat_${nextBeatNum}_1',
-                    title: fTitle,
-                    goal: bGoal,
-                    doneWhen:
-                        'Playtester triggers $fTitle and verifies response on screen.',
-                    estimatedHours: 4,
-                    included: true,
-                    lifecycle: FeatureLifecycleStatus.newFeature,
-                    originVersion: versionTag,
-                    inScope: [rawCore],
-                    outOfScope: const [],
-                    tuningParams: _defaultTuningParamsForFeature(fTitle, bGoal),
-                    edgeCases: const [
-                      '[STATE GUARD] Prevent duplicate trigger while action is active',
-                    ],
-                    checkpoints: [
-                      ProposedCheckpointBlueprint(
-                        title: '$fTitle Core',
-                        playtestCriteria:
-                            'Trigger $fTitle in playtest -> verify immediate response on screen',
-                        releaseVersion: versionTag,
-                        tasks: [
-                          'Actor Setup (2h)',
-                          'State Logic (1h)',
-                          'State Guard (1h)',
-                        ],
-                        coveredScope: [rawCore],
-                        tuningParams:
-                            _defaultTuningParamsForFeature(fTitle, bGoal),
-                        edgeCases: const [
-                          '[STATE GUARD] Prevent duplicate trigger while action is active',
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
+                features: dynamicFeatures,
               ),
             );
           }

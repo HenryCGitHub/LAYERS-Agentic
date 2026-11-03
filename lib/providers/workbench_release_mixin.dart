@@ -1352,6 +1352,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
             planned.releaseTitle != relDoc.title) {
           relDoc.title = planned.releaseTitle;
         }
+        relDoc.sections.remove('used_baseline_fallback');
         relDoc.sections['versionTag'] = verTag;
         _syncCurrentPhaseFromRelease(relDoc);
         if (!isFirstPrototypeRelease) {
@@ -1381,6 +1382,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
               fallbackProgressive,
               _currentPhase,
             );
+            relDoc.sections['used_baseline_fallback'] = 'true';
             relDoc.sections['release_blueprint_json'] =
                 jsonEncode(fallbackProgressive.toJson());
             _persistDocument(relDoc);
@@ -1395,6 +1397,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
             releaseDoc: relDoc,
           );
           if (fallbackInitial != null) {
+            relDoc.sections['used_baseline_fallback'] = 'true';
             relDoc.sections['versionTag'] = verTag;
             relDoc.sections['release_blueprint_json'] =
                 jsonEncode(fallbackInitial.toJson());
@@ -2790,6 +2793,11 @@ Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through
     } finally {
       _synthesizingFeatureIds.remove(featureId);
       notifyListeners();
+      if (_synthesizingFeatureIds.isEmpty &&
+          _pendingFeatureStepQueue.isNotEmpty &&
+          !_isDrainingStepQueue) {
+        _prefetchRemainingFeatureStepsInBackground(null, _stepQueueGeneration);
+      }
     }
   }
 
@@ -2994,6 +3002,11 @@ Return ONLY a JSON object with this schema:
     } finally {
       _synthesizingFeatureIds.remove(featureId);
       notifyListeners();
+      if (_synthesizingFeatureIds.isEmpty &&
+          _pendingFeatureStepQueue.isNotEmpty &&
+          !_isDrainingStepQueue) {
+        _prefetchRemainingFeatureStepsInBackground(null, _stepQueueGeneration);
+      }
     }
   }
 
@@ -3070,6 +3083,18 @@ Return ONLY a JSON object with this schema:
           }
         }
       }
+      final usedBaselineFallback =
+          relDoc.sections.remove('used_baseline_fallback') == 'true';
+      if (usedBaselineFallback) {
+        for (final b in activeReleaseBeats) {
+          for (final f in featuresForBeat(b.id)) {
+            if (isFeatureActiveInRelease(f)) {
+              f.sections['needs_ai_enrichment'] = 'true';
+              _persistDocument(f);
+            }
+          }
+        }
+      }
       relDoc.sections['synced_engine_label'] = _activeEngineLabel;
       relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
       _persistDocument(relDoc);
@@ -3141,22 +3166,37 @@ Return ONLY a JSON object with this schema:
         );
       notifyListeners();
     }
+    if (_isDrainingStepQueue) return;
+    _isDrainingStepQueue = true;
     final startProjectId = _activeProjectId;
     final startReleaseId = _activeReleaseId;
-    while (_pendingFeatureStepQueue.isNotEmpty) {
-      if (_stepQueueGeneration != startGen ||
-          _activeProjectId != startProjectId ||
-          _activeReleaseId != startReleaseId) {
-        if (_stepQueueGeneration == startGen) {
-          _pendingFeatureStepQueue.clear();
-          notifyListeners();
+    try {
+      while (_pendingFeatureStepQueue.isNotEmpty) {
+        if (_stepQueueGeneration != startGen ||
+            _activeProjectId != startProjectId ||
+            _activeReleaseId != startReleaseId) {
+          if (_stepQueueGeneration == startGen) {
+            _pendingFeatureStepQueue.clear();
+            notifyListeners();
+          }
+          break;
         }
-        break;
+        final fId = _pendingFeatureStepQueue.removeAt(0);
+        notifyListeners();
+        final fDoc = documents[fId];
+        if (fDoc == null) continue;
+        if (fDoc.sections.remove('needs_ai_enrichment') == 'true') {
+          final parentBeatTitle = (fDoc.parentId != null
+                  ? documents[fDoc.parentId!]?.title
+                  : null) ??
+              'Core Loop Epic';
+          await _enrichLiveFeatureWithAi(fId, parentBeatTitle);
+        } else {
+          await synthesizeFeatureHowToStepsWithAi(fId);
+        }
       }
-      final fId = _pendingFeatureStepQueue.removeAt(0);
-      notifyListeners();
-      if (!documents.containsKey(fId)) continue;
-      await synthesizeFeatureHowToStepsWithAi(fId);
+    } finally {
+      _isDrainingStepQueue = false;
     }
   }
 
@@ -4093,6 +4133,11 @@ Return ONLY valid JSON:
     } finally {
       _synthesizingFeatureIds.remove(featureId);
       notifyListeners();
+      if (_synthesizingFeatureIds.isEmpty &&
+          _pendingFeatureStepQueue.isNotEmpty &&
+          !_isDrainingStepQueue) {
+        _prefetchRemainingFeatureStepsInBackground(null, _stepQueueGeneration);
+      }
     }
   }
 
@@ -4938,6 +4983,15 @@ Return ONLY valid JSON:
     if (triggerAiSynthesis &&
         (GeminiAgentClient.hasKey(_apiKey) ||
             GeminiAgentClient.testMockResponder != null)) {
+      if (_synthesizingFeatureIds.contains(featureId)) {
+        return;
+      }
+      if (_synthesizingFeatureIds.isNotEmpty) {
+        _pendingFeatureStepQueue.remove(featureId);
+        _pendingFeatureStepQueue.insert(0, featureId);
+        notifyListeners();
+        return;
+      }
       if (feat.sections.remove('needs_ai_enrichment') == 'true') {
         final parentBeatTitle = (feat.parentId != null
                 ? documents[feat.parentId!]?.title

@@ -146,6 +146,7 @@ class WorkbenchProvider extends ChangeNotifier {
   final Set<String> _synthesizingFeatureIds = <String>{};
   final List<String> _pendingFeatureStepQueue = <String>[];
   int _stepQueueGeneration = 0;
+  bool _isDrainingStepQueue = false;
   List<String> get pendingFeatureStepQueue =>
       List.unmodifiable(_pendingFeatureStepQueue);
   bool _isPrewarmingReleaseBlueprint = false;

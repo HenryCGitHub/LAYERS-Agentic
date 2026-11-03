@@ -861,7 +861,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Building remaining features (${widget.workbench.backgroundStepSynthesisRemainingCount} left)...',
+                    '✦ Generating engine steps (${widget.workbench.backgroundStepSynthesisRemainingCount} left)',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.jetBrainsMono(
@@ -1178,7 +1178,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         child: Text(
                           isRelComplete
                               ? '+ Plan Next Release ($nextVerLabel)'
-                              : '🔒 Complete $activeVer ($relProgress%) → $nextVerLabel',
+                              : '🔒 $activeVer ($relProgress%) → $nextVerLabel',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
@@ -1248,7 +1248,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     );
 
     return Opacity(
-      opacity: shouldDim ? 0.45 : 1.0,
+      opacity: shouldDim ? 0.78 : 1.0,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
         decoration: BoxDecoration(
@@ -1433,6 +1433,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       ),
                       const SizedBox(width: 4),
                     ] else if (isSelected &&
+                        !widget.workbench
+                            .isSynthesizingFeatureSteps(feat.id) &&
                         _activeStage2InlineEditKey !=
                             'rename_rail_feat_${feat.id}') ...[
                       InkWell(
@@ -1482,8 +1484,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       ),
                       const SizedBox(width: 4),
                     ],
-                    if (widget.workbench.isSynthesizingFeatureSteps(feat.id) ||
-                        widget.workbench.isFeatureQueuedForSteps(feat.id)) ...[
+                    if (widget.workbench.isSynthesizingFeatureSteps(feat.id)) ...[
                       Padding(
                         padding: const EdgeInsets.only(top: 2, right: 4),
                         child: Text(

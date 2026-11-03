@@ -51,7 +51,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
   bool _unrealCppMode = false;
-  double _outlinerWidth = 232.0;
+  double _outlinerWidth = 268.0;
   bool _isHalfScreenOutlinerOpen = false;
   bool _isProgressiveModalOpen = false;
   String? _progressivePrevReleaseId;
