@@ -254,6 +254,115 @@ class ReleasePlannerAgent {
     },
   };
 
+  /// Native Gemini Tool Declaration for Phase 1 of Section-by-Section Workbench Build (`commit_release_system_epics`).
+  /// Synthesizes ONLY the System Epics (`E01`..`EN` — major gameplay systems / bodies of work) needed to accomplish the Core Loop.
+  static const Map<String, dynamic> commitReleaseSystemEpicsTool = {
+    'name': 'commit_release_system_epics',
+    'description':
+        'Commits the ordered System Epics (E01..EN) representing the major gameplay systems, mechanics, and engineering bodies of work required to make the Concept Blueprint Core Loop work (never word-for-word loop beat copies).',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['releaseTitle', 'goal', 'doneWhen', 'epics'],
+      'properties': {
+        'releaseTitle': {'type': 'STRING'},
+        'goal': {'type': 'STRING'},
+        'doneWhen': {'type': 'STRING'},
+        'epics': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['id', 'title', 'goal', 'doneWhen'],
+            'properties': {
+              'id': {'type': 'STRING'},
+              'title': {
+                'type': 'STRING',
+                'description':
+                    '2-4 plain game-dev words naming the gameplay system or body of engineering work (never copy the 06 Core Loop beat title word-for-word).',
+              },
+              'goal': {'type': 'STRING'},
+              'doneWhen': {'type': 'STRING'},
+            },
+          },
+        },
+      },
+    },
+  };
+
+  /// Native Gemini Tool Declaration for Phase 2 of Section-by-Section Workbench Build (`commit_epic_features`).
+  /// Synthesizes the playable Features (and their tasks, tuning parameters, and guards) for a SINGLE System Epic.
+  static const Map<String, dynamic> commitEpicFeaturesTool = {
+    'name': 'commit_epic_features',
+    'description':
+        'Commits the ordered playable Features (1..M) needed to build a single System Epic in engineering build-dependency order.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['features'],
+      'properties': {
+        'features': {
+          'type': 'ARRAY',
+          'items': {
+            'type': 'OBJECT',
+            'required': [
+              'title',
+              'goal',
+              'doneWhen',
+              'estimatedHours',
+              'inScope',
+              'tuningParams',
+              'edgeCases',
+              'checkpointTitle',
+              'playtestCriteria',
+              'tasks',
+            ],
+            'properties': {
+              'title': {
+                'type': 'STRING',
+                'description':
+                    '2-3 plain action/object words (never identical to the parent Epic title).',
+              },
+              'goal': {'type': 'STRING'},
+              'doneWhen': {'type': 'STRING'},
+              'estimatedHours': {'type': 'INTEGER'},
+              'primarySharedScriptOrScene': {'type': 'STRING'},
+              'inScope': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+              'tuningParams': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+              'edgeCases': {
+                'type': 'ARRAY',
+                'items': {'type': 'STRING'},
+              },
+              'checkpointTitle': {'type': 'STRING'},
+              'playtestCriteria': {'type': 'STRING'},
+              'tasks': {
+                'type': 'ARRAY',
+                'items': {
+                  'type': 'OBJECT',
+                  'required': ['role', 'title'],
+                  'properties': {
+                    'role': {
+                      'type': 'STRING',
+                      'enum': [
+                        'entity_and_collision_foundation',
+                        'core_action_and_math',
+                        'feedback_and_boundary_guard',
+                      ],
+                    },
+                    'title': {'type': 'STRING'},
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
   /// Native Gemini Tool Declaration for `sendReleasePlanChatTurn` (`mutate_release_plan`).
   static const Map<String, dynamic> mutateReleasePlanTool = {
     'name': 'mutate_release_plan',
@@ -772,6 +881,402 @@ Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and 
       deferredByBeatIndex: deferredByBeatIndex,
       projectExclusions: projectExclusions,
       allCoreLoopItems: coreLoopItems,
+    );
+  }
+
+  /// Phase 1 of Section-by-Section Workbench Build:
+  /// Determines the major **Gameplay Systems, Mechanics, and Bodies of Engineering Work (`E01`..`EN`)**
+  /// needed to make the Concept Blueprint's `06 Core Loop` work (never copying loop beats word-for-word).
+  static Future<ReleaseBlueprint?> planReleaseSystemEpics({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'HIGH',
+  }) async {
+    if (!GeminiAgentClient.hasKey(apiKey)) return null;
+    final preset = releaseDoc.releaseScope;
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
+    final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
+    final projectExclusions = SectionTextUtils.resolveExclusions(
+      projectDoc.sections,
+      splitSingleSentence: false,
+    );
+    final gameSpecText = (projectDoc.sections['game_spec'] ??
+            projectDoc.sections['gameSpec'] ??
+            '')
+        .trim();
+    final techSpecText = (projectDoc.sections['tech_spec'] ??
+            projectDoc.sections['techSpec'] ??
+            '')
+        .trim();
+    final pillarsText = (projectDoc.sections['design_pillars'] ??
+            projectDoc.sections['designPillars'] ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final tradeOffsText = (projectDoc.sections['trade_offs'] ??
+            projectDoc.sections['tradeOffs'] ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final projectGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
+    final projectDoneWhen =
+        SectionTextUtils.resolveDoneWhen(projectDoc.sections);
+    final loopBeatTitlesLower = <String>{
+      for (final item in coreLoopItems)
+        item.split(':').first.trim().toLowerCase(),
+    };
+    final numberedCoreLoopSummary = coreLoopItems.isNotEmpty
+        ? [
+            for (int i = 0; i < coreLoopItems.length; i++)
+              '  Loop Step ${(i + 1).toString().padLeft(2, '0')}: ${coreLoopItems[i]}',
+          ].join('\n')
+        : '  (Decompose the project goal into engineering systems)';
+
+    final effectiveModel = modelName.contains('argon')
+        ? 'gemini-flash-latest'
+        : modelName;
+    final prompt = '''
+You are the Principal Game Architect (`$effectiveModel`) planning the top-level **Engineering Systems / Mechanics / Epics (`E01`..`EN`)** for "${projectDoc.title}" ($versionTag).
+Concept Blueprint (01–08):
+- 01 Goal: "$projectGoal"
+- 02 Game Spec: $gameSpecText
+- 03 Tech Spec: $techSpecText
+- 04 Design Pillars: $pillarsText
+- 05 Trade-Offs: $tradeOffsText
+- 06 Player Core Loop (What the player experiences):
+$numberedCoreLoopSummary
+- 07 Out of Scope: ${projectExclusions.join(' | ')}
+- 08 Done When: "$projectDoneWhen"
+
+${GeminiAgentClient.compactStyleRules}
+- EPICS ARE SYSTEMS / MECHANICS / BIG BODIES OF WORK (NEVER COPY LOOP BEATS WORD-FOR-WORD):
+  * `06 Core Loop` describes chronological player actions, whereas Workbench Epics (`E01`..`EN`) MUST be the **underlying gameplay systems, mechanics, and bodies of engineering work** needed to make that loop work in the engine!
+  * NEVER copy the `06 Core Loop` step headers (${loopBeatTitlesLower.map((t) => '"$t"').join(', ')}) word-for-word as Epic titles.
+  * Instead, name the concrete engineering/gameplay systems (`2–4` plain game-dev words each, e.g., `"Arena Grid & Traversal"`, `"Hydroponic Pipe Network"`, `"Crop Growth & Harvest"`, `"Cargo Market & Upgrades"`) ordered by engineering build dependency:
+    1. `E01` MUST be the Greybox Space/Level/Grid & Primary Player/Tool Control system so the player can move and interact in the world first.
+    2. Middle Epics (`E02`..`E_{N-1}`) cover the core simulation, target/hazard entities, resource processing, or combat mechanics needed to drive the loop.
+    3. Final Epic (`EN`) covers the loop payoff, economy/upgrade terminal, and next-cycle reset so the loop connects end-to-end.
+- ZERO ARTIFICIAL COUNT LIMITS: Create the exact number of System Epics (`epics`) that "${projectDoc.title}" genuinely needs to accomplish the full `06 Core Loop` and `08 Done When`.
+
+Call `commit_release_system_epics` (or return ONLY valid JSON):
+{
+  "releaseTitle": "$versionTag: ${projectDoc.title} Core Systems",
+  "goal": "$projectGoal",
+  "doneWhen": "$projectDoneWhen",
+  "epics": [
+    {
+      "id": "beat_1",
+      "title": "2-4 Word System Title (NOT a verbatim loop beat title)",
+      "goal": "1-sentence system engineering goal",
+      "doneWhen": "1-sentence observable playtest verification for this system"
+    }
+  ]
+}''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: effectiveModel,
+      thinkingLevel: thinkingLevel,
+      temperature: 0.35,
+      functionDeclarations: const [commitReleaseSystemEpicsTool],
+    );
+    final rawEpics = json?['epics'] ?? json?['beats'];
+    if (rawEpics is! List || rawEpics.isEmpty) return null;
+
+    final beats = <ProposedBeatBlueprint>[];
+    for (int i = 0; i < rawEpics.length; i++) {
+      final item = rawEpics[i];
+      if (item is! Map) continue;
+      var rawTitle = (item['title'] ?? '').toString().trim();
+      if (rawTitle.isEmpty) continue;
+      if (loopBeatTitlesLower.contains(rawTitle.toLowerCase())) {
+        rawTitle = i == 0
+            ? '$rawTitle & Control'
+            : '$rawTitle Mechanics';
+      }
+      final bTitle = MechanicArchetypeProfile.concreteBeatDisplayTitle(
+        rawTitle,
+        beatIndex: i,
+      );
+      final bGoal = (item['goal'] ?? '').toString().trim();
+      final bDone = (item['doneWhen'] ?? '').toString().trim();
+      beats.add(
+        ProposedBeatBlueprint(
+          id: 'beat_${i + 1}',
+          title: bTitle,
+          goal: bGoal.isNotEmpty
+              ? bGoal
+              : 'Build the $bTitle gameplay system in the greybox arena.',
+          doneWhen: bDone.isNotEmpty
+              ? bDone
+              : 'Playtester verifies $bTitle in Play mode.',
+          features: <ProposedFeatureBlueprint>[],
+        ),
+      );
+    }
+    if (beats.isEmpty) return null;
+
+    return ReleaseBlueprint(
+      releaseDocId: releaseDoc.id,
+      releaseTitle:
+          (json?['releaseTitle'] ?? releaseDoc.title).toString().trim(),
+      releaseVersionTag: versionTag,
+      preset: preset,
+      goal: (json?['goal'] ?? projectGoal).toString().trim(),
+      doneWhen: (json?['doneWhen'] ?? projectDoneWhen).toString().trim(),
+      questions: const <AgentQuestion>[],
+      beats: beats,
+      explicitExclusions: projectExclusions,
+      lastAgentReply:
+          'Architected ${beats.length} System Epics for ${projectDoc.title}.',
+    );
+  }
+
+  /// Phase 2 of Section-by-Section Workbench Build:
+  /// Determines the `1..M` playable Features (plus tasks, tuning parameters, and edge-case guards)
+  /// needed for a SINGLE System Epic (`epicBlueprint`) in engineering build-dependency order.
+  static Future<List<ProposedFeatureBlueprint>> planFeaturesForSingleEpic({
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    required ProposedBeatBlueprint epicBlueprint,
+    required int epicIndex,
+    required List<ProposedBeatBlueprint> allEpics,
+    required List<String> alreadyPlannedFeatures,
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'HIGH',
+  }) async {
+    final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
+    final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
+        ? explicitVerTag
+        : extractReleaseVersionTag(releaseDoc.title);
+    final coreLoopItems = SectionTextUtils.resolveInScope(projectDoc.sections);
+    final projectExclusions = SectionTextUtils.resolveExclusions(
+      projectDoc.sections,
+      splitSingleSentence: false,
+    );
+    final gameSpecText = (projectDoc.sections['game_spec'] ??
+            projectDoc.sections['gameSpec'] ??
+            '')
+        .trim();
+    final techSpecText = (projectDoc.sections['tech_spec'] ??
+            projectDoc.sections['techSpec'] ??
+            '')
+        .trim();
+    final pillarsText = (projectDoc.sections['design_pillars'] ??
+            projectDoc.sections['designPillars'] ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final tradeOffsText = (projectDoc.sections['trade_offs'] ??
+            projectDoc.sections['tradeOffs'] ??
+            '')
+        .replaceAll('\n', ' | ')
+        .trim();
+    final projectGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
+    final epicNum = (epicIndex + 1).toString().padLeft(2, '0');
+    final allEpicsOverview = [
+      for (int i = 0; i < allEpics.length; i++)
+        'E${(i + 1).toString().padLeft(2, '0')} · ${allEpics[i].title}: ${allEpics[i].goal}',
+    ].join('\n');
+
+    final effectiveModel = modelName.contains('argon')
+        ? 'gemini-flash-latest'
+        : modelName;
+    final prompt = '''
+You are the Systems Designer (`$effectiveModel`) planning the playable **Features (`1..M`)** inside **Epic E$epicNum · ${epicBlueprint.title}** for "${projectDoc.title}" ($versionTag).
+Project Goal: "$projectGoal"
+Game Spec: $gameSpecText
+Tech Spec: $techSpecText
+Design Pillars: $pillarsText
+Trade-Offs: $tradeOffsText
+Core Loop Context: ${coreLoopItems.join(' -> ')}
+Out of Scope (DO NOT BUILD): ${projectExclusions.join(' | ')}
+
+All Release System Epics (Stay strictly inside E$epicNum's responsibility):
+$allEpicsOverview
+${alreadyPlannedFeatures.isNotEmpty ? 'Already Planned in Earlier Epics (DO NOT DUPLICATE): ${alreadyPlannedFeatures.join(', ')}' : ''}
+
+TARGET EPIC TO BREAK DOWN INTO PLAYABLE FEATURES:
+- Epic E$epicNum: "${epicBlueprint.title}"
+- System Goal: "${epicBlueprint.goal}"
+- System Done When: "${epicBlueprint.doneWhen}"
+
+${GeminiAgentClient.compactStyleRules}
+- DETERMINE THE PLAYABLE FEATURES NEEDED FOR E$epicNum:
+  * Break E$epicNum ("${epicBlueprint.title}") into the exact number of cohesive, singular-focused Playable Features (`1..M`) needed to build this system end-to-end.
+  * NEVER name a Feature identical to the Epic title ("${epicBlueprint.title}"). Each Feature must name a specific playable mechanic, tool, or interactive object inside E$epicNum (`2–3` plain game-dev words, e.g., `"Greybox Dome Floor"`, `"Player Walk & Aim"`, `"Laser Debris Cutter"`).
+  * Order Features by strict **Engineering Build Dependency**:
+    ${epicIndex == 0 ? '1. Feature #1 in E01 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE Player/Tool movement at Feature #2.' : '1. Place any target entity, container, or spawner BEFORE the tool, tether, projectile, or UI that acts on it.'}
+    2. Place the base playable action BEFORE any cooldown, pressure lock, or boundary gate that restricts it.
+- MANDATORY TUNING & GUARDS ON EVERY FEATURE:
+  * Include 2–3 concrete `"paramName: numericValue unit"` entries in `tuningParams` and 1–2 `[TAG]` guard rules in `edgeCases`.
+  * Include foundation-first `tasks` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
+
+Call `commit_epic_features` (or return ONLY valid JSON):
+{
+  "features": [
+    {
+      "title": "2-3 Word Feature Title",
+      "goal": "Build ... (1 plain sentence)",
+      "doneWhen": "Playtester verifies ... on screen",
+      "estimatedHours": 4,
+      "primarySharedScriptOrScene": "SharedScriptOrSceneName",
+      "inScope": ["Deliverable 1", "Deliverable 2"],
+      "tuningParams": ["paramOne: 5.0 m/s", "paramTwo: 1.2 s"],
+      "edgeCases": ["[COLLISION] Prevent clipping through boundary walls"],
+      "checkpointTitle": "2-4 Word Checkpoint Title",
+      "playtestCriteria": "Action -> observable result on screen",
+      "tasks": [
+        {"role": "entity_and_collision_foundation", "title": "Body & Collision (2h)"},
+        {"role": "core_action_and_math", "title": "Velocity & Aim Math (1h)"},
+        {"role": "feedback_and_boundary_guard", "title": "Hit Flash & Clamp (1h)"}
+      ]
+    }
+  ]
+}''';
+
+    final json = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: effectiveModel,
+      thinkingLevel: thinkingLevel,
+      temperature: 0.35,
+      functionDeclarations: const [commitEpicFeaturesTool],
+    );
+    final rawFeatures = json?['features'];
+    if (rawFeatures is List && rawFeatures.isNotEmpty) {
+      final parsedFeatures = <ProposedFeatureBlueprint>[];
+      final usedTitlesLower = <String>{
+        epicBlueprint.title.trim().toLowerCase(),
+        for (final prev in alreadyPlannedFeatures) prev.trim().toLowerCase(),
+      };
+      for (int fIdx = 0; fIdx < rawFeatures.length; fIdx++) {
+        final fMap = rawFeatures[fIdx];
+        if (fMap is! Map) continue;
+        final rawTitle = (fMap['title'] ?? '').toString().trim();
+        if (rawTitle.isEmpty) continue;
+        final fGoal = (fMap['goal'] ?? '').toString().trim();
+        var cleanTitle = disambiguateFeatureTitleFromBeat(
+          rawTitle,
+          beatTitle: epicBlueprint.title,
+          featureGoal: fGoal,
+          beatIndex: epicIndex,
+        );
+        if (usedTitlesLower.contains(cleanTitle.toLowerCase())) {
+          cleanTitle = '$cleanTitle ${fIdx + 1}';
+        }
+        usedTitlesLower.add(cleanTitle.toLowerCase());
+
+        final fDone = (fMap['doneWhen'] ?? '').toString().trim();
+        final estHours =
+            (int.tryParse(fMap['estimatedHours']?.toString() ?? '') ?? 4)
+                .clamp(2, 16);
+        final primaryAsset =
+            (fMap['primarySharedScriptOrScene'] ?? '').toString().trim();
+        final inScope = (fMap['inScope'] is List)
+            ? (fMap['inScope'] as List)
+                .map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList()
+            : <String>[fGoal.isNotEmpty ? fGoal : cleanTitle];
+        var tuning = (fMap['tuningParams'] is List)
+            ? (fMap['tuningParams'] as List)
+                .map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList()
+            : <String>[];
+        if (tuning.isEmpty) {
+          tuning = _defaultTuningParamsForFeature(cleanTitle, fGoal);
+        }
+        var guards = (fMap['edgeCases'] is List)
+            ? (fMap['edgeCases'] as List)
+                .map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList()
+            : <String>[];
+        if (guards.isEmpty) {
+          guards = <String>[
+            '[STATE GUARD] Prevent invalid state transition on $cleanTitle',
+          ];
+        }
+        final cpTitle =
+            (fMap['checkpointTitle'] ?? '$cleanTitle Core').toString().trim();
+        final cpCriteria = (fMap['playtestCriteria'] ??
+                (fDone.isNotEmpty
+                    ? fDone
+                    : 'Trigger $cleanTitle in Play mode -> verify immediate response on screen'))
+            .toString()
+            .trim();
+        final rawTaskList = extractCheckpointTasksFromMap(fMap);
+        final tasks = normalizeFoundationFirstTasks(
+          rawTaskList.isNotEmpty
+              ? rawTaskList
+              : <String>[
+                  '$cleanTitle Body & Collision (2h)',
+                  '$cleanTitle Action & Math (1h)',
+                  '$cleanTitle Cue & Clamp (1h)',
+                ],
+          featureTitle: cleanTitle,
+          beatTitle: epicBlueprint.title,
+          isFirstFeatureOfRelease: epicIndex == 0 && fIdx == 0,
+        );
+
+        parsedFeatures.add(
+          ProposedFeatureBlueprint(
+            id: 'feat_${epicIndex + 1}_${fIdx + 1}',
+            title: cleanTitle,
+            goal: fGoal.isNotEmpty
+                ? fGoal
+                : 'Build $cleanTitle inside ${epicBlueprint.title}.',
+            doneWhen: fDone.isNotEmpty
+                ? fDone
+                : 'Playtester verifies $cleanTitle in Play mode.',
+            estimatedHours: estHours,
+            included: true,
+            lifecycle: FeatureLifecycleStatus.newFeature,
+            originVersion: versionTag,
+            primarySharedScriptOrScene:
+                primaryAsset.isNotEmpty ? primaryAsset : null,
+            inScope: inScope,
+            outOfScope: const <String>[],
+            tuningParams: tuning,
+            edgeCases: guards,
+            checkpoints: [
+              ProposedCheckpointBlueprint(
+                title: cpTitle,
+                playtestCriteria: cpCriteria,
+                releaseVersion: versionTag,
+                tasks: tasks,
+                coveredScope: inScope,
+                tuningParams: tuning,
+                edgeCases: guards,
+              ),
+            ],
+          ),
+        );
+      }
+      if (parsedFeatures.isNotEmpty) {
+        return enforceIntraEpicBuildDependencies(
+          parsedFeatures,
+          epicIndex: epicIndex,
+        );
+      }
+    }
+
+    return decomposeBeatIntoDynamicFeatures(
+      beatNumber: epicIndex + 1,
+      beatIndex: epicIndex,
+      beatTitle: epicBlueprint.title,
+      rawBeatLine: '${epicBlueprint.title}: ${epicBlueprint.goal}',
+      rawDescPart: epicBlueprint.goal,
+      versionTag: versionTag,
     );
   }
 

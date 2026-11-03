@@ -6969,6 +6969,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           singleClauseFeats.first.title.toLowerCase(),
           isNot(equals('debris clearing')),
         );
+        expect(
+          ReleasePlannerAgent.commitReleaseSystemEpicsTool['name'],
+          equals('commit_release_system_epics'),
+        );
+        expect(
+          ReleasePlannerAgent.commitEpicFeaturesTool['name'],
+          equals('commit_epic_features'),
+        );
       },
     );
   });

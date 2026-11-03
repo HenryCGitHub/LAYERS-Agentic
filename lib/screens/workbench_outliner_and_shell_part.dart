@@ -942,7 +942,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                 )
                                 .toList()
                             : allBeatFeats;
+                        final isSynthesizingBeat = widget.workbench
+                            .isSynthesizingBeatFeatures(beat.id);
                         if (beatFeats.isEmpty &&
+                            allBeatFeats.isNotEmpty &&
+                            !isSynthesizingBeat &&
                             _activeStage2InlineEditKey !=
                                 'add_feat_${beat.id}') {
                           return const SizedBox.shrink();
@@ -1009,12 +1013,35 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         ),
                                       ),
                                     ),
-                                    if (beatFeats.isNotEmpty) ...[
+                                    if (isSynthesizingBeat) ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '⟳',
+                                        key: ValueKey(
+                                          'rail_beat_synthesizing_${beat.id}',
+                                        ),
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ] else if (beatFeats.isNotEmpty) ...[
                                       const SizedBox(width: 8),
                                       Text(
                                         '$doneBeatCount/${beatFeats.length}',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 9.5,
+                                          fontWeight: FontWeight.w500,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Queued',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9,
                                           fontWeight: FontWeight.w500,
                                           color: textMuted,
                                         ),

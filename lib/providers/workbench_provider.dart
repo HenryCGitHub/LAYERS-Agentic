@@ -154,6 +154,10 @@ class WorkbenchProvider extends ChangeNotifier {
   bool isConceptSectionQueued(int sectionIdx) =>
       _activeConceptSectionBuildIndex != null &&
       sectionIdx > _activeConceptSectionBuildIndex!;
+  String? _synthesizingBeatId;
+  String? get synthesizingBeatId => _synthesizingBeatId;
+  bool isSynthesizingBeatFeatures(String beatId) =>
+      _synthesizingBeatId == beatId;
   List<String> get pendingFeatureStepQueue =>
       List.unmodifiable(_pendingFeatureStepQueue);
   bool _isPrewarmingReleaseBlueprint = false;
