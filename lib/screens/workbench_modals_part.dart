@@ -895,7 +895,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 ),
                                 const SizedBox(height: 12),
 
-                                // Step 2: Features in v0.X (Clean Checklist Card)
+                                // Step 2: Epics & Features in v0.X (Outliner-Style Epic -> Feature Tree)
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
@@ -913,7 +913,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         children: [
                                           Flexible(
                                             child: Text(
-                                              '2. FEATURES IN ${nextVer.toUpperCase()} ($selectedChangesCount SELECTED · ${bp.totalIncludedHours}H)',
+                                              '2. EPICS & FEATURES IN ${nextVer.toUpperCase()} ($selectedChangesCount SELECTED · ${bp.totalIncludedHours}H)',
                                               overflow: TextOverflow.ellipsis,
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 10.5,
@@ -925,7 +925,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           ),
                                           const SizedBox(width: 8),
                                           Text(
-                                            'CLICK ANY ROW TO INCLUDE / SKIP',
+                                            'GROUPED BY EPIC · CLICK FEATURE TO INCLUDE / SKIP',
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 9.5,
                                               fontWeight: FontWeight.w600,
@@ -935,165 +935,459 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         ],
                                       ),
                                       const SizedBox(height: 10),
-                                      for (int nIdx = 0;
-                                          nIdx < nextRows.length;
-                                          nIdx++)
+                                      for (int bIdx = 0;
+                                          bIdx < bp.beats.length;
+                                          bIdx++)
                                         Builder(
                                           builder: (context) {
-                                            final row = nextRows[nIdx];
-                                            final f = row.feat;
-                                            final isUpg = f.lifecycle ==
-                                                FeatureLifecycleStatus.upgrade;
-                                            final isInc = f.included;
-                                            final cleanGoal = f.goal
-                                                .trim()
-                                                .replaceAll(
-                                                  _trailingDotRegex,
-                                                  '',
+                                            final b = bp.beats[bIdx];
+                                            final epicCode =
+                                                'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                                            final epicTitle =
+                                                _formatOutlineBeatDisplayTitle(
+                                              b.title,
+                                            ).toUpperCase();
+                                            final activeEpicFeats = b.features
+                                                .where(
+                                                  (f) =>
+                                                      !f.isStable &&
+                                                      !f.isSuperseded,
+                                                )
+                                                .toList();
+                                            final isAddingHere =
+                                                _addingFeatureToBeatId == b.id;
+                                            if (activeEpicFeats.isEmpty &&
+                                                !isAddingHere) {
+                                              return const SizedBox.shrink();
+                                            }
+                                            final incCount = activeEpicFeats
+                                                .where((f) => f.included)
+                                                .length;
+                                            final epicHours = activeEpicFeats
+                                                .where((f) => f.included)
+                                                .fold<int>(
+                                                  0,
+                                                  (sum, f) =>
+                                                      sum + f.estimatedHours,
                                                 );
-                                            return Padding(
-                                              padding: EdgeInsets.only(
-                                                bottom: nIdx + 1 <
-                                                        nextRows.length
-                                                    ? 6
-                                                    : 0,
+                                            return Container(
+                                              margin: const EdgeInsets.only(
+                                                bottom: 10,
                                               ),
-                                              child: InkWell(
-                                                key: ValueKey(
-                                                  'progressive_toggle_feat_${f.id}',
-                                                ),
+                                              decoration: BoxDecoration(
+                                                color: bgRecessed,
                                                 borderRadius:
-                                                    BorderRadius.circular(6),
-                                                onTap: () {
-                                                  widget.workbench
-                                                      .toggleProposedFeatureScope(
-                                                    row.beatId,
-                                                    f.id,
-                                                    !f.included,
-                                                  );
-                                                  _rebuild(() {});
-                                                },
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 11,
-                                                        vertical: 8,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: isInc
-                                                        ? bgRecessed
-                                                        : Colors.transparent,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          6,
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: borderSubtle,
+                                                ),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  // Outliner-Style Epic Group Header (ONLY Epics have E0# codes)
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 9,
                                                         ),
-                                                    border: Border.all(
-                                                      color: borderSubtle,
+                                                    decoration: BoxDecoration(
+                                                      color: bgSurface
+                                                          .withValues(
+                                                            alpha: 0.65,
+                                                          ),
+                                                      borderRadius:
+                                                          const BorderRadius.vertical(
+                                                            top: Radius.circular(
+                                                              7,
+                                                            ),
+                                                          ),
+                                                      border: Border(
+                                                        bottom: BorderSide(
+                                                          color: borderSubtle,
+                                                        ),
+                                                      ),
                                                     ),
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      Text(
-                                                        isInc ? '☑' : '☐',
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 13,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: isInc
-                                                              ? textPrimary
-                                                              : textMuted,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 9),
-                                                      Container(
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 6,
-                                                              vertical: 2,
-                                                            ),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: bgSurface,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                4,
-                                                              ),
-                                                          border: Border.all(
-                                                            color: borderSubtle,
-                                                          ),
-                                                        ),
-                                                        child: Text(
-                                                          !isInc
-                                                              ? 'Skipped'
-                                                              : (isUpg
-                                                                  ? 'Upgrade'
-                                                                  : 'New'),
-                                                          style: GoogleFonts
-                                                              .jetBrainsMono(
-                                                            fontSize: 9.5,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            color: isInc
-                                                                ? textSecondary
-                                                                : textMuted,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 9),
-                                                      Expanded(
-                                                        child: RichText(
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          text: TextSpan(
-                                                            style: GoogleFonts
-                                                                .inter(
-                                                              fontSize: 12.5,
-                                                              color: isInc
-                                                                  ? textPrimary
-                                                                  : textMuted,
-                                                            ),
+                                                    child: Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .spaceBetween,
+                                                      children: [
+                                                        Expanded(
+                                                          child: Row(
                                                             children: [
-                                                              TextSpan(
-                                                                text: f.title,
-                                                                style:
-                                                                    const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                ),
-                                                              ),
-                                                              if (cleanGoal
-                                                                  .isNotEmpty)
-                                                                TextSpan(
-                                                                  text:
-                                                                      ' — $cleanGoal',
-                                                                  style:
-                                                                      TextStyle(
-                                                                    color: isInc
-                                                                        ? textSecondary
-                                                                        : textMuted,
+                                                              Container(
+                                                                padding:
+                                                                    const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          6,
+                                                                      vertical:
+                                                                          2,
+                                                                    ),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color:
+                                                                      bgRecessed,
+                                                                  borderRadius:
+                                                                      BorderRadius.circular(
+                                                                        4,
+                                                                      ),
+                                                                  border:
+                                                                      Border.all(
+                                                                    color:
+                                                                        borderSubtle,
                                                                   ),
                                                                 ),
+                                                                child: Text(
+                                                                  'EPIC $epicCode',
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        9.5,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w800,
+                                                                    letterSpacing:
+                                                                        0.6,
+                                                                    color:
+                                                                        textSecondary,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                width: 8,
+                                                              ),
+                                                              Flexible(
+                                                                child: Text(
+                                                                  epicTitle,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        10.5,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    letterSpacing:
+                                                                        0.6,
+                                                                    color:
+                                                                        textPrimary,
+                                                                  ),
+                                                                ),
+                                                              ),
                                                             ],
                                                           ),
                                                         ),
-                                                      ),
-                                                      const SizedBox(width: 10),
-                                                      Text(
-                                                        '${row.epicCode} · ${isInc ? f.estimatedHours : 0}h',
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: textMuted,
+                                                        const SizedBox(
+                                                          width: 10,
+                                                        ),
+                                                        Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            Text(
+                                                              '$incCount ${incCount == 1 ? 'Feature' : 'Features'} · ${epicHours}h',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 9.5,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color:
+                                                                    textMuted,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 8,
+                                                            ),
+                                                            InkWell(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                        4,
+                                                                      ),
+                                                              onTap: () {
+                                                                _rebuild(() {
+                                                                  _addingFeatureToBeatId =
+                                                                      b.id;
+                                                                  _progressiveNewFeatCtrl
+                                                                      .clear();
+                                                                });
+                                                              },
+                                                              child: Container(
+                                                                padding:
+                                                                    const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          7,
+                                                                      vertical:
+                                                                          2,
+                                                                    ),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color:
+                                                                      bgRecessed,
+                                                                  borderRadius:
+                                                                      BorderRadius.circular(
+                                                                        4,
+                                                                      ),
+                                                                  border:
+                                                                      Border.all(
+                                                                    color:
+                                                                        borderSubtle,
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  '+ Add Feature',
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        9.5,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    color:
+                                                                        textSecondary,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  // Indented Features Tree (mirrors Outliner hierarchy — no E0# on feature rows)
+                                                  Container(
+                                                    margin:
+                                                        const EdgeInsets.only(
+                                                          left: 16,
+                                                        ),
+                                                    padding:
+                                                        const EdgeInsets.fromLTRB(
+                                                          12,
+                                                          8,
+                                                          10,
+                                                          8,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      border: Border(
+                                                        left: BorderSide(
+                                                          color: borderSubtle,
+                                                          width: 1.5,
                                                         ),
                                                       ),
-                                                    ],
+                                                    ),
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .stretch,
+                                                      children: [
+                                                        for (int fIdx = 0;
+                                                            fIdx <
+                                                                activeEpicFeats
+                                                                    .length;
+                                                            fIdx++)
+                                                          Builder(
+                                                            builder: (context) {
+                                                              final f =
+                                                                  activeEpicFeats[
+                                                                      fIdx];
+                                                              final isUpg = f
+                                                                      .lifecycle ==
+                                                                  FeatureLifecycleStatus
+                                                                      .upgrade;
+                                                              final isInc =
+                                                                  f.included;
+                                                              final cleanGoal =
+                                                                  f.goal
+                                                                      .trim()
+                                                                      .replaceAll(
+                                                                        _trailingDotRegex,
+                                                                        '',
+                                                                      );
+                                                              return Padding(
+                                                                padding: EdgeInsets.only(
+                                                                  bottom: fIdx +
+                                                                              1 <
+                                                                          activeEpicFeats
+                                                                              .length
+                                                                      ? 5
+                                                                      : 0,
+                                                                ),
+                                                                child: InkWell(
+                                                                  key: ValueKey(
+                                                                    'progressive_toggle_feat_${f.id}',
+                                                                  ),
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                            6,
+                                                                          ),
+                                                                  onTap: () {
+                                                                    widget
+                                                                        .workbench
+                                                                        .toggleProposedFeatureScope(
+                                                                      b.id,
+                                                                      f.id,
+                                                                      !f.included,
+                                                                    );
+                                                                    _rebuild(
+                                                                      () {},
+                                                                    );
+                                                                  },
+                                                                  child:
+                                                                      Container(
+                                                                    padding:
+                                                                        const EdgeInsets.symmetric(
+                                                                          horizontal:
+                                                                              10,
+                                                                          vertical:
+                                                                              7,
+                                                                        ),
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: isInc
+                                                                          ? bgSurface
+                                                                          : Colors
+                                                                              .transparent,
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                            6,
+                                                                          ),
+                                                                      border:
+                                                                          Border.all(
+                                                                        color:
+                                                                            borderSubtle,
+                                                                      ),
+                                                                    ),
+                                                                    child: Row(
+                                                                      children: [
+                                                                        Text(
+                                                                          isInc
+                                                                              ? '☑'
+                                                                              : '☐',
+                                                                          style: GoogleFonts
+                                                                              .jetBrainsMono(
+                                                                            fontSize:
+                                                                                13,
+                                                                            fontWeight:
+                                                                                FontWeight.w700,
+                                                                            color: isInc
+                                                                                ? textPrimary
+                                                                                : textMuted,
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              9,
+                                                                        ),
+                                                                        Container(
+                                                                          padding:
+                                                                              const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                6,
+                                                                            vertical:
+                                                                                2,
+                                                                          ),
+                                                                          decoration:
+                                                                              BoxDecoration(
+                                                                            color:
+                                                                                bgRecessed,
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(
+                                                                              4,
+                                                                            ),
+                                                                            border:
+                                                                                Border.all(
+                                                                              color:
+                                                                                  borderSubtle,
+                                                                            ),
+                                                                          ),
+                                                                          child:
+                                                                              Text(
+                                                                            !isInc
+                                                                                ? 'Skipped'
+                                                                                : (isUpg
+                                                                                    ? 'Upgrade'
+                                                                                    : 'New'),
+                                                                            style:
+                                                                                GoogleFonts.jetBrainsMono(
+                                                                              fontSize:
+                                                                                  9.5,
+                                                                              fontWeight:
+                                                                                  FontWeight.w700,
+                                                                              color: isInc
+                                                                                  ? textSecondary
+                                                                                  : textMuted,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              9,
+                                                                        ),
+                                                                        Expanded(
+                                                                          child:
+                                                                              RichText(
+                                                                            maxLines:
+                                                                                1,
+                                                                            overflow:
+                                                                                TextOverflow.ellipsis,
+                                                                            text:
+                                                                                TextSpan(
+                                                                              style: GoogleFonts.inter(
+                                                                                fontSize: 12.5,
+                                                                                color: isInc ? textPrimary : textMuted,
+                                                                              ),
+                                                                              children: [
+                                                                                TextSpan(
+                                                                                  text: f.title,
+                                                                                  style: const TextStyle(
+                                                                                    fontWeight: FontWeight.w700,
+                                                                                  ),
+                                                                                ),
+                                                                                if (cleanGoal.isNotEmpty)
+                                                                                  TextSpan(
+                                                                                    text: ' — $cleanGoal',
+                                                                                    style: TextStyle(
+                                                                                      color: isInc ? textSecondary : textMuted,
+                                                                                    ),
+                                                                                  ),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              10,
+                                                                        ),
+                                                                        Text(
+                                                                          '${isInc ? f.estimatedHours : 0}h',
+                                                                          style: GoogleFonts
+                                                                              .jetBrainsMono(
+                                                                            fontSize:
+                                                                                10,
+                                                                            fontWeight:
+                                                                                FontWeight.w600,
+                                                                            color:
+                                                                                textMuted,
+                                                                          ),
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              );
+                                                            },
+                                                          ),
+                                                      ],
+                                                    ),
                                                   ),
-                                                ),
+                                                ],
                                               ),
                                             );
                                           },
@@ -1136,7 +1430,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                   ),
                                                   child: Text(
-                                                    'ARCHIVED: ${pRow.epicCode} · ${pRow.feat.title} · ↺ Restore',
+                                                    'ARCHIVED: ${pRow.feat.title} · ↺ Restore',
                                                     style: GoogleFonts
                                                         .jetBrainsMono(
                                                       fontSize: 9.5,
@@ -1150,7 +1444,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           ],
                                         ),
                                       ],
-                                      const SizedBox(height: 10),
+                                      const SizedBox(height: 6),
                                       Wrap(
                                         spacing: 8,
                                         runSpacing: 8,
@@ -1187,7 +1481,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 child: Text(
                                                   _showProgressiveStableFeaturesDrawer
                                                       ? '▾ Hide Built Features (${stableRows.length} Stable)'
-                                                      : '+ Upgrade Another Built Feature (${stableRows.length} Stable) ▾',
+                                                      : '+ Upgrade Another Built Feature (${stableRows.length} Stable, Grouped by Epic) ▾',
                                                   style:
                                                       GoogleFonts.jetBrainsMono(
                                                     fontSize: 10,
@@ -1244,58 +1538,156 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           stableRows.isNotEmpty) ...[
                                         const SizedBox(height: 10),
                                         Container(
-                                          padding: const EdgeInsets.all(10),
+                                          padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
                                             color: bgRecessed,
                                             borderRadius:
-                                                BorderRadius.circular(6),
+                                                BorderRadius.circular(8),
                                             border: Border.all(
                                               color: borderSubtle,
                                             ),
                                           ),
-                                          child: Wrap(
-                                            spacing: 8,
-                                            runSpacing: 6,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
                                             children: [
-                                              for (final sRow in stableRows)
-                                                InkWell(
-                                                  key: ValueKey(
-                                                    'progressive_toggle_feat_${sRow.feat.id}',
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  onTap: () {
-                                                    widget.workbench
-                                                        .toggleProposedFeatureUpgradeOrStable(
-                                                      sRow.beatId,
-                                                      sRow.feat.id,
-                                                    );
-                                                    _rebuild(() {});
-                                                  },
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: bgSurface,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            4,
+                                              for (int bIdx = 0;
+                                                  bIdx < bp.beats.length;
+                                                  bIdx++)
+                                                Builder(
+                                                  builder: (context) {
+                                                    final b = bp.beats[bIdx];
+                                                    final epicCode =
+                                                        'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                                                    final epicTitle =
+                                                        _formatOutlineBeatDisplayTitle(
+                                                      b.title,
+                                                    ).toUpperCase();
+                                                    final beatStableFeats = b
+                                                        .features
+                                                        .where(
+                                                          (f) => f.isStable,
+                                                        )
+                                                        .toList();
+                                                    if (beatStableFeats
+                                                        .isEmpty) {
+                                                      return const SizedBox
+                                                          .shrink();
+                                                    }
+                                                    return Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            bottom: 10,
                                                           ),
-                                                      border: Border.all(
-                                                        color: borderSubtle,
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Text(
+                                                            '$epicCode · $epicTitle (${beatStableFeats.length} BUILT)',
+                                                            style: GoogleFonts
+                                                                .jetBrainsMono(
+                                                              fontSize: 9.5,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              letterSpacing:
+                                                                  0.6,
+                                                              color: textMuted,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            height: 5,
+                                                          ),
+                                                          Container(
+                                                            margin:
+                                                                const EdgeInsets.only(
+                                                                  left: 12,
+                                                                ),
+                                                            padding:
+                                                                const EdgeInsets.only(
+                                                                  left: 10,
+                                                                ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              border: Border(
+                                                                left:
+                                                                    BorderSide(
+                                                                  color:
+                                                                      borderSubtle,
+                                                                  width: 1.5,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            child: Wrap(
+                                                              spacing: 6,
+                                                              runSpacing: 6,
+                                                              children: [
+                                                                for (final sf
+                                                                    in beatStableFeats)
+                                                                  InkWell(
+                                                                    key: ValueKey(
+                                                                      'progressive_toggle_feat_${sf.id}',
+                                                                    ),
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(
+                                                                              4,
+                                                                            ),
+                                                                    onTap: () {
+                                                                      widget
+                                                                          .workbench
+                                                                          .toggleProposedFeatureUpgradeOrStable(
+                                                                        b.id,
+                                                                        sf.id,
+                                                                      );
+                                                                      _rebuild(
+                                                                        () {},
+                                                                      );
+                                                                    },
+                                                                    child:
+                                                                        Container(
+                                                                      padding:
+                                                                          const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                8,
+                                                                            vertical:
+                                                                                4,
+                                                                          ),
+                                                                      decoration:
+                                                                          BoxDecoration(
+                                                                        color:
+                                                                            bgSurface,
+                                                                        borderRadius:
+                                                                            BorderRadius.circular(
+                                                                              4,
+                                                                            ),
+                                                                        border:
+                                                                            Border.all(
+                                                                          color:
+                                                                              borderSubtle,
+                                                                        ),
+                                                                      ),
+                                                                      child: Text(
+                                                                        '+ ${sf.title}',
+                                                                        style: GoogleFonts
+                                                                            .inter(
+                                                                          fontSize:
+                                                                              11.5,
+                                                                          color:
+                                                                              textSecondary,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
-                                                    ),
-                                                    child: Text(
-                                                      '+ ${sRow.epicCode} · ${sRow.feat.title}',
-                                                      style: GoogleFonts.inter(
-                                                        fontSize: 11.5,
-                                                        color: textSecondary,
-                                                      ),
-                                                    ),
-                                                  ),
+                                                    );
+                                                  },
                                                 ),
                                             ],
                                           ),
