@@ -54,6 +54,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   double _outlinerWidth = 268.0;
   bool _isHalfScreenOutlinerOpen = false;
   bool _isProgressiveModalOpen = false;
+  bool _showProgressiveStableFeaturesDrawer = false;
   String? _progressivePrevReleaseId;
   ProductionPhase? _progressivePrevPhase;
   int _selectedProgressiveTrackIndex = 0;

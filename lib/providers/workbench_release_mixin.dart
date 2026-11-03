@@ -1553,7 +1553,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
     }
 
-    // Capture any features deferred (unchecked) in the prior Release Plan Gate
+    // Capture any features deferred (unchecked) across all prior Release Plan Gates (not yet built)
     // so they automatically carry over into the next release's Beat, and archive the prior ReleaseBlueprint on its own Release doc!
     final deferredByBeatIndex = <int, List<ProposedFeatureBlueprint>>{};
     final priorBp = _releaseBlueprint;
@@ -1564,20 +1564,36 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
             jsonEncode(priorBp.toJson());
         _persistDocument(priorRelDoc);
       }
-      for (int bIdx = 0; bIdx < priorBp.beats.length; bIdx++) {
-        final seenTitles = <String>{};
-        final deferredInBeat = <ProposedFeatureBlueprint>[];
-        for (final df in priorBp.beats[bIdx].deferredFeatures) {
+    }
+    final builtFeatureTitleSet = <String>{
+      for (final featList in existingFeaturesByBeat.values)
+        for (final ef in featList) ef.title.toLowerCase().trim(),
+    };
+    final priorBlueprintsToScan = <ReleaseBlueprint>[
+      for (final rel in projectReleases)
+        if (rel.id != targetRelId && rel.childrenIds.isNotEmpty)
+          if (releaseBlueprintFor(rel.id) != null) releaseBlueprintFor(rel.id)!,
+      if (priorBp != null && priorBp.releaseDocId != targetRelId) priorBp,
+    ];
+    final seenDeferredByBeat = <int, Set<String>>{};
+    for (final scannedBp in priorBlueprintsToScan) {
+      for (int bIdx = 0; bIdx < scannedBp.beats.length; bIdx++) {
+        final seenTitles = seenDeferredByBeat.putIfAbsent(bIdx, () => <String>{});
+        final deferredInBeat = deferredByBeatIndex.putIfAbsent(
+          bIdx,
+          () => <ProposedFeatureBlueprint>[],
+        );
+        for (final df in scannedBp.beats[bIdx].deferredFeatures) {
           final normTitle = df.title.toLowerCase().trim();
-          if (normTitle.isNotEmpty && seenTitles.add(normTitle)) {
+          if (normTitle.isNotEmpty &&
+              !builtFeatureTitleSet.contains(normTitle) &&
+              seenTitles.add(normTitle)) {
             deferredInBeat.add(df);
           }
         }
-        if (deferredInBeat.isNotEmpty) {
-          deferredByBeatIndex[bIdx] = deferredInBeat;
-        }
       }
     }
+    deferredByBeatIndex.removeWhere((_, list) => list.isEmpty);
 
     _activeReleaseId = targetRelId;
     final relDoc = documents[targetRelId];
@@ -1708,6 +1724,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         _injectDueScheduledInboxItemsIntoBlueprint(bp, _currentPhase);
         final relDoc = activeRelease;
         if (relDoc != null) {
+          if (bp.releaseTitle.trim().isNotEmpty &&
+              bp.releaseTitle != relDoc.title) {
+            relDoc.title = bp.releaseTitle;
+          }
           relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
           _persistDocument(relDoc);
         }
@@ -4130,12 +4150,16 @@ Return ONLY a JSON object with this schema:
         }
       }
 
-      // Gather previous checkpoints & Same-Epic Multi-Feature Scope Boundaries
+      // Gather previous checkpoints (including completed tasks across all prior releases) & Same-Epic Multi-Feature Scope Boundaries
       final priorCheckpointsSummary = <String>[];
       for (int i = 0; i < effectiveCpIndex; i++) {
         final prev = states[i];
+        final prevTasks = prev.checklist
+            .map((t) => t.text.trim())
+            .where((t) => t.isNotEmpty)
+            .join(', ');
         priorCheckpointsSummary.add(
-          '- ${prev.cleanStageTitle} (${prev.releaseVersion}): vars=[${prev.tuningParams.join(', ')}], guards=[${prev.edgeCases.join(', ')}]',
+          '- ${prev.cleanStageTitle} (${prev.releaseVersion}): tasks=[$prevTasks], vars=[${prev.tuningParams.join(', ')}], guards=[${prev.edgeCases.join(', ')}]',
         );
       }
       final sameEpicSiblingBoundaryLines = <String>[];

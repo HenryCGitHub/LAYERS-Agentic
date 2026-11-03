@@ -562,7 +562,8 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
   // 8. Stage 2: ReleasePlannerAgent.planRelease
   if (prompt.contains('planning Release:')) {
     final isPart1 = prompt.contains('PHASE 1 SPLIT PROTOTYPE (PART 1 OF 2');
-    final isPart2 = prompt.contains('Prototype — Part 2');
+    final isPart2 = prompt.contains('PHASE 1 SPLIT PROTOTYPE (PART 2 OF 2') ||
+        prompt.contains('planning Release: "v0.2: Prototype — Part 2');
     final isMvp =
         prompt.contains('PHASE 2 PER-EPIC MVP RELEASE (TARGET: EPIC ') &&
             !prompt.contains('Grapple Momentum Release');

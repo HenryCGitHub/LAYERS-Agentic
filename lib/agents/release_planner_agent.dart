@@ -687,9 +687,43 @@ class ReleasePlannerAgent {
     }
 
     final existingTreeSummary = StringBuffer();
+    if (completedReleases.isNotEmpty) {
+      existingTreeSummary.writeln(
+        'Completed Prior Releases History (all previous releases in chronological order):',
+      );
+      for (final priorRel in completedReleases) {
+        final pVer = extractReleaseVersionTag(
+          priorRel.sections['versionTag']?.isNotEmpty == true
+              ? priorRel.sections['versionTag']!
+              : priorRel.title,
+        );
+        final pPhase =
+            priorRel.sections['phase'] ?? priorRel.releaseScope.name;
+        final pGoal = SectionTextUtils.resolveGoal(priorRel.sections);
+        final touchedFeats = <String>[];
+        for (final b in existingBeats) {
+          final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
+          for (final f in feats) {
+            final states = FeatureStateNode.getStatesForDocument(f);
+            final originVer = f.sections['originVersion'] ?? 'v0.1';
+            if (originVer.toLowerCase() == pVer.toLowerCase() ||
+                states.any(
+                  (s) => s.releaseVersion.toLowerCase() == pVer.toLowerCase(),
+                )) {
+              touchedFeats.add(f.title);
+            }
+          }
+        }
+        existingTreeSummary.writeln(
+          '- $pVer [$pPhase] "${priorRel.title}": ${pGoal.isNotEmpty ? pGoal : "Completed milestone"}'
+          '${touchedFeats.isNotEmpty ? " | Built/Upgraded: ${touchedFeats.join(", ")}" : ""}',
+        );
+      }
+    }
     if (existingBeats.isNotEmpty) {
-      existingTreeSummary
-          .writeln('Existing Live Game Tree (completed in prior releases):');
+      existingTreeSummary.writeln(
+        'Existing Live Game Tree (all Epics, Features, and completed Checkpoints across prior releases):',
+      );
       for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
         final b = existingBeats[bIdx];
         existingTreeSummary.writeln('- Beat "${b.title}" (${b.id}):');
@@ -717,9 +751,19 @@ class ReleasePlannerAgent {
           final latestCp = states.isNotEmpty
               ? '${states.last.releaseVersion} "${states.last.cleanStageTitle}"'
               : originVer;
+          final fullCheckpointChain = states.isNotEmpty
+              ? states.map((s) {
+                  final tasksText = s.checklist
+                      .map((t) => t.text.replaceAll(_durationRegex, '').trim())
+                      .where((t) => t.isNotEmpty)
+                      .take(4)
+                      .join(', ');
+                  return '${s.releaseVersion} "${s.cleanStageTitle}"${tasksText.isNotEmpty ? " (tasks: $tasksText)" : ""}';
+                }).join(' -> ')
+              : originVer;
           final primaryAsset = (f.sections['primary_asset'] ?? '').trim();
           existingTreeSummary.writeln(
-            '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints (latest: $latestCp)]'
+            '  * Feature "${f.title}" [id: ${f.id}, origin: $originVer, ${states.length} checkpoints (latest: $latestCp | history: $fullCheckpointChain)]'
             '${primaryAsset.isNotEmpty ? ' | Primary Asset: $primaryAsset' : ''}'
             '${allTuning.isNotEmpty ? ' | Live Variables: ${allTuning.take(3).join(', ')}' : ''}'
             '${allFixesAndGuards.isNotEmpty ? ' | Guards: ${allFixesAndGuards.take(2).join('; ')}' : ''}',
@@ -2499,8 +2543,34 @@ Call `commit_epic_features` (or return ONLY valid JSON):
             break;
           }
         }
+        // Fallback for "upgrade" features when the LLM slightly reworded the feature title or used a generic feat_X_Y id
+        if (matchedEf == null &&
+            lf.lifecycle != FeatureLifecycleStatus.newFeature) {
+          final lfKeywords = extractBeatKeywords(lf.title);
+          for (final ef in existingFeats) {
+            if (matchedByExistingId.containsKey(ef.id)) continue;
+            if (ef.sections['lifecycle'] ==
+                FeatureLifecycleStatus.superseded.name) {
+              continue;
+            }
+            final normEfTitle = ef.title.toLowerCase().trim();
+            final efKeywords = extractBeatKeywords(ef.title);
+            if ((normEfTitle.isNotEmpty &&
+                    normLfTitle.isNotEmpty &&
+                    (normEfTitle.contains(normLfTitle) ||
+                        normLfTitle.contains(normEfTitle))) ||
+                (lfKeywords.isNotEmpty &&
+                    efKeywords.intersection(lfKeywords).isNotEmpty)) {
+              matchedEf = ef;
+              break;
+            }
+          }
+        }
         if (matchedEf != null) {
           lf.id = matchedEf.id;
+          if (matchedEf.title.trim().isNotEmpty) {
+            lf.title = matchedEf.title;
+          }
           lf.originVersion = matchedEf.sections['originVersion'] ?? 'v0.1';
           final existingAsset =
               (matchedEf.sections['primary_asset'] ?? '').trim();
@@ -2511,6 +2581,9 @@ Call `commit_epic_features` (or return ONLY valid JSON):
           }
           matchedByExistingId[matchedEf.id] = lf;
         } else {
+          if (lf.lifecycle == FeatureLifecycleStatus.upgrade) {
+            lf.lifecycle = FeatureLifecycleStatus.newFeature;
+          }
           final existingIdCollision = existingFeats.any((e) => e.id == lf.id) ||
               lf.id.startsWith('feat_1_') ||
               lf.id.startsWith('feat_2_') ||
@@ -2636,7 +2709,7 @@ Call `commit_epic_features` (or return ONLY valid JSON):
     final currentBeatsSummary = blueprint.beats
         .map(
           (b) => '- ${b.id} "${b.title}" (${b.goal}): '
-              '${b.features.map((f) => '"${f.title}" [${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${(f.primarySharedScriptOrScene != null && f.primarySharedScriptOrScene!.trim().isNotEmpty) ? ", asset: ${f.primarySharedScriptOrScene!.trim()}" : ""}${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
+              '${b.features.map((f) => '"${f.title}" [id: ${f.id}, origin: ${f.originVersion.isNotEmpty ? f.originVersion : "v0.1"}, ${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${(f.primarySharedScriptOrScene != null && f.primarySharedScriptOrScene!.trim().isNotEmpty) ? ", asset: ${f.primarySharedScriptOrScene!.trim()}" : ""}${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
         )
         .join('\n');
 
@@ -2758,6 +2831,25 @@ Return ONLY valid JSON:
     if (updatedBp.goal.isNotEmpty) blueprint.goal = updatedBp.goal;
     if (updatedBp.doneWhen.isNotEmpty) blueprint.doneWhen = updatedBp.doneWhen;
     final cleanMsgLower = cleanMsg.toLowerCase();
+    final isStrategicOptionSwitch = cleanMsgLower.startsWith('re-architect ') &&
+        cleanMsgLower.contains('strategic option:');
+    if (isStrategicOptionSwitch) {
+      final markerIdx = cleanMsgLower.indexOf('strategic option:');
+      if (markerIdx >= 0) {
+        final rawOptText = cleanMsg
+            .substring(markerIdx + 'strategic option:'.length)
+            .replaceFirst(
+              RegExp(r'^\(recommended\)\s*', caseSensitive: false),
+              '',
+            )
+            .trim();
+        final optTitle = rawOptText.split(':').first.trim();
+        if (optTitle.isNotEmpty) {
+          blueprint.releaseTitle =
+              '${blueprint.releaseVersionTag}: $optTitle';
+        }
+      }
+    }
     final isRemoveOrReplaceTurn = cleanMsgLower.contains('remove') ||
         cleanMsgLower.contains('delete') ||
         cleanMsgLower.contains('drop') ||
@@ -2772,6 +2864,23 @@ Return ONLY valid JSON:
           .toSet();
     }
     final mergedBeats = List<ProposedBeatBlueprint>.from(blueprint.beats);
+    if (isStrategicOptionSwitch && updatedBp.beats.isNotEmpty) {
+      for (final b in mergedBeats) {
+        b.features.removeWhere(
+          (f) =>
+              f.lifecycle == FeatureLifecycleStatus.newFeature &&
+              (f.originVersion.isEmpty ||
+                  f.originVersion == blueprint.releaseVersionTag),
+        );
+        for (final f in b.features) {
+          if (f.lifecycle == FeatureLifecycleStatus.upgrade) {
+            f.lifecycle = FeatureLifecycleStatus.stable;
+            f.estimatedHours = 0;
+            f.included = true;
+          }
+        }
+      }
+    }
     for (final deltaBeat in updatedBp.beats) {
       final dTitle = deltaBeat.title.toLowerCase().trim();
       final dKeywords = extractKeywords(deltaBeat.title);
@@ -2808,6 +2917,9 @@ Return ONLY valid JSON:
       if (idx != -1) {
         final existingBeat = mergedBeats[idx];
         deltaBeat.id = existingBeat.id;
+        if (existingBeat.title.trim().isNotEmpty) {
+          deltaBeat.title = existingBeat.title;
+        }
         final matchedUpdatesById = <String, ProposedFeatureBlueprint>{};
         final newlyAddedFeats = <ProposedFeatureBlueprint>[];
         for (final df in deltaBeat.features) {
@@ -2816,22 +2928,40 @@ Return ONLY valid JSON:
               .where((ef) => ef.title.toLowerCase().trim() == dfTitle)
               .firstOrNull;
           existingFeat ??= existingBeat.features.where((ef) {
-            if (ef.id != df.id || matchedUpdatesById.containsKey(ef.id)) {
+            if (matchedUpdatesById.containsKey(ef.id)) {
               return false;
             }
-            if (df.id != 'feat_1_1' ||
-                deltaBeat.features.length == existingBeat.features.length) {
+            if (ef.id == df.id &&
+                (df.id != 'feat_1_1' ||
+                    deltaBeat.features.length ==
+                        existingBeat.features.length)) {
               return isRemoveOrReplaceTurn ||
+                  isStrategicOptionSwitch ||
                   extractKeywords(ef.title)
                       .intersection(extractKeywords(df.title))
                       .isNotEmpty;
+            }
+            if (isStrategicOptionSwitch ||
+                df.lifecycle != FeatureLifecycleStatus.newFeature) {
+              return extractKeywords(ef.title)
+                  .intersection(extractKeywords(df.title))
+                  .isNotEmpty;
             }
             return false;
           }).firstOrNull;
           if (existingFeat != null) {
             df.id = existingFeat.id;
+            if (existingFeat.title.trim().isNotEmpty &&
+                (isStrategicOptionSwitch ||
+                    df.lifecycle != FeatureLifecycleStatus.newFeature)) {
+              df.title = existingFeat.title;
+            }
             if (existingFeat.originVersion.isNotEmpty) {
               df.originVersion = existingFeat.originVersion;
+            }
+            if (df.originVersion != blueprint.releaseVersionTag &&
+                df.lifecycle == FeatureLifecycleStatus.newFeature) {
+              df.lifecycle = FeatureLifecycleStatus.upgrade;
             }
             if ((df.primarySharedScriptOrScene == null ||
                     df.primarySharedScriptOrScene!.trim().isEmpty) &&
@@ -2842,6 +2972,10 @@ Return ONLY valid JSON:
             }
             matchedUpdatesById[existingFeat.id] = df;
           } else {
+            if (df.lifecycle == FeatureLifecycleStatus.upgrade &&
+                blueprint.releaseVersionTag != 'v0.1') {
+              df.lifecycle = FeatureLifecycleStatus.newFeature;
+            }
             if (existingBeat.features.any((ef) => ef.id == df.id) ||
                 newlyAddedFeats.any((nf) => nf.id == df.id) ||
                 mergedBeats.any((b) => b.features.any((ef) => ef.id == df.id))) {
@@ -3121,10 +3255,11 @@ class ReleaseExecutorAgent {
           existingFeat.sections.remove('supersededInVersion');
           existingFeat.sections.remove('supersededByRelease');
           existingFeat.sections['activeReleaseVersion'] = versionTag;
-          existingFeat.sections['lastVerifiedVersion'] =
-              existingFeat.sections['originVersion'] ?? 'v0.1';
           final stableStates =
               FeatureStateNode.getStatesForDocument(existingFeat);
+          existingFeat.sections['lastVerifiedVersion'] = stableStates.isNotEmpty
+              ? stableStates.last.releaseVersion
+              : (existingFeat.sections['originVersion'] ?? 'v0.1');
           if (stableStates.isNotEmpty) {
             for (final s in stableStates) {
               for (final t in s.checklist) {
@@ -3375,10 +3510,11 @@ class ReleaseExecutorAgent {
           priorFeatDoc.sections.remove('supersededInVersion');
           priorFeatDoc.sections.remove('supersededByRelease');
           priorFeatDoc.sections['activeReleaseVersion'] = versionTag;
-          priorFeatDoc.sections['lastVerifiedVersion'] =
-              priorFeatDoc.sections['originVersion'] ?? 'v0.1';
           final priorStates =
               FeatureStateNode.getStatesForDocument(priorFeatDoc);
+          priorFeatDoc.sections['lastVerifiedVersion'] = priorStates.isNotEmpty
+              ? priorStates.last.releaseVersion
+              : (priorFeatDoc.sections['originVersion'] ?? 'v0.1');
           if (priorStates.isNotEmpty) {
             for (final s in priorStates) {
               for (final t in s.checklist) {

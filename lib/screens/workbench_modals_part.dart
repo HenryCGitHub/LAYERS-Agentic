@@ -1,25 +1,7 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
-  static final RegExp _sentenceSplitRegex = RegExp(r'\.\s+');
-  static final RegExp _priorReleasesPrefixRegex =
-      RegExp(r'^Prior releases established\s+', caseSensitive: false);
-  static final RegExp _commaAndSplitRegex =
-      RegExp(r',\s*(?:and\s+)?|\s+and\s+');
   static final RegExp _trailingDotRegex = RegExp(r'\.$');
-  static final RegExp _sentenceLookbehindRegex = RegExp(r'(?<=\.)\s+');
-  static final RegExp _howeverPrefixRegex =
-      RegExp(r'^However,\s*', caseSensitive: false);
-  static final RegExp _beatClauseSplitRegex = RegExp(
-    r',\s*(?=(?:Beat|Epic|E0)\s*\d+)|,\s+and\s+(?=(?:Beat|Epic|E0)\s*\d+)',
-    caseSensitive: false,
-  );
-  static final RegExp _gapBeatPrefixRegex = RegExp(
-    r'^(?:Beat|Epic)[\s\-–—]*0*(\d+)\s*(?:\(([^)]+)\))?\s*[:\-–—]?\s*(.+)$',
-    caseSensitive: false,
-  );
-  static final RegExp _gapECodePrefixRegex =
-      RegExp(r'^(E\d+)\s*[:\-–—]?\s*(.+)$', caseSensitive: false);
   static final RegExp _recommendedPrefixRegex =
       RegExp(r'^\(recommended\)\s*', caseSensitive: false);
   static final RegExp _goalPrefixRegex =
@@ -50,6 +32,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
 
     _rebuild(() {
       _isProgressiveModalOpen = true;
+      _showProgressiveStableFeaturesDrawer = false;
       _progressivePrevReleaseId = prevReleaseId;
       _progressivePrevPhase = prevPhase;
       _selectedProgressiveTrackIndex = 0;
@@ -75,6 +58,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
 
     void resetState() {
       _isProgressiveModalOpen = false;
+      _showProgressiveStableFeaturesDrawer = false;
       _addingFeatureToBeatId = null;
       if (confirmed) {
         _manualCheckpointFocusIndex = null;
@@ -378,13 +362,26 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (bp != null) ...[
-                      Text(
-                        '${bp.totalIncludedHours}h in $nextVer · ${upgradeCount + newCount} Active Features',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: textSecondary,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          int stableCount = 0;
+                          for (final b in bp.beats) {
+                            for (final f in b.features) {
+                              if (f.included && f.isStable) {
+                                stableCount++;
+                              }
+                            }
+                          }
+                          final activeCount = upgradeCount + newCount;
+                          return Text(
+                            '$stableCount Built (≤$prevVer) · $activeCount Selected for $nextVer (${bp.totalIncludedHours}h)',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: textSecondary,
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(width: 12),
                     ],
@@ -498,91 +495,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       ],
 
                       if (bp != null) ...[
-                        // Section 1: Greyscale-First Vertical Agent Diagnostic Card (gemini-4-argon)
+                        // Streamlined 3-Step Progressive Release Canvas
                         Builder(
                           builder: (context) {
-                            // 1. Resolve "Built So Far" chips
-                            final builtChips = <String>[
-                              for (final item in bp.builtSoFar)
-                                if (item.trim().isNotEmpty) item.trim(),
-                            ];
-                            if (builtChips.isEmpty) {
-                              for (final b in bp.beats) {
-                                for (final f in b.features) {
-                                  if (f.isStable &&
-                                      f.title.trim().isNotEmpty &&
-                                      !builtChips.contains(f.title.trim())) {
-                                    builtChips.add(f.title.trim());
-                                  }
-                                }
-                              }
-                            }
-                            if (builtChips.isEmpty &&
-                                bp.lastAgentReply != null &&
-                                bp.lastAgentReply!.trim().isNotEmpty) {
-                              final firstSentence = bp.lastAgentReply!
-                                  .split(_sentenceSplitRegex)
-                                  .first
-                                  .replaceFirst(_priorReleasesPrefixRegex, '')
-                                  .trim();
-                              for (final part
-                                  in firstSentence.split(_commaAndSplitRegex)) {
-                                final cleanPart = part
-                                    .replaceAll(_trailingDotRegex, '')
-                                    .trim();
-                                if (cleanPart.isNotEmpty &&
-                                    cleanPart.length <= 48) {
-                                  builtChips.add(cleanPart);
-                                }
-                              }
-                            }
-
-                            // 2. Resolve "Lacking Now" rows (with optional E0X tag)
-                            final rawGaps = <String>[
-                              for (final g in bp.missingGaps)
-                                if (g.trim().isNotEmpty) g.trim(),
-                            ];
-                            if (rawGaps.isEmpty &&
-                                bp.lastAgentReply != null &&
-                                bp.lastAgentReply!.trim().isNotEmpty) {
-                              final sentences = bp.lastAgentReply!
-                                  .split(_sentenceLookbehindRegex);
-                              for (final s in sentences) {
-                                final lower = s.toLowerCase();
-                                if (lower.contains('however') ||
-                                    lower.contains('lacks') ||
-                                    lower.contains('missing')) {
-                                  final cleaned = s
-                                      .replaceFirst(_howeverPrefixRegex, '')
-                                      .replaceAll(_trailingDotRegex, '')
-                                      .trim();
-                                  for (final clause
-                                      in cleaned.split(_beatClauseSplitRegex)) {
-                                    final c = clause.trim();
-                                    if (c.isNotEmpty) rawGaps.add(c);
-                                  }
-                                }
-                              }
-                            }
-                            if (rawGaps.isEmpty) {
-                              for (int bIdx = 0;
-                                  bIdx < bp.beats.length;
-                                  bIdx++) {
-                                final b = bp.beats[bIdx];
-                                final activeFeats = b.includedFeatures
-                                    .where((f) => !f.isStable)
-                                    .toList();
-                                if (activeFeats.isNotEmpty) {
-                                  final eCode =
-                                      'E${(bIdx + 1).toString().padLeft(2, '0')}';
-                                  rawGaps.add(
-                                    '$eCode ${b.title}: Needs ${activeFeats.map((f) => f.title).join(' & ')}',
-                                  );
-                                }
-                              }
-                            }
-
-                            // 3. Collect "Next in v0.X" active feature rows, stable rows, & pivoted/archived rows
                             final nextRows = <({
                               String beatId,
                               String epicCode,
@@ -624,1134 +539,556 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 }
                               }
                             }
-                            final stableTitleLowerSet = stableRows
-                                .map((r) => r.feat.title.toLowerCase().trim())
-                                .toSet();
-                            final extraBuiltSummaryChips = builtChips
-                                .where(
-                                  (c) => !stableTitleLowerSet
-                                      .contains(c.toLowerCase().trim()),
-                                )
-                                .toList();
 
                             final heroGoal = bp.goal.trim().isNotEmpty
                                 ? bp.goal.trim()
                                 : ((bp.lastAgentReply != null &&
                                         bp.lastAgentReply!.trim().isNotEmpty)
                                     ? bp.lastAgentReply!.trim()
-                                    : 'Advance $nextVer with the active features and upgrades below.');
+                                    : 'Advance $nextVer with the selected features and upgrades below.');
 
-                            return Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: bgSurface,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: borderSubtle),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // 1. Unboxed Hero Header (Goal & Done When)
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          'AGENT ARCHITECTURAL RECOMMENDATION · ${nextVer.toUpperCase()} (${widget.workbench.activePhaseBadgeLabel})',
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 0.6,
-                                            color: textMuted,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '${upgradeCount + newCount} Active Changes · ${bp.totalIncludedHours}h',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    heroGoal,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 14,
-                                      height: 1.4,
-                                      fontWeight: FontWeight.w700,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                  if (bp.doneWhen.trim().isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '✓ DONE WHEN → ',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: textSecondary,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            bp.doneWhen.trim(),
-                                            style: GoogleFonts.inter(
-                                              fontSize: 12,
-                                              height: 1.35,
-                                              color: textSecondary,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                  const SizedBox(height: 14),
+                            final selectedChangesCount =
+                                nextRows.where((r) => r.feat.included).length;
 
-                                  // 2. Unified Vertical Diagnostic Ledger (Built -> Lacking Now -> Next in v0.X)
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: bgRecessed,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: borderSubtle),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        if (stableRows.isNotEmpty ||
-                                            extraBuiltSummaryChips
-                                                .isNotEmpty) ...[
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                SizedBox(
-                                                  width: 126,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 2,
-                                                        ),
-                                                    child: Text(
-                                                      '✓ BUILT (≤$prevVer)',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: textMuted,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Wrap(
-                                                    spacing: 8,
-                                                    runSpacing: 6,
-                                                    children: [
-                                                      for (final sRow
-                                                          in stableRows)
-                                                        InkWell(
-                                                          key: ValueKey(
-                                                            'progressive_toggle_feat_${sRow.feat.id}',
-                                                          ),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(4),
-                                                          onTap: () {
-                                                            widget.workbench
-                                                                .toggleProposedFeatureUpgradeOrStable(
-                                                              sRow.beatId,
-                                                              sRow.feat.id,
-                                                            );
-                                                            _rebuild(() {});
-                                                          },
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                              horizontal: 7,
-                                                              vertical: 3,
-                                                            ),
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color: bgSurface,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                4,
-                                                              ),
-                                                              border:
-                                                                  Border.all(
-                                                                color:
-                                                                    borderSubtle,
-                                                              ),
-                                                            ),
-                                                            child: Text(
-                                                              '✓ ${sRow.epicCode} · ${sRow.feat.title} · +Upgrade',
-                                                              style: GoogleFonts
-                                                                  .inter(
-                                                                fontSize: 11,
-                                                                color:
-                                                                    textSecondary,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      for (final chip
-                                                          in extraBuiltSummaryChips
-                                                              .take(8))
-                                                        Text(
-                                                          '✓ $chip',
-                                                          style: GoogleFonts
-                                                              .inter(
-                                                            fontSize: 11.5,
-                                                            color:
-                                                                textSecondary,
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Divider(
-                                            height: 1,
-                                            thickness: 1,
-                                            color: borderSubtle,
-                                          ),
-                                        ],
-                                        if (rawGaps.isNotEmpty) ...[
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                SizedBox(
-                                                  width: 126,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 2,
-                                                        ),
-                                                    child: Text(
-                                                      'LACKING NOW',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: textMuted,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      for (int gIdx = 0;
-                                                          gIdx <
-                                                              rawGaps
-                                                                  .take(5)
-                                                                  .length;
-                                                          gIdx++)
-                                                        Builder(
-                                                          builder: (context) {
-                                                            var gapText =
-                                                                rawGaps[gIdx];
-                                                            String? epicTag;
-                                                            final beatMatch =
-                                                                _gapBeatPrefixRegex.firstMatch(gapText);
-                                                            final eCodeMatch =
-                                                                _gapECodePrefixRegex.firstMatch(gapText);
-                                                            if (beatMatch !=
-                                                                null) {
-                                                              final num = int
-                                                                      .tryParse(
-                                                                        beatMatch
-                                                                            .group(
-                                                                              1,
-                                                                            )!,
-                                                                      ) ??
-                                                                  1;
-                                                              epicTag =
-                                                                  'E${num.toString().padLeft(2, '0')}';
-                                                              final beatName =
-                                                                  beatMatch
-                                                                      .group(2)
-                                                                      ?.trim();
-                                                              final rest =
-                                                                  beatMatch
-                                                                      .group(3)!
-                                                                      .trim();
-                                                              gapText =
-                                                                  (beatName !=
-                                                                              null &&
-                                                                          beatName
-                                                                              .isNotEmpty)
-                                                                      ? '$beatName — $rest'
-                                                                      : rest;
-                                                            } else if (eCodeMatch !=
-                                                                null) {
-                                                              epicTag =
-                                                                  eCodeMatch
-                                                                      .group(1)!
-                                                                      .toUpperCase();
-                                                              gapText =
-                                                                  eCodeMatch
-                                                                      .group(2)!
-                                                                      .trim();
-                                                            }
-                                                            return Padding(
-                                                              padding: EdgeInsets.only(
-                                                                bottom: gIdx +
-                                                                            1 <
-                                                                        rawGaps
-                                                                            .take(
-                                                                              5,
-                                                                            )
-                                                                            .length
-                                                                    ? 6
-                                                                    : 0,
-                                                              ),
-                                                              child: Row(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .start,
-                                                                children: [
-                                                                  if (epicTag !=
-                                                                      null) ...[
-                                                                    Text(
-                                                                      epicTag,
-                                                                      style: GoogleFonts
-                                                                          .jetBrainsMono(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight.w700,
-                                                                        color:
-                                                                            textMuted,
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 7,
-                                                                    ),
-                                                                  ] else ...[
-                                                                    Text(
-                                                                      '• ',
-                                                                      style: GoogleFonts
-                                                                          .jetBrainsMono(
-                                                                        fontSize:
-                                                                            11,
-                                                                        color:
-                                                                            textMuted,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                  Expanded(
-                                                                    child: Text(
-                                                                      gapText,
-                                                                      style: GoogleFonts
-                                                                          .inter(
-                                                                        fontSize:
-                                                                            12,
-                                                                        height:
-                                                                            1.35,
-                                                                        color:
-                                                                            textPrimary,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            );
-                                                          },
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Divider(
-                                            height: 1,
-                                            thickness: 1,
-                                            color: borderSubtle,
-                                          ),
-                                        ],
-                                        if (nextRows.isNotEmpty ||
-                                            bp.beats.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                SizedBox(
-                                                  width: 126,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 5,
-                                                        ),
-                                                    child: Text(
-                                                      'NEXT IN ${nextVer.toUpperCase()}',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: textPrimary,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .stretch,
-                                                    children: [
-                                                      for (int nIdx = 0;
-                                                          nIdx <
-                                                              nextRows.length;
-                                                          nIdx++)
-                                                        Builder(
-                                                          builder: (context) {
-                                                            final row =
-                                                                nextRows[nIdx];
-                                                            final f = row.feat;
-                                                            final isUpg = f
-                                                                    .lifecycle ==
-                                                                FeatureLifecycleStatus
-                                                                    .upgrade;
-                                                            final isInc =
-                                                                f.included;
-                                                            final cleanGoal = f
-                                                                .goal
-                                                                .trim()
-                                                                .replaceAll(_trailingDotRegex, '');
-                                                            return Padding(
-                                                              padding: EdgeInsets.only(
-                                                                bottom: nIdx +
-                                                                            1 <
-                                                                        nextRows
-                                                                            .length
-                                                                    ? 6
-                                                                    : 0,
-                                                              ),
-                                                              child: InkWell(
-                                                                key: ValueKey(
-                                                                  'progressive_toggle_feat_${f.id}',
-                                                                ),
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                          5,
-                                                                        ),
-                                                                onTap: () {
-                                                                  if (f.lifecycle ==
-                                                                      FeatureLifecycleStatus
-                                                                          .newFeature) {
-                                                                    widget
-                                                                        .workbench
-                                                                        .toggleProposedFeatureScope(
-                                                                      row.beatId,
-                                                                      f.id,
-                                                                      !f.included,
-                                                                    );
-                                                                  } else {
-                                                                    widget
-                                                                        .workbench
-                                                                        .toggleProposedFeatureUpgradeOrStable(
-                                                                      row.beatId,
-                                                                      f.id,
-                                                                    );
-                                                                  }
-                                                                  _rebuild(
-                                                                    () {},
-                                                                  );
-                                                                },
-                                                                child:
-                                                                    Container(
-                                                                  padding:
-                                                                      const EdgeInsets.symmetric(
-                                                                        horizontal:
-                                                                            10,
-                                                                        vertical:
-                                                                            6,
-                                                                      ),
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color:
-                                                                        bgSurface,
-                                                                    borderRadius:
-                                                                        BorderRadius.circular(
-                                                                          5,
-                                                                        ),
-                                                                    border:
-                                                                        Border.all(
-                                                                      color:
-                                                                          borderSubtle,
-                                                                    ),
-                                                                  ),
-                                                                  child: Row(
-                                                                    mainAxisAlignment:
-                                                                        MainAxisAlignment
-                                                                            .spaceBetween,
-                                                                    children: [
-                                                                      Expanded(
-                                                                        child:
-                                                                            Row(
-                                                                          children: [
-                                                                            Text(
-                                                                              !isInc
-                                                                                  ? 'DEFERRED'
-                                                                                  : (isUpg ? '↻ UPGRADE' : '+ NEW'),
-                                                                              style: GoogleFonts.jetBrainsMono(
-                                                                                fontSize: 9.5,
-                                                                                fontWeight: FontWeight.w700,
-                                                                                color: isInc ? textSecondary : textMuted,
-                                                                              ),
-                                                                            ),
-                                                                            const SizedBox(
-                                                                              width:
-                                                                                  8,
-                                                                            ),
-                                                                            Flexible(
-                                                                              child:
-                                                                                  RichText(
-                                                                                maxLines:
-                                                                                    1,
-                                                                                overflow:
-                                                                                    TextOverflow.ellipsis,
-                                                                                text: TextSpan(
-                                                                                  style: GoogleFonts.inter(
-                                                                                    fontSize: 12,
-                                                                                    color: isInc ? textPrimary : textMuted,
-                                                                                  ),
-                                                                                  children: [
-                                                                                    TextSpan(
-                                                                                      text: f.title,
-                                                                                      style: const TextStyle(
-                                                                                        fontWeight: FontWeight.w700,
-                                                                                      ),
-                                                                                    ),
-                                                                                    if (cleanGoal.isNotEmpty)
-                                                                                      TextSpan(
-                                                                                        text: ' — $cleanGoal',
-                                                                                        style: TextStyle(
-                                                                                          color: isInc ? textSecondary : textMuted,
-                                                                                        ),
-                                                                                      ),
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                      ),
-                                                                      const SizedBox(
-                                                                        width:
-                                                                            10,
-                                                                      ),
-                                                                        Text(
-                                                                          '${row.epicCode} · ${isInc ? f.estimatedHours : 0}h',
-                                                                          style: GoogleFonts
-                                                                              .jetBrainsMono(
-                                                                            fontSize:
-                                                                                10,
-                                                                            fontWeight:
-                                                                                FontWeight.w600,
-                                                                            color:
-                                                                                textMuted,
-                                                                          ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          width:
-                                                                              8,
-                                                                        ),
-                                                                        InkWell(
-                                                                          key: ValueKey(
-                                                                            'progressive_supersede_feat_${f.id}',
-                                                                          ),
-                                                                          borderRadius:
-                                                                              BorderRadius.circular(
-                                                                                4,
-                                                                              ),
-                                                                          onTap: () {
-                                                                            widget
-                                                                                .workbench
-                                                                                .toggleProposedFeatureSuperseded(
-                                                                              row.beatId,
-                                                                              f.id,
-                                                                            );
-                                                                            _rebuild(
-                                                                              () {},
-                                                                            );
-                                                                          },
-                                                                          child: Padding(
-                                                                            padding: const EdgeInsets.symmetric(
-                                                                              horizontal: 4,
-                                                                              vertical: 2,
-                                                                            ),
-                                                                            child: Text(
-                                                                              '⊗ Pivot',
-                                                                              style: GoogleFonts.jetBrainsMono(
-                                                                                fontSize: 9.5,
-                                                                                fontWeight: FontWeight.w600,
-                                                                                color: textMuted,
-                                                                              ),
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              );
-                                                            },
-                                                          ),
-                                                        if (pivotedRows
-                                                            .isNotEmpty) ...[
-                                                          const SizedBox(
-                                                            height: 8,
-                                                          ),
-                                                          Wrap(
-                                                            spacing: 6,
-                                                            runSpacing: 6,
-                                                            children: [
-                                                              for (final pRow
-                                                                  in pivotedRows)
-                                                                InkWell(
-                                                                  key: ValueKey(
-                                                                    'progressive_restore_feat_${pRow.feat.id}',
-                                                                  ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                            4,
-                                                                          ),
-                                                                  onTap: () {
-                                                                    widget
-                                                                        .workbench
-                                                                        .toggleProposedFeatureSuperseded(
-                                                                      pRow.beatId,
-                                                                      pRow.feat
-                                                                          .id,
-                                                                    );
-                                                                    _rebuild(
-                                                                      () {},
-                                                                    );
-                                                                  },
-                                                                  child:
-                                                                      Container(
-                                                                    padding:
-                                                                        const EdgeInsets.symmetric(
-                                                                          horizontal:
-                                                                              8,
-                                                                          vertical:
-                                                                              4,
-                                                                        ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color:
-                                                                          bgSurface,
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                            4,
-                                                                          ),
-                                                                      border:
-                                                                          Border.all(
-                                                                        color:
-                                                                            borderSubtle,
-                                                                      ),
-                                                                    ),
-                                                                    child: Text(
-                                                                      'ARCHIVED: ${pRow.epicCode} · ${pRow.feat.title} · ↺ Restore',
-                                                                      style: GoogleFonts
-                                                                          .jetBrainsMono(
-                                                                        fontSize:
-                                                                            9.5,
-                                                                        fontWeight:
-                                                                            FontWeight.w600,
-                                                                        color:
-                                                                            textMuted,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                            ],
-                                                          ),
-                                                        ],
-                                                        if (bp.beats
-                                                            .isNotEmpty) ...[
-                                                          const SizedBox(
-                                                            height: 6,
-                                                          ),
-                                                          if (_addingFeatureToBeatId ==
-                                                              null)
-                                                            Align(
-                                                              alignment: Alignment
-                                                                  .centerLeft,
-                                                              child: InkWell(
-                                                                key: ValueKey(
-                                                                  'progressive_add_feat_btn_${bp.beats.first.id}',
-                                                                ),
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                          4,
-                                                                        ),
-                                                                onTap: () {
-                                                                  _rebuild(() {
-                                                                    _addingFeatureToBeatId =
-                                                                        bp
-                                                                            .beats
-                                                                            .first
-                                                                            .id;
-                                                                    _progressiveNewFeatCtrl
-                                                                        .clear();
-                                                                  });
-                                                                },
-                                                                child: Padding(
-                                                                  padding:
-                                                                      const EdgeInsets.symmetric(
-                                                                        vertical:
-                                                                            2,
-                                                                      ),
-                                                                  child: Text(
-                                                                    '+ Add Custom Feature...',
-                                                                    style: GoogleFonts
-                                                                        .jetBrainsMono(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w700,
-                                                                      color:
-                                                                          textMuted,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            )
-                                                          else
-                                                            Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .stretch,
-                                                              children: [
-                                                                if (bp.beats
-                                                                        .length >
-                                                                    1)
-                                                                  Padding(
-                                                                    padding:
-                                                                        const EdgeInsets.only(
-                                                                      bottom: 6,
-                                                                    ),
-                                                                    child: Wrap(
-                                                                      spacing:
-                                                                          6,
-                                                                      runSpacing:
-                                                                          4,
-                                                                      children: [
-                                                                        for (int bIdx =
-                                                                                0;
-                                                                            bIdx <
-                                                                                bp.beats.length;
-                                                                            bIdx++)
-                                                                          Builder(
-                                                                            builder:
-                                                                                (context) {
-                                                                              final b = bp.beats[bIdx];
-                                                                              final isSelBeat = _addingFeatureToBeatId == b.id;
-                                                                              final code = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
-                                                                              return InkWell(
-                                                                                key: ValueKey('progressive_add_feat_target_epic_${b.id}'),
-                                                                                borderRadius: BorderRadius.circular(4),
-                                                                                onTap: () {
-                                                                                  _rebuild(() {
-                                                                                    _addingFeatureToBeatId = b.id;
-                                                                                  });
-                                                                                },
-                                                                                child: Container(
-                                                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                                                  decoration: BoxDecoration(
-                                                                                    color: isSelBeat ? bgRecessed : bgSurface,
-                                                                                    borderRadius: BorderRadius.circular(4),
-                                                                                    border: Border.all(
-                                                                                      color: isSelBeat ? textPrimary.withValues(alpha: 0.45) : borderSubtle,
-                                                                                    ),
-                                                                                  ),
-                                                                                  child: Text(
-                                                                                    '$code · ${b.title}',
-                                                                                    style: GoogleFonts.jetBrainsMono(
-                                                                                      fontSize: 9.5,
-                                                                                      fontWeight: isSelBeat ? FontWeight.w700 : FontWeight.w500,
-                                                                                      color: isSelBeat ? textPrimary : textMuted,
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                              );
-                                                                            },
-                                                                          ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                Row(
-                                                                  children: [
-                                                                    Expanded(
-                                                                      child:
-                                                                          TextField(
-                                                                        controller:
-                                                                            _progressiveNewFeatCtrl,
-                                                                        autofocus:
-                                                                            true,
-                                                                        style: GoogleFonts
-                                                                            .inter(
-                                                                          fontSize:
-                                                                              12,
-                                                                          color:
-                                                                              textPrimary,
-                                                                        ),
-                                                                        decoration:
-                                                                            InputDecoration(
-                                                                          hintText:
-                                                                              'New $nextVer feature title...',
-                                                                          hintStyle:
-                                                                              GoogleFonts.inter(
-                                                                            fontSize:
-                                                                                11.5,
-                                                                            color:
-                                                                                textMuted,
-                                                                          ),
-                                                                          filled:
-                                                                              true,
-                                                                          fillColor:
-                                                                              bgSurface,
-                                                                          isDense:
-                                                                              true,
-                                                                          contentPadding:
-                                                                              const EdgeInsets.symmetric(
-                                                                            horizontal:
-                                                                                10,
-                                                                            vertical:
-                                                                                7,
-                                                                          ),
-                                                                          border:
-                                                                              OutlineInputBorder(
-                                                                            borderRadius:
-                                                                                BorderRadius.circular(
-                                                                                  5,
-                                                                                ),
-                                                                            borderSide:
-                                                                                BorderSide(
-                                                                              color:
-                                                                                  borderSubtle,
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                        onSubmitted:
-                                                                            (val) {
-                                                                          if (val
-                                                                              .trim()
-                                                                              .isEmpty) {
-                                                                            return;
-                                                                          }
-                                                                          widget
-                                                                              .workbench
-                                                                              .addCustomFeatureToProposedBeat(
-                                                                            _addingFeatureToBeatId!,
-                                                                            val.trim(),
-                                                                          );
-                                                                          _rebuild(
-                                                                            () {
-                                                                              _addingFeatureToBeatId =
-                                                                                  null;
-                                                                            },
-                                                                          );
-                                                                        },
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 6,
-                                                                    ),
-                                                                    TextButton(
-                                                                      onPressed:
-                                                                          () {
-                                                                        final val =
-                                                                            _progressiveNewFeatCtrl
-                                                                                .text
-                                                                                .trim();
-                                                                        if (val
-                                                                            .isNotEmpty) {
-                                                                          widget
-                                                                              .workbench
-                                                                              .addCustomFeatureToProposedBeat(
-                                                                            _addingFeatureToBeatId!,
-                                                                            val,
-                                                                          );
-                                                                        }
-                                                                        _rebuild(
-                                                                          () {
-                                                                            _addingFeatureToBeatId =
-                                                                                null;
-                                                                          },
-                                                                        );
-                                                                      },
-                                                                      child: Text(
-                                                                        'Add',
-                                                                        style: GoogleFonts
-                                                                            .jetBrainsMono(
-                                                                          fontSize:
-                                                                              10.5,
-                                                                          fontWeight:
-                                                                              FontWeight
-                                                                                  .w700,
-                                                                          color:
-                                                                              textPrimary,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ],
-                                                            ),
-                                                        ],
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 14),
-
-                                  // 3. Vertical Radio-Style Strategic Direction Selector
-                                  Text(
-                                    (dynamicQuestion?.question ??
-                                            'STRATEGIC DIRECTION (SELECT TO RE-ARCHITECT ${nextVer.toUpperCase()})')
-                                        .toUpperCase(),
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.4,
-                                      color: textMuted,
-                                    ),
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Step 1: Choose v0.X Focus (3 Focus Cards + Goal & Done When Box)
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: bgSurface,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: borderSubtle),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Column(
+                                  child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      for (int oIdx = 0;
-                                          oIdx < dynamicOptions.length;
-                                          oIdx++)
-                                        Builder(
-                                          builder: (context) {
-                                            final rawOpt = dynamicOptions[oIdx];
-                                            final isSelected =
-                                                _selectedProgressiveTrackIndex ==
-                                                oIdx;
-                                            final isRec = rawOpt
-                                                .toLowerCase()
-                                                .startsWith('(recommended)');
-                                            final stripped = rawOpt
-                                                .replaceFirst(_recommendedPrefixRegex, '')
-                                                .trim();
-                                            final colonIdx =
-                                                stripped.indexOf(':');
-                                            final optTitle = colonIdx > 0
-                                                ? stripped
-                                                    .substring(0, colonIdx)
-                                                    .trim()
-                                                : stripped;
-                                            final optDesc = colonIdx > 0
-                                                ? stripped
-                                                    .substring(colonIdx + 1)
-                                                    .trim()
-                                                : '';
-                                            return Padding(
-                                              padding: EdgeInsets.only(
-                                                bottom: oIdx + 1 <
-                                                        dynamicOptions.length
-                                                    ? 6
-                                                    : 0,
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              '1. CHOOSE ${nextVer.toUpperCase()} FOCUS',
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.6,
+                                                color: textMuted,
                                               ),
-                                              child: InkWell(
-                                                key: ValueKey(
-                                                  'progressive_preset_chip_$oIdx',
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(7),
-                                                onTap: widget
-                                                        .workbench
-                                                        .isAgentBusy
-                                                    ? null
-                                                    : () async {
-                                                        final prevIdx =
-                                                            _selectedProgressiveTrackIndex;
-                                                        if (prevIdx == oIdx) {
-                                                          return;
-                                                        }
-                                                        _rebuild(() {
-                                                          _selectedProgressiveTrackIndex =
-                                                              oIdx;
-                                                        });
-                                                        if (prevIdx != 0) {
-                                                          widget.workbench
-                                                              .restoreInitialProgressiveDraftBlueprint();
-                                                        }
-                                                        if (oIdx > 0) {
-                                                          await submitDirective(
-                                                            'Re-architect $nextVer around this strategic option: $rawOpt',
-                                                          );
-                                                        } else {
-                                                          _rebuild(() {});
-                                                        }
-                                                      },
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 9,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: isSelected
-                                                        ? bgRecessed
-                                                        : Colors.transparent,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'AGENT ARCHITECTURAL RECOMMENDATION · ${widget.workbench.activePhaseBadgeLabel}',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final isWide =
+                                              constraints.maxWidth >= 700;
+                                          final optionCards = <Widget>[
+                                            for (int oIdx = 0;
+                                                oIdx < dynamicOptions.length;
+                                                oIdx++)
+                                              Builder(
+                                                builder: (context) {
+                                                  final rawOpt =
+                                                      dynamicOptions[oIdx];
+                                                  final isSelected =
+                                                      _selectedProgressiveTrackIndex ==
+                                                      oIdx;
+                                                  final isRec = rawOpt
+                                                      .toLowerCase()
+                                                      .startsWith(
+                                                        '(recommended)',
+                                                      );
+                                                  final stripped = rawOpt
+                                                      .replaceFirst(
+                                                        _recommendedPrefixRegex,
+                                                        '',
+                                                      )
+                                                      .trim();
+                                                  final colonIdx =
+                                                      stripped.indexOf(':');
+                                                  final optTitle = colonIdx > 0
+                                                      ? stripped
+                                                          .substring(
+                                                            0,
+                                                            colonIdx,
+                                                          )
+                                                          .trim()
+                                                      : stripped;
+                                                  final optDesc = colonIdx > 0
+                                                      ? stripped
+                                                          .substring(
+                                                            colonIdx + 1,
+                                                          )
+                                                          .trim()
+                                                      : '';
+                                                  return InkWell(
+                                                    key: ValueKey(
+                                                      'progressive_preset_chip_$oIdx',
+                                                    ),
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                          7,
+                                                          8,
                                                         ),
-                                                    border: Border.all(
-                                                      color: isSelected
-                                                          ? textPrimary
-                                                              .withValues(
-                                                                alpha: 0.55,
-                                                              )
-                                                          : borderSubtle,
-                                                    ),
-                                                  ),
-                                                  child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets.only(
-                                                              top: 1,
-                                                            ),
-                                                        child: Text(
-                                                          isSelected
-                                                              ? '●'
-                                                              : '○',
-                                                          style: GoogleFonts
-                                                              .jetBrainsMono(
-                                                            fontSize: 11,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            color: isSelected
-                                                                ? textPrimary
-                                                                : textMuted,
+                                                    onTap: widget
+                                                            .workbench
+                                                            .isAgentBusy
+                                                        ? null
+                                                        : () async {
+                                                            final prevIdx =
+                                                                _selectedProgressiveTrackIndex;
+                                                            if (prevIdx ==
+                                                                oIdx) {
+                                                              return;
+                                                            }
+                                                            _rebuild(() {
+                                                              _selectedProgressiveTrackIndex =
+                                                                  oIdx;
+                                                            });
+                                                            if (prevIdx != 0) {
+                                                              widget.workbench
+                                                                  .restoreInitialProgressiveDraftBlueprint();
+                                                            }
+                                                            if (oIdx > 0) {
+                                                              await submitDirective(
+                                                                'Re-architect $nextVer around this strategic option: $rawOpt',
+                                                              );
+                                                            } else {
+                                                              _rebuild(() {});
+                                                            }
+                                                          },
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            12,
                                                           ),
+                                                      decoration: BoxDecoration(
+                                                        color: isSelected
+                                                            ? bgRecessed
+                                                            : Colors.transparent,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        border: Border.all(
+                                                          color: isSelected
+                                                              ? textPrimary
+                                                                  .withValues(
+                                                                    alpha: 0.6,
+                                                                  )
+                                                              : borderSubtle,
                                                         ),
                                                       ),
-                                                      const SizedBox(width: 10),
-                                                      Expanded(
-                                                        child: Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            Row(
-                                                              children: [
-                                                                Flexible(
-                                                                  child: Text(
-                                                                    optTitle,
-                                                                    style: GoogleFonts
-                                                                        .inter(
-                                                                      fontSize:
-                                                                          12,
-                                                                      fontWeight: isSelected
-                                                                          ? FontWeight.w700
-                                                                          : FontWeight.w600,
-                                                                      color: isSelected
-                                                                          ? textPrimary
-                                                                          : textSecondary,
-                                                                    ),
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Row(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              Text(
+                                                                isSelected
+                                                                    ? '●'
+                                                                    : '○',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 11,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  color: isSelected
+                                                                      ? textPrimary
+                                                                      : textMuted,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                width: 8,
+                                                              ),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  optTitle,
+                                                                  style: GoogleFonts
+                                                                      .inter(
+                                                                    fontSize:
+                                                                        12.5,
+                                                                    fontWeight: isSelected
+                                                                        ? FontWeight
+                                                                            .w700
+                                                                        : FontWeight
+                                                                            .w600,
+                                                                    color: isSelected
+                                                                        ? textPrimary
+                                                                        : textSecondary,
                                                                   ),
                                                                 ),
-                                                                if (isRec) ...[
-                                                                  const SizedBox(
-                                                                    width: 8,
-                                                                  ),
-                                                                  Text(
-                                                                    '(Recommended)',
-                                                                    style: GoogleFonts
-                                                                        .jetBrainsMono(
-                                                                      fontSize:
-                                                                          9.5,
-                                                                      fontWeight:
-                                                                          FontWeight.w600,
-                                                                      color:
-                                                                          textMuted,
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ],
-                                                            ),
-                                                            if (optDesc
-                                                                .isNotEmpty) ...[
-                                                              const SizedBox(
-                                                                height: 2,
                                                               ),
-                                                              Text(
+                                                            ],
+                                                          ),
+                                                          if (isRec) ...[
+                                                            const SizedBox(
+                                                              height: 4,
+                                                            ),
+                                                            Padding(
+                                                              padding:
+                                                                  const EdgeInsets.only(
+                                                                left: 19,
+                                                              ),
+                                                              child: Text(
+                                                                '★ RECOMMENDED',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 9,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  color:
+                                                                      textMuted,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                          if (optDesc
+                                                              .isNotEmpty) ...[
+                                                            const SizedBox(
+                                                              height: 5,
+                                                            ),
+                                                            Padding(
+                                                              padding:
+                                                                  const EdgeInsets.only(
+                                                                left: 19,
+                                                              ),
+                                                              child: Text(
                                                                 optDesc,
                                                                 style: GoogleFonts
                                                                     .inter(
-                                                                  fontSize: 11.5,
+                                                                  fontSize:
+                                                                      11.5,
                                                                   height: 1.35,
                                                                   color:
                                                                       textMuted,
                                                                 ),
                                                               ),
-                                                            ],
+                                                            ),
                                                           ],
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                          ];
+                                          if (isWide &&
+                                              optionCards.length > 1) {
+                                            return IntrinsicHeight(
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  for (int i = 0;
+                                                      i < optionCards.length;
+                                                      i++) ...[
+                                                    if (i > 0)
+                                                      const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: optionCards[i],
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            );
+                                          }
+                                          return Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              for (int i = 0;
+                                                  i < optionCards.length;
+                                                  i++) ...[
+                                                if (i > 0)
+                                                  const SizedBox(height: 8),
+                                                optionCards[i],
+                                              ],
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 11,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: bgRecessed,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: borderSubtle,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              heroGoal,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13.5,
+                                                height: 1.4,
+                                                fontWeight: FontWeight.w700,
+                                                color: textPrimary,
+                                              ),
+                                            ),
+                                            if (bp.doneWhen
+                                                .trim()
+                                                .isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    '✓ DONE WHEN: ',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 10.5,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: textSecondary,
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: Text(
+                                                      bp.doneWhen.trim(),
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 12,
+                                                        height: 1.35,
+                                                        color: textSecondary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Step 2: Features in v0.X (Clean Checklist Card)
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: bgSurface,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: borderSubtle),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              '2. FEATURES IN ${nextVer.toUpperCase()} ($selectedChangesCount SELECTED · ${bp.totalIncludedHours}H)',
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.6,
+                                                color: textMuted,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'CLICK ANY ROW TO INCLUDE / SKIP',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      for (int nIdx = 0;
+                                          nIdx < nextRows.length;
+                                          nIdx++)
+                                        Builder(
+                                          builder: (context) {
+                                            final row = nextRows[nIdx];
+                                            final f = row.feat;
+                                            final isUpg = f.lifecycle ==
+                                                FeatureLifecycleStatus.upgrade;
+                                            final isInc = f.included;
+                                            final cleanGoal = f.goal
+                                                .trim()
+                                                .replaceAll(
+                                                  _trailingDotRegex,
+                                                  '',
+                                                );
+                                            return Padding(
+                                              padding: EdgeInsets.only(
+                                                bottom: nIdx + 1 <
+                                                        nextRows.length
+                                                    ? 6
+                                                    : 0,
+                                              ),
+                                              child: InkWell(
+                                                key: ValueKey(
+                                                  'progressive_toggle_feat_${f.id}',
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                onTap: () {
+                                                  widget.workbench
+                                                      .toggleProposedFeatureScope(
+                                                    row.beatId,
+                                                    f.id,
+                                                    !f.included,
+                                                  );
+                                                  _rebuild(() {});
+                                                },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 11,
+                                                        vertical: 8,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: isInc
+                                                        ? bgRecessed
+                                                        : Colors.transparent,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          6,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: borderSubtle,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Text(
+                                                        isInc ? '☑' : '☐',
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 13,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: isInc
+                                                              ? textPrimary
+                                                              : textMuted,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 9),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: bgSurface,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                4,
+                                                              ),
+                                                          border: Border.all(
+                                                            color: borderSubtle,
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          !isInc
+                                                              ? 'Skipped'
+                                                              : (isUpg
+                                                                  ? 'Upgrade'
+                                                                  : 'New'),
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 9.5,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: isInc
+                                                                ? textSecondary
+                                                                : textMuted,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 9),
+                                                      Expanded(
+                                                        child: RichText(
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          text: TextSpan(
+                                                            style: GoogleFonts
+                                                                .inter(
+                                                              fontSize: 12.5,
+                                                              color: isInc
+                                                                  ? textPrimary
+                                                                  : textMuted,
+                                                            ),
+                                                            children: [
+                                                              TextSpan(
+                                                                text: f.title,
+                                                                style:
+                                                                    const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                ),
+                                                              ),
+                                                              if (cleanGoal
+                                                                  .isNotEmpty)
+                                                                TextSpan(
+                                                                  text:
+                                                                      ' — $cleanGoal',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color: isInc
+                                                                        ? textSecondary
+                                                                        : textMuted,
+                                                                  ),
+                                                                ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Text(
+                                                        '${row.epicCode} · ${isInc ? f.estimatedHours : 0}h',
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: textMuted,
                                                         ),
                                                       ),
                                                     ],
@@ -1761,90 +1098,480 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             );
                                           },
                                         ),
+                                      if (pivotedRows.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: [
+                                            for (final pRow in pivotedRows)
+                                              InkWell(
+                                                key: ValueKey(
+                                                  'progressive_restore_feat_${pRow.feat.id}',
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                onTap: () {
+                                                  widget.workbench
+                                                      .toggleProposedFeatureSuperseded(
+                                                    pRow.beatId,
+                                                    pRow.feat.id,
+                                                  );
+                                                  _rebuild(() {});
+                                                },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: bgRecessed,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: borderSubtle,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    'ARCHIVED: ${pRow.epicCode} · ${pRow.feat.title} · ↺ Restore',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 9.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: textMuted,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                      const SizedBox(height: 10),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          if (stableRows.isNotEmpty)
+                                            InkWell(
+                                              key: const ValueKey(
+                                                'progressive_toggle_stable_drawer_btn',
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              onTap: () {
+                                                _rebuild(() {
+                                                  _showProgressiveStableFeaturesDrawer =
+                                                      !_showProgressiveStableFeaturesDrawer;
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: bgRecessed,
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: borderSubtle,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  _showProgressiveStableFeaturesDrawer
+                                                      ? '▾ Hide Built Features (${stableRows.length} Stable)'
+                                                      : '+ Upgrade Another Built Feature (${stableRows.length} Stable) ▾',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          if (bp.beats.isNotEmpty &&
+                                              _addingFeatureToBeatId == null)
+                                            InkWell(
+                                              key: ValueKey(
+                                                'progressive_add_feat_btn_${bp.beats.first.id}',
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              onTap: () {
+                                                _rebuild(() {
+                                                  _addingFeatureToBeatId =
+                                                      bp.beats.first.id;
+                                                  _progressiveNewFeatCtrl
+                                                      .clear();
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: bgRecessed,
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: borderSubtle,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '+ Add New Feature...',
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: textSecondary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      if (_showProgressiveStableFeaturesDrawer &&
+                                          stableRows.isNotEmpty) ...[
+                                        const SizedBox(height: 10),
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: bgRecessed,
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: borderSubtle,
+                                            ),
+                                          ),
+                                          child: Wrap(
+                                            spacing: 8,
+                                            runSpacing: 6,
+                                            children: [
+                                              for (final sRow in stableRows)
+                                                InkWell(
+                                                  key: ValueKey(
+                                                    'progressive_toggle_feat_${sRow.feat.id}',
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  onTap: () {
+                                                    widget.workbench
+                                                        .toggleProposedFeatureUpgradeOrStable(
+                                                      sRow.beatId,
+                                                      sRow.feat.id,
+                                                    );
+                                                    _rebuild(() {});
+                                                  },
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: bgSurface,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            4,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: borderSubtle,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      '+ ${sRow.epicCode} · ${sRow.feat.title}',
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 11.5,
+                                                        color: textSecondary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                      if (_addingFeatureToBeatId != null &&
+                                          bp.beats.isNotEmpty) ...[
+                                        const SizedBox(height: 10),
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            if (bp.beats.length > 1)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 6,
+                                                ),
+                                                child: Wrap(
+                                                  spacing: 6,
+                                                  runSpacing: 4,
+                                                  children: [
+                                                    for (int bIdx = 0;
+                                                        bIdx < bp.beats.length;
+                                                        bIdx++)
+                                                      Builder(
+                                                        builder: (context) {
+                                                          final b =
+                                                              bp.beats[bIdx];
+                                                          final isSelBeat =
+                                                              _addingFeatureToBeatId ==
+                                                              b.id;
+                                                          final code =
+                                                              'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                                                          return InkWell(
+                                                            key: ValueKey(
+                                                              'progressive_add_feat_target_epic_${b.id}',
+                                                            ),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                      4,
+                                                                    ),
+                                                            onTap: () {
+                                                              _rebuild(() {
+                                                                _addingFeatureToBeatId =
+                                                                    b.id;
+                                                              });
+                                                            },
+                                                            child: Container(
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical: 2,
+                                                                  ),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: isSelBeat
+                                                                    ? bgRecessed
+                                                                    : bgSurface,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                          4,
+                                                                        ),
+                                                                border:
+                                                                    Border.all(
+                                                                  color: isSelBeat
+                                                                      ? textPrimary
+                                                                          .withValues(
+                                                                            alpha:
+                                                                                0.45,
+                                                                          )
+                                                                      : borderSubtle,
+                                                                ),
+                                                              ),
+                                                              child: Text(
+                                                                '$code · ${b.title}',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 9.5,
+                                                                  fontWeight: isSelBeat
+                                                                      ? FontWeight
+                                                                          .w700
+                                                                      : FontWeight
+                                                                          .w500,
+                                                                  color: isSelBeat
+                                                                      ? textPrimary
+                                                                      : textMuted,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: TextField(
+                                                    controller:
+                                                        _progressiveNewFeatCtrl,
+                                                    autofocus: true,
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 12,
+                                                      color: textPrimary,
+                                                    ),
+                                                    decoration: InputDecoration(
+                                                      hintText:
+                                                          'New $nextVer feature title...',
+                                                      hintStyle:
+                                                          GoogleFonts.inter(
+                                                        fontSize: 11.5,
+                                                        color: textMuted,
+                                                      ),
+                                                      filled: true,
+                                                      fillColor: bgRecessed,
+                                                      isDense: true,
+                                                      contentPadding:
+                                                          const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 7,
+                                                      ),
+                                                      border:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              5,
+                                                            ),
+                                                        borderSide: BorderSide(
+                                                          color: borderSubtle,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    onSubmitted: (val) {
+                                                      if (val.trim().isEmpty) {
+                                                        return;
+                                                      }
+                                                      widget.workbench
+                                                          .addCustomFeatureToProposedBeat(
+                                                        _addingFeatureToBeatId!,
+                                                        val.trim(),
+                                                      );
+                                                      _rebuild(() {
+                                                        _addingFeatureToBeatId =
+                                                            null;
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                TextButton(
+                                                  onPressed: () {
+                                                    final val =
+                                                        _progressiveNewFeatCtrl
+                                                            .text
+                                                            .trim();
+                                                    if (val.isNotEmpty) {
+                                                      widget.workbench
+                                                          .addCustomFeatureToProposedBeat(
+                                                        _addingFeatureToBeatId!,
+                                                        val,
+                                                      );
+                                                    }
+                                                    _rebuild(() {
+                                                      _addingFeatureToBeatId =
+                                                          null;
+                                                    });
+                                                  },
+                                                  child: Text(
+                                                    'Add',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 10.5,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: textPrimary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
-                                  const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    key: const ValueKey(
-                                      'progressive_release_prompt_input',
-                                    ),
-                                    controller: _progressiveDirectiveCtrl,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12.5,
-                                      color: textPrimary,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText:
-                                          'Want to adjust the Agent\'s $nextVer recommendation? Tell the Agent what to swap or add...',
-                                      hintStyle: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        color: textMuted,
-                                      ),
-                                      filled: true,
-                                      fillColor: bgRecessed,
-                                      isDense: true,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 11,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                        borderSide:
-                                            BorderSide(color: borderSubtle),
-                                      ),
-                                    ),
-                                    onSubmitted: (val) async {
-                                      if (val.trim().isEmpty) return;
-                                      _progressiveDirectiveCtrl.clear();
-                                      await submitDirective(val);
-                                    },
-                                  ),
                                 ),
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  key: const ValueKey(
-                                    'progressive_release_ask_agent_btn',
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: textPrimary,
-                                    backgroundColor: bgRecessed,
-                                    side: BorderSide(
-                                      color: borderBright,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                  onPressed: widget.workbench.isAgentBusy
-                                      ? null
-                                      : () async {
-                                          final text = _progressiveDirectiveCtrl
-                                              .text
-                                              .trim();
-                                          if (text.isEmpty) return;
+                                const SizedBox(height: 12),
+
+                                // Step 3: Ask Agent Prompt Bar
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        key: const ValueKey(
+                                          'progressive_release_prompt_input',
+                                        ),
+                                        controller: _progressiveDirectiveCtrl,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12.5,
+                                          color: textPrimary,
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText:
+                                              'Want to adjust the $nextVer plan? Tell the Agent what to swap or add...',
+                                          hintStyle: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            color: textMuted,
+                                          ),
+                                          filled: true,
+                                          fillColor: bgSurface,
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 11,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            borderSide: BorderSide(
+                                              color: borderSubtle,
+                                            ),
+                                          ),
+                                        ),
+                                        onSubmitted: (val) async {
+                                          if (val.trim().isEmpty) return;
                                           _progressiveDirectiveCtrl.clear();
-                                          await submitDirective(text);
+                                          await submitDirective(val);
                                         },
-                                  child: Text(
-                                    'Ask Agent ✦',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton(
+                                      key: const ValueKey(
+                                        'progressive_release_ask_agent_btn',
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: textPrimary,
+                                        backgroundColor: bgSurface,
+                                        side: BorderSide(
+                                          color: borderBright,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 12,
+                                        ),
+                                      ),
+                                      onPressed: widget.workbench.isAgentBusy
+                                          ? null
+                                          : () async {
+                                              final text =
+                                                  _progressiveDirectiveCtrl
+                                                      .text
+                                                      .trim();
+                                              if (text.isEmpty) return;
+                                              _progressiveDirectiveCtrl.clear();
+                                              await submitDirective(text);
+                                            },
+                                      child: Text(
+                                        'Ask Agent ✦',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
-                          ],
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                   Builder(
                     builder: (context) {
                       final activeInbox = widget.workbench.featureInboxItems
@@ -1961,109 +1688,132 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       );
                     },
                   ),
-                        if (bp.explicitExclusions.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: bgSurface,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: borderSubtle),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'DEFERRED BACKLOG (${bp.explicitExclusions.length}) — CLICK TO PROMOTE INTO ${nextVer.toUpperCase()}',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: textSecondary,
-                                  ),
+                        Builder(
+                          builder: (context) {
+                            final promotableExclusions =
+                                <({int originalIdx, String text})>[];
+                            for (int eIdx = 0;
+                                eIdx < bp.explicitExclusions.length;
+                                eIdx++) {
+                              final exText = bp.explicitExclusions[eIdx].trim();
+                              if (exText.isEmpty) continue;
+                              final lower = exText.toLowerCase();
+                              if (lower.startsWith('no ') ||
+                                  lower.contains(': no ') ||
+                                  lower.contains('] no ') ||
+                                  lower.contains('[never]') ||
+                                  lower.contains('[cut]')) {
+                                continue;
+                              }
+                              promotableExclusions.add((
+                                originalIdx: eIdx,
+                                text: exText,
+                              ));
+                            }
+                            if (promotableExclusions.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: bgSurface,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: borderSubtle),
                                 ),
-                                const SizedBox(height: 10),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    for (int eIdx = 0;
-                                        eIdx < bp.explicitExclusions.length;
-                                        eIdx++)
-                                      Builder(
-                                        builder: (context) {
-                                          final exText =
-                                              bp.explicitExclusions[eIdx];
-                                          final activePhase =
-                                              widget.workbench.currentPhase;
-                                          final isUnlocked = ReleaseBlueprint
-                                              .isDeferredExclusionUnlockedInPhase(
-                                            exText,
-                                            activePhase,
-                                          );
-                                          final isNever = exText
-                                              .toLowerCase()
-                                              .contains('[never]');
-                                          final labelText = isUnlocked
-                                              ? '✦ UNLOCKED IN ${activePhase.shortName.toUpperCase()} · + Promote: $exText'
-                                              : (isNever
-                                                  ? '[NEVER] · + Override: $exText'
-                                                  : '+ Promote: $exText');
-                                          return InkWell(
-                                            key: ValueKey(
-                                              'promote_exclusion_chip_$eIdx',
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(5),
-                                            onTap: () {
-                                              widget.workbench
-                                                  .promoteExclusionToNextRelease(
+                                    Text(
+                                      'DEFERRED BACKLOG (${promotableExclusions.length}) — CLICK TO PROMOTE INTO ${nextVer.toUpperCase()}',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        for (final entry
+                                            in promotableExclusions)
+                                          Builder(
+                                            builder: (context) {
+                                              final exText = entry.text;
+                                              final activePhase = widget
+                                                  .workbench
+                                                  .currentPhase;
+                                              final isUnlocked = ReleaseBlueprint
+                                                  .isDeferredExclusionUnlockedInPhase(
                                                 exText,
+                                                activePhase,
                                               );
-                                              _rebuild(() {});
-                                            },
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 9,
-                                                    vertical: 5,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: bgRecessed,
+                                              final labelText = isUnlocked
+                                                  ? '✦ UNLOCKED IN ${activePhase.shortName.toUpperCase()} · + Promote: $exText'
+                                                  : '+ Promote: $exText';
+                                              return InkWell(
+                                                key: ValueKey(
+                                                  'promote_exclusion_chip_${entry.originalIdx}',
+                                                ),
                                                 borderRadius:
                                                     BorderRadius.circular(5),
-                                                border: Border.all(
-                                                  color: isUnlocked
-                                                      ? const Color(
-                                                          0xFF10B981,
-                                                        ).withValues(
-                                                          alpha: 0.55,
-                                                        )
-                                                      : borderSubtle,
+                                                onTap: () {
+                                                  widget.workbench
+                                                      .promoteExclusionToNextRelease(
+                                                    exText,
+                                                  );
+                                                  _rebuild(() {});
+                                                },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 9,
+                                                        vertical: 5,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: bgRecessed,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          5,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: isUnlocked
+                                                          ? const Color(
+                                                              0xFF10B981,
+                                                            ).withValues(
+                                                              alpha: 0.55,
+                                                            )
+                                                          : borderSubtle,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    labelText,
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 10.5,
+                                                      fontWeight: isUnlocked
+                                                          ? FontWeight.w700
+                                                          : FontWeight.w600,
+                                                      color: isUnlocked
+                                                          ? textPrimary
+                                                          : textSecondary,
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                              child: Text(
-                                                labelText,
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 10.5,
-                                                  fontWeight: isUnlocked
-                                                      ? FontWeight.w700
-                                                      : FontWeight.w600,
-                                                  color: isUnlocked
-                                                      ? textPrimary
-                                                      : textSecondary,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
+                                              );
+                                            },
+                                          ),
+                                      ],
+                                    ),
                                   ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ],
                   ),
