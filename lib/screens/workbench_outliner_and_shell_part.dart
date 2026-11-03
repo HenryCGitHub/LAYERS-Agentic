@@ -915,6 +915,37 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           for (final arch in archivedFeats)
             _buildFeatureRailItem(arch, activeVer: activeVer),
         ] else ...[
+          if (beats.isEmpty && widget.workbench.isAgentBusy)
+            Padding(
+              key: const ValueKey('outliner_planning_epics_row'),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    '⟳',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.workbench.agentProgressStep ??
+                          'Determining Systems & Mechanics ($activeVer)...',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Builder(
             builder: (context) {
               final releaseHasActiveFeats = beats.any(
@@ -2196,6 +2227,13 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
   }) {
     final feat = widget.workbench.selectedFeature;
     if (feat == null) {
+      if (widget.workbench.isAgentBusy ||
+          widget.workbench.synthesizingBeatId != null) {
+        return Container(
+          color: bgBase,
+          child: _buildAgentExecutionProgress(rel),
+        );
+      }
       return Center(
         child: Text(
           'Select a Feature from the left rail.',

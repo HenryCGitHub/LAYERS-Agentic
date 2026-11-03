@@ -107,12 +107,12 @@ RULES:
     if (useThinkingLevelEnum) {
       return <String, dynamic>{
         'thinkingLevel':
-            (upper == 'NONE' || upper == 'MINIMAL') ? upper : 'HIGH',
+            (upper == 'NONE' || upper == 'MINIMAL') ? upper : 'LOW',
       };
     }
     final int budget = switch (upper) {
       'NONE' || 'MINIMAL' => 0,
-      _ => -1,
+      _ => 256,
     };
     return <String, dynamic>{
       'thinkingBudget': budget,

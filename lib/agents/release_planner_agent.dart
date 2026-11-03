@@ -3424,4 +3424,233 @@ class ReleaseExecutorAgent {
     );
     return createdOrUpdatedDocs;
   }
+
+  /// Materializes all System Epic (`E01`..`EN`) TierDocuments (`epic_${releaseDoc.id}_1` .. `epic_${releaseDoc.id}_N`)
+  /// into `releaseDoc.childrenIds` immediately after Phase 1 (`planReleaseSystemEpics`) so all Epics appear in the
+  /// Left Outliner Rail right away (`E01` showing `⟳`, `E02`..`EN` showing `Queued`).
+  static List<TierDocument> createInitialSystemEpicDocs({
+    required TierDocument releaseDoc,
+    required ReleaseBlueprint blueprint,
+  }) {
+    final createdEpics = <TierDocument>[];
+    final beatTitles = <String>[];
+    final versionTag = blueprint.releaseVersionTag;
+    releaseDoc.childrenIds.clear();
+
+    for (int bIdx = 0; bIdx < blueprint.beats.length; bIdx++) {
+      final beatBp = blueprint.beats[bIdx];
+      final concreteBeatTitle =
+          MechanicArchetypeProfile.concreteBeatDisplayTitle(
+        beatBp.title,
+        beatIndex: bIdx,
+      );
+      beatTitles.add(concreteBeatTitle);
+      final beatId = 'epic_${releaseDoc.id}_${bIdx + 1}';
+      beatBp.id = beatId;
+
+      final beatDoc = TierDocument(
+        id: beatId,
+        title: concreteBeatTitle,
+        tier: TierType.epic,
+        parentId: releaseDoc.id,
+        estimatedDuration: '0h',
+        sections: <String, String>{
+          'scope': 'Goal: ${beatBp.goal}\n\n'
+              'In Scope:\n\n'
+              'Done When: ${beatBp.doneWhen}',
+        },
+      );
+      releaseDoc.childrenIds.add(beatDoc.id);
+      createdEpics.add(beatDoc);
+    }
+
+    final inScopeBeats = beatTitles.map((t) => '• $t').join('\n');
+    final outScopeItems =
+        blueprint.effectiveOutOfScope.map((o) => '• $o').join('\n');
+    releaseDoc.title = blueprint.releaseTitle;
+    releaseDoc.sections['releaseScope'] = blueprint.preset.name;
+    releaseDoc.sections['versionTag'] = versionTag;
+    releaseDoc.sections['release_blueprint_json'] =
+        jsonEncode(blueprint.toJson());
+    releaseDoc.estimatedDuration = '${blueprint.totalIncludedHours}h';
+    releaseDoc.sections['scope'] = 'Goal: ${blueprint.goal}\n\n'
+        'In Scope:\n$inScopeBeats\n\n'
+        'Out of Scope:\n$outScopeItems\n\n'
+        'Done When: ${blueprint.doneWhen}';
+
+    return createdEpics;
+  }
+
+  /// Materializes the playable Feature TierDocuments (`feat_${beatDoc.id}_1` .. `feat_${beatDoc.id}_M`)
+  /// for a SINGLE System Epic (`beatDoc` at `epicIndex`) without clearing `releaseDoc.childrenIds`
+  /// or overwriting any earlier Epic or Feature documents.
+  static List<TierDocument> materializeFeaturesForSingleEpic({
+    required TierDocument releaseDoc,
+    required TierDocument beatDoc,
+    required ReleaseBlueprint blueprint,
+    required ProposedBeatBlueprint beatBp,
+    required int epicIndex,
+    Map<String, TierDocument> existingDocuments = const {},
+  }) {
+    final createdFeatures = <TierDocument>[];
+    final versionTag = blueprint.releaseVersionTag;
+    final includedFeats = beatBp.includedFeatures;
+    final concreteBeatTitle =
+        MechanicArchetypeProfile.concreteBeatDisplayTitle(
+      beatBp.title,
+      beatIndex: epicIndex,
+    );
+    final featTitlesForBeat = includedFeats
+        .map(
+          (f) =>
+              '• ${MechanicArchetypeProfile.concreteFeatureTitleForBeat(f.title, beatTitle: concreteBeatTitle, beatGoal: beatBp.goal, beatIndex: epicIndex)}: ${f.goal}',
+        )
+        .join('\n');
+    final deferredForBeat =
+        beatBp.deferredFeatures.map((f) => '• ${f.title}').join('\n');
+
+    beatDoc.title = concreteBeatTitle;
+    beatDoc.parentId = releaseDoc.id;
+    beatDoc.estimatedDuration = '${beatBp.totalIncludedHours}h';
+    beatDoc.sections['scope'] = 'Goal: ${beatBp.goal}\n\n'
+        'In Scope:\n$featTitlesForBeat\n\n'
+        '${deferredForBeat.isNotEmpty ? 'Out of Scope:\n$deferredForBeat\n\n' : ''}'
+        'Done When: ${beatBp.doneWhen}';
+    beatDoc.childrenIds.clear();
+
+    final parentProjId = releaseDoc.parentId;
+    final projDocForHint =
+        parentProjId != null ? existingDocuments[parentProjId] : null;
+    final engineHint = projDocForHint?.sections['tech_spec'] ??
+        projDocForHint?.sections['techSpec'] ??
+        projDocForHint?.sections['tech_stack'] ??
+        '';
+    final rawPhase = (releaseDoc.sections['phase'] ?? '').trim();
+    final releasePhase = switch (rawPhase) {
+      'postLaunch' => ProductionPhase.postLaunch,
+      'fullProduction' => ProductionPhase.fullProduction,
+      'verticalSlice' => ProductionPhase.verticalSlice,
+      'mvp' => ProductionPhase.mvp,
+      'prototype' => ProductionPhase.prototype,
+      _ => ProductionPhase.prototype,
+    };
+
+    for (int fIdx = 0; fIdx < includedFeats.length; fIdx++) {
+      final featBp = includedFeats[fIdx];
+      final concreteFeatTitle =
+          MechanicArchetypeProfile.concreteFeatureTitleForBeat(
+        featBp.title,
+        beatTitle: beatBp.title,
+        beatGoal: beatBp.goal,
+        beatIndex: epicIndex,
+      );
+      final featId = 'feat_${beatDoc.id}_${fIdx + 1}';
+      featBp.id = featId;
+
+      final inScopeText = featBp.inScope.map((s) => '• $s').join('\n');
+      final outScopeText = featBp.outOfScope.map((s) => '• $s').join('\n');
+      final tuningText = featBp.tuningParams.map((t) => '• $t').join('\n');
+      final edgeText = featBp.edgeCases.map((e) => '• $e').join('\n');
+      final effectivePrimaryAsset =
+          (featBp.primarySharedScriptOrScene ?? '').trim();
+
+      final featDoc = TierDocument(
+        id: featId,
+        title: concreteFeatTitle,
+        tier: TierType.feature,
+        parentId: beatDoc.id,
+        estimatedDuration: '${featBp.activeDeltaHours}h',
+        sections: <String, String>{
+          'originVersion': versionTag,
+          'activeReleaseVersion': versionTag,
+          'lifecycle': featBp.lifecycle.name,
+          if (effectivePrimaryAsset.isNotEmpty)
+            'primary_asset': effectivePrimaryAsset,
+          'scope': 'Goal: ${featBp.goal}\n\n'
+              'In Scope:\n$inScopeText\n\n'
+              '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
+              'Done When: ${featBp.doneWhen}',
+          'variables': tuningText,
+          'tuning': tuningText,
+          'edge_cases': edgeText,
+        },
+      );
+
+      final effectiveCheckpoints = featBp.checkpoints.isNotEmpty
+          ? featBp.checkpoints
+          : <ProposedCheckpointBlueprint>[
+              ProposedCheckpointBlueprint(
+                title: '$concreteFeatTitle ($versionTag)',
+                playtestCriteria: featBp.doneWhen.isNotEmpty
+                    ? featBp.doneWhen
+                    : 'Trigger $concreteFeatTitle -> verify $versionTag behavior in playtest',
+                releaseVersion: versionTag,
+                tasks: const [
+                  'Actor Setup (2h)',
+                  'State Logic (1h)',
+                  'State Guard (1h)',
+                ],
+                coveredScope: featBp.inScope,
+                tuningParams: featBp.tuningParams,
+                edgeCases: featBp.edgeCases,
+              ),
+            ];
+
+      final stateNodes = <FeatureStateNode>[];
+      for (int cIdx = 0; cIdx < effectiveCheckpoints.length; cIdx++) {
+        final cpBp = effectiveCheckpoints[cIdx];
+        final cpNumber = cIdx + 1;
+        final effectiveTasks = cpBp.tasks.isNotEmpty
+            ? cpBp.tasks
+            : const [
+                'Actor Setup (2h)',
+                'State Logic (1h)',
+                'State Guard (1h)',
+              ];
+        final checklist = <Subtask>[
+          for (int tIdx = 0; tIdx < effectiveTasks.length; tIdx++)
+            Subtask(
+              id: '${featId}_${versionTag}_cp${cpNumber}_t${tIdx + 1}',
+              text: effectiveTasks[tIdx],
+              completed: false,
+            ),
+        ];
+
+        final cpNode = FeatureStateNode(
+          id: '${featId}_${versionTag}_cp_$cpNumber',
+          name: 'Checkpoint $cpNumber: ${cpBp.title}',
+          trigger: 'Playtest: ${cpBp.playtestCriteria}',
+          order: cIdx,
+          checklist: checklist,
+          coveredScope: List<String>.from(cpBp.coveredScope),
+          tuningParams: List<String>.from(cpBp.tuningParams),
+          edgeCases: List<String>.from(cpBp.edgeCases),
+          parameters: {
+            'releaseVersion': versionTag,
+            if (effectivePrimaryAsset.isNotEmpty)
+              'primarySharedScriptOrScene': effectivePrimaryAsset,
+          },
+        );
+        for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+          TaskHowToBlueprint.resolve(
+            parentTask: cpNode.checklist[tIdx],
+            taskIndex: tIdx,
+            checkpointNode: cpNode,
+            engineHint: engineHint,
+            phase: releasePhase,
+          );
+        }
+        stateNodes.add(cpNode);
+      }
+
+      FeatureStateNode.saveStatesToDocument(featDoc, stateNodes);
+      beatDoc.childrenIds.add(featDoc.id);
+      createdFeatures.add(featDoc);
+    }
+
+    releaseDoc.estimatedDuration = '${blueprint.totalIncludedHours}h';
+    releaseDoc.sections['release_blueprint_json'] =
+        jsonEncode(blueprint.toJson());
+    return createdFeatures;
+  }
 }

@@ -116,13 +116,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       );
     }
 
-    if (widget.workbench.isAgentBusy &&
-        !_isProgressiveModalOpen &&
-        (widget.workbench.activeReleaseBeats.isEmpty ||
-            widget.workbench.selectedFeature == null)) {
-      return _buildAgentExecutionProgress(rel);
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final isFullScreenDocked = constraints.maxWidth >= 1040;

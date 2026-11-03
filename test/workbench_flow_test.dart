@@ -6902,27 +6902,27 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
 
         // 11. Stage 2 Workbench & AI Release Architecture Audit Regressions
-        // 11a. GeminiAgentClient.buildNativeThinkingConfig always uses Dynamic Thinking (-1)
+        // 11a. GeminiAgentClient.buildNativeThinkingConfig uses capped fast thinking budget (256)
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'LOW',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(-1),
+          equals(256),
         );
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'MEDIUM',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(-1),
+          equals(256),
         );
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'HIGH',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(-1),
+          equals(256),
         );
         expect(
           ProjectConceptAgent.conceptSectionBuildOrder.length,
@@ -6976,6 +6976,105 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(
           ReleasePlannerAgent.commitEpicFeaturesTool['name'],
           equals('commit_epic_features'),
+        );
+
+        // 11d. Section-by-Section Workbench materializes E01..EN and populates each Epic's features without overwriting E01
+        final testRelDoc = TierDocument(
+          id: 'rel_sec_test',
+          title: 'v0.1: Train Turret Defense',
+          tier: TierType.release,
+        );
+        final testSysBp = ReleaseBlueprint(
+          releaseDocId: testRelDoc.id,
+          releaseTitle: testRelDoc.title,
+          releaseVersionTag: 'v0.1',
+          preset: ReleaseScope.featurePrototype,
+          goal: 'Build train defense loop.',
+          doneWhen: 'Player clears 1 sector.',
+          questions: const [],
+          explicitExclusions: const ['No multiplayer'],
+          beats: [
+            ProposedBeatBlueprint(
+              id: 'beat_1',
+              title: 'Locomotive & Track Navigation',
+              goal: 'Steer train along desert tracks.',
+              doneWhen: 'Train moves along track splines.',
+              features: [
+                ProposedFeatureBlueprint(
+                  id: 'feat_1_1',
+                  title: 'Track Spline & Train Body',
+                  goal: 'Build track spline and train collision.',
+                  doneWhen: 'Train follows track.',
+                  estimatedHours: 4,
+                  inScope: const ['Track spline', 'Locomotive body'],
+                  tuningParams: const ['trainSpeed: 12.0 m/s'],
+                  edgeCases: const ['[BOUNDS] Clamp speed at junctions'],
+                  checkpoints: const [],
+                ),
+              ],
+            ),
+            ProposedBeatBlueprint(
+              id: 'beat_2',
+              title: 'Roof Turret Aiming & Fire',
+              goal: 'Aim and fire roof turrets.',
+              doneWhen: 'Turret fires projectiles.',
+              features: [
+                ProposedFeatureBlueprint(
+                  id: 'feat_2_1',
+                  title: 'Turret Swivel & Projectile',
+                  goal: 'Rotate turret toward cursor and spawn shells.',
+                  doneWhen: 'Shells hit target.',
+                  estimatedHours: 4,
+                  inScope: const ['Turret rotation', 'Shell spawner'],
+                  tuningParams: const ['fireRate: 3.5 shots/s'],
+                  edgeCases: const ['[COOLDOWN] Prevent fire during reload'],
+                  checkpoints: const [],
+                ),
+              ],
+            ),
+          ],
+        );
+        final createdSysEpics =
+            ReleaseExecutorAgent.createInitialSystemEpicDocs(
+          releaseDoc: testRelDoc,
+          blueprint: testSysBp,
+        );
+        expect(createdSysEpics.length, equals(2));
+        expect(
+          testRelDoc.childrenIds,
+          equals(['epic_rel_sec_test_1', 'epic_rel_sec_test_2']),
+        );
+        final e01CreatedFeats =
+            ReleaseExecutorAgent.materializeFeaturesForSingleEpic(
+          releaseDoc: testRelDoc,
+          beatDoc: createdSysEpics[0],
+          blueprint: testSysBp,
+          beatBp: testSysBp.beats[0],
+          epicIndex: 0,
+        );
+        final e02CreatedFeats =
+            ReleaseExecutorAgent.materializeFeaturesForSingleEpic(
+          releaseDoc: testRelDoc,
+          beatDoc: createdSysEpics[1],
+          blueprint: testSysBp,
+          beatBp: testSysBp.beats[1],
+          epicIndex: 1,
+        );
+        expect(
+          testRelDoc.childrenIds,
+          equals(['epic_rel_sec_test_1', 'epic_rel_sec_test_2']),
+        );
+        expect(
+          createdSysEpics[0].childrenIds,
+          equals([e01CreatedFeats.first.id]),
+        );
+        expect(
+          createdSysEpics[1].childrenIds,
+          equals([e02CreatedFeats.first.id]),
+        );
+        expect(
+          e01CreatedFeats.first.id,
+          isNot(equals(e02CreatedFeats.first.id)),
         );
       },
     );

@@ -332,9 +332,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
       }
       relDoc.childrenIds.clear();
+      _selectedBeatId = null;
+      _selectedFeatureId = null;
+      notifyListeners();
 
-      // Phase 1 (~2.5s): Determine System Epics (E01..EN) needed to accomplish the Core Loop
-      var systemBp = await ReleasePlannerAgent.planReleaseSystemEpics(
+      // Phase 1: Determine System Epics (E01..EN) needed to accomplish the Core Loop
+      final systemBp = await ReleasePlannerAgent.planReleaseSystemEpics(
         projectDoc: proj,
         releaseDoc: relDoc,
         apiKey: _apiKey,
@@ -363,8 +366,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
       _releaseBlueprint = systemBp;
 
-      // Phase 2A (~2.5s): Determine Features for E01 FIRST so Feature 1.1 opens immediately
+      // Immediately materialize all System Epics (E01..EN) into the Left Outliner Rail
+      final createdEpics = ReleaseExecutorAgent.createInitialSystemEpicDocs(
+        releaseDoc: relDoc,
+        blueprint: systemBp,
+      );
+      for (final epicDoc in createdEpics) {
+        documents[epicDoc.id] = epicDoc;
+        _persistDocument(epicDoc);
+      }
+      _persistDocument(relDoc);
+
+      // Phase 2A: Determine Features for E01 FIRST so Feature 1.1 opens immediately
       final e01Bp = systemBp.beats.first;
+      final e01Doc = createdEpics.first;
+      _synthesizingBeatId = e01Doc.id;
       _agentProgressStep =
           'Planning E01 · ${e01Bp.title} features ($_conversationModel)...';
       notifyListeners();
@@ -382,22 +398,27 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       );
       e01Bp.features = e01Features;
 
-      final createdDocs = await ReleaseExecutorAgent.executeBlueprint(
+      final createdE01Features =
+          ReleaseExecutorAgent.materializeFeaturesForSingleEpic(
         releaseDoc: relDoc,
+        beatDoc: e01Doc,
         blueprint: systemBp,
+        beatBp: e01Bp,
+        epicIndex: 0,
         existingDocuments: documents,
-        onProgress: (_) {},
       );
-      for (final d in createdDocs) {
-        documents[d.id] = d;
-        _persistDocument(d);
+      for (final fDoc in createdE01Features) {
+        documents[fDoc.id] = fDoc;
+        _persistDocument(fDoc);
       }
+      _persistDocument(e01Doc);
       relDoc.sections['synced_engine_label'] = _activeEngineLabel;
       relDoc.sections['release_blueprint_json'] = jsonEncode(systemBp.toJson());
       _persistDocument(relDoc);
       _selectFirstIncompleteFeatureInActiveRelease();
       _syncActiveProjectMetadata();
     } finally {
+      _synthesizingBeatId = null;
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
@@ -439,6 +460,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final remainingFeatureIds = <String>[
       for (final f in e01FeatDocs.skip(1)) f.id,
     ];
+    _pendingFeatureStepQueue.addAll(remainingFeatureIds);
 
     // Step 3: Immediately synthesize Feature 1.1's 3-Area Engine Steps BEFORE E02..EN
     if (firstFeatureId != null && !isCancelled()) {
@@ -449,17 +471,15 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final plannedFeatureTitles = <String>[
       for (final f in blueprint.beats.first.features) f.title,
     ];
-    final beatDocsSnapshot = List<TierDocument>.from(activeReleaseBeats);
 
     for (int bIdx = 1; bIdx < blueprint.beats.length; bIdx++) {
       if (isCancelled()) break;
       final epicBp = blueprint.beats[bIdx];
-      final targetBeatDoc =
-          bIdx < beatDocsSnapshot.length ? beatDocsSnapshot[bIdx] : null;
-      if (targetBeatDoc != null) {
-        _synthesizingBeatId = targetBeatDoc.id;
-        notifyListeners();
-      }
+      final targetBeatDoc = documents[epicBp.id] ??
+          documents['epic_${releaseDoc.id}_${bIdx + 1}'];
+      if (targetBeatDoc == null) continue;
+      _synthesizingBeatId = targetBeatDoc.id;
+      notifyListeners();
       try {
         final epicFeats = await ReleasePlannerAgent.planFeaturesForSingleEpic(
           projectDoc: projectDoc,
@@ -478,37 +498,28 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           plannedFeatureTitles.add(ef.title);
         }
 
-        final singleEpicBp = ReleaseBlueprint(
-          releaseDocId: blueprint.releaseDocId,
-          releaseTitle: blueprint.releaseTitle,
-          releaseVersionTag: blueprint.releaseVersionTag,
-          preset: blueprint.preset,
-          goal: blueprint.goal,
-          doneWhen: blueprint.doneWhen,
-          questions: blueprint.questions,
-          beats: [epicBp],
-          explicitExclusions: blueprint.explicitExclusions,
-        );
-        final createdEpicDocs = await ReleaseExecutorAgent.executeBlueprint(
+        final createdEpicFeatures =
+            ReleaseExecutorAgent.materializeFeaturesForSingleEpic(
           releaseDoc: releaseDoc,
-          blueprint: singleEpicBp,
+          beatDoc: targetBeatDoc,
+          blueprint: blueprint,
+          beatBp: epicBp,
+          epicIndex: bIdx,
           existingDocuments: documents,
-          onProgress: (_) {},
         );
-        for (final d in createdEpicDocs) {
-          documents[d.id] = d;
-          _persistDocument(d);
-          if (d.tier == TierType.feature) {
-            remainingFeatureIds.add(d.id);
-            _pendingFeatureStepQueue.add(d.id);
-          }
+        for (final fDoc in createdEpicFeatures) {
+          documents[fDoc.id] = fDoc;
+          _persistDocument(fDoc);
+          remainingFeatureIds.add(fDoc.id);
+          _pendingFeatureStepQueue.add(fDoc.id);
         }
+        _persistDocument(targetBeatDoc);
         releaseDoc.sections['release_blueprint_json'] =
             jsonEncode(blueprint.toJson());
         _persistDocument(releaseDoc);
         _syncActiveProjectMetadata();
       } finally {
-        if (_synthesizingBeatId == targetBeatDoc?.id) {
+        if (_synthesizingBeatId == targetBeatDoc.id) {
           _synthesizingBeatId = null;
         }
         notifyListeners();
