@@ -284,9 +284,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
-      if (_conceptDraft != null && prewarmRelease) {
-        unawaited(prewarmInitialReleasePlanIfNeeded());
-      }
     }
   }
 
@@ -349,6 +346,43 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
   }
 
+  static String _compactStoredTradeOff(String raw) {
+    var clean = raw.trim();
+    if (clean.endsWith('.')) clean = clean.substring(0, clean.length - 1).trim();
+    clean = clean.replaceFirst(
+      RegExp(r'^(?:prioritize|favor|choose)\s+', caseSensitive: false),
+      '',
+    );
+    return clean;
+  }
+
+  static String _compactStoredExclusion(String raw) {
+    var clean = raw.trim();
+    if (clean.endsWith('.')) clean = clean.substring(0, clean.length - 1).trim();
+    final colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < 32) {
+      clean = clean.substring(colonIdx + 1).trim();
+    }
+    clean = clean
+        .replaceFirst(
+          RegExp(r'^(?:cut|defer|exclude|skip)\s+', caseSensitive: false),
+          'No ',
+        )
+        .replaceAll(
+          RegExp(
+            r'\s+(?:in|for|during)\s+(?:the\s+)?(?:v0\.1\s+)?prototype$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(
+          RegExp(r'\s+in\s+v0\.1$', caseSensitive: false),
+          '',
+        )
+        .trim();
+    return clean;
+  }
+
   void _commitConceptToVault(
     ProjectConceptBlueprint draft, {
     bool syncBuiltWorkbench = true,
@@ -370,10 +404,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     projDoc.sections['tech_spec'] = draft.techSpec.join(' · ');
     projDoc.sections['design_pillars'] =
         draft.designPillars.map((p) => '• $p').join('\n');
-    projDoc.sections['trade_offs'] =
-        draft.tradeOffs.map((t) => '• $t').join('\n');
-    projDoc.sections['exclusions'] =
-        draft.exclusions.map((e) => '• $e').join('\n');
+    projDoc.sections['trade_offs'] = draft.tradeOffs
+        .map((t) => '• ${_compactStoredTradeOff(t)}')
+        .join('\n');
+    projDoc.sections['exclusions'] = draft.exclusions
+        .map((e) => '• ${_compactStoredExclusion(e)}')
+        .join('\n');
     projDoc.sections['done_when'] = draft.doneWhen;
 
     final releaseIds = <String>[];

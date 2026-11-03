@@ -159,74 +159,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         _prewarmedConceptSignature == sig;
   }
 
-  /// Pre-warms the `v0.1` Release Blueprint in the background while the user is reviewing
-  /// Step `09 · Full Concept Review` in Stage 1 so clicking `Approve & Build v0.1 →`
-  /// can jump straight to synthesizing Feature #1 without waiting on the Release Planner pass.
+  /// On-demand synthesis only: background pre-warming of `v0.1` is disabled to prevent speculative token spend.
   Future<void> prewarmInitialReleasePlanIfNeeded() async {
-    if (!GeminiAgentClient.hasKey(_apiKey) ||
-        GeminiAgentClient.testMockResponder != null) {
-      return;
-    }
-    if (_isAgentBusy) return;
-    if (_inFlightPrewarmFuture != null) {
-      return _inFlightPrewarmFuture!;
-    }
-    final draft = _conceptDraft;
-    if (draft == null || draft.coreLoopBeats.isEmpty) return;
-    final sig = _computeConceptSignature(draft);
-    if (_releaseBlueprint != null && _prewarmedConceptSignature == sig) {
-      return;
-    }
-    if (activeReleaseBeats.isNotEmpty) return;
-
-    final completer = Completer<void>();
-    _inFlightPrewarmFuture = completer.future;
-    _isPrewarmingReleaseBlueprint = true;
-    notifyListeners();
-    try {
-      _commitConceptToVault(draft, syncBuiltWorkbench: false);
-      final proj = activeProject;
-      if (proj == null || proj.childrenIds.isEmpty) return;
-      final targetRelId = _activeReleaseId ?? proj.childrenIds.first;
-      final relDoc = documents[targetRelId];
-      if (relDoc == null || relDoc.childrenIds.isNotEmpty) return;
-      final verTag = releaseVersionTagFor(relDoc);
-      relDoc.sections['versionTag'] = verTag;
-
-      final planned = await ReleasePlannerAgent.planRelease(
-        projectDoc: proj,
-        releaseDoc: relDoc,
-        completedReleases: const [],
-        existingBeats: const [],
-        existingFeaturesByBeat: const {},
-        deferredByBeatIndex: const {},
-        apiKey: _apiKey,
-        modelName: _planningModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      if (planned != null &&
-          _computeConceptSignature(_conceptDraft) == sig) {
-        if (planned.releaseTitle.isNotEmpty &&
-            planned.releaseTitle != relDoc.title) {
-          relDoc.title = planned.releaseTitle;
-        }
-        relDoc.sections['versionTag'] = verTag;
-        relDoc.sections['release_blueprint_json'] =
-            jsonEncode(planned.toJson());
-        _persistDocument(relDoc);
-        _releaseBlueprint = planned;
-        _prewarmedConceptSignature = sig;
-        _syncActiveProjectMetadata();
-      }
-    } catch (_) {
-    } finally {
-      _isPrewarmingReleaseBlueprint = false;
-      _inFlightPrewarmFuture = null;
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-      notifyListeners();
-    }
+    return;
   }
 
   /// 2-Stage Flow (`1. Concept` -> `2. Workbench`): Transitions immediately to `2. Workbench`,
@@ -2117,92 +2052,13 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         _prewarmedProgressiveSignature == sig;
   }
 
-  /// Automatically pre-warms the next Progressive Release Blueprint (`v0.2+`) in the background
-  /// as soon as `isActiveReleaseComplete` reaches `100%` so clicking `+ New Release (v0.X) ✦`
-  /// opens in `0ms` with Section 1 and Section 2 already synthesized.
+  /// On-demand synthesis only: background pre-warming of `v0.2+` is disabled to prevent speculative token spend.
   Future<void> prewarmProgressiveNextReleaseIfNeeded() async {
-    if (!GeminiAgentClient.hasKey(_apiKey) ||
-        GeminiAgentClient.testMockResponder != null) {
-      return;
-    }
-    if (_isAgentBusy || !isActiveReleaseComplete) return;
-    if (_inFlightProgressivePrewarmFuture != null) {
-      return _inFlightProgressivePrewarmFuture!;
-    }
-    final proj = activeProject;
-    if (proj == null) return;
-    final nextPhase = inferNextProgressivePhase();
-    final sig = _computeProgressivePrewarmSignature(phaseOverride: nextPhase);
-    if (sig.isEmpty ||
-        (_prewarmedProgressiveBlueprint != null &&
-            _prewarmedProgressiveSignature == sig)) {
-      return;
-    }
-
-    final existingBeats = <TierDocument>[];
-    final existingFeaturesByBeat = <String, List<TierDocument>>{};
-    for (final rel in projectReleases) {
-      if (rel.childrenIds.isNotEmpty) {
-        for (final beatId in rel.childrenIds) {
-          final bDoc = documents[beatId];
-          if (bDoc != null && !existingBeats.any((b) => b.id == bDoc.id)) {
-            existingBeats.add(bDoc);
-            existingFeaturesByBeat[bDoc.id] = featuresForBeat(
-              bDoc.id,
-              includeSuperseded: true,
-            );
-          }
-        }
-      }
-    }
-    if (existingBeats.isEmpty) return;
-
-    final completer = Completer<void>();
-    _inFlightProgressivePrewarmFuture = completer.future;
-    try {
-      final nextVer = nextProgressiveVersionLabel;
-      final nextScope = _releaseScopeForPhase(nextPhase);
-      final tempRelDoc = TierDocument(
-        id: 'prewarm_rel_$nextVer',
-        title: '$nextVer: Progressive Release',
-        tier: TierType.release,
-        parentId: proj.id,
-        sections: {
-          'versionTag': nextVer,
-          'releaseScope': nextScope.name,
-          'phase': nextPhase.name,
-          'agentReasoned': 'true',
-        },
-      );
-      final completedPriorReleases = projectReleases
-          .where((r) => r.childrenIds.isNotEmpty)
-          .toList();
-      final planned = await planProgressiveReleaseSectionBySection(
-        projectDoc: proj,
-        releaseDoc: tempRelDoc,
-        completedReleases: completedPriorReleases,
-        existingBeats: existingBeats,
-        existingFeaturesByBeat: existingFeaturesByBeat,
-        deferredByBeatIndex: const {},
-        isBackgroundPrewarm: true,
-      );
-      if (planned != null &&
-          _computeProgressivePrewarmSignature(phaseOverride: nextPhase) ==
-              sig) {
-        _prewarmedProgressiveBlueprint = planned;
-        _prewarmedProgressiveSignature = sig;
-      }
-    } catch (_) {
-    } finally {
-      _inFlightProgressivePrewarmFuture = null;
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    }
+    return;
   }
 
-  /// Section-by-Section Progressive Release Orchestrator (`Step 0: 0ms Live-Tree Skeleton` ->
-  /// `Pass 1: Section 1 Focus & 3 Strategic Options (~1.5s)` -> `Pass 2: Section 2 Target Epics One-by-One`).
+  /// Section-by-Section Progressive Release Orchestrator (`Step 0: 0ms Live-Tree Skeleton & Deterministic Section 1` ->
+  /// `Pass 2: Section 2 Target Epics One-by-One`).
   Future<ReleaseBlueprint?> planProgressiveReleaseSectionBySection({
     required TierDocument projectDoc,
     required TierDocument releaseDoc,
@@ -2234,63 +2090,50 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           );
     if (workingBp == null) return null;
 
+    // Pass 1 (0ms Deterministic Section 1): Seed `1. Choose v0.X Focus`, `GOAL`, `END GOAL`, & 3 Epic Option Cards
+    final epicCards = epicFocusOptionsForBlueprint(workingBp);
+    final recCard = epicCards.isNotEmpty ? epicCards.first : null;
+    final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
+    final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
+    final explicitIdx = !isAgentReasoned && rawTargetEpicIdx != null
+        ? int.tryParse(rawTargetEpicIdx)
+        : null;
+    final targetEpicIndices = (explicitIdx != null &&
+            explicitIdx >= 0 &&
+            explicitIdx < existingBeats.length)
+        ? <int>[explicitIdx]
+        : (recCard != null && recCard.targetBeatIndices.isNotEmpty
+            ? recCard.targetBeatIndices
+            : <int>[0]);
+
+    if (recCard != null) {
+      workingBp.releaseTitle = '$verTag: ${recCard.blufHeadline}';
+      releaseDoc.title = workingBp.releaseTitle;
+      workingBp.goal = '${recCard.blufHeadline} — ${recCard.blufDetail}';
+      workingBp.doneWhen = recCard.causalDoneWhen;
+      workingBp.questions = [
+        AgentQuestion(
+          id: 'rel_q_1',
+          question: 'Which available Epics should $verTag build?',
+          options: [
+            for (final c in epicCards)
+              '${c.isRecommended ? "(Recommended) " : ""}${c.title}: ${c.subtitle}',
+          ],
+        ),
+      ];
+    }
+    workingBp.missingGaps = [
+      for (final idx in targetEpicIndices)
+        if (idx >= 0 && idx < existingBeats.length)
+          'E${(idx + 1).toString().padLeft(2, '0')}: Complete ${existingBeats[idx].title} for ${_currentPhase.shortName}',
+    ];
+
     if (!isBackgroundPrewarm) {
       _releaseBlueprint = workingBp;
-      _isSynthesizingProgressiveFocus = true;
+      _isSynthesizingProgressiveFocus = false;
       _synthesizingProgressiveBeatId = null;
       _queuedProgressiveBeatIds.clear();
-      _agentProgressStep =
-          'Synthesizing Section 1 · $verTag Focus & 3 Strategic Options ($_conversationModel)...';
-      notifyListeners();
-    }
-
-    // Pass 1 (~1.5s): Synthesize Section 1 (`1. Choose v0.X Focus`, `Done When`, & 3 Strategic Options)
-    final focusResult =
-        await ReleasePlannerAgent.planProgressiveReleaseFocusSection(
-      projectDoc: projectDoc,
-      releaseDoc: releaseDoc,
-      completedReleases: completedReleases,
-      existingBeats: existingBeats,
-      existingFeaturesByBeat: existingFeaturesByBeat,
-      deferredByBeatIndex: deferredByBeatIndex,
-      apiKey: _apiKey,
-      modelName: _conversationModel,
-      thinkingLevel: 'LOW',
-    );
-    if (isCancelled()) return null;
-    if (focusResult == null) return null;
-    if (focusResult.fullBlueprint != null) {
-      if (!isBackgroundPrewarm) {
-        _isSynthesizingProgressiveFocus = false;
-        _releaseBlueprint = focusResult.fullBlueprint;
-        notifyListeners();
-      }
-      return focusResult.fullBlueprint;
-    }
-
-    if (focusResult.releaseTitle.isNotEmpty) {
-      workingBp.releaseTitle = focusResult.releaseTitle;
-      releaseDoc.title = focusResult.releaseTitle;
-    }
-    if (focusResult.goal.isNotEmpty) {
-      workingBp.goal = focusResult.goal;
-    }
-    if (focusResult.doneWhen.isNotEmpty) {
-      workingBp.doneWhen = focusResult.doneWhen;
-    }
-    workingBp.builtSoFar = focusResult.builtSoFar;
-    workingBp.missingGaps = focusResult.missingGaps;
-    if (focusResult.questions.isNotEmpty) {
-      workingBp.questions = focusResult.questions;
-    }
-    if (focusResult.agentReasoning.isNotEmpty) {
-      workingBp.lastAgentReply = focusResult.agentReasoning;
-    }
-
-    if (!isBackgroundPrewarm) {
-      _isSynthesizingProgressiveFocus = false;
-      _queuedProgressiveBeatIds.clear();
-      for (final idx in focusResult.targetEpicIndices) {
+      for (final idx in targetEpicIndices) {
         if (idx >= 0 && idx < workingBp.beats.length) {
           _queuedProgressiveBeatIds.add(workingBp.beats[idx].id);
         }
@@ -2300,7 +2143,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
     // Pass 2 (Epic-by-Epic): Synthesize Section 2 (`2. Epics & Features in v0.X`) one target Epic at a time
     final alreadyPlannedChanges = <String>[];
-    for (final bIdx in focusResult.targetEpicIndices) {
+    for (final bIdx in targetEpicIndices) {
       if (isCancelled()) return null;
       if (bIdx < 0 ||
           bIdx >= existingBeats.length ||
@@ -2359,6 +2202,13 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       (b) => b.features.any((f) => !f.isStable && !f.isSuperseded),
     );
     if (!hasAnyActiveChange) return null;
+    final refreshedCards = epicFocusOptionsForBlueprint(workingBp);
+    if (refreshedCards.isNotEmpty) {
+      final refreshedRec = refreshedCards.first;
+      workingBp.goal =
+          '${refreshedRec.blufHeadline} — ${refreshedRec.blufDetail}';
+      workingBp.doneWhen = refreshedRec.causalDoneWhen;
+    }
     return workingBp;
   }
 
@@ -2749,27 +2599,7 @@ You are the Systems Designer for "$projTitle" ($engineLabel).
 Enrich this newly proposed Feature ("${targetFeat.title}" inside Epic "$beatTitle" for ${bp.releaseVersionTag}) so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
 ${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate; reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
 - Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
-Call `commit_live_feature_enrichment` (or return ONLY a JSON object):
-{
-  "goal": "<1 plain-English sentence starting with Build/Implement>",
-  "inScope": ["<in-scope deliverable 1>", "<in-scope deliverable 2>"],
-  "doneWhen": "<1 observable playtest completion condition>",
-  "primarySharedScriptOrScene": "<Canonical shared $engineLabel script/scene for this feature>",
-  "checkpointTitle": "<2-4 word playable checkpoint title>",
-  "playtestGate": "<Action -> Observable result>",
-  "tasks": [
-    {"role": "entity_and_collision_foundation", "title": "<Entity/collision foundation task> (2h)"},
-    {"role": "core_action_and_math", "title": "<Core mechanic velocity/action task 1..N> (1h)"},
-    {"role": "feedback_and_boundary_guard", "title": "<Observable feedback & boundary clamp task> (1h)"}
-  ],
-  "tuningParams": [
-    "<param1: numericValue unit>",
-    "<param2: numericValue unit>"
-  ],
-  "edgeCases": [
-    "[STATE GUARD] <concise guard rule>"
-  ]
-}''';
+Call `commit_live_feature_enrichment` with the enriched feature details.''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -3097,27 +2927,7 @@ You are the Systems Designer for "$projTitle" ($engineLabel).
 Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
 ${gameSpecSummary.isNotEmpty ? 'Game Spec: $gameSpecSummary\n' : ''}${techSpecSummary.isNotEmpty ? 'Tech Spec: $techSpecSummary\n' : ''}$dimensionRule${pillarsSummary.isNotEmpty ? 'Design Pillars: $pillarsSummary\n' : ''}${tradeOffsSummary.isNotEmpty ? 'Trade-Offs: $tradeOffsSummary\n' : ''}${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (do not duplicate; reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
 - Return the exact number of tasks the feature genuinely requires: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
-Return ONLY a JSON object:
-{
-  "goal": "<1 plain-English sentence starting with Build/Implement>",
-  "inScope": ["<in-scope deliverable 1>", "<in-scope deliverable 2>"],
-  "doneWhen": "<1 observable playtest completion condition>",
-  "primarySharedScriptOrScene": "<Canonical shared $engineLabel script/scene for this feature>",
-  "checkpointTitle": "<2-4 word playable checkpoint title>",
-  "playtestGate": "<Action -> Observable result>",
-  "tasks": [
-    {"role": "entity_and_collision_foundation", "title": "<Entity/collision foundation task> (2h)"},
-    {"role": "core_action_and_math", "title": "<Core mechanic velocity/action task 1..N> (1h)"},
-    {"role": "feedback_and_boundary_guard", "title": "<Observable feedback & boundary clamp task> (1h)"}
-  ],
-  "tuningParams": [
-    "<param1: numericValue unit>",
-    "<param2: numericValue unit>"
-  ],
-  "edgeCases": [
-    "[STATE GUARD] <concise guard rule>"
-  ]
-}''';
+Call `commit_live_feature_enrichment` with the enriched feature details.''';
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
       apiKey: _apiKey,
@@ -3619,23 +3429,7 @@ ${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
-Return ONLY a JSON object with the sequential fix steps (Step $taskNum.1 through Step $taskNum.N):
-{
-  "fixTaskTitle": "[FIX] <Concise 2-4 word fix task title> (1h)",
-  "playtestGuard": "[PLAYTEST GUARD] <1 concise rule preventing this bug>",
-  "tuningUpdates": [{"variableName": "<optional tuning var>", "value": "<updated value>"}],
-  "steps": [
-    {
-      "title": "STEP $taskNum.1 · <SHORT LITERAL STEP TITLE>",
-      "stepPath": "<Exact $engineLabel panel/inspector/script path>",
-      "instruction": "<1 sentence concrete fix/inspection instruction>",
-      "area1Hierarchy": "<Optional node/component tree using ├─ / └─ or empty string>",
-      "area2Inspector": "<Inspector/Details property bindings formatted as Property: Value>",
-      "codeFormula": "<2-4 lines of $engineLabel code or node setup>",
-      "verifyResult": "<1 sentence visual/console check in Play mode>"
-    }
-  ]
-}''';
+Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 through Step $taskNum.N).''';
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
@@ -3874,21 +3668,7 @@ Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
 Break this task down into the exact number of checkable How-To Sub-Steps (Step $taskNum.1 through Step $taskNum.N — e.g., 3 steps for a simple hook/guard task or up to 6 steps for a multi-part mechanic) specifically using the developer's node/script names from "$cleanContext".
-Return ONLY a JSON object with this schema:
-{
-  "primarySharedScriptOrScene": "<Shared $engineLabel script/scene for this feature>",
-  "subSteps": [
-    {
-      "title": "STEP $taskNum.1 · SHORT LITERAL SUB-STEP TITLE",
-      "stepPath": "Exact $engineLabel editor panel/inspector/script path",
-      "instruction": "1-sentence literal instruction referencing the user's exact nodes/scripts",
-      "area1Hierarchy": "Optional Scene/Component hierarchy tree using ├─ / └─ or empty string",
-      "area2Inspector": "Inspector/Details bindings formatted as Property: Value | Property2: Value2",
-      "codeFormula": "2-4 lines of $engineLabel code or hierarchy setup using the user's node/script names",
-      "verifyResult": "1-sentence observable verification check in Play mode"
-    }
-  ]
-}
+Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
 ''';
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
@@ -4989,26 +4769,7 @@ For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequent
 6. "codeFormula": 2-6 lines of concrete $targetEngineMode code or node graph wiring using the exact tuning variables and guard checks
 7. "verifyResult": 1 concise observable verification check in the editor or Play mode
 
-Return ONLY valid JSON:
-{
-  "primarySharedScriptOrScene": "...",
-  "tasks": [
-    {
-      "taskIndex": 0,
-      "subSteps": [
-        {
-          "title": "STEP 1.1 · ...",
-          "stepPath": "...",
-          "instruction": "...",
-          "area1Hierarchy": "...",
-          "area2Inspector": "paramName: value | ...",
-          "codeFormula": "...",
-          "verifyResult": "..."
-        }
-      ]
-    }
-  ]
-}''';
+Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each task.''';
 
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
@@ -5745,12 +5506,7 @@ Extract:
 2. "tuningUpdates": Any updated or newly exported numeric/boolean/string tuning variables from the script. Preserve existing variable names when they match.
 3. "newGuards": Any new safety/null/cooldown/bounds guard checks in the script formatted as "[GUARD] condition — safe fallback".
 
-Return ONLY valid JSON:
-{
-  "primarySharedScriptOrScene": "PlayerDashController (res://scripts/player_dash.gd)",
-  "tuningUpdates": [{"variableName": "moveSpeed", "value": "650.0"}],
-  "newGuards": ["[GUARD] Prevent dash while stunned — early-return when isStunned is true"]
-}''';
+Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.''';
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
@@ -6074,11 +5830,6 @@ Return ONLY valid JSON:
     TaskHowToBlueprint.clearCache();
     _persistDocument(feat, debounce: true);
     notifyListeners();
-    if (isActiveReleaseComplete &&
-        GeminiAgentClient.testMockResponder == null &&
-        GeminiAgentClient.hasKey(_apiKey)) {
-      unawaited(prewarmProgressiveNextReleaseIfNeeded());
-    }
   }
 
   /// Propagates a variable identifier rename (`oldIdentifier` -> `newIdentifier`)
@@ -6983,30 +6734,7 @@ ${beatCatalogLines.join('\n')}
 ${GeminiAgentClient.compactStyleRules}
 - If `releaseTimingMode` is `"now"`, omit `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTasks"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
 
-Invoke `commit_inbox_feature_triage` (or return valid JSON matching its schema):
-{
-  "releaseTimingMode": "now",
-  "targetFuturePhase": "mvp",
-  "releaseTimingReasoning": "<1 sentence why now vs split vs future>",
-  "integrationMode": "newFeatureInEpic",
-  "targetBeatId": "${beats.isNotEmpty ? beats.first.id : 'beat_1'}",
-  "placementReasoning": "<1 sentence why this Epic/Feature owns it>",
-  "featureTitle": "<2-4 word plain mechanic title>",
-  "goal": "<1 sentence player/system action>",
-  "inScope": ["<Deliverable 1>", "<Deliverable 2>"],
-  "doneWhen": "<Observable playtest condition>",
-  "primarySharedScriptOrScene": "<1 shared script/scene asset for all tasks>",
-  "architectureHowSummary": ["<Engine node/class setup>", "<Input/state flow>", "<Guard/feedback hook>"],
-  "checkpointTitle": "Checkpoint 1: <Stage Title>",
-  "playtestGate": "<Action> -> <Observable response>",
-  "tasks": [
-    {"role": "entity_and_collision_foundation", "title": "<Task 1> (1h)"},
-    {"role": "core_action_and_math", "title": "<Task 2> (2h)"},
-    {"role": "feedback_and_boundary_guard", "title": "<Task 3> (1h)"}
-  ],
-  "tuningParams": ["paramOne: 1.0", "paramTwo: 2.0"],
-  "edgeCases": ["[STATE GUARD] <condition — fallback>"]
-}''';
+Invoke `commit_inbox_feature_triage` with the structured triage recommendation.''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,

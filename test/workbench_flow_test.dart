@@ -7240,13 +7240,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           expect(planned, isNotNull);
           expect(
             planned!.goal,
-            contains('Build multi-wave arena escalation'),
+            contains('Complete E01'),
           );
           expect(planned.questions, isNotEmpty);
           expect(planned.questions.first.options.length, equals(3));
 
-          // Verify Section 1 synthesis flag toggled true then false
-          expect(observedSection1States, contains(true));
+          // Verify Section 1 is seeded deterministically in 0ms without a Pass 1 network wait
+          expect(observedSection1States, contains(false));
           expect(provider.isSynthesizingProgressiveFocus, isFalse);
 
           // Verify Epic-by-Epic synthesis visited E01 and E02

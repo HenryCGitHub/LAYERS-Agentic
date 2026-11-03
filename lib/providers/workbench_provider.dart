@@ -170,10 +170,9 @@ class WorkbenchProvider extends ChangeNotifier {
       _queuedProgressiveBeatIds.contains(beatId);
   ReleaseBlueprint? _prewarmedProgressiveBlueprint;
   String? _prewarmedProgressiveSignature;
-  Future<void>? _inFlightProgressivePrewarmFuture;
   List<String> get pendingFeatureStepQueue =>
       List.unmodifiable(_pendingFeatureStepQueue);
-  bool _isPrewarmingReleaseBlueprint = false;
+  final bool _isPrewarmingReleaseBlueprint = false;
 
   String? _cachedInboxProjectId;
   int? _cachedInboxRawHash;

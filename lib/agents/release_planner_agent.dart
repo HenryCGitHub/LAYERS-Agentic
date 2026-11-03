@@ -320,12 +320,22 @@ class ReleasePlannerAgent {
                 'description':
                     '2-3 plain action/object words (never identical to the parent Epic title).',
               },
-              'goal': {'type': 'STRING'},
-              'doneWhen': {'type': 'STRING'},
+              'goal': {
+                'type': 'STRING',
+                'description':
+                    'Concise 1-clause action summary (e.g. "Build Player Dash with cooldown and trail").',
+              },
+              'doneWhen': {
+                'type': 'STRING',
+                'description':
+                    'Causal Action -> Observable Result playtest condition.',
+              },
               'estimatedHours': {'type': 'INTEGER'},
               'primarySharedScriptOrScene': {'type': 'STRING'},
               'inScope': {
                 'type': 'ARRAY',
+                'description':
+                    '2-3 short 2-5 word deliverables (e.g. "Dash impulse", "Cooldown timer").',
                 'items': {'type': 'STRING'},
               },
               'tuningParams': {
@@ -337,7 +347,10 @@ class ReleasePlannerAgent {
                 'items': {'type': 'STRING'},
               },
               'checkpointTitle': {'type': 'STRING'},
-              'playtestCriteria': {'type': 'STRING'},
+              'playtestCriteria': {
+                'type': 'STRING',
+                'description': 'Causal Action -> Observable Result on screen.',
+              },
               'tasks': {
                 'type': 'ARRAY',
                 'items': {
@@ -454,12 +467,22 @@ class ReleasePlannerAgent {
                 'type': 'STRING',
                 'enum': ['upgrade', 'new', 'superseded'],
               },
-              'goal': {'type': 'STRING'},
-              'doneWhen': {'type': 'STRING'},
+              'goal': {
+                'type': 'STRING',
+                'description':
+                    'Concise 1-clause action summary (e.g. "Build Player Dash with cooldown and trail").',
+              },
+              'doneWhen': {
+                'type': 'STRING',
+                'description':
+                    'Causal Action -> Observable Result playtest condition.',
+              },
               'estimatedHours': {'type': 'INTEGER'},
               'primarySharedScriptOrScene': {'type': 'STRING'},
               'inScope': {
                 'type': 'ARRAY',
+                'description':
+                    '2-3 short 2-5 word deliverables (e.g. "Dash impulse", "Cooldown timer").',
                 'items': {'type': 'STRING'},
               },
               'tuningParams': {
@@ -471,7 +494,10 @@ class ReleasePlannerAgent {
                 'items': {'type': 'STRING'},
               },
               'checkpointTitle': {'type': 'STRING'},
-              'playtestCriteria': {'type': 'STRING'},
+              'playtestCriteria': {
+                'type': 'STRING',
+                'description': 'Causal Action -> Observable Result on screen.',
+              },
               'tasks': {
                 'type': 'ARRAY',
                 'items': {
@@ -653,8 +679,6 @@ class ReleasePlannerAgent {
         projectDoc.sections['tradeOffs'] ??
         '';
 
-    final String schemaPhaseHint =
-        releasePhase.isNotEmpty ? releasePhase : 'mvp';
     final bool isPhaseLocked =
         releaseDoc.sections['phaseLockedByUser'] == 'true';
 
@@ -935,19 +959,6 @@ class ReleasePlannerAgent {
   * `"agentReasoning"`: 1–2 concise summary sentences tying the gaps to $versionTag's focus.
 - BESPOKE GAME-SPECIFIC STRATEGIC OPTIONS ("questions"): In `questions[0]`, ask 1 architectural priority question for $versionTag with 3 concrete options tailored specifically to "${projectDoc.title}"'s actual mechanics (Option 1 prefixed with `(Recommended)` matching your primary plan; Options 2 and 3 offering distinct, game-specific alternative angles for $versionTag).'''
         : '';
-    final progressiveJsonFields = isSubsequentRelease
-        ? '''
-  "builtSoFar": ["Slide & Air Strafe", "Rocket & Gib Shatter", "Room Clear & Pedestals"],
-  "missingGaps": ["E01: No incoming enemy fire to dodge", "E02: Missing rapid-fire plasma weapon", "E05: Single room only — no boss room"],
-  "agentReasoning": "1-2 concise sentences explaining why these $versionTag features are recommended next.",
-  "questions": [
-    {
-      "id": "rel_q_1",
-      "question": "How should we focus $versionTag for ${projectDoc.title}?",
-      "options": ["(Recommended) Specific Focus A: 1-sentence game-specific description", "Specific Focus B: ...", "Specific Focus C: ..."]
-    }
-  ],'''
-        : '';
     final prompt = '''
 You are the Antigravity Release Planner Agent (`$effectiveModel`) planning Release: "${releaseDoc.title}" ($versionTag, ${preset.label}).
 Full Concept Blueprint (01–08):
@@ -987,46 +998,7 @@ $progressiveDiagnosticInstructions
   3. Concrete Tuning & Guards: Verify every Feature has 2–3 `"paramName: value unit"` entries in `tuningParams` and `[TAG]` edge-case guards.
   4. Progressive Delta Integrity: For v0.2+, verify `"upgrade"` checkpoints extend existing v0.1 features in-place without duplicating v0.1 tasks.
 
-Return ONLY valid JSON (checkpoints inherit `coveredScope`, `tuningParams`, and `edgeCases` from their Feature automatically):
-{
-  "releasePhase": "$schemaPhaseHint",
-  "releaseTitle": "$versionTag: Concrete Release Focus",$progressiveJsonFields
-  "goal": "Build... goal of ${releaseDoc.title}",
-  "doneWhen": "Concrete playtest completion condition",
-  "explicitExclusions": ["Excluded mechanic", "..."],
-  "beats": [
-    {
-      "id": "beat_1",
-      "title": "Plain Epic Title",
-      "goal": "Literal epic goal",
-      "doneWhen": "Literal epic completion criteria",
-      "features": [
-        {
-          "id": "feat_1_1",
-          "title": "Plain Feature Title",
-          "goal": "Literal feature goal",
-          "doneWhen": "Literal feature doneWhen",
-          "estimatedHours": 5,
-          "lifecycle": "new",
-          "inScope": ["Specific scope item 1", "Specific scope item 2"],
-          "tuningParams": ["walkSpeed: 4.5 m/s", "lookSensitivity: 0.15 deg/px"],
-          "edgeCases": ["[COLLISION] Prevent player capsule from clipping through walls"],
-          "checkpoints": [
-            {
-              "title": "Plain Checkpoint Title",
-              "playtestCriteria": "Action -> observable result on screen",
-              "tasks": [
-                {"role": "entity_and_collision_foundation", "title": "Capsule Body & Camera (2h)"},
-                {"role": "core_action_and_math", "title": "WASD Velocity & Look (2h)"},
-                {"role": "feedback_and_boundary_guard", "title": "Wall Slide & Pitch Clamp (1h)"}
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
+Call `commit_release_plan` with the structured release blueprint.
 ''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -1141,20 +1113,8 @@ ${GeminiAgentClient.compactStyleRules}
     3. Final Epic (`EN`) covers the loop payoff, economy/upgrade terminal, and next-cycle reset so the loop connects end-to-end.
 - ZERO ARTIFICIAL COUNT LIMITS: Create the exact number of System Epics (`epics`) that "${projectDoc.title}" genuinely needs to accomplish the full `06 Core Loop` and `08 Done When`.
 
-Call `commit_release_system_epics` (or return ONLY valid JSON):
-{
-  "releaseTitle": "$versionTag: ${projectDoc.title} Core Systems",
-  "goal": "$projectGoal",
-  "doneWhen": "$projectDoneWhen",
-  "epics": [
-    {
-      "id": "beat_1",
-      "title": "2-4 Word System Title (NOT a verbatim loop beat title)",
-      "goal": "1-sentence system engineering goal",
-      "doneWhen": "1-sentence observable playtest verification for this system"
-    }
-  ]
-}''';
+Call `commit_release_system_epics` with the structured system epics.
+''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -1297,28 +1257,8 @@ ${GeminiAgentClient.compactStyleRules}
   * Include 2–3 concrete `"paramName: numericValue unit"` entries in `tuningParams` and 1–2 `[TAG]` guard rules in `edgeCases`.
   * Include foundation-first `tasks` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
 
-Call `commit_epic_features` (or return ONLY valid JSON):
-{
-  "features": [
-    {
-      "title": "2-3 Word Feature Title",
-      "goal": "Build ... (1 plain sentence)",
-      "doneWhen": "Playtester verifies ... on screen",
-      "estimatedHours": 4,
-      "primarySharedScriptOrScene": "SharedScriptOrSceneName",
-      "inScope": ["Deliverable 1", "Deliverable 2"],
-      "tuningParams": ["paramOne: 5.0 m/s", "paramTwo: 1.2 s"],
-      "edgeCases": ["[COLLISION] Prevent clipping through boundary walls"],
-      "checkpointTitle": "2-4 Word Checkpoint Title",
-      "playtestCriteria": "Action -> observable result on screen",
-      "tasks": [
-        {"role": "entity_and_collision_foundation", "title": "Body & Collision (2h)"},
-        {"role": "core_action_and_math", "title": "Velocity & Aim Math (1h)"},
-        {"role": "feedback_and_boundary_guard", "title": "Hit Flash & Clamp (1h)"}
-      ]
-    }
-  ]
-}''';
+Call `commit_epic_features` with the ordered playable features.
+''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -1722,28 +1662,8 @@ ${GeminiAgentClient.compactStyleRules}
   7. `"targetEpicNumbers"`: Array of 1-based Epic numbers (`1..${existingBeats.length}`) that $versionTag will upgrade or add features to (e.g. `[2, 3]`).
   8. `"questions"`: 1 question with 3 Epic-driven options naming the available incomplete Epic codes (`E0#`) and telegraphic `+`-joined deliverables (Option 1 prefixed with `(Recommended)`).
 
-Call `commit_progressive_release_focus` (or return ONLY valid JSON):
-{
-  "releasePhase": "$releasePhase",
-  "releaseTitle": "$versionTag: Concrete Focus Title",
-  "goal": "2-4 Word Payoff — Complete E02 and E03 for $releasePhase.",
-  "doneWhen": "Player action in Play mode → observable screen result",
-  "builtSoFar": ["...", "..."],
-  "missingGaps": ["E02: ...", "E03: ..."],
-  "agentReasoning": "1-2 concise sentences explaining why these Epics are prioritized next.",
-  "targetEpicNumbers": [2, 3],
-  "questions": [
-    {
-      "id": "rel_q_1",
-      "question": "Which available Epics should $versionTag build?",
-      "options": [
-        "(Recommended) E02 + E03 · System A & System B: Deliverable 1 + Deliverable 2 + Deliverable 3",
-        "E02 Only · System A: Deliverable 1 + Deliverable 2",
-        "E03 + E04 · System B & System C: Deliverable 2 + Deliverable 3"
-      ]
-    }
-  ]
-}''';
+Call `commit_progressive_release_focus` with Section 1 of the progressive release plan.
+''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -1968,29 +1888,8 @@ ${GeminiAgentClient.compactStyleRules}
   * You may also add a brand-new feature in Epic $epicCode (`"lifecycle": "new"`) if a missing mechanic is required to complete the Epic.
   * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"`, 1–2 `[STATE GUARD]` rules in `"edgeCases"`, and foundation-first `"tasks"` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
 
-Call `commit_progressive_epic_changes` (or return ONLY valid JSON):
-{
-  "features": [
-    {
-      "id": "${existingFeaturesInEpic.isNotEmpty ? existingFeaturesInEpic.first.id : 'feat_${epicIndex + 1}_1'}",
-      "title": "${existingFeaturesInEpic.isNotEmpty ? existingFeaturesInEpic.first.title : '2-3 Word Feature Title'}",
-      "lifecycle": "upgrade",
-      "goal": "Upgrade ... with ...",
-      "doneWhen": "Playtester verifies ... in Play mode.",
-      "estimatedHours": 4,
-      "inScope": ["Delta deliverable 1", "Delta deliverable 2"],
-      "tuningParams": ["paramOne: 1.5 s", "paramTwo: 250.0 px"],
-      "edgeCases": ["[STATE GUARD] Prevent duplicate trigger while active"],
-      "checkpointTitle": "2-4 Word Delta Stage Title",
-      "playtestCriteria": "Action -> observable result on screen",
-      "tasks": [
-        {"role": "entity_and_collision_foundation", "title": "Component & Collision Extension (2h)"},
-        {"role": "core_action_and_math", "title": "Delta Velocity & Signal Math (1h)"},
-        {"role": "feedback_and_boundary_guard", "title": "HUD Cue & State Clamp (1h)"}
-      ]
-    }
-  ]
-}''';
+Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features for Epic $epicCode.
+''';
 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -3648,45 +3547,7 @@ ${GeminiAgentClient.compactStyleRules}
 - DELTA-ONLY BEATS: In `beats`, return ONLY the specific Beat(s) that were modified or added by the developer's request (untouched Beats are preserved automatically).
 - Keep `Task 1` focused on Scene/Entity/Collision foundation (never Input/Keybind) and include 2–3 `"paramName: value unit"` entries in `tuningParams`.
 
-Return ONLY valid JSON:
-{
-  "reply": "1-2 sentence confirmation of the changes made",
-  "goal": "Updated release goal (or existing if unchanged)",
-  "doneWhen": "Updated release doneWhen (or existing if unchanged)",
-  "explicitExclusions": ["Exclusion 1", "Exclusion 2"],
-  "beats": [
-    {
-      "id": "beat_1",
-      "title": "Plain Beat Title",
-      "goal": "1-sentence literal beat goal",
-      "doneWhen": "1-sentence literal beat completion criteria",
-      "features": [
-        {
-          "id": "feat_1_1",
-          "title": "Plain Feature Title",
-          "goal": "1-sentence literal feature goal",
-          "doneWhen": "1-sentence literal feature doneWhen",
-          "estimatedHours": 6,
-          "lifecycle": "new",
-          "inScope": ["Scope item"],
-          "tuningParams": ["paramOne: 10.0 m/s", "paramTwo: 1.5 s"],
-          "edgeCases": ["[TAG] Specific edge case behavior"],
-          "checkpoints": [
-            {
-              "title": "Plain Checkpoint Title",
-              "playtestCriteria": "Action -> observable result on screen",
-              "tasks": [
-                {"role": "entity_and_collision_foundation", "title": "Entity & Collision Body (2h)"},
-                {"role": "core_action_and_math", "title": "Core Action Velocity (2h)"},
-                {"role": "feedback_and_boundary_guard", "title": "Boundary Clamp & Cue (2h)"}
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
+Call `mutate_release_plan` with the delta updates.
 ''';
 
     final json = await GeminiAgentClient.generateJson(

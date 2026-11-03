@@ -70,13 +70,6 @@ class SparkIdeaIntakeResult {
 class ProjectConceptAgent {
   static const _kCardAccents = ['amber', 'emerald', 'neutral'];
 
-  static const _kExpansionCardsJsonSchema = '''
-  "expansionCards": [
-    {"badge": "01 · CORE MECHANIC TWIST", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
-    {"badge": "02 · RISK / REWARD HOOK", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"},
-    {"badge": "03 · LOOP PAYOFF & UPGRADE", "title": "2-4 Word Name", "description": "1-2 plain sentences.", "additionSummary": "Concise clause"}
-  ]''';
-
   static bool _isPlaceholderString(String s) =>
       s.isEmpty ||
       s == '...' ||
@@ -232,7 +225,8 @@ class ProjectConceptAgent {
         },
         'tradeOffs': {
           'type': 'ARRAY',
-          'description': '2-3 explicit X over Y engineering/design boundaries.',
+          'description':
+              '2-3 compact X over Y engineering/design boundaries (2-4 words per side, no "Prioritize" or version suffixes).',
           'items': {
             'type': 'OBJECT',
             'required': ['priorityX', 'overAlternativeY'],
@@ -240,12 +234,12 @@ class ProjectConceptAgent {
               'priorityX': {
                 'type': 'STRING',
                 'description':
-                    'What we prioritize (e.g. "Immediate arcade movement")',
+                    '2-4 words naming what we prioritize (e.g. "Arcade dash response")',
               },
               'overAlternativeY': {
                 'type': 'STRING',
                 'description':
-                    'What we sacrifice (e.g. "realistic physics inertia")',
+                    '2-4 words naming what we sacrifice (e.g. "Momentum inertia")',
               },
             },
           },
@@ -255,14 +249,15 @@ class ProjectConceptAgent {
           'items': {
             'type': 'STRING',
             'description':
-                'Beat Name: Concise 1-sentence observable player action and system response.',
+                'Beat Name: Concise observable player action and system response.',
           },
         },
         'exclusions': {
           'type': 'ARRAY',
           'items': {
             'type': 'STRING',
-            'description': 'No 2-4 word prototype cut.',
+            'description':
+                'No [2-4 word excluded system/content] (never use "Cut/Defer ... until v0.1").',
           },
         },
         'doneWhen': {
@@ -1043,21 +1038,6 @@ class ProjectConceptAgent {
       return null;
     }
 
-    final includeUpfrontOptions = GeminiAgentClient.testMockResponder != null;
-    final optionsSchemaTail = includeUpfrontOptions
-        ? ''',
-  "sectionOptions": {
-    "goal": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."],
-    "gameSpec": ["View · Controls · Mode · Structure", "View 2 · Controls 2 · Mode 2 · Structure 2", "View 3 · Controls 3 · Mode 3 · Structure 3"],
-    "techSpec": ["Engine · Platform · Pipeline · Save", "Engine 2 · Platform 2 · Pipeline 2 · Save 2", "Engine 3 · Platform 3 · Pipeline 3 · Save 3"],
-    "designPillars": ["Title 1: Experience...", "Title 2: Experience...", "Title 3: Experience..."],
-    "tradeOffs": ["Rule Title 1: Specific X over Y rule for $cleanSpark", "Rule Title 2: Specific X over Y rule", "Rule Title 3: Specific X over Y rule"],
-    "coreLoop": ["Title 1: Beat A → Beat B → Beat C → Beat D", "Title 2: ...", "Title 3: ..."],
-    "exclusions": ["Cut Title 1: Specific prototype cut for $cleanSpark", "Cut Title 2: Specific prototype cut", "Cut Title 3: Specific prototype cut"],
-    "doneWhen": ["Playtest Gate 1: Observable completion condition", "Playtest Gate 2: ...", "Playtest Gate 3: ..."]
-  }'''
-        : '';
-
     final promptLead = isGddExtraction
         ? '''You are an indie game producer extracting a structured 8-section Stage 1 Concept Blueprint from this pasted Game Design Document (GDD) / Notes:
 """
@@ -1077,33 +1057,7 @@ ${GeminiAgentClient.compactStyleRules}
   3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.
 - In `techSpec`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
 
-Call `commit_concept_blueprint` (or return valid JSON):
-{
-  "title": "Short 2-3 word title",
-  "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].",
-  "gameSpec": {
-    "cameraView": "Camera View",
-    "controls": "Controls",
-    "playerMode": "Player Mode",
-    "arenaStructure": "Arena Structure"
-  },
-  "techSpec": {
-    "engine": "Godot 4 (GDScript)",
-    "platform": "Platform",
-    "assetPipeline": "Asset Pipeline",
-    "saveMode": "Network / Save"
-  },
-  "designPillars": [
-    {"pillarName": "2-3 Word Pillar Name", "playerExperience": "Concise 1-sentence player feeling 1"}
-  ],
-  "tradeOffs": [
-    {"priorityX": "2-3 word priority", "overAlternativeY": "2-3 word alternative"}
-  ],
-  "coreLoopBeats": ["Beat Name: Concise 1-sentence action and response", "..."],
-  "exclusions": ["No 2-4 word prototype cut 1", "No 2-4 word prototype cut 2", "No 2-4 word prototype cut 3"],
-  "doneWhen": "Concise 1-sentence playtest completion condition without FPS targets",
-  "releaseTrainTitles": ["v0.1: [Plain Prototype Name] - Prototype"]$optionsSchemaTail
-}
+Call `commit_concept_blueprint` with the structured blueprint.
 ''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -1199,24 +1153,6 @@ Call `commit_concept_blueprint` (or return valid JSON):
         buildFocusedConceptSectionTool(focusedSectionTag);
     final activeToolName = activeConceptTool['name']?.toString() ??
         'update_concept_section';
-    final toolExamplePayload = switch (activeToolName) {
-      'update_game_spec_section' =>
-        '"reply": "1-sentence confirmation", "gameSpec": {"cameraView": "...", "controls": "...", "playerMode": "...", "arenaStructure": "..."}',
-      'update_tech_spec_section' =>
-        '"reply": "1-sentence confirmation", "techSpec": {"engine": "Godot 4 (GDScript)", "platform": "...", "assetPipeline": "...", "saveMode": "..."}',
-      'update_design_pillars_section' =>
-        '"reply": "1-sentence confirmation", "designPillars": [{"pillarName": "...", "playerExperience": "..."}]',
-      'update_trade_offs_section' =>
-        '"reply": "1-sentence confirmation", "tradeOffs": [{"priorityX": "...", "overAlternativeY": "..."}]',
-      'update_core_loop_section' =>
-        '"reply": "1-sentence confirmation", "coreLoopBeats": ["Beat Name: Observable action and system response", "..."]',
-      'update_exclusions_section' =>
-        '"reply": "1-sentence confirmation", "exclusions": ["No 2-4 word prototype cut"]',
-      'update_done_when_section' =>
-        '"reply": "1-sentence confirmation", "doneWhen": "Concise 1-sentence playtest completion condition"',
-      _ =>
-        '"reply": "1-sentence confirmation of what changed", "updatedFields": ["Goal"], "goal": "Strategy Label: Build a playable prototype where you [action 1], [action 2], and [action 3].", "goalOptions": ["Title 1: Build...", "Title 2: Build...", "Title 3: Build..."]',
-    };
 
     final prompt = '''
 You are Antigravity, an indie game producer updating a Live Concept Blueprint.
@@ -1236,12 +1172,9 @@ Developer Direction: "$cleanMsg"
 
 ${GeminiAgentClient.compactStyleRules}
 - Synthesize and rewrite the affected field(s) into natural, polished game-dev English. NEVER copy-paste the developer's raw phrasing ("instead of...", "but in a...") verbatim.
-- DELTA-ONLY OUTPUT: Call `$activeToolName` (or return JSON) including ONLY `reply` and the specific Blueprint key(s) that actually changed. Omit all unchanged keys!$sectionScopeRule
+- DELTA-ONLY OUTPUT: Call `$activeToolName` including ONLY `reply` and the specific Blueprint key(s) that actually changed. Omit all unchanged keys!$sectionScopeRule
 
-Call `$activeToolName` (or return ONLY valid JSON):
-{
-  $toolExamplePayload
-}
+Call `$activeToolName` with the delta update.
 ''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -1524,16 +1457,6 @@ Call `$activeToolName` (or return ONLY valid JSON):
         ? ''
         : '\nSelected Idea Additions to Fold In: ${selectedCardAdditions.join(' | ')}';
 
-    final includeExpansionCards = existingIntake == null ||
-        existingIntake.expansionCards.isEmpty ||
-        GeminiAgentClient.testMockResponder != null;
-    final expansionCardsSchemaTail = includeExpansionCards
-        ? ''',
-  "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"],
-$_kExpansionCardsJsonSchema'''
-        : ''',
-  "mechanics": ["Mechanic Tag 1", "Mechanic Tag 2", "Mechanic Tag 3"]''';
-
     final prompt = '''
 You are an indie game producer summarizing a developer's game idea before building the blueprint.
 ${existingIntake != null ? 'Original Premise: "${existingIntake.rawIdea}"\nPrevious Title: "${existingIntake.workingTitle}"\nPrevious Summary: "${existingIntake.baseSummary}"$selectedContext\n${cleanInput.isNotEmpty ? 'User Update Direction: "$cleanInput"' : 'Action: Polish Previous Summary into a clean 2-sentence game pitch.'}' : 'Raw Idea: "$seedIdea"'}
@@ -1542,11 +1465,7 @@ ${GeminiAgentClient.compactStyleRules}
 - `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop in game-design language (NEVER quote, echo, or replace the summary with the user's raw input sentence verbatim).
 ${existingIntake != null ? '- Preserve the core genre, role, and setting of `Previous Summary` while smoothly integrating `User Update Direction` (never switch to an unrelated genre).' : ''}
 
-Return ONLY valid JSON:
-{
-  "workingTitle": "Short 2-3 word title",
-  "baseSummary": "2 plain sentences summarizing core gameplay premise, controls/feel, and repeatable loop."$expansionCardsSchemaTail
-}
+Call `commit_spark_intake` with the structured summary.
 ''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -1617,10 +1536,7 @@ ${GeminiAgentClient.compactStyleRules}
 - Stay 100% faithful to "${existingIntake.workingTitle}" and its exact subject, genre, and mechanics (never switch to an unrelated genre or theme).
 - Propose 3 distinct, concrete playable twists that complement "${existingIntake.workingTitle}".
 
-Return ONLY valid JSON:
-{
-$_kExpansionCardsJsonSchema
-}
+Call `propose_spark_expansion_cards` with 3 fresh expansion cards.
 ''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -1693,20 +1609,6 @@ $_kExpansionCardsJsonSchema
     final sectionOptionsTool = buildSectionOptionsTool(optionKey);
     final sectionToolName =
         sectionOptionsTool['name']?.toString() ?? 'propose_section_options';
-    final optionsJsonExample = switch (optionKey) {
-      'gameSpec' =>
-        '[{"label": "Spec Label", "cameraView": "...", "controls": "...", "playerMode": "...", "arenaStructure": "..."}]',
-      'techSpec' =>
-        '[{"label": "Stack Label", "engine": "Godot 4 (GDScript)", "platform": "...", "assetPipeline": "...", "saveMode": "..."}]',
-      'designPillars' =>
-        '[{"pillarName": "2-3 Word Pillar", "playerExperience": "1-sentence player feeling"}]',
-      'tradeOffs' =>
-        '[{"label": "Rule Label", "priorityX": "Concrete Priority X", "overAlternativeY": "Concrete Alternative Y"}]',
-      'coreLoop' =>
-        '[{"label": "Loop Label", "beats": ["Beat 1: Action", "Beat 2: Action", "Beat 3: Action", "Beat 4: Action"]}]',
-      _ =>
-        '["Option Label 1: Concrete option tailored to ${draft.title}", "Option Label 2: ...", "Option Label 3: ..."]',
-    };
 
     final prompt = '''
 You are an indie game producer generating 3 fresh Option Cards for the "$optionKey" section of this game concept:
@@ -1725,10 +1627,7 @@ ${GeminiAgentClient.compactStyleRules}
 - Stay 100% faithful to "${draft.title}" and its locked upstream Game Spec, Tech Spec, Design Pillars, and Trade-Offs.
 $sectionFormatRule
 
-Call `$sectionToolName` (or return ONLY valid JSON):
-{
-  "options": $optionsJsonExample
-}
+Call `$sectionToolName` with 3 fresh options.
 ''';
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
