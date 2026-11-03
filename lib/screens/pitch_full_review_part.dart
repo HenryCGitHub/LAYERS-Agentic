@@ -607,6 +607,10 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     final isFocused = _focusedBentoSectionIdx == sectionIdx;
     final isHovered = _hoveredReviewSectionIdx == sectionIdx;
     final isDrawerOpen = _openRefineDrawerSectionIdx == sectionIdx;
+    final isDraftingThisSection =
+        widget.workbench.isSynthesizingConceptSection(sectionIdx);
+    final isQueuedSection =
+        widget.workbench.isConceptSectionQueued(sectionIdx);
     final headerAddBtn = _buildHeaderAddActionForSection(sectionIdx);
 
     return MouseRegion(
@@ -635,7 +639,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
             color: _gsCardBg,
             borderRadius: BorderRadius.circular(13),
             border: Border.all(
-              color: (isFocused || isDrawerOpen)
+              color: (isFocused || isDrawerOpen || isDraftingThisSection)
                   ? _gsT1Primary.withValues(alpha: 0.75)
                   : (isHovered ? _gsCardHoverBorder : _gsCardBorder),
               width: 1.0,
@@ -679,6 +683,24 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                               ),
                             ),
                           ),
+                          if (isDraftingThisSection || isQueuedSection) ...[
+                            const SizedBox(width: 10),
+                            Text(
+                              isDraftingThisSection
+                                  ? '⟳ Drafting...'
+                                  : 'Queued',
+                              key: ValueKey(
+                                'concept_section_build_status_$sectionIdx',
+                              ),
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isDraftingThisSection
+                                    ? _gsT1Primary
+                                    : _gsT4Muted,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

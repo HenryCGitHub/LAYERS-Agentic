@@ -485,7 +485,6 @@ extension _ShellDialogsExt on WorkbenchShell {
     final isDark = workbench.isDark;
     final bgSurface = AppTheme.bgSurfaceFor(isDark);
     final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
-    final bgHover = AppTheme.bgSurfaceHoverFor(isDark);
     final borderSubtle = AppTheme.borderSubtleFor(isDark);
     final borderBright = AppTheme.borderBrightFor(isDark);
     final textPrimary = AppTheme.textPrimaryFor(isDark);
@@ -496,7 +495,6 @@ extension _ShellDialogsExt on WorkbenchShell {
     final keyController = TextEditingController(text: workbench.apiKey);
     String selectedConversationModel = workbench.conversationModel;
     String selectedPlanningModel = workbench.planningModel;
-    String selectedThinking = workbench.thinkingLevel;
 
     showDialog<void>(
       context: context,
@@ -563,57 +561,6 @@ extension _ShellDialogsExt on WorkbenchShell {
                           isRecommended: true,
                           onTap: () => setModalState(() => selectedPlanningModel = m),
                         ),
-                      const SizedBox(height: 14),
-                      Text(
-                        '03 · THINKING LEVEL (REASONING DEPTH)',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                          color: textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          for (final lvl in WorkbenchProvider.availableThinkingLevels)
-                            Expanded(
-                              child: Padding(
-                                padding: EdgeInsets.only(
-                                  right: lvl == WorkbenchProvider.availableThinkingLevels.last ? 0 : 6,
-                                ),
-                                child: InkWell(
-                                  onTap: () => setModalState(() => selectedThinking = lvl),
-                                  borderRadius: BorderRadius.circular(5),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 9),
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: selectedThinking == lvl ? bgHover : bgRecessed,
-                                      borderRadius: BorderRadius.circular(5),
-                                      border: Border.all(
-                                        color: selectedThinking == lvl
-                                            ? textPrimary
-                                            : borderSubtle,
-                                        width: selectedThinking == lvl ? 1.5 : 1.0,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      lvl == 'HIGH' ? 'HIGH (Default)' : lvl,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11,
-                                        fontWeight: selectedThinking == lvl
-                                            ? FontWeight.w800
-                                            : FontWeight.w500,
-                                        color: selectedThinking == lvl ? textPrimary : textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
                       const SizedBox(height: 16),
                       if (workbench.aiLastErrorStatus != null) ...[
                         Container(
@@ -638,7 +585,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                         ),
                       ],
                       Text(
-                        '04 · GEMINI API KEY',
+                        '03 · GEMINI API KEY',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
@@ -699,7 +646,6 @@ extension _ShellDialogsExt on WorkbenchShell {
                       apiKey: keyController.text,
                       conversationModel: selectedConversationModel,
                       planningModel: selectedPlanningModel,
-                      thinkingLevel: selectedThinking,
                     );
                     Navigator.of(ctx).pop();
                   },

@@ -106,13 +106,12 @@ RULES:
     final upper = normalizedThinking.trim().toUpperCase();
     if (useThinkingLevelEnum) {
       return <String, dynamic>{
-        'thinkingLevel': upper.isEmpty ? 'LOW' : upper,
+        'thinkingLevel':
+            (upper == 'NONE' || upper == 'MINIMAL') ? upper : 'HIGH',
       };
     }
     final int budget = switch (upper) {
       'NONE' || 'MINIMAL' => 0,
-      'LOW' => 1024,
-      'MEDIUM' => 4096,
       _ => -1,
     };
     return <String, dynamic>{

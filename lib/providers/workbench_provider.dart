@@ -147,6 +147,13 @@ class WorkbenchProvider extends ChangeNotifier {
   final List<String> _pendingFeatureStepQueue = <String>[];
   int _stepQueueGeneration = 0;
   bool _isDrainingStepQueue = false;
+  int? _activeConceptSectionBuildIndex;
+  int? get activeConceptSectionBuildIndex => _activeConceptSectionBuildIndex;
+  bool isSynthesizingConceptSection(int sectionIdx) =>
+      _activeConceptSectionBuildIndex == sectionIdx;
+  bool isConceptSectionQueued(int sectionIdx) =>
+      _activeConceptSectionBuildIndex != null &&
+      sectionIdx > _activeConceptSectionBuildIndex!;
   List<String> get pendingFeatureStepQueue =>
       List.unmodifiable(_pendingFeatureStepQueue);
   bool _isPrewarmingReleaseBlueprint = false;

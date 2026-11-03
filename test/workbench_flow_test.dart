@@ -6902,20 +6902,20 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
 
         // 11. Stage 2 Workbench & AI Release Architecture Audit Regressions
-        // 11a. GeminiAgentClient.buildNativeThinkingConfig maps LOW/MEDIUM/HIGH proportionally
+        // 11a. GeminiAgentClient.buildNativeThinkingConfig always uses Dynamic Thinking (-1)
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'LOW',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(1024),
+          equals(-1),
         );
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'MEDIUM',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(4096),
+          equals(-1),
         );
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
@@ -6923,6 +6923,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
           equals(-1),
+        );
+        expect(
+          ProjectConceptAgent.conceptSectionBuildOrder.length,
+          equals(8),
         );
 
         // 11b. ProjectConceptAgent.buildSectionOptionsTool('coreLoop') has zero hardcoded beat counts

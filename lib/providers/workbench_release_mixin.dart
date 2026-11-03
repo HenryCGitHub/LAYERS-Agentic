@@ -242,7 +242,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (releaseId == null && _inFlightPrewarmFuture != null) {
       _isAgentBusy = true;
       _agentProgressStep =
-          'Finishing v0.1 Release Architecture ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+          'Finishing v0.1 Release Architecture ($_conversationModel)...';
       notifyListeners();
       try {
         await _inFlightPrewarmFuture;
@@ -1329,7 +1329,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         ? _conversationModel
         : _planningModel;
     _agentProgressStep =
-        'Synthesizing $verTag Release Architecture ($displayPlanModel · ${_thinkingLevel.toLowerCase()})...';
+        'Synthesizing $verTag Release Architecture ($displayPlanModel)...';
     notifyListeners();
 
     try {
@@ -1424,7 +1424,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Refining Release Plan ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Refining Release Plan ($_conversationModel)...';
     notifyListeners();
 
     try {
@@ -3121,26 +3121,35 @@ Return ONLY a JSON object with this schema:
               .toList();
           final currentGen = ++_stepQueueGeneration;
           _pendingFeatureStepQueue.clear();
-          final primaryTitle = documents[primaryFeatId]?.title ?? 'Feature 1';
-          _agentProgressStep =
-              'Synthesizing Feature #1 ($primaryTitle) so you can enter the Workarea immediately...';
-          notifyListeners();
-
-          // Always synthesize Feature #1 first so the user enters the Workarea with Step 1.1 ready.
-          // Features #2..N already have instant deterministic steps from TaskHowToBlueprint.resolve
-          // and are AI-tailored on-demand when selected via selectWorkbenchFeature.
-          await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
-
-          if (remainingFeatIds.isNotEmpty &&
-              _stepQueueGeneration == currentGen &&
-              GeminiAgentClient.testMockResponder != null) {
-            _pendingFeatureStepQueue.addAll(remainingFeatIds);
-            // In test mode, run sequentially one feature at a time so each feature K
-            // receives the Cumulative Project Ledger from features 1..K-1.
-            await _prefetchRemainingFeatureStepsInBackground(
-              remainingFeatIds,
-              currentGen,
+          if (GeminiAgentClient.testMockResponder == null) {
+            final allOrderedFeatIds = <String>[
+              primaryFeatId,
+              ...remainingFeatIds,
+            ];
+            _pendingFeatureStepQueue.addAll(allOrderedFeatIds);
+            unawaited(
+              _prefetchRemainingFeatureStepsInBackground(
+                allOrderedFeatIds,
+                currentGen,
+              ),
             );
+          } else {
+            final primaryTitle =
+                documents[primaryFeatId]?.title ?? 'Feature 1';
+            _agentProgressStep =
+                'Synthesizing Feature #1 ($primaryTitle) so you can enter the Workarea immediately...';
+            notifyListeners();
+
+            await synthesizeFeatureHowToStepsWithAi(primaryFeatId);
+
+            if (remainingFeatIds.isNotEmpty &&
+                _stepQueueGeneration == currentGen) {
+              _pendingFeatureStepQueue.addAll(remainingFeatIds);
+              await _prefetchRemainingFeatureStepsInBackground(
+                remainingFeatIds,
+                currentGen,
+              );
+            }
           }
         }
       }

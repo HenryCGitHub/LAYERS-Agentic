@@ -14,7 +14,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Ingesting & summarizing idea ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Ingesting & summarizing idea ($_conversationModel)...';
     notifyListeners();
 
     try {
@@ -59,7 +59,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Refreshing suggestions for ${currentIntake.workingTitle} ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Refreshing suggestions for ${currentIntake.workingTitle} ($_conversationModel)...';
     notifyListeners();
 
     try {
@@ -99,7 +99,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Extracting 8-section Concept Blueprint from GDD ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Extracting 8-section Concept Blueprint from GDD ($_conversationModel)...';
     notifyListeners();
 
     try {
@@ -135,7 +135,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Refreshing $optionKey options for $title ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Refreshing $optionKey options for $title ($_conversationModel)...';
     notifyListeners();
     try {
       final aiOptions =
@@ -166,8 +166,22 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     createNewProject();
   }
 
+  String _deriveInitialWorkingTitle(String rawSpark) {
+    final intakeTitle = (_sparkIntake?.workingTitle ?? '').trim();
+    if (intakeTitle.isNotEmpty) return intakeTitle;
+    final words = rawSpark
+        .split('—')
+        .first
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(3)
+        .toList();
+    return words.isEmpty ? 'Game Prototype' : words.join(' ');
+  }
+
   /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 8-section Concept Blueprint.
-  /// When [jumpToFullReview] is true (default), lands directly on the Single-Page Complete Concept Blueprint.
+  /// In live mode, transitions immediately to the Concept Blueprint view and builds Sections `01`..`08` one at a time.
   Future<void> startConceptInterview([
     String sparkText = '',
     bool jumpToFullReview = true,
@@ -181,10 +195,74 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Drafting initial Concept Blueprint ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Drafting initial Concept Blueprint ($_conversationModel)...';
     notifyListeners();
 
     try {
+      if (GeminiAgentClient.testMockResponder == null) {
+        if (!GeminiAgentClient.hasKey(_apiKey)) {
+          _setOfflineState();
+          return;
+        }
+        final initialTitle = _deriveInitialWorkingTitle(effectiveSpark);
+        final liveDraft = ProjectConceptBlueprint(
+          title: initialTitle,
+          sparkIdea: effectiveSpark,
+          questions: const <AgentQuestion>[],
+          goal: '',
+          gameSpec: const <String>[],
+          techSpec: const <String>[],
+          designPillars: const <String>[],
+          tradeOffs: const <String>[],
+          coreLoopBeats: const <String>[],
+          exclusions: const <String>[],
+          doneWhen: '',
+          firstReleasePreset: ReleaseScope.featurePrototype,
+          releaseTrainTitles: <String>['v0.1: $initialTitle - Prototype'],
+          isInterviewComplete: false,
+          lastUpdatedFields: const <String>[],
+        );
+        _conceptDraft = liveDraft;
+        _offlineErrorMessage = null;
+        if (jumpToFullReview) {
+          _jumpToFullReviewPending = true;
+        }
+        _commitConceptToVault(liveDraft, syncBuiltWorkbench: false);
+        notifyListeners();
+
+        for (int secIdx = 0;
+            secIdx < ProjectConceptAgent.conceptSectionBuildOrder.length;
+            secIdx++) {
+          if (_conceptDraft != liveDraft) break;
+          _activeConceptSectionBuildIndex = secIdx;
+          final secLabel =
+              ProjectConceptAgent.conceptSectionBuildOrder[secIdx].label;
+          _agentProgressStep = 'Drafting $secLabel ($_conversationModel)...';
+          notifyListeners();
+
+          final ok = await ProjectConceptAgent.generateSingleConceptSection(
+            draft: liveDraft,
+            sectionIndex: secIdx,
+            apiKey: _apiKey,
+            modelName: _conversationModel,
+            thinkingLevel: _thinkingLevel,
+          );
+          if (_conceptDraft != liveDraft) break;
+          if (!ok && secIdx == 0) {
+            _conceptDraft = null;
+            _setOfflineState();
+            return;
+          }
+          _commitConceptToVault(liveDraft, syncBuiltWorkbench: false);
+          notifyListeners();
+        }
+        if (_conceptDraft == liveDraft) {
+          liveDraft.isInterviewComplete = true;
+          _commitConceptToVault(liveDraft);
+        }
+        return;
+      }
+
       final draft = await ProjectConceptAgent.startConceptInterview(
         effectiveSpark,
         apiKey: _apiKey,
@@ -202,6 +280,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         _setOfflineState();
       }
     } finally {
+      _activeConceptSectionBuildIndex = null;
       _isAgentBusy = false;
       _agentProgressStep = null;
       notifyListeners();
@@ -236,7 +315,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
     _isAgentBusy = true;
     _agentProgressStep =
-        'Updating Concept Blueprint ($_conversationModel · ${_thinkingLevel.toLowerCase()})...';
+        'Updating Concept Blueprint ($_conversationModel)...';
     notifyListeners();
 
     try {

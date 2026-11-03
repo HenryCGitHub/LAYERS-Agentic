@@ -1071,7 +1071,7 @@ $cleanSpark
 $promptLead
 
 ${GeminiAgentClient.compactStyleRules}
-- Decompose `coreLoopBeats` into 4 to 6 sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:
+- Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:
   1. Beat 1 MUST be the immediate in-game player control & primary action (e.g. Walking & Tank Inspection, Grapple/Dash Traversal, Vehicle Handling, or Grid Placement—never a pre-match menu).
   2. Middle Beats cover the core simulation/action and reactive challenge in the exact chronological sequence the player experiences them.
   3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.
@@ -1346,6 +1346,87 @@ Call `$activeToolName` (or return ONLY valid JSON):
     draft.isInterviewComplete = true;
     draft.lastAgentReply = replyText;
     return true;
+  }
+
+  static const List<({String tag, String label, String directive})>
+      conceptSectionBuildOrder = [
+    (
+      tag: '[Section 01 · Goal]',
+      label: '01 · Goal',
+      directive:
+          'Draft the initial concise 2-3 word `title` and `goal` ("Strategy Label: Build a playable [Title] prototype where you [action 1], [action 2], and [action 3].").',
+    ),
+    (
+      tag: '[Section 02 · Game Spec]',
+      label: '02 · Game Spec',
+      directive:
+          'Draft the 4 cells of `gameSpec` (`cameraView`, `controls`, `playerMode`, `arenaStructure`) tailored to the Spark and 01 Goal.',
+    ),
+    (
+      tag: '[Section 03 · Tech Spec]',
+      label: '03 · Tech Spec',
+      directive:
+          'Draft the 4 cells of `techSpec` (`engine` must be "Godot 4 (GDScript)", "Unity 6 (C#)", or "Unreal Engine 5 (Blueprints / C++)", plus `platform`, `assetPipeline`, `saveMode`) tailored to 01 Goal and 02 Game Spec.',
+    ),
+    (
+      tag: '[Section 04 · Design Pillars]',
+      label: '04 · Design Pillars',
+      directive:
+          'Draft `designPillars` naming the core player feelings and emotional experiences the game must create (never features or genres).',
+    ),
+    (
+      tag: '[Section 05 · Trade-Offs]',
+      label: '05 · Trade-Offs',
+      directive:
+          'Draft `tradeOffs` as practical `priorityX` over `overAlternativeY` engineering and design boundaries.',
+    ),
+    (
+      tag: '[Section 06 · Core Loop]',
+      label: '06 · Core Loop',
+      directive:
+          'Draft `coreLoopBeats` in chronological playable loop order ("Beat Name: Observable player action and system response"), starting with immediate in-game player control and ending with reward/upgrade and next-cycle reset.',
+    ),
+    (
+      tag: '[Section 07 · Out of Scope]',
+      label: '07 · Out of Scope',
+      directive:
+          'Draft `exclusions` listing explicit prototype scope cuts ("No ...") to keep v0.1 focused.',
+    ),
+    (
+      tag: '[Section 08 · Done When]',
+      label: '08 · Done When',
+      directive:
+          'Draft `doneWhen` as a concise 1-sentence observable playtest completion condition covering the Core Loop without FPS targets.',
+    ),
+  ];
+
+  /// Builds a single Stage 1 Concept Blueprint section (`0` = `01 Goal` .. `7` = `08 Done When`)
+  /// in place on [draft] using its dedicated single-section tool schema.
+  static Future<bool> generateSingleConceptSection({
+    required ProjectConceptBlueprint draft,
+    required int sectionIndex,
+    String apiKey = '',
+    String modelName = 'gemini-flash-latest',
+    String thinkingLevel = 'HIGH',
+  }) async {
+    if (sectionIndex < 0 || sectionIndex >= conceptSectionBuildOrder.length) {
+      return false;
+    }
+    final spec = conceptSectionBuildOrder[sectionIndex];
+    final ok = await sendConceptChatTurn(
+      draft,
+      '${spec.tag} ${spec.directive}',
+      apiKey: apiKey,
+      conversationModel: modelName,
+      planningModel: modelName,
+      thinkingLevel: thinkingLevel,
+    );
+    if (ok && sectionIndex == 0 && draft.title.trim().isNotEmpty) {
+      draft.releaseTrainTitles = <String>[
+        'v0.1: ${draft.title.trim()} - Prototype',
+      ];
+    }
+    return ok;
   }
 
   /// Ranks a Core Loop Beat so pre-match Staging/Loadout menus (`3`) and end-of-run Reset/Summary (`4`)
