@@ -7265,6 +7265,87 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               .toList();
           expect(e02NewFeats.length, equals(1));
           expect(e02NewFeats.first.title, equals('Enemy Wave Spawner'));
+          // Whole-Epic rule: existing feature(s) in E02 are also upgraded alongside the NEW feature
+          final e02Upgrades = planned.beats[1].features
+              .where((f) => f.lifecycle == FeatureLifecycleStatus.upgrade)
+              .toList();
+          expect(
+            e02Upgrades.length,
+            equals(secExistingFeaturesByBeat[secExistingBeats[1].id]!.length),
+          );
+
+          // 11f. Whole-Epic Completion Rule (Multi-Feature Epic), Strict Epic-Only Phase Coverage, and Unbuilt Draft Release Guard
+          final secondFeatInE01 = TierDocument(
+            id: 'feat_e01_extra_v01',
+            tier: TierType.feature,
+            title: 'Hovertank Boost Jets',
+            parentId: secFirstBeat.id,
+            sections: {
+              'goal': 'Activate lateral boost jets on Shift key.',
+              'doneWhen': 'Playtester presses Shift and boosts sideways.',
+              'originVersion': 'v0.1',
+              'lastUpdatedRelease': 'v0.1',
+            },
+          );
+          final multiFeatMap = <String, List<TierDocument>>{
+            for (final entry in secExistingFeaturesByBeat.entries)
+              entry.key: List<TierDocument>.from(entry.value),
+          };
+          multiFeatMap[secFirstBeat.id] = [secFirstFeat, secondFeatInE01];
+
+          final multiFeatPlanned =
+              await provider.planProgressiveReleaseSectionBySection(
+                projectDoc: provider.activeProject!,
+                releaseDoc: relV02,
+                completedReleases: provider.projectReleases,
+                existingBeats: secExistingBeats,
+                existingFeaturesByBeat: multiFeatMap,
+                deferredByBeatIndex: const {},
+              );
+          expect(multiFeatPlanned, isNotNull);
+          final multiE01Upgrades = multiFeatPlanned!.beats[0].features
+              .where((f) => f.lifecycle == FeatureLifecycleStatus.upgrade)
+              .toList();
+          // Even though the mock only returned secFirstFeat, Whole-Epic rule upgrades ALL 2 features in E01!
+          expect(multiE01Upgrades.length, equals(2));
+          expect(
+            multiE01Upgrades.map((f) => f.id).toSet(),
+            equals({secFirstFeat.id, secondFeatInE01.id}),
+          );
+
+          // Verify Vertical Slice phase switching works in planProgressiveReleaseSectionBySection
+          final relV03Vs = TierDocument(
+            id: 'rel_v03_vs_test',
+            tier: TierType.release,
+            title: 'v0.3: Vertical Slice Polish',
+            parentId: provider.activeProject!.id,
+            sections: {'versionTag': 'v0.3', 'phase': 'verticalSlice'},
+          );
+          final vsPlanned =
+              await provider.planProgressiveReleaseSectionBySection(
+                projectDoc: provider.activeProject!,
+                releaseDoc: relV03Vs,
+                completedReleases: provider.projectReleases,
+                existingBeats: secExistingBeats,
+                existingFeaturesByBeat: multiFeatMap,
+                deferredByBeatIndex: const {},
+              );
+          expect(vsPlanned, isNotNull);
+          expect(vsPlanned!.preset, equals(ReleaseScope.verticalSlice));
+          expect(
+            vsPlanned.beats[0].features
+                .where((f) => f.lifecycle == FeatureLifecycleStatus.upgrade)
+                .length,
+            equals(2),
+          );
+
+          // Verify unbuilt draft release (empty childrenIds) returns isActiveReleaseComplete == false
+          final savedChildren = List<String>.from(
+            provider.activeRelease!.childrenIds,
+          );
+          provider.activeRelease!.childrenIds.clear();
+          expect(provider.isActiveReleaseComplete, isFalse);
+          provider.activeRelease!.childrenIds.addAll(savedChildren);
         } finally {
           provider.removeListener(progListener);
           GeminiAgentClient.testMockResponder = prevMock;

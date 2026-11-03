@@ -163,6 +163,7 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _synthesizingProgressiveBeatId;
   String? get synthesizingProgressiveBeatId => _synthesizingProgressiveBeatId;
   final Set<String> _queuedProgressiveBeatIds = <String>{};
+  int _progressivePlanGeneration = 0;
   bool isSynthesizingProgressiveBeat(String beatId) =>
       _synthesizingProgressiveBeatId == beatId;
   bool isQueuedProgressiveBeat(String beatId) =>
@@ -785,16 +786,23 @@ class WorkbenchProvider extends ChangeNotifier {
 
   /// Returns true if all Checkpoints across all Features in the active Release are 100% verified.
   bool get isActiveReleaseComplete {
+    final rel = activeRelease;
+    if (rel == null || rel.childrenIds.isEmpty) return false;
     final beats = activeReleaseBeats;
     if (beats.isEmpty) return false;
+    final activeVerTag = releaseVersionTagFor(rel);
+    bool hasAnyActiveFeatureInRelease = false;
     for (final b in beats) {
       final feats = featuresForBeat(b.id);
       if (feats.isEmpty) return false;
       for (final f in feats) {
+        if (isFeatureActiveInRelease(f, activeVerTag)) {
+          hasAnyActiveFeatureInRelease = true;
+        }
         if (getDocumentProgress(f.id) < 100) return false;
       }
     }
-    return true;
+    return hasAnyActiveFeatureInRelease;
   }
 
   /// Concise 4-Phase Release Train badge displayed in Stage 2 and Stage 3 headers.

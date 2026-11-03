@@ -35,6 +35,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
       _showProgressiveStableFeaturesDrawer = false;
       _progressivePrevReleaseId = prevReleaseId;
       _progressivePrevPhase = prevPhase;
+      _pendingPhaseGraduationOverride = null;
       _selectedProgressiveTrackIndex = 0;
       _addingFeatureToBeatId = null;
       _progressiveDirectiveCtrl.clear();
@@ -59,6 +60,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     void resetState() {
       _isProgressiveModalOpen = false;
       _showProgressiveStableFeaturesDrawer = false;
+      _pendingPhaseGraduationOverride = null;
       _addingFeatureToBeatId = null;
       if (confirmed) {
         _manualCheckpointFocusIndex = null;
@@ -185,206 +187,347 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          'TARGET PHASE:',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.7,
-                            color: textMuted,
-                          ),
-                        ),
-                        for (final phase in ProductionPhase.values)
-                          Builder(
-                            builder: (context) {
-                              final isSelected =
-                                  widget.workbench.currentPhase == phase;
-                              final shortLabel =
-                                  phase == ProductionPhase.prototype
-                                      ? '01 · Prototype'
-                                      : (phase == ProductionPhase.mvp
-                                          ? '02 · MVP'
-                                          : (phase ==
-                                                  ProductionPhase.verticalSlice
-                                              ? '03 · Vertical Slice'
+                    Builder(
+                      builder: (context) {
+                        final activePhase = widget.workbench.currentPhase;
+                        final mvpCov = widget.workbench.mvpBeatCoverage();
+                        final vsCov =
+                            widget.workbench.verticalSliceBeatCoverage();
+                        final fpCov =
+                            widget.workbench.fullProductionCoverage();
+
+                        bool isPhaseCompleted(ProductionPhase p) {
+                          switch (p) {
+                            case ProductionPhase.prototype:
+                              return true;
+                            case ProductionPhase.mvp:
+                              return mvpCov.isComplete ||
+                                  activePhase.index > ProductionPhase.mvp.index;
+                            case ProductionPhase.verticalSlice:
+                              return vsCov.isComplete ||
+                                  activePhase.index >
+                                      ProductionPhase.verticalSlice.index;
+                            case ProductionPhase.fullProduction:
+                              return fpCov.isReadyForLaunch &&
+                                  activePhase == ProductionPhase.postLaunch;
+                            case ProductionPhase.postLaunch:
+                              return false;
+                          }
+                        }
+
+                        bool isPhaseGated(ProductionPhase p) {
+                          if (p.index <= activePhase.index) return false;
+                          switch (p) {
+                            case ProductionPhase.prototype:
+                            case ProductionPhase.mvp:
+                              return false;
+                            case ProductionPhase.verticalSlice:
+                              return !mvpCov.isComplete;
+                            case ProductionPhase.fullProduction:
+                              return !mvpCov.isComplete || !vsCov.isComplete;
+                            case ProductionPhase.postLaunch:
+                              return !fpCov.isReadyForLaunch;
+                          }
+                        }
+
+                        String? inlineEpicCounterFor(ProductionPhase p) {
+                          if (p != activePhase) return null;
+                          switch (p) {
+                            case ProductionPhase.prototype:
+                              return null;
+                            case ProductionPhase.mvp:
+                              return '${mvpCov.coveredBeats}/${mvpCov.totalBeats} Epics';
+                            case ProductionPhase.verticalSlice:
+                              return '${vsCov.polishedBeats}/${vsCov.totalBeats} Epics';
+                            case ProductionPhase.fullProduction:
+                              return '${fpCov.coveredBeats}/${fpCov.totalBeats} Epics';
+                            case ProductionPhase.postLaunch:
+                              return fpCov.openFixCount > 0
+                                  ? '${fpCov.openFixCount} Fixes'
+                                  : 'Live Ops';
+                          }
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  'PHASE:',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.7,
+                                    color: textMuted,
+                                  ),
+                                ),
+                                for (final phase in ProductionPhase.values)
+                                  Builder(
+                                    builder: (context) {
+                                      final isSelected = activePhase == phase;
+                                      final isCompleted =
+                                          !isSelected && isPhaseCompleted(phase);
+                                      final isGated = isPhaseGated(phase);
+                                      final epicCounter =
+                                          inlineEpicCounterFor(phase);
+                                      final shortLabel = phase ==
+                                              ProductionPhase.prototype
+                                          ? '01 · Prototype'
+                                          : (phase == ProductionPhase.mvp
+                                              ? '02 · MVP'
                                               : (phase ==
                                                       ProductionPhase
-                                                          .fullProduction
-                                                  ? '04 · Full Production'
-                                                  : '05 · Post-Launch')));
-                              return InkWell(
-                                key: ValueKey(
-                                  'progressive_phase_pill_${phase.name}',
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                                onTap: widget.workbench.isAgentBusy
-                                    ? null
-                                    : () async {
-                                        if (isSelected) return;
-                                        await widget.workbench
-                                            .setDraftReleasePhase(phase);
-                                        if (mounted) {
+                                                          .verticalSlice
+                                                  ? '03 · Vertical Slice'
+                                                  : (phase ==
+                                                          ProductionPhase
+                                                              .fullProduction
+                                                      ? '04 · Full Production'
+                                                      : '05 · Post-Launch')));
+                                      return InkWell(
+                                        key: ValueKey(
+                                          'progressive_phase_pill_${phase.name}',
+                                        ),
+                                        borderRadius: BorderRadius.circular(5),
+                                        onTap: () async {
+                                          if (isSelected) return;
+                                          if (isGated &&
+                                              _pendingPhaseGraduationOverride !=
+                                                  phase) {
+                                            _rebuild(() {
+                                              _pendingPhaseGraduationOverride =
+                                                  phase;
+                                            });
+                                            return;
+                                          }
                                           _rebuild(() {
+                                            _pendingPhaseGraduationOverride =
+                                                null;
                                             _selectedProgressiveTrackIndex = 0;
                                           });
-                                        }
-                                      },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 3,
+                                          await widget.workbench
+                                              .setDraftReleasePhase(phase);
+                                          if (mounted) {
+                                            _rebuild(() {});
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? bgRecessed
+                                                : Colors.transparent,
+                                            borderRadius:
+                                                BorderRadius.circular(5),
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: isSelected
+                                                    ? accentEmerald
+                                                    : Colors.transparent,
+                                                width: 2,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                isCompleted
+                                                    ? '$shortLabel ✓'
+                                                    : shortLabel,
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
+                                                  color: isSelected
+                                                      ? textPrimary
+                                                      : (isCompleted
+                                                          ? textMuted
+                                                          : textSecondary),
+                                                ),
+                                              ),
+                                              if (epicCounter != null) ...[
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  epicCounter,
+                                                  key: const ValueKey(
+                                                    'progressive_phase_coverage_badge',
+                                                  ),
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: accentEmerald,
+                                                  ),
+                                                ),
+                                              ] else if (isGated) ...[
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '🔒',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 9.5,
+                                                    color: textMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: isSelected
-                                            ? textPrimary
-                                            : Colors.transparent,
-                                        width: 2,
+                              ],
+                            ),
+                            if (_pendingPhaseGraduationOverride != null) ...[
+                              const SizedBox(height: 10),
+                              Builder(
+                                builder: (context) {
+                                  final targetOverride =
+                                      _pendingPhaseGraduationOverride!;
+                                  final remainingCodes = activePhase ==
+                                          ProductionPhase.mvp
+                                      ? mvpCov.incompleteBeatCodes
+                                      : vsCov.incompleteBeatCodes;
+                                  final totalCount = activePhase ==
+                                          ProductionPhase.mvp
+                                      ? mvpCov.totalBeats
+                                      : vsCov.totalBeats;
+                                  final phaseName = activePhase ==
+                                          ProductionPhase.mvp
+                                      ? '02 · MVP'
+                                      : '03 · Vertical Slice';
+                                  return Container(
+                                    key: const ValueKey(
+                                      'progressive_phase_graduation_guard_banner',
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: accentAmber.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(7),
+                                      border: Border.all(
+                                        color:
+                                            accentAmber.withValues(alpha: 0.35),
                                       ),
                                     ),
-                                  ),
-                                  child: Text(
-                                    shortLabel,
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: isSelected
-                                          ? textPrimary
-                                          : textSecondary,
+                                    child: Wrap(
+                                      spacing: 12,
+                                      runSpacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        Text(
+                                          '${remainingCodes.length} of $totalCount Epics are not yet $phaseName Complete (${remainingCodes.join(", ")}). Finish upgrading remaining Epics first, or override.',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: textPrimary,
+                                          ),
+                                        ),
+                                        InkWell(
+                                          key: const ValueKey(
+                                            'progressive_phase_stay_btn',
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          onTap: () {
+                                            _rebuild(() {
+                                              _pendingPhaseGraduationOverride =
+                                                  null;
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: accentAmber,
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                            ),
+                                            child: Text(
+                                              'Stay in $phaseName (Recommended)',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF1F1600),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        InkWell(
+                                          key: const ValueKey(
+                                            'progressive_phase_override_confirm_btn',
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          onTap: () async {
+                                            _rebuild(() {
+                                              _pendingPhaseGraduationOverride =
+                                                  null;
+                                              _selectedProgressiveTrackIndex =
+                                                  0;
+                                            });
+                                            await widget.workbench
+                                                .setDraftReleasePhase(
+                                                  targetOverride,
+                                                );
+                                            if (mounted) {
+                                              _rebuild(() {});
+                                            }
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: accentAmber.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Override → ${targetOverride.label}',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: accentAmber,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        Builder(
-                          builder: (context) {
-                            final activePhase = widget.workbench.currentPhase;
-                            if (activePhase == ProductionPhase.mvp) {
-                              final cov = widget.workbench.mvpBeatCoverage();
-                              return Padding(
-                                key: const ValueKey(
-                                  'progressive_phase_coverage_badge',
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'MVP COVERAGE: ${cov.coveredBeats}/${cov.totalBeats} EPICS',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              );
-                            } else if (activePhase ==
-                                ProductionPhase.verticalSlice) {
-                              final cov =
-                                  widget.workbench.verticalSliceBeatCoverage();
-                              return Padding(
-                                key: const ValueKey(
-                                  'progressive_phase_coverage_badge',
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'SLICE COVERAGE: ${cov.polishedBeats}/${cov.totalBeats} EPICS',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              );
-                            } else if (activePhase ==
-                                ProductionPhase.fullProduction) {
-                              final cov =
-                                  widget.workbench.fullProductionCoverage();
-                              return Padding(
-                                key: const ValueKey(
-                                  'progressive_phase_coverage_badge',
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'PRODUCTION COVERAGE: ${cov.coveredBeats}/${cov.totalBeats} EPICS · ${cov.remainingDeferredCount} DEFERRED',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              );
-                            } else if (activePhase ==
-                                ProductionPhase.postLaunch) {
-                              final cov =
-                                  widget.workbench.fullProductionCoverage();
-                              return Padding(
-                                key: const ValueKey(
-                                  'progressive_phase_coverage_badge',
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'LIVE OPS · ${cov.openFixCount} OPEN FIXES',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
-                        ),
-                      ],
+                                  );
+                                },
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (bp != null) ...[
-                      Builder(
-                        builder: (context) {
-                          int stableCount = 0;
-                          for (final b in bp.beats) {
-                            for (final f in b.features) {
-                              if (f.included && f.isStable) {
-                                stableCount++;
-                              }
-                            }
-                          }
-                          final activeCount = upgradeCount + newCount;
-                          return Text(
-                            '$stableCount Built (≤$prevVer) · $activeCount Selected for $nextVer (${bp.totalIncludedHours}h)',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w600,
-                              color: textSecondary,
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 12),
-                    ],
                     TextButton(
                       onPressed: () =>
                           _closeProgressiveReleasePlanner(confirmed: false),
@@ -411,7 +554,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                           vertical: 12,
                         ),
                       ),
-                      onPressed: (widget.workbench.isAgentBusy || bp == null)
+                      onPressed: (widget.workbench.isAgentBusy ||
+                              bp == null ||
+                              (upgradeCount + newCount) == 0)
                           ? null
                           : () => _closeProgressiveReleasePlanner(
                                 confirmed: true,
@@ -1062,16 +1207,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 !isQueuedEpic) {
                                               return const SizedBox.shrink();
                                             }
-                                            final incCount = activeEpicFeats
-                                                .where((f) => f.included)
-                                                .length;
-                                            final epicHours = activeEpicFeats
-                                                .where((f) => f.included)
-                                                .fold<int>(
-                                                  0,
-                                                  (sum, f) =>
-                                                      sum + f.estimatedHours,
-                                                );
                                             return Container(
                                               margin: const EdgeInsets.only(
                                                 bottom: 10,
@@ -1118,70 +1253,22 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                               .spaceBetween,
                                                       children: [
                                                         Expanded(
-                                                          child: Row(
-                                                            children: [
-                                                              Container(
-                                                                padding:
-                                                                    const EdgeInsets.symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                      vertical:
-                                                                          2,
-                                                                    ),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color:
-                                                                      bgRecessed,
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                        4,
-                                                                      ),
-                                                                  border:
-                                                                      Border.all(
-                                                                    color:
-                                                                        borderSubtle,
-                                                                  ),
-                                                                ),
-                                                                child: Text(
-                                                                  'EPIC $epicCode',
-                                                                  style: GoogleFonts
-                                                                      .jetBrainsMono(
-                                                                    fontSize:
-                                                                        9.5,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w800,
-                                                                    letterSpacing:
-                                                                        0.6,
-                                                                    color:
-                                                                        textSecondary,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              const SizedBox(
-                                                                width: 8,
-                                                              ),
-                                                              Flexible(
-                                                                child: Text(
-                                                                  epicTitle,
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                  style: GoogleFonts
-                                                                      .jetBrainsMono(
-                                                                    fontSize:
-                                                                        10.5,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w700,
-                                                                    letterSpacing:
-                                                                        0.6,
-                                                                    color:
-                                                                        textPrimary,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ],
+                                                          child: Text(
+                                                            '$epicCode — $epicTitle',
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style: GoogleFonts
+                                                                .jetBrainsMono(
+                                                              fontSize: 10.5,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              letterSpacing:
+                                                                  0.6,
+                                                              color:
+                                                                  textPrimary,
+                                                            ),
                                                           ),
                                                         ),
                                                         const SizedBox(
@@ -1218,6 +1305,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                       accentAmber,
                                                                 ),
                                                               ),
+                                                              const SizedBox(
+                                                                width: 8,
+                                                              ),
                                                             ] else if (isQueuedEpic &&
                                                                 activeEpicFeats
                                                                     .isEmpty) ...[
@@ -1233,23 +1323,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                       textMuted,
                                                                 ),
                                                               ),
-                                                            ] else ...[
-                                                              Text(
-                                                                '$incCount ${incCount == 1 ? 'Feature' : 'Features'} · ${epicHours}h',
-                                                                style: GoogleFonts
-                                                                    .jetBrainsMono(
-                                                                  fontSize: 9.5,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  color:
-                                                                      textMuted,
-                                                                ),
+                                                              const SizedBox(
+                                                                width: 8,
                                                               ),
                                                             ],
-                                                            const SizedBox(
-                                                              width: 8,
-                                                            ),
                                                             InkWell(
                                                               borderRadius:
                                                                   BorderRadius
@@ -1287,7 +1364,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                   ),
                                                                 ),
                                                                 child: Text(
-                                                                  '+ Add Feature',
+                                                                  '+ Add',
                                                                   style: GoogleFonts
                                                                       .jetBrainsMono(
                                                                     fontSize:
@@ -1636,94 +1713,179 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                         ),
                                       ],
                                       const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        crossAxisAlignment:
-                                            WrapCrossAlignment.center,
-                                        children: [
-                                          if (stableRows.isNotEmpty)
-                                            InkWell(
-                                              key: const ValueKey(
-                                                'progressive_toggle_stable_drawer_btn',
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              onTap: () {
-                                                _rebuild(() {
-                                                  _showProgressiveStableFeaturesDrawer =
-                                                      !_showProgressiveStableFeaturesDrawer;
-                                                });
-                                              },
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: bgRecessed,
+                                      Builder(
+                                        builder: (context) {
+                                          final activePhase =
+                                              widget.workbench.currentPhase;
+                                          final isVs = activePhase ==
+                                              ProductionPhase.verticalSlice;
+                                          final mvpCov = widget.workbench
+                                              .mvpBeatCoverage();
+                                          final vsCov = widget.workbench
+                                              .verticalSliceBeatCoverage();
+                                          final doneCodes = isVs
+                                              ? vsCov.completedBeatCodes
+                                              : mvpCov.completedBeatCodes;
+                                          final remCodes = isVs
+                                              ? vsCov.incompleteBeatCodes
+                                              : mvpCov.incompleteBeatCodes;
+                                          final untouchedEpicCount = bp.beats
+                                              .where(
+                                                (b) => b.features.every(
+                                                  (f) =>
+                                                      f.isStable ||
+                                                      f.isSuperseded,
+                                                ),
+                                              )
+                                              .length;
+                                          return Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            children: [
+                                              if (stableRows.isNotEmpty)
+                                                InkWell(
+                                                  key: const ValueKey(
+                                                    'progressive_toggle_stable_drawer_btn',
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
-                                                  border: Border.all(
-                                                    color: borderSubtle,
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  _showProgressiveStableFeaturesDrawer
-                                                      ? '▾ Hide Built Features (${stableRows.length} Stable)'
-                                                      : '+ Upgrade Another Built Feature (${stableRows.length} Stable, Grouped by Epic) ▾',
-                                                  style:
-                                                      GoogleFonts.jetBrainsMono(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: textSecondary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          if (bp.beats.isNotEmpty &&
-                                              _addingFeatureToBeatId == null)
-                                            InkWell(
-                                              key: ValueKey(
-                                                'progressive_add_feat_btn_${bp.beats.first.id}',
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              onTap: () {
-                                                _rebuild(() {
-                                                  _addingFeatureToBeatId =
-                                                      bp.beats.first.id;
-                                                  _progressiveNewFeatCtrl
-                                                      .clear();
-                                                });
-                                              },
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
+                                                  onTap: () {
+                                                    _rebuild(() {
+                                                      _showProgressiveStableFeaturesDrawer =
+                                                          !_showProgressiveStableFeaturesDrawer;
+                                                    });
+                                                  },
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 6,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: bgRecessed,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            6,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: borderSubtle,
+                                                      ),
                                                     ),
-                                                decoration: BoxDecoration(
-                                                  color: bgRecessed,
+                                                    child: Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 4,
+                                                      crossAxisAlignment:
+                                                          WrapCrossAlignment
+                                                              .center,
+                                                      children: [
+                                                        Text(
+                                                          _showProgressiveStableFeaturesDrawer
+                                                              ? '▾ Hide Other Epics (${stableRows.length} Stable)'
+                                                              : '▸ Other $untouchedEpicCount Epics:',
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 10,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color:
+                                                                textSecondary,
+                                                          ),
+                                                        ),
+                                                        if (!_showProgressiveStableFeaturesDrawer) ...[
+                                                          if (doneCodes
+                                                              .isNotEmpty)
+                                                            Text(
+                                                              '${doneCodes.length} Complete ✓ (${doneCodes.join(", ")})',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color:
+                                                                    accentEmerald,
+                                                              ),
+                                                            ),
+                                                          if (remCodes
+                                                              .isNotEmpty)
+                                                            Text(
+                                                              '· ${remCodes.length} Remaining (${remCodes.join(", ")})',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color:
+                                                                    textMuted,
+                                                              ),
+                                                            ),
+                                                          Text(
+                                                            '· Expand all ▾',
+                                                            style: GoogleFonts
+                                                                .jetBrainsMono(
+                                                              fontSize: 10,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              color: textMuted,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (bp.beats.isNotEmpty &&
+                                                  _addingFeatureToBeatId ==
+                                                      null)
+                                                InkWell(
+                                                  key: ValueKey(
+                                                    'progressive_add_feat_btn_${bp.beats.first.id}',
+                                                  ),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
-                                                  border: Border.all(
-                                                    color: borderSubtle,
+                                                  onTap: () {
+                                                    _rebuild(() {
+                                                      _addingFeatureToBeatId =
+                                                          bp.beats.first.id;
+                                                      _progressiveNewFeatCtrl
+                                                          .clear();
+                                                    });
+                                                  },
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 6,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: bgRecessed,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            6,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: borderSubtle,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      '+ Add New Feature...',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: textSecondary,
+                                                      ),
+                                                    ),
                                                   ),
                                                 ),
-                                                child: Text(
-                                                  '+ Add New Feature...',
-                                                  style:
-                                                      GoogleFonts.jetBrainsMono(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: textSecondary,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                        ],
+                                            ],
+                                          );
+                                        },
                                       ),
                                       if (_showProgressiveStableFeaturesDrawer &&
                                           stableRows.isNotEmpty) ...[

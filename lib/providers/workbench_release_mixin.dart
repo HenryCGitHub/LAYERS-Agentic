@@ -616,6 +616,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
   /// Evaluates how many Core Loop Epics (`activeReleaseBeats`) and `v0.1` Prototype Features
   /// have received functional `MVP` coverage across built `ProductionPhase.mvp` releases.
+  /// An Epic only counts as complete (`coveredBeats++`) once ALL of its non-superseded
+  /// `v0.1` features have been upgraded beyond `v0.1`.
   ({
     int coveredBeats,
     int totalBeats,
@@ -623,6 +625,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     int totalProtoFeatures,
     List<String> uncoveredBeatTitles,
     List<String> unupgradedProtoFeatureTitles,
+    List<String> completedBeatCodes,
+    List<String> incompleteBeatCodes,
     bool isComplete,
   }) mvpBeatCoverage() {
     final builtReleases =
@@ -638,6 +642,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     int upgradedProtoFeatures = 0;
     final uncoveredBeatTitles = <String>[];
     final unupgradedProtoFeatureTitles = <String>[];
+    final completedBeatCodes = <String>[];
+    final incompleteBeatCodes = <String>[];
 
     for (int bIdx = 0; bIdx < beats.length; bIdx++) {
       final b = beats[bIdx];
@@ -649,15 +655,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
                 FeatureLifecycleStatus.superseded.name,
           )
           .toList();
-      bool beatCoveredInMvp = false;
+      bool allProtoFeaturesInBeatUpgraded = feats.isNotEmpty;
       for (final f in feats) {
         final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
         final states = FeatureStateNode.getStatesForDocument(f);
         final hasMvpCheckpoint = mvpVerTags.contains(originVer) ||
-            states.any((s) => mvpVerTags.contains(s.releaseVersion.toLowerCase()));
-        if (hasMvpCheckpoint) {
-          beatCoveredInMvp = true;
-        }
+            states.any(
+              (s) => mvpVerTags.contains(s.releaseVersion.toLowerCase()),
+            );
         if (originVer == 'v0.1') {
           totalProtoFeatures++;
           final upgradedPostV01 = states.any(
@@ -666,23 +671,22 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           if (upgradedPostV01 || hasMvpCheckpoint) {
             upgradedProtoFeatures++;
           } else {
+            allProtoFeaturesInBeatUpgraded = false;
             unupgradedProtoFeatureTitles.add('$eTag · ${f.title}');
           }
         }
       }
-      if (beatCoveredInMvp) {
+      if (allProtoFeaturesInBeatUpgraded) {
         coveredBeats++;
+        completedBeatCodes.add(eTag);
       } else {
         uncoveredBeatTitles.add('$eTag · ${b.title}');
+        incompleteBeatCodes.add(eTag);
       }
     }
 
     final totalBeats = beats.length;
-    final protoThreshold =
-        totalProtoFeatures > 0 ? (totalProtoFeatures * 0.75).ceil() : 0;
-    final isComplete = totalBeats > 0 &&
-        coveredBeats >= totalBeats &&
-        upgradedProtoFeatures >= protoThreshold;
+    final isComplete = totalBeats > 0 && coveredBeats >= totalBeats;
 
     return (
       coveredBeats: coveredBeats,
@@ -691,12 +695,16 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       totalProtoFeatures: totalProtoFeatures,
       uncoveredBeatTitles: uncoveredBeatTitles,
       unupgradedProtoFeatureTitles: unupgradedProtoFeatureTitles,
+      completedBeatCodes: completedBeatCodes,
+      incompleteBeatCodes: incompleteBeatCodes,
       isComplete: isComplete,
     );
   }
 
   /// Evaluates how many Core Loop Epics (`activeReleaseBeats`) and live Features have received
   /// `Vertical Slice` polish coverage across built `ProductionPhase.verticalSlice` releases.
+  /// An Epic only counts as complete (`polishedBeats++`) once ALL of its non-superseded
+  /// features have received a `Vertical Slice` polish checkpoint.
   ({
     int polishedBeats,
     int totalBeats,
@@ -704,6 +712,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     int totalFeatures,
     List<String> unpolishedBeatTitles,
     List<String> unpolishedFeatureTitles,
+    List<String> completedBeatCodes,
+    List<String> incompleteBeatCodes,
     bool isComplete,
   }) verticalSliceBeatCoverage() {
     final builtReleases =
@@ -719,6 +729,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     int polishedFeatures = 0;
     final unpolishedBeatTitles = <String>[];
     final unpolishedFeatureTitles = <String>[];
+    final completedBeatCodes = <String>[];
+    final incompleteBeatCodes = <String>[];
 
     for (int bIdx = 0; bIdx < beats.length; bIdx++) {
       final b = beats[bIdx];
@@ -730,33 +742,33 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
                 FeatureLifecycleStatus.superseded.name,
           )
           .toList();
-      bool beatPolishedInVs = false;
+      bool allFeaturesInBeatPolished = feats.isNotEmpty;
       for (final f in feats) {
         totalFeatures++;
         final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
         final states = FeatureStateNode.getStatesForDocument(f);
         final hasVsCheckpoint = vsVerTags.contains(originVer) ||
-            states.any((s) => vsVerTags.contains(s.releaseVersion.toLowerCase()));
+            states.any(
+              (s) => vsVerTags.contains(s.releaseVersion.toLowerCase()),
+            );
         if (hasVsCheckpoint) {
-          beatPolishedInVs = true;
           polishedFeatures++;
         } else {
+          allFeaturesInBeatPolished = false;
           unpolishedFeatureTitles.add('$eTag · ${f.title}');
         }
       }
-      if (beatPolishedInVs) {
+      if (allFeaturesInBeatPolished) {
         polishedBeats++;
+        completedBeatCodes.add(eTag);
       } else {
         unpolishedBeatTitles.add('$eTag · ${b.title}');
+        incompleteBeatCodes.add(eTag);
       }
     }
 
     final totalBeats = beats.length;
-    final featureThreshold =
-        totalFeatures > 0 ? (totalFeatures * 0.75).ceil() : 0;
-    final isComplete = totalBeats > 0 &&
-        polishedBeats >= totalBeats &&
-        (polishedFeatures >= featureThreshold || polishedBeats >= totalBeats);
+    final isComplete = totalBeats > 0 && polishedBeats >= totalBeats;
 
     return (
       polishedBeats: polishedBeats,
@@ -765,6 +777,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       totalFeatures: totalFeatures,
       unpolishedBeatTitles: unpolishedBeatTitles,
       unpolishedFeatureTitles: unpolishedFeatureTitles,
+      completedBeatCodes: completedBeatCodes,
+      incompleteBeatCodes: incompleteBeatCodes,
       isComplete: isComplete,
     );
   }
@@ -1412,6 +1426,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String? previousReleaseId,
     ProductionPhase previousPhase,
   ) {
+    _progressivePlanGeneration++;
+    _isSynthesizingProgressiveFocus = false;
+    _synthesizingProgressiveBeatId = null;
+    _queuedProgressiveBeatIds.clear();
     final proj = activeProject;
     final preIds = _preModalReleaseIds;
     if (proj != null && preIds != null) {
@@ -1601,6 +1619,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _syncCurrentPhaseFromRelease(relDoc);
 
     _stepQueueGeneration++;
+    _progressivePlanGeneration++;
+    final int planGeneration = _progressivePlanGeneration;
     _pendingFeatureStepQueue.clear();
     final verTag = releaseVersionTagFor(relDoc);
     relDoc.sections['versionTag'] = verTag;
@@ -1695,6 +1715,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           existingBeats: existingBeats,
           existingFeaturesByBeat: existingFeaturesByBeat,
           deferredByBeatIndex: deferredByBeatIndex,
+          generation: planGeneration,
         );
       } else {
         planned = await ReleasePlannerAgent.planRelease(
@@ -1709,6 +1730,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           thinkingLevel: _thinkingLevel,
         );
       }
+      if (planGeneration != _progressivePlanGeneration) return;
       if (planned != null) {
         if (planned.releaseTitle.isNotEmpty &&
             planned.releaseTitle != relDoc.title) {
@@ -1774,12 +1796,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         }
       }
     } finally {
-      _isSynthesizingProgressiveFocus = false;
-      _synthesizingProgressiveBeatId = null;
-      _queuedProgressiveBeatIds.clear();
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-      notifyListeners();
+      if (planGeneration == _progressivePlanGeneration) {
+        _isSynthesizingProgressiveFocus = false;
+        _synthesizingProgressiveBeatId = null;
+        _queuedProgressiveBeatIds.clear();
+        _isAgentBusy = false;
+        _agentProgressStep = null;
+        notifyListeners();
+      }
     }
   }
 
@@ -1902,10 +1926,15 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     required Map<String, List<TierDocument>> existingFeaturesByBeat,
     required Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex,
     bool isBackgroundPrewarm = false,
+    int? generation,
   }) async {
     if (!GeminiAgentClient.hasKey(_apiKey) || existingBeats.isEmpty) {
       return null;
     }
+    bool isCancelled() =>
+        !isBackgroundPrewarm &&
+        generation != null &&
+        generation != _progressivePlanGeneration;
     final verTag = releaseVersionTagFor(releaseDoc);
     final workingBp = (!isBackgroundPrewarm &&
             _releaseBlueprint != null &&
@@ -1943,6 +1972,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       modelName: _conversationModel,
       thinkingLevel: 'LOW',
     );
+    if (isCancelled()) return null;
     if (focusResult == null) return null;
     if (focusResult.fullBlueprint != null) {
       if (!isBackgroundPrewarm) {
@@ -1986,6 +2016,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     // Pass 2 (Epic-by-Epic): Synthesize Section 2 (`2. Epics & Features in v0.X`) one target Epic at a time
     final alreadyPlannedChanges = <String>[];
     for (final bIdx in focusResult.targetEpicIndices) {
+      if (isCancelled()) return null;
       if (bIdx < 0 ||
           bIdx >= existingBeats.length ||
           bIdx >= workingBp.beats.length) {
@@ -2019,6 +2050,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         modelName: _conversationModel,
         thinkingLevel: 'LOW',
       );
+      if (isCancelled()) return null;
       if (updatedBeat != null) {
         workingBp.beats[bIdx] = updatedBeat;
         for (final f in updatedBeat.features) {

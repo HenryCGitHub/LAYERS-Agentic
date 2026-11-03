@@ -955,6 +955,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                 borderRadius: BorderRadius.circular(4),
                                 onTap: () {
                                   if (beatFeats.isEmpty) return;
+                                  if (_isProgressiveModalOpen) {
+                                    _closeProgressiveReleasePlanner(
+                                      confirmed: false,
+                                    );
+                                  }
                                   final targetFeat = beatFeats.firstWhere(
                                     (f) =>
                                         widget.workbench
@@ -1289,6 +1294,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               key: ValueKey('rail_feat_${feat.id}'),
               borderRadius: BorderRadius.circular(6),
               onTap: () {
+                if (_isProgressiveModalOpen) {
+                  _closeProgressiveReleasePlanner(confirmed: false);
+                }
                 _rebuild(() {
                   _manualCheckpointFocusIndex = null;
                 });
@@ -1309,6 +1317,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       child: InkWell(
                         key: ValueKey('outline_feat_chevron_${feat.id}'),
                         onTap: () {
+                          if (_isProgressiveModalOpen) {
+                            _closeProgressiveReleasePlanner(confirmed: false);
+                          }
                           _rebuild(() {
                             _manualCheckpointFocusIndex = null;
                           });

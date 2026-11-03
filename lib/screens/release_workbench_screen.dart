@@ -57,6 +57,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   bool _showProgressiveStableFeaturesDrawer = false;
   String? _progressivePrevReleaseId;
   ProductionPhase? _progressivePrevPhase;
+  ProductionPhase? _pendingPhaseGraduationOverride;
   int _selectedProgressiveTrackIndex = 0;
   String? _addingFeatureToBeatId;
   final TextEditingController _progressiveDirectiveCtrl =

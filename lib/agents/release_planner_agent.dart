@@ -1614,6 +1614,8 @@ Call `commit_epic_features` (or return ONLY valid JSON):
         SectionTextUtils.resolveDoneWhen(projectDoc.sections);
 
     final historyAndTree = StringBuffer();
+    final mvpVerTags = <String>{};
+    final vsVerTags = <String>{};
     if (completedReleases.isNotEmpty) {
       historyAndTree.writeln(
         'Completed Prior Releases History (chronological):',
@@ -1626,6 +1628,12 @@ Call `commit_epic_features` (or return ONLY valid JSON):
         );
         final pPhase =
             priorRel.sections['phase'] ?? priorRel.releaseScope.name;
+        final pPhaseLower = pPhase.toLowerCase();
+        if (pPhaseLower.contains('vertical') || pPhaseLower.contains('slice')) {
+          vsVerTags.add(pVer.toLowerCase());
+        } else if (pPhaseLower.contains('mvp')) {
+          mvpVerTags.add(pVer.toLowerCase());
+        }
         final pGoal = SectionTextUtils.resolveGoal(priorRel.sections);
         historyAndTree.writeln(
           '- $pVer [$pPhase] "${priorRel.title}": ${pGoal.isNotEmpty ? pGoal : "Completed milestone"}',
@@ -1635,13 +1643,15 @@ Call `commit_epic_features` (or return ONLY valid JSON):
     historyAndTree.writeln(
       'Existing Live Game Tree (Epics E01..E${existingBeats.length.toString().padLeft(2, '0')}):',
     );
+    final isVsTarget = releasePhase == ProductionPhase.verticalSlice.name ||
+        preset == ReleaseScope.verticalSlice;
     final unupgradedEpicNums = <int>[];
     for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
       final b = existingBeats[bIdx];
       final eNum = bIdx + 1;
       final eCode = 'E${eNum.toString().padLeft(2, '0')}';
       final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
-      bool hasPostV01Upgrade = false;
+      bool allFeaturesInEpicCoveredForPhase = feats.isNotEmpty;
       final featSummaries = <String>[];
       for (final f in feats) {
         if (f.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name) {
@@ -1649,23 +1659,44 @@ Call `commit_epic_features` (or return ONLY valid JSON):
           continue;
         }
         final states = FeatureStateNode.getStatesForDocument(f);
-        final originVer = f.sections['originVersion'] ?? 'v0.1';
-        if (originVer.toLowerCase() != 'v0.1' ||
-            states.any((s) => s.releaseVersion.toLowerCase() != 'v0.1')) {
-          hasPostV01Upgrade = true;
+        final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
+        final bool coveredInPhase;
+        if (isVsTarget) {
+          coveredInPhase = vsVerTags.contains(originVer) ||
+              states.any(
+                (s) => vsVerTags.contains(s.releaseVersion.toLowerCase()),
+              );
+        } else {
+          coveredInPhase = originVer != 'v0.1' ||
+              mvpVerTags.contains(originVer) ||
+              states.any((s) => s.releaseVersion.toLowerCase() != 'v0.1');
+        }
+        if (!coveredInPhase) {
+          allFeaturesInEpicCoveredForPhase = false;
         }
         final cpChain = states.isNotEmpty
             ? states.map((s) => s.releaseVersion).join('->')
             : originVer;
         featSummaries.add('${f.title} ($cpChain)');
       }
-      if (!hasPostV01Upgrade) {
+      if (!allFeaturesInEpicCoveredForPhase) {
         unupgradedEpicNums.add(eNum);
       }
+      final epicPhaseTag = allFeaturesInEpicCoveredForPhase
+          ? '[COMPLETE IN ${releasePhase.toUpperCase()} ✓]'
+          : '[INCOMPLETE IN ${releasePhase.toUpperCase()} — Needs full Epic pass]';
       historyAndTree.writeln(
-        '- Epic $eNum ($eCode · "${b.title}", id: ${b.id}): ${featSummaries.join(', ')}',
+        '- Epic $eNum ($eCode · "${b.title}", id: ${b.id}) $epicPhaseTag: ${featSummaries.join(', ')}',
       );
     }
+
+    final phaseFocusDirective = isVsTarget
+        ? 'Phase 3 · Vertical Slice (Gold Standard Polish Pass): Select 1–2 incomplete Epics in "targetEpicNumbers" (${unupgradedEpicNums.isNotEmpty ? unupgradedEpicNums.map((n) => "E${n.toString().padLeft(2, '0')}").join(', ') : 'E01, E02'}) to polish completely with observable VFX/particles, SFX audio cues, hit-stop/camera feedback, animation states, and HUD readability.'
+        : (releasePhase == ProductionPhase.fullProduction.name
+            ? 'Phase 4 · Full Production (v1.0 Content & Deferred Backlog): Select 1–2 Epics in "targetEpicNumbers" to scale content/wave variety and promote deferred Out-of-Scope systems.'
+            : (releasePhase == ProductionPhase.postLaunch.name
+                ? 'Phase 5 · Post-Launch & Live Ops: Select 1–2 Epics in "targetEpicNumbers" for live balance tuning, [FIX] resolution, and modular content drops.'
+                : 'Phase 2 · MVP (Whole-Epic Functional Upgrade): Select 1–2 incomplete Epics in "targetEpicNumbers" (${unupgradedEpicNums.isNotEmpty ? unupgradedEpicNums.map((n) => "E${n.toString().padLeft(2, '0')}").join(', ') : 'E01, E02'}) to upgrade completely from v0.1 greybox to functional MVP.'));
 
     final prompt = '''
 You are the Lead Game Architect planning **Section 1 (Focus & Strategic Options)** for Progressive Release "$versionTag" (${releaseDoc.title}, Phase: $releasePhase) of "${projectDoc.title}".
@@ -1679,7 +1710,8 @@ Concept Blueprint:
 - 07 Out of Scope: ${projectExclusions.join(' | ')}
 - 08 Done When: "$projectDoneWhen"
 $historyAndTree
-${unupgradedEpicNums.isNotEmpty ? 'Still-Greybox v0.1 Epics needing upgrade coverage: ${unupgradedEpicNums.map((n) => "E${n.toString().padLeft(2, '0')}").join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- PHASE DIRECTIVE: $phaseFocusDirective
+${GeminiAgentClient.compactStyleRules}
 - Return ONLY Section 1 of the $versionTag Progressive Release Plan:
   1. `"releasePhase"`: `"$releasePhase"`
   2. `"releaseTitle"`: `"$versionTag: <2-5 Word Concrete Focus>"`
@@ -1908,8 +1940,17 @@ Call `commit_progressive_release_focus` (or return ONLY valid JSON):
       );
     }
 
+    final phaseUpgradeDirective = releasePhase ==
+            ProductionPhase.verticalSlice.name
+        ? 'Phase 3 · Vertical Slice Polish: Upgrade EVERY existing feature in Epic $epicCode with observable VFX/particles, SFX audio cues, camera shake/hit-stop, animation states, and HUD readability.'
+        : (releasePhase == ProductionPhase.fullProduction.name
+            ? 'Phase 4 · Full Production Scaling: Upgrade EVERY existing feature in Epic $epicCode with content/wave variety scaling and promote any deferred exclusions for this Epic.'
+            : (releasePhase == ProductionPhase.postLaunch.name
+                ? 'Phase 5 · Post-Launch & Live Ops: Upgrade EVERY existing feature in Epic $epicCode with live balance tuning, [FIX] resolutions, and modular content depth.'
+                : 'Phase 2 · MVP Functional Depth: Upgrade EVERY existing v0.1 greybox feature in Epic $epicCode into a complete functional MVP mechanic.'));
+
     final prompt = '''
-You are the Systems Designer planning the **$versionTag (`$releasePhase`) UPGRADE and NEW features** inside **Epic $epicCode · ${epicDoc.title}** for "${projectDoc.title}".
+You are the Systems Designer planning the **$versionTag (`$releasePhase`) COMPLETE EPIC UPGRADE** inside **Epic $epicCode · ${epicDoc.title}** for "${projectDoc.title}".
 Section 1 Release Focus:
 - Release Goal: "$section1Goal"
 - Release Done When: "$section1DoneWhen"
@@ -1920,11 +1961,11 @@ ${alreadyPlannedChanges.isNotEmpty ? '- Already Planned in Earlier Epics for $ve
 Target Epic $epicCode ("${epicDoc.title}", id: "${epicDoc.id}"):
 ${existingFeatLines.isNotEmpty ? existingFeatLines.join('\n') : '(No existing features)'}
 
+- PHASE DIRECTIVE: $phaseUpgradeDirective
 ${GeminiAgentClient.compactStyleRules}
-- Return ONLY the active `"upgrade"` or `"new"` features needed inside **Epic $epicCode · ${epicDoc.title}** for $versionTag:
-  * When upgrading an existing feature, set `"lifecycle": "upgrade"` and use its EXACT `"id"` and `"title"` from the list above, describing only the $versionTag delta upgrade in `"goal"`, `"inScope"`, and `"tasks"`.
-  * When introducing a brand-new feature in Epic $epicCode, set `"lifecycle": "new"` with a 2–3 word plain action/object title (never identical to "${epicDoc.title}").
-  * Omit any existing feature in Epic $epicCode that stays untouched (`"stable"`) in $versionTag.
+- WHOLE-EPIC COMPLETION RULE (NO PARTIAL EPICS):
+  * Because **Epic $epicCode · ${epicDoc.title}** was chosen for $versionTag, you MUST return an `"upgrade"` entry for **EVERY** existing non-superseded feature listed above in Epic $epicCode (using its EXACT `"id"` and `"title"`), describing its $versionTag delta upgrade in `"goal"`, `"inScope"`, and `"tasks"`, so the **entire Epic $epicCode** is completed in $versionTag.
+  * You may also add a brand-new feature in Epic $epicCode (`"lifecycle": "new"`) if a missing mechanic is required to complete the Epic.
   * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"`, 1–2 `[STATE GUARD]` rules in `"edgeCases"`, and foundation-first `"tasks"` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
 
 Call `commit_progressive_epic_changes` (or return ONLY valid JSON):
@@ -1960,7 +2001,16 @@ Call `commit_progressive_epic_changes` (or return ONLY valid JSON):
       functionDeclarations: const [commitProgressiveEpicChangesTool],
     );
     final rawFeatures = json?['features'];
-    if (rawFeatures is! List || rawFeatures.isEmpty) return null;
+    if (rawFeatures is! List || rawFeatures.isEmpty) {
+      return ensureCompleteEpicUpgradedForBeat(
+        beatBp: null,
+        epicDoc: epicDoc,
+        existingFeaturesInEpic: existingFeaturesInEpic,
+        queuedDeferredInEpic: queuedDeferredInEpic,
+        versionTag: versionTag,
+        releasePhase: releasePhase,
+      );
+    }
 
     final singleBeatJson = <String, dynamic>{
       'releasePhase': releasePhase,
@@ -2003,7 +2053,16 @@ Call `commit_progressive_epic_changes` (or return ONLY valid JSON):
       fallbackExclusions: projectExclusions,
       capV01Checkpoints: false,
     );
-    if (parsedSingle == null || parsedSingle.beats.isEmpty) return null;
+    if (parsedSingle == null || parsedSingle.beats.isEmpty) {
+      return ensureCompleteEpicUpgradedForBeat(
+        beatBp: null,
+        epicDoc: epicDoc,
+        existingFeaturesInEpic: existingFeaturesInEpic,
+        queuedDeferredInEpic: queuedDeferredInEpic,
+        versionTag: versionTag,
+        releasePhase: releasePhase,
+      );
+    }
 
     final reconciledSingle = reconcileReleaseBlueprintWithPhaseRules(
       parsed: parsedSingle,
@@ -2020,7 +2079,137 @@ Call `commit_progressive_epic_changes` (or return ONLY valid JSON):
       projectExclusions: projectExclusions,
       allCoreLoopItems: const <String>[],
     );
-    return reconciledSingle.beats.firstOrNull;
+    return ensureCompleteEpicUpgradedForBeat(
+      beatBp: reconciledSingle.beats.firstOrNull,
+      epicDoc: epicDoc,
+      existingFeaturesInEpic: existingFeaturesInEpic,
+      queuedDeferredInEpic: queuedDeferredInEpic,
+      versionTag: versionTag,
+      releasePhase: releasePhase,
+    );
+  }
+
+  /// Guarantees that when a target Epic (`epicDoc`) is selected for a progressive release (`versionTag`),
+  /// EVERY existing non-superseded feature in that Epic is upgraded together (`lifecycle: upgrade`)
+  /// so an Epic is never left only partially upgraded in a progressive release.
+  static ProposedBeatBlueprint ensureCompleteEpicUpgradedForBeat({
+    required ProposedBeatBlueprint? beatBp,
+    required TierDocument epicDoc,
+    required List<TierDocument> existingFeaturesInEpic,
+    required List<ProposedFeatureBlueprint> queuedDeferredInEpic,
+    required String versionTag,
+    required String releasePhase,
+  }) {
+    final isVs = releasePhase == ProductionPhase.verticalSlice.name;
+    final isFullProd = releasePhase == ProductionPhase.fullProduction.name;
+    final isPostLaunch = releasePhase == ProductionPhase.postLaunch.name;
+    final stageSuffix = isVs
+        ? 'Slice Polish'
+        : (isFullProd
+            ? 'Production Scale'
+            : (isPostLaunch ? 'Live Ops' : 'MVP Upgrade'));
+
+    final baseFeatures = beatBp != null
+        ? List<ProposedFeatureBlueprint>.from(beatBp.features)
+        : <ProposedFeatureBlueprint>[
+            for (final ef in existingFeaturesInEpic)
+              ProposedFeatureBlueprint(
+                id: ef.id,
+                title: ef.title,
+                goal: SectionTextUtils.resolveGoal(ef.sections),
+                doneWhen: SectionTextUtils.resolveDoneWhen(ef.sections),
+                estimatedHours: 0,
+                included: ef.sections['lifecycle'] !=
+                    FeatureLifecycleStatus.superseded.name,
+                lifecycle: ef.sections['lifecycle'] ==
+                        FeatureLifecycleStatus.superseded.name
+                    ? FeatureLifecycleStatus.superseded
+                    : FeatureLifecycleStatus.stable,
+                originVersion: ef.sections['originVersion'] ?? 'v0.1',
+                primarySharedScriptOrScene:
+                    (ef.sections['primary_asset'] ?? '').trim().isNotEmpty
+                        ? ef.sections['primary_asset']!.trim()
+                        : null,
+                inScope: SectionTextUtils.resolveInScope(ef.sections),
+                outOfScope: const [],
+                tuningParams: const [],
+                edgeCases: const [],
+                checkpoints: const [],
+              ),
+            for (final df in queuedDeferredInEpic)
+              df
+                ..included = true
+                ..lifecycle = FeatureLifecycleStatus.newFeature
+                ..originVersion = versionTag,
+          ];
+
+    for (int i = 0; i < baseFeatures.length; i++) {
+      final f = baseFeatures[i];
+      if (!f.isStable || f.isSuperseded) continue;
+      final defaultGoal = isVs
+          ? 'Polish ${f.title} with VFX particles, SFX cues, hit-stop/camera feedback, and HUD readability for $versionTag.'
+          : (isFullProd
+              ? 'Scale ${f.title} content tiers and encounter parameters for $versionTag.'
+              : (isPostLaunch
+                  ? 'Tune ${f.title} live balance parameters and state guards for $versionTag.'
+                  : 'Upgrade ${f.title} from v0.1 greybox to complete functional MVP depth in $versionTag.'));
+      final defaultDone = isVs
+          ? 'Playtester triggers ${f.title} and verifies VFX, audio cues, and responsive game feel on screen.'
+          : 'Playtester triggers ${f.title} and verifies the $versionTag $stageSuffix in Play mode.';
+      final tuning = _defaultTuningParamsForFeature(f.title, defaultGoal);
+      final guards = <String>[
+        '[STATE GUARD] Prevent duplicate or invalid state transition during ${f.title} ($versionTag)',
+      ];
+      final tasks = isVs
+          ? <String>[
+              '${f.title} VFX & Material Setup (1h)',
+              '${f.title} Camera & Audio Feel Cues (1h)',
+              '${f.title} HUD Readability & Frame Guard (1h)',
+            ]
+          : <String>[
+              '${f.title} Component & Collision Extension (1h)',
+              '${f.title} $stageSuffix Logic & Math (1h)',
+              '${f.title} Feedback Cue & State Guard (1h)',
+            ];
+      baseFeatures[i] = ProposedFeatureBlueprint(
+        id: f.id,
+        title: f.title,
+        goal: defaultGoal,
+        doneWhen: defaultDone,
+        estimatedHours: 3,
+        included: true,
+        lifecycle: FeatureLifecycleStatus.upgrade,
+        originVersion: f.originVersion,
+        primarySharedScriptOrScene: f.primarySharedScriptOrScene,
+        inScope: <String>[defaultGoal],
+        outOfScope: const [],
+        tuningParams: tuning,
+        edgeCases: guards,
+        checkpoints: <ProposedCheckpointBlueprint>[
+          ProposedCheckpointBlueprint(
+            title: '${f.title} ($stageSuffix)',
+            playtestCriteria: defaultDone,
+            releaseVersion: versionTag,
+            tasks: tasks,
+            coveredScope: <String>[defaultGoal],
+            tuningParams: tuning,
+            edgeCases: guards,
+          ),
+        ],
+      );
+    }
+
+    return ProposedBeatBlueprint(
+      id: epicDoc.id,
+      title: beatBp?.title.isNotEmpty == true ? beatBp!.title : epicDoc.title,
+      goal: beatBp?.goal.isNotEmpty == true
+          ? beatBp!.goal
+          : SectionTextUtils.resolveGoal(epicDoc.sections),
+      doneWhen: beatBp?.doneWhen.isNotEmpty == true
+          ? beatBp!.doneWhen
+          : SectionTextUtils.resolveDoneWhen(epicDoc.sections),
+      features: baseFeatures,
+    );
   }
 
   /// Ensures checkpoint tasks follow a strict Foundation-First progression (`01` Asset/Character Setup ->
@@ -2913,8 +3102,7 @@ Call `commit_progressive_epic_changes` (or return ONLY valid JSON):
           );
           continue;
         }
-        final shouldUpgrade = isTargetEpic &&
-            (targetMvpEpicIndex != null || fIdx == 0);
+        final shouldUpgrade = isTargetEpic;
         if (shouldUpgrade) {
           proposedFeats.add(
             ProposedFeatureBlueprint(
