@@ -1715,19 +1715,19 @@ ${GeminiAgentClient.compactStyleRules}
 - Return ONLY Section 1 of the $versionTag Progressive Release Plan:
   1. `"releasePhase"`: `"$releasePhase"`
   2. `"releaseTitle"`: `"$versionTag: <2-5 Word Concrete Focus>"`
-  3. `"goal"`: 1 plain-English sentence stating what $versionTag upgrades/adds and why.
-  4. `"doneWhen"`: 1 observable playtest completion condition for $versionTag.
+  3. `"goal"`: BLUF format (`"<2-4 Word Payoff> — Complete E0# <System> and E0# <System> for $releasePhase."`).
+  4. `"doneWhen"`: Causal `Trigger → Result` format (`"<Player Action> → <Observable Screen Result>"`).
   5. `"builtSoFar"`: 2–4 short phrases summarizing what is already built.
   6. `"missingGaps"`: 2–4 concise 1-line statements prefixed with `E0#:` naming what is lacking right now.
   7. `"targetEpicNumbers"`: Array of 1-based Epic numbers (`1..${existingBeats.length}`) that $versionTag will upgrade or add features to (e.g. `[2, 3]`).
-  8. `"questions"`: 1 strategic question with 3 concrete options tailored to "${projectDoc.title}" (Option 1 prefixed with `(Recommended)` matching your primary focus; Options 2 and 3 offering distinct alternative focuses).
+  8. `"questions"`: 1 question with 3 Epic-driven options naming the available incomplete Epic codes (`E0#`) and telegraphic `+`-joined deliverables (Option 1 prefixed with `(Recommended)`).
 
 Call `commit_progressive_release_focus` (or return ONLY valid JSON):
 {
   "releasePhase": "$releasePhase",
   "releaseTitle": "$versionTag: Concrete Focus Title",
-  "goal": "Upgrade ... and add ... so the player can ...",
-  "doneWhen": "Playtester verifies ... in Play mode.",
+  "goal": "2-4 Word Payoff — Complete E02 and E03 for $releasePhase.",
+  "doneWhen": "Player action in Play mode → observable screen result",
   "builtSoFar": ["...", "..."],
   "missingGaps": ["E02: ...", "E03: ..."],
   "agentReasoning": "1-2 concise sentences explaining why these Epics are prioritized next.",
@@ -1735,11 +1735,11 @@ Call `commit_progressive_release_focus` (or return ONLY valid JSON):
   "questions": [
     {
       "id": "rel_q_1",
-      "question": "Which gameplay focus should $versionTag prioritize?",
+      "question": "Which available Epics should $versionTag build?",
       "options": [
-        "(Recommended) Focus A: 1-sentence game-specific description",
-        "Focus B: 1-sentence game-specific description",
-        "Focus C: 1-sentence game-specific description"
+        "(Recommended) E02 + E03 · System A & System B: Deliverable 1 + Deliverable 2 + Deliverable 3",
+        "E02 Only · System A: Deliverable 1 + Deliverable 2",
+        "E03 + E04 · System B & System C: Deliverable 2 + Deliverable 3"
       ]
     }
   ]

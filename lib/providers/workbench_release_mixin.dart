@@ -1420,6 +1420,291 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     } catch (_) {}
   }
 
+  static final RegExp _epicPrefixStripper = RegExp(
+    r'^(?:epic\s*\d+|beat\s*\d+|e0?\d+)\s*[:·—\-]\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _leadingVerbStripper = RegExp(
+    r'^(?:build|create|implement|add|upgrade|extend|configure|wire|setup|set up|enable|establish|allow|support)\s+(?:the|a|an)?\s*',
+    caseSensitive: false,
+  );
+
+  String _shortBeatName(String rawTitle, int idx) {
+    final cleaned = rawTitle.replaceFirst(_epicPrefixStripper, '').trim();
+    return cleaned.isNotEmpty ? cleaned : 'Epic ${idx + 1}';
+  }
+
+  /// Formats a feature's scope/goal into a concise **Changelog Delta (`+Delta`)** string for `UPGRADE`
+  /// features or a clean telegraphic phrase for `NEW` features.
+  String formatChangelogDeltaForFeature(ProposedFeatureBlueprint feat) {
+    final isUpg = feat.lifecycle == FeatureLifecycleStatus.upgrade;
+    final items = <String>[];
+    for (final raw in feat.inScope) {
+      final cleaned = raw
+          .replaceFirst(_leadingVerbStripper, '')
+          .replaceAll(RegExp(r'\.$'), '')
+          .trim();
+      if (cleaned.isNotEmpty &&
+          cleaned.toLowerCase() != feat.title.toLowerCase()) {
+        items.add(isUpg && !cleaned.startsWith('+') ? '+$cleaned' : cleaned);
+      }
+      if (items.length >= 2) break;
+    }
+    if (items.isNotEmpty) {
+      return items.join(', ');
+    }
+    final cleanGoal = feat.goal
+        .replaceFirst(_leadingVerbStripper, '')
+        .replaceAll(RegExp(r'\.$'), '')
+        .trim();
+    if (cleanGoal.isEmpty) {
+      return isUpg ? '+MVP functional upgrade & tuning' : feat.title;
+    }
+    return isUpg && !cleanGoal.startsWith('+') ? '+$cleanGoal' : cleanGoal;
+  }
+
+  /// Generates the 3 selectable **EPICS** option cards for the Progressive Release Co-Pilot
+  /// directly from the remaining incomplete Epics (`E01..EN`), using:
+  /// - **BLUF** card titles (`E02 + E03 · <Epic Titles>`)
+  /// - **Telegraphic (`+`-joined)** card subtitles
+  /// - **BLUF** `GOAL:` (`<Bold Payoff> — <Concise Epic Scope>`)
+  /// - **Causal `Trigger → Result`** `✓ END GOAL:` (`<Action> → <Observable Screen Result>`)
+  List<({
+    String title,
+    String subtitle,
+    String blufHeadline,
+    String blufDetail,
+    String causalDoneWhen,
+    List<int> targetBeatIndices,
+    bool isRecommended,
+  })> epicFocusOptionsForBlueprint(ReleaseBlueprint bp) {
+    final totalBeats = bp.beats.length;
+    if (totalBeats == 0) return const [];
+
+    final phase = _currentPhase;
+    final isVs = phase == ProductionPhase.verticalSlice;
+    final mvpCov = mvpBeatCoverage();
+    final vsCov = verticalSliceBeatCoverage();
+    final incompleteCodes = isVs
+        ? vsCov.incompleteBeatCodes.toSet()
+        : mvpCov.incompleteBeatCodes.toSet();
+
+    final incompleteIndices = <int>[];
+    final initialActiveIndices = <int>[];
+    for (int i = 0; i < totalBeats; i++) {
+      final code = 'E${(i + 1).toString().padLeft(2, '0')}';
+      if (incompleteCodes.contains(code)) {
+        incompleteIndices.add(i);
+      }
+      final b = bp.beats[i];
+      if (b.features.any((f) => f.included && !f.isStable && !f.isSuperseded)) {
+        initialActiveIndices.add(i);
+      }
+    }
+
+    final availableIndices = incompleteIndices.isNotEmpty
+        ? incompleteIndices
+        : List<int>.generate(totalBeats, (i) => i);
+
+    // Card 0 (Recommended): initial active incomplete Epics (or first 1-2 available incomplete Epics)
+    final recIndices = initialActiveIndices.isNotEmpty
+        ? initialActiveIndices
+        : availableIndices.take(availableIndices.length >= 2 ? 2 : 1).toList();
+
+    // Card 1: Focused single-Epic option on the first available incomplete Epic
+    final firstSingleIdx = availableIndices.first;
+    final opt1Indices = (recIndices.length == 1 &&
+            recIndices.first == firstSingleIdx &&
+            availableIndices.length >= 2)
+        ? <int>[availableIndices[0], availableIndices[1]]
+        : <int>[firstSingleIdx];
+
+    // Card 2: Alternative incomplete Epic(s)
+    List<int> opt2Indices;
+    if (availableIndices.length >= 3) {
+      opt2Indices = <int>[availableIndices[1], availableIndices[2]];
+    } else if (availableIndices.length == 2) {
+      opt2Indices = <int>[availableIndices[1]];
+    } else if (totalBeats >= 2) {
+      final otherIdx = (firstSingleIdx + 1) % totalBeats;
+      opt2Indices = <int>[firstSingleIdx, otherIdx];
+    } else {
+      opt2Indices = <int>[0];
+    }
+
+    ({
+      String title,
+      String subtitle,
+      String blufHeadline,
+      String blufDetail,
+      String causalDoneWhen,
+      List<int> targetBeatIndices,
+      bool isRecommended,
+    }) buildCardConfig(
+      List<int> indices, {
+      required bool isRec,
+      required bool forceSingleLabel,
+    }) {
+      final codes = [
+        for (final i in indices) 'E${(i + 1).toString().padLeft(2, '0')}',
+      ];
+      final names = [
+        for (final i in indices) _shortBeatName(bp.beats[i].title, i),
+      ];
+      final codePrefix = forceSingleLabel && codes.length == 1
+          ? '${codes.first} Only'
+          : codes.join(' + ');
+      final joinedNames = names.take(2).join(' & ');
+      final cardTitle = '$codePrefix · $joinedNames';
+
+      final telegraphicTokens = <String>[];
+      for (final i in indices) {
+        for (final f in bp.beats[i].features) {
+          if (f.isSuperseded) continue;
+          telegraphicTokens.add(f.title);
+          if (telegraphicTokens.length >= 3) break;
+        }
+        if (telegraphicTokens.length >= 3) break;
+      }
+      final subtitle = telegraphicTokens.isNotEmpty
+          ? telegraphicTokens.join(' + ')
+          : names.join(' + ');
+
+      final phaseLabel = phase == ProductionPhase.verticalSlice
+          ? 'Vertical Slice polish'
+          : (phase == ProductionPhase.fullProduction
+              ? 'Full Production'
+              : 'MVP');
+      final epicPairsText = [
+        for (int k = 0; k < indices.length; k++) '${codes[k]} ${names[k]}',
+      ].join(' and ');
+
+      final blufHeadline = joinedNames;
+      final blufDetail = 'Complete $epicPairsText for $phaseLabel.';
+
+      final String causalDoneWhen;
+      if (isRec && bp.doneWhen.trim().isNotEmpty && bp.doneWhen.contains('→')) {
+        causalDoneWhen = bp.doneWhen.trim();
+      } else if (telegraphicTokens.length >= 2) {
+        causalDoneWhen =
+            'Trigger ${telegraphicTokens.first} in Play mode → verify ${telegraphicTokens.skip(1).join(" + ")} on screen';
+      } else {
+        causalDoneWhen =
+            'Playtest ${codes.join(" + ")} in Play mode → verify all $joinedNames mechanics respond without state locks';
+      }
+
+      return (
+        title: cardTitle,
+        subtitle: subtitle,
+        blufHeadline: blufHeadline,
+        blufDetail: blufDetail,
+        causalDoneWhen: causalDoneWhen,
+        targetBeatIndices: indices,
+        isRecommended: isRec,
+      );
+    }
+
+    return [
+      buildCardConfig(
+        recIndices,
+        isRec: true,
+        forceSingleLabel: false,
+      ),
+      buildCardConfig(
+        opt1Indices,
+        isRec: false,
+        forceSingleLabel: opt1Indices.length == 1,
+      ),
+      buildCardConfig(
+        opt2Indices,
+        isRec: false,
+        forceSingleLabel: opt2Indices.length == 1 && opt1Indices.length > 1,
+      ),
+    ];
+  }
+
+  /// Immediately switches the active whole Epics in `_releaseBlueprint` (`0ms`) when the user clicks
+  /// one of the 3 Epic option cards in the Progressive Release Co-Pilot.
+  void applyProgressiveEpicFocusOption(
+    int optionIndex,
+    List<int> targetBeatIndices,
+  ) {
+    if (optionIndex == 0) {
+      restoreInitialProgressiveDraftBlueprint();
+      return;
+    }
+    restoreInitialProgressiveDraftBlueprint();
+    final bp = _releaseBlueprint;
+    if (bp == null || bp.beats.isEmpty) return;
+
+    final verTag = bp.releaseVersionTag;
+    final targetSet = targetBeatIndices.toSet();
+    final options = epicFocusOptionsForBlueprint(bp);
+    final selectedOpt =
+        (optionIndex >= 0 && optionIndex < options.length) ? options[optionIndex] : null;
+
+    for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
+      final beat = bp.beats[bIdx];
+      final isTarget = targetSet.contains(bIdx);
+      for (final feat in beat.features) {
+        if (feat.isSuperseded) continue;
+        if (isTarget) {
+          if (feat.lifecycle == FeatureLifecycleStatus.stable) {
+            feat.lifecycle = FeatureLifecycleStatus.upgrade;
+            feat.included = true;
+            if (feat.estimatedHours <= 0) {
+              feat.estimatedHours = 4;
+            }
+            if (feat.checkpoints.isEmpty) {
+              feat.checkpoints = [
+                ProposedCheckpointBlueprint(
+                  title: '${feat.title} $verTag Upgrade',
+                  playtestCriteria:
+                      'Trigger ${feat.title} in Play mode → verify $verTag upgrade on screen',
+                  tasks: [
+                    '${feat.title} State Upgrade (2h)',
+                    '${feat.title} Action & Feel Extension (1h)',
+                    '${feat.title} Bounds & State Guard (1h)',
+                  ],
+                  coveredScope: feat.inScope.isNotEmpty
+                      ? List<String>.from(feat.inScope)
+                      : ['${feat.title} $verTag upgrade'],
+                  tuningParams: List<String>.from(feat.tuningParams),
+                  edgeCases: List<String>.from(feat.edgeCases),
+                  releaseVersion: verTag,
+                ),
+              ];
+            }
+          } else {
+            feat.included = true;
+          }
+        } else {
+          if (feat.lifecycle == FeatureLifecycleStatus.upgrade) {
+            feat.lifecycle = FeatureLifecycleStatus.stable;
+            feat.estimatedHours = 0;
+            feat.included = true;
+          } else if (feat.lifecycle == FeatureLifecycleStatus.newFeature) {
+            feat.included = false;
+          }
+        }
+      }
+    }
+
+    if (selectedOpt != null) {
+      bp.releaseTitle = '$verTag: ${selectedOpt.blufHeadline}';
+      bp.goal = '${selectedOpt.blufHeadline} — ${selectedOpt.blufDetail}';
+      bp.doneWhen = selectedOpt.causalDoneWhen;
+      final relDoc = activeRelease;
+      if (relDoc != null && relDoc.id == bp.releaseDocId) {
+        relDoc.title = bp.releaseTitle;
+        relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+        _persistDocument(relDoc);
+      }
+    }
+    _syncActiveProjectMetadata();
+    notifyListeners();
+  }
+
   /// Restores the active release, blueprint, and production phase if the user cancels (or fails offline in)
   /// the Progressive Next Release modal, and removes any newly created unbuilt draft release documents.
   void restoreActiveReleaseAfterCancel(

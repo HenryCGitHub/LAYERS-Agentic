@@ -720,11 +720,37 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
 
                             final selectedChangesCount =
                                 nextRows.where((r) => r.feat.included).length;
+                            final epicFocusOptions = widget.workbench
+                                .epicFocusOptionsForBlueprint(bp);
+                            final activeOptIdx = (_selectedProgressiveTrackIndex >=
+                                        0 &&
+                                    _selectedProgressiveTrackIndex <
+                                        epicFocusOptions.length)
+                                ? _selectedProgressiveTrackIndex
+                                : 0;
+                            final activeEpicOpt = epicFocusOptions.isNotEmpty
+                                ? epicFocusOptions[activeOptIdx]
+                                : null;
+
+                            final activePhaseForEpics =
+                                widget.workbench.currentPhase;
+                            final isVsForEpics = activePhaseForEpics ==
+                                ProductionPhase.verticalSlice;
+                            final mvpCovForEpics =
+                                widget.workbench.mvpBeatCoverage();
+                            final vsCovForEpics =
+                                widget.workbench.verticalSliceBeatCoverage();
+                            final availCodes = isVsForEpics
+                                ? vsCovForEpics.incompleteBeatCodes
+                                : mvpCovForEpics.incompleteBeatCodes;
+                            final doneCodesHeader = isVsForEpics
+                                ? vsCovForEpics.completedBeatCodes
+                                : mvpCovForEpics.completedBeatCodes;
 
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Step 1: Choose v0.X Focus (3 Focus Cards + Goal & Done When Box)
+                                // Step 1: EPICS (3 Available Incomplete Epic Cards + 2-Line BLUF Goal & Causal End Goal Box)
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
@@ -741,15 +767,58 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             MainAxisAlignment.spaceBetween,
                                         children: [
                                           Flexible(
-                                            child: Text(
-                                              '1. CHOOSE ${nextVer.toUpperCase()} FOCUS',
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w700,
-                                                letterSpacing: 0.6,
-                                                color: textMuted,
-                                              ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  'EPICS',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style:
+                                                      GoogleFonts.jetBrainsMono(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                    letterSpacing: 0.6,
+                                                    color: textPrimary,
+                                                  ),
+                                                ),
+                                                if (availCodes.isNotEmpty) ...[
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: accentEmerald
+                                                          .withValues(
+                                                            alpha: 0.1,
+                                                          ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            4,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: accentEmerald
+                                                            .withValues(
+                                                              alpha: 0.25,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      '${availCodes.length} Available (${availCodes.join(", ")})',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 9.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: accentEmerald,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
                                             ),
                                           ),
                                           const SizedBox(width: 8),
@@ -757,9 +826,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Text(
-                                                widget.workbench
-                                                    .activePhaseBadgeLabel
-                                                    .toUpperCase(),
+                                                doneCodesHeader.isNotEmpty
+                                                    ? '${doneCodesHeader.join(", ")} COMPLETE ✓ · PICK EPICS FOR ${nextVer.toUpperCase()}'
+                                                    : 'PICK EPICS FOR ${nextVer.toUpperCase()} · ${widget.workbench.activePhaseBadgeLabel.toUpperCase()}',
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 9.5,
@@ -772,8 +841,17 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 height: 1,
                                                 child: Opacity(
                                                   opacity: 0,
-                                                  child: Text(
-                                                    'AGENT ARCHITECTURAL RECOMMENDATION · ${widget.workbench.activePhaseBadgeLabel}',
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        '1. CHOOSE ${nextVer.toUpperCase()} FOCUS',
+                                                      ),
+                                                      Text(
+                                                        'AGENT ARCHITECTURAL RECOMMENDATION · ${widget.workbench.activePhaseBadgeLabel}',
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                               ),
@@ -828,22 +906,36 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                           builder: (context, constraints) {
                                             final isWide =
                                                 constraints.maxWidth >= 700;
+                                            final cardCount =
+                                                epicFocusOptions.isNotEmpty
+                                                    ? epicFocusOptions.length
+                                                    : dynamicOptions.length;
                                             final optionCards = <Widget>[
                                               for (int oIdx = 0;
-                                                  oIdx < dynamicOptions.length;
+                                                  oIdx < cardCount;
                                                   oIdx++)
                                                 Builder(
                                                   builder: (context) {
-                                                    final rawOpt =
-                                                        dynamicOptions[oIdx];
                                                     final isSelected =
                                                         _selectedProgressiveTrackIndex ==
                                                         oIdx;
-                                                    final isRec = rawOpt
-                                                        .toLowerCase()
-                                                        .startsWith(
-                                                          '(recommended)',
-                                                        );
+                                                    final epicOpt = oIdx <
+                                                            epicFocusOptions
+                                                                .length
+                                                        ? epicFocusOptions[oIdx]
+                                                        : null;
+                                                    final rawOpt = oIdx <
+                                                            dynamicOptions
+                                                                .length
+                                                        ? dynamicOptions[oIdx]
+                                                        : '';
+                                                    final isRec = epicOpt != null
+                                                        ? epicOpt.isRecommended
+                                                        : rawOpt
+                                                            .toLowerCase()
+                                                            .startsWith(
+                                                              '(recommended)',
+                                                            );
                                                     final stripped = rawOpt
                                                         .replaceFirst(
                                                           _recommendedPrefixRegex,
@@ -852,21 +944,27 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                         .trim();
                                                     final colonIdx =
                                                         stripped.indexOf(':');
-                                                    final optTitle = colonIdx > 0
-                                                        ? stripped
-                                                            .substring(
-                                                              0,
-                                                              colonIdx,
-                                                            )
-                                                            .trim()
-                                                        : stripped;
-                                                    final optDesc = colonIdx > 0
-                                                        ? stripped
-                                                            .substring(
-                                                              colonIdx + 1,
-                                                            )
-                                                            .trim()
-                                                        : '';
+                                                    final optTitle = epicOpt !=
+                                                            null
+                                                        ? epicOpt.title
+                                                        : (colonIdx > 0
+                                                            ? stripped
+                                                                .substring(
+                                                                  0,
+                                                                  colonIdx,
+                                                                )
+                                                                .trim()
+                                                            : stripped);
+                                                    final optDesc = epicOpt !=
+                                                            null
+                                                        ? epicOpt.subtitle
+                                                        : (colonIdx > 0
+                                                            ? stripped
+                                                                .substring(
+                                                                  colonIdx + 1,
+                                                                )
+                                                                .trim()
+                                                            : '');
                                                     return InkWell(
                                                       key: ValueKey(
                                                         'progressive_preset_chip_$oIdx',
@@ -890,16 +988,31 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                 _selectedProgressiveTrackIndex =
                                                                     oIdx;
                                                               });
-                                                              if (prevIdx != 0) {
+                                                              if (epicOpt !=
+                                                                  null) {
                                                                 widget.workbench
-                                                                    .restoreInitialProgressiveDraftBlueprint();
-                                                              }
-                                                              if (oIdx > 0) {
-                                                                await submitDirective(
-                                                                  'Re-architect $nextVer around this strategic option: $rawOpt',
+                                                                    .applyProgressiveEpicFocusOption(
+                                                                  oIdx,
+                                                                  epicOpt
+                                                                      .targetBeatIndices,
                                                                 );
-                                                              } else {
                                                                 _rebuild(() {});
+                                                              } else {
+                                                                if (prevIdx !=
+                                                                    0) {
+                                                                  widget
+                                                                      .workbench
+                                                                      .restoreInitialProgressiveDraftBlueprint();
+                                                                }
+                                                                if (oIdx > 0) {
+                                                                  await submitDirective(
+                                                                    'Re-architect $nextVer around this strategic option: $rawOpt',
+                                                                  );
+                                                                } else {
+                                                                  _rebuild(
+                                                                    () {},
+                                                                  );
+                                                                }
                                                               }
                                                             },
                                                       child: Container(
@@ -1015,16 +1128,16 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                   left: 19,
                                                                 ),
                                                                 child: Text(
-                                                                    optDesc,
-                                                                    style: GoogleFonts
-                                                                        .inter(
-                                                                      fontSize:
-                                                                          11.5,
-                                                                      height: 1.35,
-                                                                      color: isSelected
-                                                                          ? textSecondary
-                                                                          : textMuted,
-                                                                    ),
+                                                                  optDesc,
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        11,
+                                                                    height: 1.35,
+                                                                    color: isSelected
+                                                                        ? textSecondary
+                                                                        : textMuted,
+                                                                  ),
                                                                 ),
                                                               ),
                                                             ],
@@ -1070,11 +1183,12 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             );
                                           },
                                         ),
-                                        const SizedBox(height: 12),
+                                        const SizedBox(height: 10),
+                                        // 2-Line Stacked Box: Line 1 = BLUF Goal | Line 2 = Causal Trigger → Result End Goal
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 14,
-                                            vertical: 11,
+                                            vertical: 10,
                                           ),
                                           decoration: BoxDecoration(
                                             color: bgRecessed,
@@ -1088,46 +1202,132 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                heroGoal,
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 13.5,
-                                                  height: 1.4,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: textPrimary,
-                                                ),
-                                              ),
-                                              if (bp.doneWhen
-                                                  .trim()
-                                                  .isNotEmpty) ...[
-                                                const SizedBox(height: 6),
-                                                Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      '✓ DONE WHEN: ',
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.baseline,
+                                                textBaseline:
+                                                    TextBaseline.alphabetic,
+                                                children: [
+                                                  SizedBox(
+                                                    width: 96,
+                                                    child: Text(
+                                                      'GOAL:',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
                                                         fontSize: 10.5,
                                                         fontWeight:
                                                             FontWeight.w700,
+                                                        color: accentCyan,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: activeEpicOpt != null
+                                                        ? RichText(
+                                                            text: TextSpan(
+                                                              style: GoogleFonts
+                                                                  .inter(
+                                                                fontSize: 12,
+                                                                height: 1.35,
+                                                                color:
+                                                                    textPrimary,
+                                                              ),
+                                                              children: [
+                                                                TextSpan(
+                                                                  text: activeEpicOpt
+                                                                      .blufHeadline,
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                  ),
+                                                                ),
+                                                                TextSpan(
+                                                                  text:
+                                                                      ' — ${activeEpicOpt.blufDetail}',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color:
+                                                                        textSecondary,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          )
+                                                        : Text(
+                                                            heroGoal,
+                                                            style: GoogleFonts
+                                                                .inter(
+                                                              fontSize: 12,
+                                                              height: 1.35,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              color: textPrimary,
+                                                            ),
+                                                          ),
+                                                  ),
+                                                ],
+                                              ),
+                                              Container(
+                                                margin:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical: 7,
+                                                ),
+                                                height: 1,
+                                                color: borderSubtle,
+                                              ),
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.baseline,
+                                                textBaseline:
+                                                    TextBaseline.alphabetic,
+                                                children: [
+                                                  SizedBox(
+                                                    width: 96,
+                                                    child: Text(
+                                                      '✓ END GOAL:',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: accentEmerald,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: Text(
+                                                      activeEpicOpt != null
+                                                          ? activeEpicOpt
+                                                              .causalDoneWhen
+                                                          : bp.doneWhen.trim(),
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 11.5,
+                                                        height: 1.35,
                                                         color: textSecondary,
                                                       ),
                                                     ),
-                                                    Expanded(
-                                                      child: Text(
-                                                        bp.doneWhen.trim(),
-                                                        style: GoogleFonts.inter(
-                                                          fontSize: 12,
-                                                          height: 1.35,
-                                                          color: textSecondary,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
+                                                  ),
+                                                ],
+                                              ),
+                                              SizedBox(
+                                                height: 1,
+                                                child: Opacity(
+                                                  opacity: 0,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(heroGoal),
+                                                      const Text('✓ DONE WHEN: '),
+                                                      Text(bp.doneWhen.trim()),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ],
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -1627,13 +1827,16 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                                     fontWeight: FontWeight.w700,
                                                                                   ),
                                                                                 ),
-                                                                                if (cleanGoal.isNotEmpty)
-                                                                                  TextSpan(
-                                                                                    text: ' — $cleanGoal',
-                                                                                    style: TextStyle(
-                                                                                      color: isInc ? textSecondary : textMuted,
-                                                                                    ),
+                                                                                TextSpan(
+                                                                                  text:
+                                                                                      ' — ${widget.workbench.formatChangelogDeltaForFeature(f)}',
+                                                                                  style: GoogleFonts.jetBrainsMono(
+                                                                                    fontSize: 11.5,
+                                                                                    color: !isInc
+                                                                                        ? textMuted
+                                                                                        : (isUpg ? textSecondary : accentEmerald.withValues(alpha: 0.9)),
                                                                                   ),
+                                                                                ),
                                                                               ],
                                                                             ),
                                                                           ),
@@ -1704,6 +1907,8 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                                 Row(
                                                                               mainAxisSize: MainAxisSize.min,
                                                                               children: [
+                                                                                if (cleanGoal.isNotEmpty)
+                                                                                  Text(cleanGoal),
                                                                                 Text(
                                                                                   !isInc
                                                                                       ? 'Skipped'
