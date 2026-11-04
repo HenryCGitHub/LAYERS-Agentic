@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/agent_blueprints.dart';
+import '../constants/text_style_guide.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 
@@ -31,10 +32,6 @@ final RegExp _exclusionLeadVerbRegex = RegExp(
 );
 final RegExp _leadInFillerVerbRegex = RegExp(
   r'^(?:Prioritize|Focus\s+on|Ensure)\s+',
-  caseSensitive: false,
-);
-final RegExp _offlineOnlyPrefixRegex = RegExp(
-  r'^Offline(?:-Only)?\s+',
   caseSensitive: false,
 );
 final RegExp _whitespaceRegex = RegExp(r'\s+');
@@ -206,7 +203,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   double get _measureTitleFontSize =>
       _isMobileMeasure ? 21.0 : (_isTabletMeasure ? 24.0 : 26.0);
   double get _measureSpecValueSize =>
-      _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 15.5);
+      _isMobileMeasure ? 13.0 : (_isTabletMeasure ? 13.5 : 14.0);
   double get _measureCardPadH =>
       _isMobileMeasure ? 18.0 : (_isTabletMeasure ? 22.0 : 24.0);
   double get _measureCardPadV =>
@@ -664,15 +661,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   List<String> _kvPresetsForCell(bool isGameSpec, int cellIndex) {
     const gameSpecPresets = <int, List<String>>{
       0: ['2D Top-Down', '2D Side-Scrolling', '3D First-Person', '3D Third-Person', '3D Isometric'],
-      1: ['Twin-Stick (WASD + Aim)', 'Mouse + WASD', 'Gamepad / Precision Platformer', 'Point & Click'],
-      2: ['Singleplayer', 'Local Couch Co-Op', 'Singleplayer + Leaderboards'],
-      3: ['Single-Screen Wave Arena', 'Continuous Single Overworld', 'Multi-Room Obstacle Course', 'Procedural Room Grid'],
+      1: ['WASD + Mouse', 'KBM / Gamepad', 'Gamepad Platformer', 'Point & Click'],
+      2: ['Singleplayer', 'Local Couch Co-Op', 'Singleplayer Leaderboards', 'Singleplayer Survival'],
+      3: ['Single-Screen Arena', 'Continuous Overworld', 'Multi-Room Course', 'Procedural Room Grid'],
     };
     const techSpecPresets = <int, List<String>>{
-      0: ['Godot 4 (GDScript)', 'Unity 6 (C#)', 'Unreal Engine 5', 'Custom / Raylib'],
+      0: ['Godot 4 (GDScript)', 'Unity 6 (C#)', 'Unreal Engine 5 (Blueprints / C++)', 'Custom / Raylib'],
       1: ['PC Desktop', 'PC & Steam Deck', 'Web + Desktop'],
       2: ['2D Sprites + Particles', '3D Greybox Meshes', '2D/3D Hybrid Pipeline', 'Low-Poly Stylized'],
-      3: ['Offline Local Save', 'Steam Cloud Save', 'Stateless Arcade Session'],
+      3: ['Local Save', 'Steam Cloud Save', 'Stateless Arcade Session'],
     };
     return (isGameSpec ? gameSpecPresets[cellIndex] : techSpecPresets[cellIndex]) ?? const <String>[];
   }

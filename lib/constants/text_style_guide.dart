@@ -15,6 +15,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 - Release Goals (BLUF): "[2-4 Word Payoff] — [Scope]" (e.g. "3-Wave Arena Combat — Complete E02 Shotgun Hazards and E03 Enemy Waves for MVP.").
 - Feature Goals & In-Scope (Changelog +Delta): Direct 5-10 word summary of concrete mechanics/deltas (e.g. "+6-pellet cone spread, +knockback impulse" for upgrades; "Magnetic ore shard spawn on enemy kill" for new features). NEVER start feature goals with "Build a playable..." or "Upgrade <Feature> into/with..." and NEVER copy-paste raw user instructions verbatim.
 - Done When, Playtest Gates & Verify (Causal Trigger -> Result): "[Player Action] -> [Observable Screen Result]" (<= 14 words, e.g. "Press Fire within 4m of target -> 6 pellets fan out + push enemy back 2.5m"). NEVER use FPS/60fps targets.
+- Concept Spec Cells (02 Game Spec & 03 Tech Spec): Strictly 2-4 Title-Case words naming the concrete setup (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub", "Unreal Engine 5", "PC Desktop"). NEVER write narrative sentences, explanatory preambles ("with...", "featuring..."), or punctuation.
 - Parent Task Group Titles & Goals (tasks[]): tasks[].title = strictly 2-4 Title-Case words naming 1-2 concrete components (e.g. "Shard Physics Hull", "Radial Scatter Impulse", "Floor Clink & Settle"; NO verbs, NO 3-item lists, NO "(2h)" tags); tasks[].goal = 1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").
 - Sub-Step Titles & Instructions (Imperative Runbook): subSteps[].title = 3-4 Title-Case "Verb + Object" words (e.g. "Spawn 6 Pellet Raycasts", NO "STEP X.Y" prefix); instruction = 1 imperative sentence (<= 18 words) starting with a command verb + exact node/script and tuning value.''';
 
@@ -27,7 +28,96 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
       '1 direct sentence: "Build a playable [Title] prototype where you [action 1], [action 2], and [action 3]." (No "Strategy Label:" prefix on goal).';
 
   static const String specCellSchemaDesc =
-      'Telegraphic 2-5 word phrase (e.g. "2D Top-Down", "WASD + Mouse Aim", "Singleplayer", "Single-Screen Arena").';
+      'Strictly 2-4 Title-Case words naming the setup (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub"). NEVER write full sentences or narrative clauses.';
+
+  /// Compresses a verbose narrative Game Spec or Tech Spec cell string into a crisp
+  /// 2–4 word Title-Case telegraphic tag (Style 5).
+  static String formatTelegraphicSpecValue(String raw) {
+    var clean = raw.trim().replaceFirst(RegExp(r'^Offline(?:-Only)?\s+', caseSensitive: false), '');
+    // Strip leading field name labels if present (e.g. "Perspective: 3D Third-Person")
+    final colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx <= 24 && colonIdx < clean.length - 1) {
+      clean = clean.substring(colonIdx + 1).trim();
+    }
+    // Prune trailing punctuation
+    while (clean.endsWith('.') || clean.endsWith(',')) {
+      clean = clean.substring(0, clean.length - 1).trim();
+    }
+
+    // Common verbose phrases compression
+    if (clean == 'Twin-Stick (WASD + Mouse Aim)' ||
+        clean == 'Twin-Stick (WASD + Aim)') {
+      return 'WASD + Mouse';
+    }
+    if (clean == 'Keyboard and Mouse / Gamepad with contextual controls' ||
+        clean.toLowerCase().contains('keyboard and mouse / gamepad') ||
+        clean.toLowerCase().contains('keyboard & mouse / gamepad') ||
+        clean.toLowerCase().contains('kbm / gamepad')) {
+      return 'KBM / Gamepad';
+    }
+    if (clean == 'Single-Screen Wave Arena') {
+      return 'Single-Screen Arena';
+    }
+
+    // Strip trailing narrative/prepositional clauses ("with...", "featuring...", "that allows...", "where...")
+    final narrativeClauseMatch = RegExp(
+      r'\s+(?:with|featuring|where|that|using)\s+.*$',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    if (narrativeClauseMatch != null && narrativeClauseMatch.start > 3) {
+      clean = clean.substring(0, narrativeClauseMatch.start).trim();
+    }
+
+    // Strip filler descriptors like "immersive", "narrative survival simulation", etc.
+    clean = clean.replaceAll(RegExp(r'\bimmersive\s+', caseSensitive: false), '');
+
+    // Common patterns compression
+    final lower = clean.toLowerCase();
+    if (lower.contains('first-person') || lower.contains('first person')) {
+      if (lower.contains('tool') || lower.contains('camera')) {
+        clean = '3D First-Person';
+      }
+    } else if (lower.contains('third-person') || lower.contains('third person')) {
+      if (lower.contains('over-shoulder') || lower.contains('camera')) {
+        clean = '3D Third-Person';
+      }
+    } else if (lower.contains('single-player') || lower.contains('singleplayer')) {
+      if (lower.contains('survival')) {
+        clean = 'Singleplayer Survival';
+      } else if (lower.contains('roguelite') || lower.contains('roguelike')) {
+        clean = 'Singleplayer Roguelite';
+      } else {
+        clean = 'Singleplayer';
+      }
+    }
+
+    // If still longer than 4 words, take first 3-4 words cleanly
+    final words = clean.split(_whitespaceRegex).where((w) => w.isNotEmpty).toList();
+    final cappedWords = words.length > 4 ? words.take(3).toList() : words;
+
+    // Convert to Title Case while preserving uppercase 2D/3D/KBM/PC/HUD/UI/WASD
+    final titleCased = cappedWords.map((w) {
+      if (w.isEmpty) return w;
+      final upper = w.toUpperCase();
+      if (upper == '2D' || upper == '3D' || upper == 'KBM' || upper == 'PC' || upper == 'HUD' || upper == 'UI' || upper == 'WASD') {
+        return upper;
+      }
+      if (w.contains('-')) {
+        return w.split('-').map((p) => p.isEmpty ? p : (p[0].toUpperCase() + p.substring(1).toLowerCase())).join('-');
+      }
+      if (w.contains('/')) {
+        return w.split('/').map((p) {
+          final pUpper = p.trim().toUpperCase();
+          if (pUpper == 'KBM' || pUpper == 'PC') return pUpper;
+          return p.trim().isEmpty ? p : (p.trim()[0].toUpperCase() + p.trim().substring(1).toLowerCase());
+        }).join(' / ');
+      }
+      if (w == '+' || w == '&' || w == '·') return w;
+      return w[0].toUpperCase() + w.substring(1).toLowerCase();
+    }).join(' ');
+
+    return titleCased.trim();
+  }
 
   static const String pillarNameSchemaDesc =
       '2-3 Title-Case Word Pillar Name';

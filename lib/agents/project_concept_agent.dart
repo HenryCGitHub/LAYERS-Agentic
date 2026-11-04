@@ -1358,13 +1358,13 @@ Call `$activeToolName` with the delta update.
       tag: '[Section 02 · Game Spec]',
       label: '02 · Game Spec',
       directive:
-          'Draft the 4 cells of `gameSpec` (`cameraView`, `controls`, `playerMode`, `arenaStructure`) tailored to the Spark and 01 Goal.',
+          'Draft the 4 cells of `gameSpec` (`cameraView`, `controls`, `playerMode`, `arenaStructure`) strictly as 2-4 Title-Case words each (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub"; no narrative sentences or clauses).',
     ),
     (
       tag: '[Section 03 · Tech Spec]',
       label: '03 · Tech Spec',
       directive:
-          'Draft the 4 cells of `techSpec` (`engine` must be "Godot 4 (GDScript)", "Unity 6 (C#)", or "Unreal Engine 5 (Blueprints / C++)", plus `platform`, `assetPipeline`, `saveMode`) tailored to 01 Goal and 02 Game Spec.',
+          'Draft the 4 cells of `techSpec` (`engine` must be "Godot 4 (GDScript)", "Unity 6 (C#)", or "Unreal Engine 5 (Blueprints / C++)", plus `platform`, `assetPipeline`, `saveMode`) strictly as 2-4 Title-Case words each (e.g. "PC Desktop", "2D Sprites + Particles", "Offline Local Save").',
     ),
     (
       tag: '[Section 04 · Design Pillars]',

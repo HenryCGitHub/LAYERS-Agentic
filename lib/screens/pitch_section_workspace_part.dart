@@ -461,18 +461,9 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     return _capitalizeFirst(clean);
   }
 
-  /// Formats a 02 Game Spec or 03 Tech Spec cell value into a concise telegraphic tag.
-  String _formatTelegraphicSpecValue(String raw) {
-    var clean = raw.trim().replaceFirst(_offlineOnlyPrefixRegex, '');
-    if (clean == 'Twin-Stick (WASD + Mouse Aim)' ||
-        clean == 'Twin-Stick (WASD + Aim)') {
-      return 'WASD + Mouse';
-    }
-    if (clean == 'Single-Screen Wave Arena') {
-      return 'Single-Screen Arena';
-    }
-    return clean;
-  }
+  /// Formats a 02 Game Spec or 03 Tech Spec cell value into a concise telegraphic tag (2–4 words max).
+  String _formatTelegraphicSpecValue(String raw) =>
+      LayersTextStyleGuide.formatTelegraphicSpecValue(raw);
 
   // ── 08 Done When: Concise Messaging Verification Sentence ──
   Widget _buildCalloutStatement(
@@ -720,11 +711,11 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                       v.trim().isEmpty
                           ? 'Click to set...'
                           : _formatTelegraphicSpecValue(v),
-                      maxLines: 2,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
                         fontSize: _measureSpecValueSize,
-                        height: 1.3,
+                        height: 1.35,
                         fontWeight: v.trim().isEmpty
                             ? FontWeight.w400
                             : FontWeight.w600,

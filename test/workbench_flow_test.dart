@@ -7418,6 +7418,40 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('Press Spacebar → The character dashes 4m forward.'),
         );
 
+        // 6b. Stage 1 Concept Blueprint Section 02 & 03 Telegraphic Spec Value Compression
+        expect(
+          LayersTextStyleGuide.formatTelegraphicSpecValue(
+            'First-person immersive camera with direct tool manipulation and precision interaction',
+          ),
+          equals('3D First-Person'),
+        );
+        expect(
+          LayersTextStyleGuide.formatTelegraphicSpecValue(
+            'Keyboard and Mouse / Gamepad with contextual tool bindings',
+          ),
+          equals('KBM / Gamepad'),
+        );
+        expect(
+          LayersTextStyleGuide.formatTelegraphicSpecValue(
+            'Single-player narrative survival simulation with environmental hazards',
+          ),
+          equals('Singleplayer Survival'),
+        );
+        expect(
+          LayersTextStyleGuide.formatTelegraphicSpecValue(
+            'Interconnected rooftop garden hub with ziplines and vertical scaffolds',
+          ),
+          equals('Interconnected Rooftop Garden Hub'),
+        );
+        expect(
+          LayersTextStyleGuide.formatTelegraphicSpecValue('Twin-Stick (WASD + Mouse Aim)'),
+          equals('WASD + Mouse'),
+        );
+        expect(
+          LayersTextStyleGuide.formatTelegraphicSpecValue('Perspective: 3D Third-Person Over-Shoulder'),
+          equals('3D Third-Person'),
+        );
+
         // 7. Telegraphic Progressive Release Feature +Delta Summary
         final provider = WorkbenchProvider(enableAutoLoad: false);
         final sampleUpgradeFeat = ProposedFeatureBlueprint(
