@@ -256,14 +256,6 @@ class ProjectConceptAgent {
     return current;
   }
 
-  /// True when [s] is a short drop-in keyword phrase (2-6 words, not a sentence).
-  static bool _isDropInPhrase(String s) {
-    final t = s.trim();
-    if (t.isEmpty || t.endsWith('.')) return false;
-    final words = t.split(RegExp(r'\s+')).length;
-    return words >= 1 && words <= 6;
-  }
-
   /// Extracts or parses 2–4 non-overlapping Google ImageFX-style [SparkExpressiveChip]
   /// phrases anchored to exact verbatim substrings inside [baseSummary].
   static List<SparkExpressiveChip> buildExpressiveChipsForSummary({
@@ -286,39 +278,25 @@ class ProjectConceptAgent {
       return false;
     }
 
-    // Heuristic-only fallback pool: short mechanics tags (never Expansion Card sentences).
     final fallbackPool = <String>[
+      for (final c in expansionCards)
+        if (c.additionSummary.trim().isNotEmpty)
+          c.additionSummary.trim()
+        else if (c.title.trim().isNotEmpty)
+          c.title.trim().toLowerCase(),
       for (final m in mechanics)
-        if (_isDropInPhrase(m)) m.trim().toLowerCase(),
+        if (m.trim().isNotEmpty) m.trim().toLowerCase(),
     ];
-    final usedAlternatives = <String>{};
 
     List<String> buildAlternativesFor(String exactPhrase, List<String> seeded) {
       final result = <String>[exactPhrase];
-      bool addIfValid(String candidate) {
+      for (final candidate in [...seeded, ...fallbackPool]) {
         final clean = candidate.trim();
-        final key = clean.toLowerCase();
-        if (!_isDropInPhrase(clean) ||
-            result.any((r) => r.toLowerCase() == key)) {
-          return false;
+        if (clean.isEmpty) continue;
+        if (!result.any((r) => r.toLowerCase() == clean.toLowerCase())) {
+          result.add(clean);
         }
-        result.add(clean);
-        return true;
-      }
-
-      final aiSeeded = seeded.where(_isDropInPhrase).toList();
-      for (final candidate in aiSeeded) {
-        addIfValid(candidate);
         if (result.length >= 4) break;
-      }
-      // Pad from the pool only for heuristic chips (no AI alternatives), never reusing
-      // an option already shown on another chip.
-      if (aiSeeded.isEmpty) {
-        for (final candidate in fallbackPool) {
-          if (usedAlternatives.contains(candidate.toLowerCase())) continue;
-          if (addIfValid(candidate)) usedAlternatives.add(candidate.toLowerCase());
-          if (result.length >= 3) break;
-        }
       }
       return result;
     }
