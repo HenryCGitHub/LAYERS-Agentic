@@ -23,36 +23,14 @@ class SparkExpansionCard {
   });
 }
 
-/// An interactive Google ImageFX-style keyword pill extracted directly from `baseSummary`
-/// in Stage 1 Section `00 · PITCH & CONCEPT`.
-class SparkExpressiveChip {
-  final String id;
-  final String category;
-  final String originalValue;
-  String currentValue;
-  List<String> alternatives;
-  bool isModified;
-
-  SparkExpressiveChip({
-    required this.id,
-    required this.category,
-    required this.currentValue,
-    required List<String> alternatives,
-    String? originalValue,
-    this.isModified = false,
-  })  : originalValue = originalValue ?? currentValue,
-        alternatives = List<String>.from(alternatives);
-}
-
 /// Holds the ingested AI summary of the user's raw game idea on the New Project screen,
-/// plus the interactive Expressive Chips and 3 toggleable Concept Expansion Cards.
+/// plus the 3 toggleable Concept Expansion Cards tailored to that idea.
 class SparkIdeaIntakeResult {
   String rawIdea;
   String workingTitle;
   String baseSummary;
   List<String> mechanics;
   List<SparkExpansionCard> expansionCards;
-  List<SparkExpressiveChip> expressiveChips;
 
   SparkIdeaIntakeResult({
     required this.rawIdea,
@@ -60,77 +38,7 @@ class SparkIdeaIntakeResult {
     required this.baseSummary,
     required this.mechanics,
     required this.expansionCards,
-    List<SparkExpressiveChip>? expressiveChips,
-  }) : expressiveChips = expressiveChips ??
-            ProjectConceptAgent.buildExpressiveChipsForSummary(
-              baseSummary: baseSummary,
-              mechanics: mechanics,
-              expansionCards: expansionCards,
-            );
-
-  /// Replaces the [chipIndex] chip's current phrase inside [baseSummary] with [newValue]
-  /// and keeps the previous phrase in the chip's alternatives list so the user can toggle back.
-  bool replaceExpressiveChipValue(int chipIndex, String newValue) {
-    if (chipIndex < 0 || chipIndex >= expressiveChips.length) return false;
-    final cleanNew = newValue.trim();
-    if (cleanNew.isEmpty) return false;
-
-    final chip = expressiveChips[chipIndex];
-    final oldVal = chip.currentValue;
-    if (oldVal.toLowerCase() == cleanNew.toLowerCase()) return false;
-
-    final lowerSummary = baseSummary.toLowerCase();
-    final matchIdx = lowerSummary.indexOf(oldVal.toLowerCase());
-    if (matchIdx < 0) return false;
-
-    if (!chip.alternatives.any((a) => a.toLowerCase() == oldVal.toLowerCase())) {
-      chip.alternatives = [oldVal, ...chip.alternatives];
-    }
-    if (!chip.alternatives
-        .any((a) => a.toLowerCase() == cleanNew.toLowerCase())) {
-      chip.alternatives = [...chip.alternatives, cleanNew];
-    }
-
-    baseSummary = baseSummary.replaceRange(
-      matchIdx,
-      matchIdx + oldVal.length,
-      cleanNew,
-    );
-    chip.currentValue = cleanNew;
-    chip.isModified =
-        chip.currentValue.toLowerCase() != chip.originalValue.toLowerCase();
-    return true;
-  }
-
-  /// Synchronizes each chip's [currentValue] with whichever of its [alternatives]
-  /// currently appears in [baseSummary] (used when Undo restores a previous summary).
-  void syncChipsWithSummary() {
-    final lowerSummary = baseSummary.toLowerCase();
-    for (final chip in expressiveChips) {
-      final currIdx = lowerSummary.indexOf(chip.currentValue.toLowerCase());
-      if (currIdx >= 0) {
-        chip.currentValue = baseSummary.substring(
-          currIdx,
-          currIdx + chip.currentValue.length,
-        );
-        chip.isModified = chip.currentValue.toLowerCase() !=
-            chip.originalValue.toLowerCase();
-        continue;
-      }
-      for (final alt in chip.alternatives) {
-        final altIdx = lowerSummary.indexOf(alt.toLowerCase());
-        if (altIdx >= 0) {
-          chip.currentValue = baseSummary.substring(
-            altIdx,
-            altIdx + alt.length,
-          );
-          chip.isModified = chip.currentValue.toLowerCase() !=
-              chip.originalValue.toLowerCase();
-          break;
-        }
-      }
-    }
-  }
+  });
 
   /// Returns the effective summary including any selected Expansion Cards.
   String get effectiveSummary {
@@ -214,190 +122,6 @@ class ProjectConceptAgent {
       result[0] = 'Unreal Engine 5 (Blueprints / C++)';
     }
     return result;
-  }
-
-  static final RegExp _chipClauseStopWordRegex = RegExp(
-    r'^(?:a|an|the|and|or|but|to|in|on|at|by|for|with|using|via|while|across|through|into|from|as|of)\b|\b(?:a|an|the|and|or|but|to|in|on|at|by|for|with|using|via|while|across|through|into|from|as|of)$',
-    caseSensitive: false,
-  );
-
-  static final List<(String, RegExp)> _chipExtractionPatterns = [
-    (
-      'ACTION',
-      RegExp(
-        r'\b(?:using|with|via)\s+(?:a\s+|an\s+|the\s+)?([A-Za-z0-9-]+(?:\s+[A-Za-z0-9-]+){1,2})',
-        caseSensitive: false,
-      ),
-    ),
-    (
-      'SETTING',
-      RegExp(
-        r'\b(?:across|through|inside|into|in)\s+(?:a\s+|an\s+|the\s+)?([A-Za-z0-9-]+(?:\s+[A-Za-z0-9-]+){1,3})',
-        caseSensitive: false,
-      ),
-    ),
-    (
-      'TARGET',
-      RegExp(
-        r'\b(?:deliver|retrieve|brew|bake|clear|evading|against|for|shoot|slice)\s+(?:a\s+|an\s+|the\s+)?([A-Za-z0-9-]+(?:\s+[A-Za-z0-9-]+){1,2})',
-        caseSensitive: false,
-      ),
-    ),
-  ];
-
-  static String _trimChipCandidate(String raw) {
-    var current = raw.trim().replaceAll(RegExp(r'^[.,;:!?]+|[.,;:!?]+$'), '');
-    for (int i = 0; i < 3; i++) {
-      final next =
-          current.replaceAll(_chipClauseStopWordRegex, '').trim();
-      if (next == current || next.isEmpty) break;
-      current = next;
-    }
-    return current;
-  }
-
-  /// Extracts or parses 2–4 non-overlapping Google ImageFX-style [SparkExpressiveChip]
-  /// phrases anchored to exact verbatim substrings inside [baseSummary].
-  static List<SparkExpressiveChip> buildExpressiveChipsForSummary({
-    required String baseSummary,
-    List<String> mechanics = const <String>[],
-    List<SparkExpansionCard> expansionCards = const <SparkExpansionCard>[],
-    dynamic rawChips,
-  }) {
-    final summary = baseSummary.trim();
-    if (summary.isEmpty) return const <SparkExpressiveChip>[];
-
-    final lowerSummary = summary.toLowerCase();
-    final occupiedRanges = <(int, int)>[];
-    final staged = <(int start, int end, String category, List<String> alts)>[];
-
-    bool overlapsOccupied(int start, int end) {
-      for (final (s, e) in occupiedRanges) {
-        if (start < e && end > s) return true;
-      }
-      return false;
-    }
-
-    final fallbackPool = <String>[
-      for (final c in expansionCards)
-        if (c.additionSummary.trim().isNotEmpty)
-          c.additionSummary.trim()
-        else if (c.title.trim().isNotEmpty)
-          c.title.trim().toLowerCase(),
-      for (final m in mechanics)
-        if (m.trim().isNotEmpty) m.trim().toLowerCase(),
-    ];
-
-    List<String> buildAlternativesFor(String exactPhrase, List<String> seeded) {
-      final result = <String>[exactPhrase];
-      for (final candidate in [...seeded, ...fallbackPool]) {
-        final clean = candidate.trim();
-        if (clean.isEmpty) continue;
-        if (!result.any((r) => r.toLowerCase() == clean.toLowerCase())) {
-          result.add(clean);
-        }
-        if (result.length >= 4) break;
-      }
-      return result;
-    }
-
-    // 1. Parse explicit AI-supplied expressiveChips if present and verbatim in baseSummary
-    if (rawChips is List) {
-      for (final item in rawChips) {
-        if (item is! Map) continue;
-        final rawPhrase =
-            (item['phrase'] ?? item['currentValue'] ?? '').toString().trim();
-        final cleanPhrase = _trimChipCandidate(rawPhrase);
-        if (cleanPhrase.length < 4) continue;
-        final idx = lowerSummary.indexOf(cleanPhrase.toLowerCase());
-        if (idx < 0) continue;
-        final end = idx + cleanPhrase.length;
-        if (overlapsOccupied(idx, end)) continue;
-
-        final cat = (item['category'] ?? 'ACTION')
-            .toString()
-            .trim()
-            .toUpperCase();
-        final rawAlts = _parseStringList(item['alternatives']);
-        occupiedRanges.add((idx, end));
-        staged.add((
-          idx,
-          end,
-          cat.isEmpty ? 'ACTION' : cat,
-          rawAlts,
-        ));
-        if (staged.length >= 4) break;
-      }
-    }
-
-    // 2. Anchor any verbatim mechanic phrases present in baseSummary
-    if (staged.length < 3) {
-      for (final mech in mechanics) {
-        final candidates = <String>[
-          mech.trim(),
-          ...mech
-              .split(RegExp(r'\s*(?:&|and|/)\s*', caseSensitive: false))
-              .map((s) => s.trim()),
-        ];
-        for (final cand in candidates) {
-          final clean = _trimChipCandidate(cand);
-          if (clean.split(RegExp(r'\s+')).length < 2 || clean.length < 6) {
-            continue;
-          }
-          final idx = lowerSummary.indexOf(clean.toLowerCase());
-          if (idx < 0) continue;
-          final end = idx + clean.length;
-          if (overlapsOccupied(idx, end)) continue;
-          occupiedRanges.add((idx, end));
-          staged.add((idx, end, 'ACTION', const <String>[]));
-          break;
-        }
-        if (staged.length >= 3) break;
-      }
-    }
-
-    // 3. Extract natural clause phrases (Action / Setting / Target) from baseSummary
-    if (staged.length < 4) {
-      for (final (category, regex) in _chipExtractionPatterns) {
-        for (final match in regex.allMatches(summary)) {
-          final groupText = match.group(1);
-          if (groupText == null) continue;
-          final clean = _trimChipCandidate(groupText);
-          if (clean.split(RegExp(r'\s+')).length < 2 || clean.length < 6) {
-            continue;
-          }
-          final relIdx =
-              summary.substring(match.start, match.end).toLowerCase().indexOf(
-                    clean.toLowerCase(),
-                  );
-          if (relIdx < 0) continue;
-          final start = match.start + relIdx;
-          final end = start + clean.length;
-          if (overlapsOccupied(start, end)) continue;
-          occupiedRanges.add((start, end));
-          staged.add((start, end, category, const <String>[]));
-          if (staged.length >= 4) break;
-        }
-        if (staged.length >= 4) break;
-      }
-    }
-
-    staged.sort((a, b) => a.$1.compareTo(b.$1));
-
-    final chips = <SparkExpressiveChip>[];
-    for (int i = 0; i < staged.length; i++) {
-      final (start, end, category, seededAlts) = staged[i];
-      final verbatim = summary.substring(start, end);
-      chips.add(
-        SparkExpressiveChip(
-          id: 'chip_$i',
-          category: category,
-          currentValue: verbatim,
-          alternatives: buildAlternativesFor(verbatim, seededAlts),
-        ),
-      );
-    }
-    return chips;
   }
 
   static List<SparkExpansionCard> _parseExpansionCards(dynamic rawCards) {
@@ -651,33 +375,6 @@ class ProjectConceptAgent {
               'title': {'type': 'STRING'},
               'description': {'type': 'STRING'},
               'additionSummary': {'type': 'STRING'},
-            },
-          },
-        },
-        'expressiveChips': {
-          'type': 'ARRAY',
-          'description':
-              '3-4 Google ImageFX-style interactive keyword phrases that appear verbatim inside baseSummary, each with 3 concrete drop-in alternative phrases.',
-          'items': {
-            'type': 'OBJECT',
-            'required': ['category', 'phrase', 'alternatives'],
-            'properties': {
-              'category': {
-                'type': 'STRING',
-                'description':
-                    'One of: ACTION, TWIST, SETTING, TARGET, or STAKES',
-              },
-              'phrase': {
-                'type': 'STRING',
-                'description':
-                    'Exact 2-5 word substring that appears verbatim in baseSummary.',
-              },
-              'alternatives': {
-                'type': 'ARRAY',
-                'description':
-                    '3 concrete, playable alternative phrases of matching grammatical form that can swap cleanly into baseSummary.',
-                'items': {'type': 'STRING'},
-              },
             },
           },
         },
@@ -1831,7 +1528,6 @@ ${existingIntake != null ? 'Original Premise: "${existingIntake.rawIdea}"\nPrevi
 ${GeminiAgentClient.compactStyleRules}
 - `workingTitle` MUST be a concrete 2-3 word game title naming the setting/role/mechanic (NEVER just copy the first 3 words of the user's sentence).
 - `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop in game-design language (NEVER quote, echo, or replace the summary with the user's raw input sentence verbatim).
-- `expressiveChips` MUST extract 3-4 exact 2-5 word phrases that appear verbatim inside `baseSummary` (`ACTION`, `TWIST`, `SETTING`, `TARGET`, or `STAKES`), each paired with 3 concrete, playable drop-in alternative phrases tailored to this idea.
 ${existingIntake != null ? '- Preserve the core genre, role, and setting of `Previous Summary` while smoothly integrating `User Update Direction` (never switch to an unrelated genre).' : ''}
 
 Call `commit_spark_intake` with the structured summary.
@@ -1861,26 +1557,18 @@ Call `commit_spark_intake` with the structured summary.
             ? '${existingIntake.rawIdea}, $cleanInput'
             : existingIntake.rawIdea)
         : seedIdea;
-    final resolvedMechs = mechs.isNotEmpty
-        ? mechs
-        : (existingIntake?.mechanics ?? const <String>[]);
-    final resolvedCards = cards.isNotEmpty
-        ? cards
-        : (existingIntake?.expansionCards ?? const <SparkExpansionCard>[]);
     return SparkIdeaIntakeResult(
       rawIdea: updatedRawIdea,
       workingTitle: wTitle.isNotEmpty
           ? wTitle
           : (existingIntake?.workingTitle ?? updatedRawIdea),
       baseSummary: summary,
-      mechanics: resolvedMechs,
-      expansionCards: resolvedCards,
-      expressiveChips: buildExpressiveChipsForSummary(
-        baseSummary: summary,
-        mechanics: resolvedMechs,
-        expansionCards: resolvedCards,
-        rawChips: json['expressiveChips'],
-      ),
+      mechanics: mechs.isNotEmpty
+          ? mechs
+          : (existingIntake?.mechanics ?? const <String>[]),
+      expansionCards: cards.isNotEmpty
+          ? cards
+          : (existingIntake?.expansionCards ?? const <SparkExpansionCard>[]),
     );
   }
 

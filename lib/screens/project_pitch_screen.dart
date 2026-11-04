@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
 import '../constants/text_style_guide.dart';
 import '../providers/workbench_provider.dart';
@@ -185,10 +184,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   final TextEditingController _inlineItemEditController =
       TextEditingController();
 
-  /// Stage 1A Section 00 custom Expressive Chip inline input state.
-  int? _activeCustomChipIndex;
-  final TextEditingController _customChipController = TextEditingController();
-
   @override
   bool get isDark => widget.workbench.isDark;
 
@@ -350,7 +345,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     _sparkController.dispose();
     _agentPromptController.dispose();
     _inlineItemEditController.dispose();
-    _customChipController.dispose();
     _sparkFocusNode.dispose();
     super.dispose();
   }

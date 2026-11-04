@@ -50,18 +50,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  /// Replaces a Google ImageFX-style [SparkExpressiveChip] phrase inside the committed
-  /// pitch summary (`_sparkIntake.baseSummary`) and notifies listeners.
-  bool replaceSparkExpressiveChip(int chipIndex, String newValue) {
-    final intake = _sparkIntake;
-    if (intake == null) return false;
-    final changed = intake.replaceExpressiveChipValue(chipIndex, newValue);
-    if (changed) {
-      notifyListeners();
-    }
-    return changed;
-  }
-
   /// Cycles ONLY the 3 Concept Expansion / Twist Cards on the New Project screen to fresh suggestions,
   /// never overwriting `workingTitle`, `baseSummary`, or `mechanics`.
   Future<void> shuffleSparkExpansionCards() async {
