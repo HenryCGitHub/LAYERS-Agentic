@@ -13,6 +13,7 @@ part 'workbench_modals_part.dart';
 part 'workbench_task_and_playtest_modals_part.dart';
 part 'workbench_outliner_and_shell_part.dart';
 part 'workbench_checkpoint_workspace_part.dart';
+part 'workbench_full_production_blueprint_part.dart';
 
 /// Stage 2 Screen: Streamlined 2-Surface Open-Canvas Release Workbench
 /// - Left Outliner Rail (`#0C0E12`): Core Loop Epics (`E01`, `E02`, ...) & Singular-Focused Features

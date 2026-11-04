@@ -200,6 +200,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           _showProgressiveNextReleaseModal(context);
                         } else if (value == '__view_release_plan__') {
                           _showSavedReleasePlanDialog(context, rel);
+                        } else if (value == '__view_fp_blueprint__') {
+                          _showFullProductionBlueprintModal(
+                            context,
+                            readOnly: true,
+                          );
                         } else if (value.startsWith('rel:')) {
                           final targetId = value.substring(4);
                           final targetDoc = widget.workbench.documents[targetId];
@@ -588,6 +593,25 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             ),
                           ),
                         );
+                        if (widget.workbench.fullProductionBlueprint != null &&
+                            widget.workbench.fullProductionCoverage()
+                                .skeletonBuilt) {
+                          menuItems.add(
+                            PopupMenuItem<String>(
+                              value: '__view_fp_blueprint__',
+                              height: 34,
+                              child: Text(
+                                '📋 View Full Production Blueprint',
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
                         menuItems.add(
                           PopupMenuItem<String>(
                             value: '__progressive_release__',

@@ -288,6 +288,14 @@ class TierDocument {
   bool isIcebox;
   bool isCompleted;
 
+  /// Section key/value that tags Epics created by Act 2 · Full Production (Skeleton / later passes).
+  static const String actSectionKey = 'act';
+  static const String fullProductionAct = 'fullProduction';
+
+  /// True when this Epic was created in Act 2 · Full Production (not a core Concept Blueprint Epic).
+  bool get isFullProductionEpic =>
+      sections[actSectionKey] == fullProductionAct;
+
   TierDocument({
     required this.id,
     required this.title,

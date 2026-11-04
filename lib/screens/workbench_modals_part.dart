@@ -27,6 +27,12 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
 
     if (_isProgressiveModalOpen) return;
 
+    // Act 2: after the Vertical Slice, Full Production starts with the Full Production Blueprint.
+    if (widget.workbench.needsFullProductionBlueprint) {
+      await _showFullProductionBlueprintModal(context);
+      return;
+    }
+
     final prevReleaseId = widget.workbench.activeReleaseId;
     final prevPhase = widget.workbench.currentPhase;
 
@@ -234,8 +240,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                   activePhase.index >
                                       ProductionPhase.verticalSlice.index;
                             case ProductionPhase.fullProduction:
-                              return fpCov.isReadyForLaunch &&
-                                  activePhase == ProductionPhase.postLaunch;
+                              return activePhase == ProductionPhase.postLaunch;
                             case ProductionPhase.postLaunch:
                               return false;
                           }
@@ -252,7 +257,9 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             case ProductionPhase.fullProduction:
                               return !mvpCov.isComplete || !vsCov.isComplete;
                             case ProductionPhase.postLaunch:
-                              return !fpCov.isReadyForLaunch;
+                              return widget.workbench
+                                      .inferNextProgressivePhase() !=
+                                  ProductionPhase.postLaunch;
                           }
                         }
 
@@ -266,6 +273,14 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                             case ProductionPhase.verticalSlice:
                               return '${vsCov.polishedBeats}/${vsCov.totalBeats} Epics';
                             case ProductionPhase.fullProduction:
+                              if (fpCov.isLegacy) {
+                                return '${fpCov.coveredBeats}/${fpCov.totalBeats} Epics';
+                              }
+                              if (!fpCov.skeletonBuilt) return 'Skeleton';
+                              if (fpCov.launchReleaseBuilt ||
+                                  widget.workbench.isNextReleaseV1Launch) {
+                                return 'v1.0 Launch';
+                              }
                               return '${fpCov.coveredBeats}/${fpCov.totalBeats} Epics';
                             case ProductionPhase.postLaunch:
                               return fpCov.openFixCount > 0
@@ -336,6 +351,21 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                 null;
                                             _selectedProgressiveTrackIndex = 0;
                                           });
+                                          if (phase ==
+                                                  ProductionPhase
+                                                      .fullProduction &&
+                                              !fpCov.skeletonBuilt &&
+                                              !fpCov.isLegacy) {
+                                            await _closeProgressiveReleasePlanner(
+                                              confirmed: false,
+                                            );
+                                            if (context.mounted) {
+                                              await _showFullProductionBlueprintModal(
+                                                context,
+                                              );
+                                            }
+                                            return;
+                                          }
                                           await widget.workbench
                                               .setDraftReleasePhase(phase);
                                           if (mounted) {
@@ -729,12 +759,22 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                 widget.workbench.mvpBeatCoverage();
                             final vsCovForEpics =
                                 widget.workbench.verticalSliceBeatCoverage();
-                            final availCodes = isVsForEpics
-                                ? vsCovForEpics.incompleteBeatCodes
-                                : mvpCovForEpics.incompleteBeatCodes;
-                            final doneCodesHeader = isVsForEpics
-                                ? vsCovForEpics.completedBeatCodes
-                                : mvpCovForEpics.completedBeatCodes;
+                            final fpCovForEpics = activePhaseForEpics ==
+                                    ProductionPhase.fullProduction
+                                ? widget.workbench.fullProductionCoverage()
+                                : null;
+                            final useFpCodes = fpCovForEpics != null &&
+                                !fpCovForEpics.isLegacy;
+                            final availCodes = useFpCodes
+                                ? fpCovForEpics.incompleteBeatCodes
+                                : (isVsForEpics
+                                    ? vsCovForEpics.incompleteBeatCodes
+                                    : mvpCovForEpics.incompleteBeatCodes);
+                            final doneCodesHeader = useFpCodes
+                                ? fpCovForEpics.completedBeatCodes
+                                : (isVsForEpics
+                                    ? vsCovForEpics.completedBeatCodes
+                                    : mvpCovForEpics.completedBeatCodes);
 
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1988,12 +2028,23 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                               .mvpBeatCoverage();
                                           final vsCov = widget.workbench
                                               .verticalSliceBeatCoverage();
-                                          final doneCodes = isVs
-                                              ? vsCov.completedBeatCodes
-                                              : mvpCov.completedBeatCodes;
-                                          final remCodes = isVs
-                                              ? vsCov.incompleteBeatCodes
-                                              : mvpCov.incompleteBeatCodes;
+                                          final fpCovRows = activePhase ==
+                                                  ProductionPhase.fullProduction
+                                              ? widget.workbench
+                                                  .fullProductionCoverage()
+                                              : null;
+                                          final useFpRows = fpCovRows != null &&
+                                              !fpCovRows.isLegacy;
+                                          final doneCodes = useFpRows
+                                              ? fpCovRows.completedBeatCodes
+                                              : (isVs
+                                                  ? vsCov.completedBeatCodes
+                                                  : mvpCov.completedBeatCodes);
+                                          final remCodes = useFpRows
+                                              ? fpCovRows.incompleteBeatCodes
+                                              : (isVs
+                                                  ? vsCov.incompleteBeatCodes
+                                                  : mvpCov.incompleteBeatCodes);
                                           final untouchedEpicCount = bp.beats
                                               .where(
                                                 (b) => b.features.every(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../agents/full_production_blueprint_agent.dart';
 import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
 import '../agents/release_planner_agent.dart';
@@ -77,6 +78,9 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String _planningModel = 'gemini-flash-latest';
   String get planningModel => _planningModel;
+
+  /// True while the Act 2 Full Production Blueprint draft is being generated.
+  bool _isDraftingFullProductionBlueprint = false;
 
   String _thinkingLevel = 'HIGH';
   String get thinkingLevel => _thinkingLevel;

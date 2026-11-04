@@ -906,6 +906,77 @@ class ReleaseBlueprint {
 
 typedef ReleasePlanBlueprint = ReleaseBlueprint;
 
+/// Act 2 · Full Production Blueprint — defines the full `v1.0` game once the Vertical Slice is done.
+/// The Agent reads all 6 sections to plan the `v0.N` Full-Game Skeleton (sections never map 1:1 to Epics).
+class FullProductionBlueprint {
+  String goal;
+  List<String> contentScale;
+  List<String> fullGameLoop;
+  List<String> promotedSystems;
+  List<String> permanentCuts;
+  String doneWhen;
+  Map<String, List<String>> sectionOptions;
+
+  static const String storageKey = 'full_production_blueprint_json';
+
+  FullProductionBlueprint({
+    this.goal = '',
+    List<String>? contentScale,
+    List<String>? fullGameLoop,
+    List<String>? promotedSystems,
+    List<String>? permanentCuts,
+    this.doneWhen = '',
+    Map<String, List<String>>? sectionOptions,
+  })  : contentScale = contentScale ?? <String>[],
+        fullGameLoop = fullGameLoop ?? <String>[],
+        promotedSystems = promotedSystems ?? <String>[],
+        permanentCuts = permanentCuts ?? <String>[],
+        sectionOptions = sectionOptions ?? <String, List<String>>{};
+
+  bool get isReadyToApprove =>
+      goal.trim().isNotEmpty && doneWhen.trim().isNotEmpty;
+
+  /// Compact prompt block reused by the Release Planner and step synthesis.
+  String toPromptBlock() => '''
+Full Production Blueprint (Act 2 · v1.0 Full Game):
+- 01 v1.0 Goal: "$goal"
+- 02 Content & World Scale: ${contentScale.join(' | ')}
+- 03 Full-Game Loop: ${fullGameLoop.join(' -> ')}
+- 04 Promoted Systems: ${promotedSystems.join(' | ')}
+- 05 Permanent Cuts: ${permanentCuts.join(' | ')}
+- 06 v1.0 Done When: "$doneWhen"''';
+
+  Map<String, dynamic> toJson() => {
+        'goal': goal,
+        'contentScale': contentScale,
+        'fullGameLoop': fullGameLoop,
+        'promotedSystems': promotedSystems,
+        'permanentCuts': permanentCuts,
+        'doneWhen': doneWhen,
+        'sectionOptions': sectionOptions,
+      };
+
+  factory FullProductionBlueprint.fromJson(Map<String, dynamic> json) {
+    final rawOpts = json['sectionOptions'];
+    final opts = <String, List<String>>{};
+    if (rawOpts is Map) {
+      rawOpts.forEach((k, v) {
+        final parsed = _parseStringList(v);
+        if (parsed.isNotEmpty) opts[k.toString()] = parsed;
+      });
+    }
+    return FullProductionBlueprint(
+      goal: json['goal']?.toString().trim() ?? '',
+      contentScale: _parseStringList(json['contentScale']),
+      fullGameLoop: _parseStringList(json['fullGameLoop']),
+      promotedSystems: _parseStringList(json['promotedSystems']),
+      permanentCuts: _parseStringList(json['permanentCuts']),
+      doneWhen: json['doneWhen']?.toString().trim() ?? '',
+      sectionOptions: opts,
+    );
+  }
+}
+
 /// Holds the Post-Release Retrospective & Auto-Carryover Summary (`v0.1` -> `v0.2`+).
 class ReleaseRetrospectiveSummary {
   final String releaseTitle;

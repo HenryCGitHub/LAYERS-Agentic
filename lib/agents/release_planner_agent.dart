@@ -8,7 +8,7 @@ import '../utils/section_text_utils.dart';
 import 'gemini_agent_client.dart';
 
 /// Stage 2 Agent: Inspects the Project Concept (and any completed prior Releases)
-/// and synthesizes a single-Release Blueprint (`ReleaseBlueprint`) using Gemini AI (`gemini-4-argon`).
+/// and synthesizes a single-Release Blueprint (`ReleaseBlueprint`) using Gemini AI (`gemini-flash-latest`).
 /// Contains zero hardcoded archetypes and zero offline minimal scaffolds.
 /// Returns `null` (or `false`) whenever the app is offline or Gemini AI is unreachable.
 class ReleasePlannerAgent {
@@ -729,7 +729,7 @@ class ReleasePlannerAgent {
     return 'v0.1';
   }
 
-  /// Synthesizes a `ReleaseBlueprint` for `releaseDoc` via Gemini AI (`gemini-4-argon`).
+  /// Synthesizes a `ReleaseBlueprint` for `releaseDoc` via Gemini AI (`gemini-flash-latest`).
   /// Returns `null` if offline or if Gemini AI cannot be reached.
   static Future<ReleaseBlueprint?> planRelease({
     required TierDocument projectDoc,
@@ -741,6 +741,7 @@ class ReleasePlannerAgent {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
     String thinkingLevel = 'LOW',
+    FullProductionBlueprint? fullProductionBlueprint,
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) {
       return null;
@@ -814,6 +815,7 @@ class ReleasePlannerAgent {
 
     for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
       final b = existingBeats[bIdx];
+      if (b.isFullProductionEpic) continue;
       final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
       final feats = (existingFeaturesByBeat[b.id] ?? const <TierDocument>[])
           .where(
@@ -854,8 +856,12 @@ class ReleasePlannerAgent {
       }
     }
 
+    final isFpSkeleton = releaseDoc.sections['fpSkeleton'] == 'true';
     final String phaseInstruction;
-    if (prototypePart == '1' && !isSubsequentRelease) {
+    if (isFpSkeleton) {
+      phaseInstruction =
+          '- ACT 2 FULL-GAME SKELETON ($versionTag · FIRST FULL PRODUCTION RELEASE): The Vertical Slice is finished. Every existing Beat/Feature in the Existing Live Game Tree stays `"stable"` (omit them from JSON). Read the ENTIRE Full Production Blueprint (01–06) and create as many brand-new Beats/Epics (unique `"id"` values like `"fp_beat_1"`, titles that do NOT reuse existing Beat titles) and `"lifecycle": "new"` Features as the full v1.0 game needs, as a rough playable pass so the full game connects from launch to credits. Model added content (enemy types, bosses, biomes, items) as separate NEW Features that plug into the existing core scripts listed in the tree instead of rebuilding them. Order Epics and Features by engineering build dependency and honor `05 Permanent Cuts`. Loop beats are NOT Epics—decide the Epic breakdown yourself.';
+    } else if (prototypePart == '1' && !isSubsequentRelease) {
       phaseInstruction =
           '- PHASE 1 SPLIT PROTOTYPE (PART 1 OF 2 — CONTROLS & PRIMARY MECHANICS): Only plan the first ${(coreLoopItems.length / 2).ceil()} Core Loop Beats in `v0.1` so the developer can prove primary controls and core mechanics first (the remaining Beats are reserved for `v0.2` Prototype Part 2).';
     } else if (prototypePart == '2' ||
@@ -885,7 +891,7 @@ class ReleasePlannerAgent {
           : (releasePhase == ProductionPhase.verticalSlice.name
               ? '  1. TARGET PHASE IS `"verticalSlice"` (MULTI-RELEASE VERTICAL SLICE POLISH TRACK): Set `"releasePhase": "verticalSlice"` and a descriptive `"releaseTitle"` (`"$versionTag: <Polish & Feel Focus>"`). Focus upgrades on visual/material polish, SFX/VFX & camera/hit-stop feel cues, HUD readability, and state/frame guards across unpolished Core Loop Beats.$vsCoverageHint'
               : (releasePhase == ProductionPhase.fullProduction.name
-                  ? '  1. TARGET PHASE IS `"fullProduction"` (CONTENT & BACKLOG EXPANSION): Set `"releasePhase": "fullProduction"` and a descriptive `"releaseTitle"` (`"$versionTag: <Content & Expansion Focus>"`). Scale content/encounter variety and promote deferred backlog systems while honoring active exclusions.'
+                  ? '  1. TARGET PHASE IS `"fullProduction"` (FULL PRODUCTION PASS): Set `"releasePhase": "fullProduction"` and a descriptive `"releaseTitle"` (`"$versionTag: <Full Production Focus>"`). Upgrade only Full Production Epics (Beats tagged [FULL PRODUCTION EPIC]) to the Vertical Slice quality bar (content depth + feel polish in one pass); core Concept Epics stay `"stable"`.'
                   : '  1. TARGET PHASE IS `"mvp"` (MULTI-RELEASE MVP TRACK): Set `"releasePhase": "mvp"` and a specific, descriptive `"releaseTitle"` (`"$versionTag: <Concrete MVP Focus>"`). Bring the next cohesive group of greybox prototype mechanics up to functional MVP depth across the Core Loop and Design Pillars.$mvpCoverageHint'));
       phaseInstruction =
           '- AGENT-REASONED PROGRESSIVE RELEASE ($versionTag): You are the Lead Game Architect deciding what "${projectDoc.title}" needs next in $versionTag by evaluating the Existing Live Game Tree against the Stage 1 Design Pillars, Trade-Offs, Core Loop Beats, and Out-of-Scope Backlog:\n'
@@ -908,7 +914,7 @@ class ReleasePlannerAgent {
     } else if (releasePhase == ProductionPhase.fullProduction.name ||
         preset == ReleaseScope.fullProduction) {
       phaseInstruction =
-          '- PHASE 4 FULL PRODUCTION (CONTENT, LEVELS & DEFERRED SYSTEMS): Bring the rest of the project up to the Vertical Slice bar by upgrading Epics with Content/Level/Wave roster scaling checkpoints (`"lifecycle": "upgrade"`) and promoting previously deferred Out-of-Scope systems into `"lifecycle": "new"` playable features.';
+          '- PHASE 4 FULL PRODUCTION PASS: Upgrade 1–2 Full Production Epics (Beats tagged [FULL PRODUCTION EPIC]) to the Vertical Slice quality bar with `"lifecycle": "upgrade"` checkpoints (content depth + feel polish in one pass). Core Concept Epics stay `"stable"` (omit them from JSON).';
     } else {
       phaseInstruction =
           '- PHASE 1 PLAYABLE PROTOTYPE (`v0.1` GREYBOX CORE LOOP): Organize `beats` into the exact number of Epics required to build ${releaseDoc.title} end-to-end across the Concept Blueprint (`01 Goal` through `08 Done When`), breaking each Epic into as many singular-focused greybox Features as its mechanics genuinely require.';
@@ -988,7 +994,9 @@ class ReleasePlannerAgent {
       );
       for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
         final b = existingBeats[bIdx];
-        existingTreeSummary.writeln('- Beat "${b.title}" (${b.id}):');
+        existingTreeSummary.writeln(
+          '- Beat "${b.title}" (${b.id})${b.isFullProductionEpic ? ' [FULL PRODUCTION EPIC]' : ''}:',
+        );
         final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
         for (final f in feats) {
           if (f.sections['lifecycle'] ==
@@ -1075,7 +1083,7 @@ Full Concept Blueprint (01–08):
 $numberedCoreLoopSummary
 - 07 Out of Scope (Exclusions): ${projectExclusions.join(' | ')}
 - 08 Done When: "$projectDoneWhen"
-${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
+${fullProductionBlueprint != null ? '${fullProductionBlueprint.toPromptBlock()}\n' : ''}${existingTreeSummary.isNotEmpty ? existingTreeSummary.toString() : 'First Release (v0.1): No prior features exist yet.'}
 
 ${GeminiAgentClient.compactStyleRules}
 $phaseInstruction
@@ -1689,13 +1697,16 @@ Call `commit_epic_features` with the ordered playable features.
     );
     final isVsTarget = releasePhase == ProductionPhase.verticalSlice.name ||
         preset == ReleaseScope.verticalSlice;
+    final isFpTarget = releasePhase == ProductionPhase.fullProduction.name;
     final unupgradedEpicNums = <int>[];
     for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
       final b = existingBeats[bIdx];
       final eNum = bIdx + 1;
       final eCode = 'E${eNum.toString().padLeft(2, '0')}';
       final feats = existingFeaturesByBeat[b.id] ?? const <TierDocument>[];
-      bool allFeaturesInEpicCoveredForPhase = feats.isNotEmpty;
+      // Act 2: core Concept Epics are locked STABLE in Full Production; only FP Epics are targetable.
+      bool allFeaturesInEpicCoveredForPhase =
+          feats.isNotEmpty || (isFpTarget && !b.isFullProductionEpic);
       final featSummaries = <String>[];
       for (final f in feats) {
         if (f.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name) {
@@ -1705,7 +1716,10 @@ Call `commit_epic_features` with the ordered playable features.
         final states = FeatureStateNode.getStatesForDocument(f);
         final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
         final bool coveredInPhase;
-        if (isVsTarget) {
+        if (isFpTarget) {
+          coveredInPhase = !b.isFullProductionEpic ||
+              states.any((s) => s.releaseVersion.toLowerCase() != originVer);
+        } else if (isVsTarget) {
           coveredInPhase = vsVerTags.contains(originVer) ||
               states.any(
                 (s) => vsVerTags.contains(s.releaseVersion.toLowerCase()),
@@ -1730,14 +1744,14 @@ Call `commit_epic_features` with the ordered playable features.
           ? '[COMPLETE IN ${releasePhase.toUpperCase()} ✓]'
           : '[INCOMPLETE IN ${releasePhase.toUpperCase()} — Needs full Epic pass]';
       historyAndTree.writeln(
-        '- Epic $eNum ($eCode · "${b.title}", id: ${b.id}) $epicPhaseTag: ${featSummaries.join(', ')}',
+        '- Epic $eNum ($eCode · "${b.title}", id: ${b.id})${b.isFullProductionEpic ? ' [FULL PRODUCTION EPIC]' : ''} $epicPhaseTag: ${featSummaries.join(', ')}',
       );
     }
 
     final phaseFocusDirective = isVsTarget
         ? 'Phase 3 · Vertical Slice (Gold Standard Polish Pass): Select 1–2 incomplete Epics in "targetEpicNumbers" (${unupgradedEpicNums.isNotEmpty ? unupgradedEpicNums.map((n) => "E${n.toString().padLeft(2, '0')}").join(', ') : 'E01, E02'}) to polish completely with observable VFX/particles, SFX audio cues, hit-stop/camera feedback, animation states, and HUD readability.'
         : (releasePhase == ProductionPhase.fullProduction.name
-            ? 'Phase 4 · Full Production (v1.0 Content & Deferred Backlog): Select 1–2 Epics in "targetEpicNumbers" to scale content/wave variety and promote deferred Out-of-Scope systems.'
+            ? 'Phase 4 · Full Production Pass: Select 1–2 incomplete Full Production Epics in "targetEpicNumbers" (${unupgradedEpicNums.isNotEmpty ? unupgradedEpicNums.map((n) => "E${n.toString().padLeft(2, '0')}").join(', ') : 'any Full Production Epic'}) to bring up to the Vertical Slice quality bar (content depth + feel polish in one pass). NEVER target core Concept Epics—they stay STABLE.'
             : (releasePhase == ProductionPhase.postLaunch.name
                 ? 'Phase 5 · Post-Launch & Live Ops: Select 1–2 Epics in "targetEpicNumbers" for live balance tuning, [FIX] resolution, and modular content drops.'
                 : 'Phase 2 · MVP (Whole-Epic Functional Upgrade): Select 1–2 incomplete Epics in "targetEpicNumbers" (${unupgradedEpicNums.isNotEmpty ? unupgradedEpicNums.map((n) => "E${n.toString().padLeft(2, '0')}").join(', ') : 'E01, E02'}) to upgrade completely from v0.1 greybox to functional MVP.'));
@@ -1870,11 +1884,17 @@ Call `commit_progressive_release_focus` with Section 1 of the progressive releas
         }
       }
     }
+    if (isFpTarget && existingBeats.any((b) => b.isFullProductionEpic)) {
+      targetIndices.removeWhere((i) => !existingBeats[i].isFullProductionEpic);
+    }
     if (targetIndices.isEmpty) {
       if (unupgradedEpicNums.isNotEmpty) {
         for (final n in unupgradedEpicNums.take(2)) {
           targetIndices.add(n - 1);
         }
+      } else if (isFpTarget) {
+        final firstFp = existingBeats.indexWhere((b) => b.isFullProductionEpic);
+        targetIndices.add(firstFp >= 0 ? firstFp : 0);
       } else {
         targetIndices.add(0);
       }
@@ -1968,7 +1988,7 @@ Call `commit_progressive_release_focus` with Section 1 of the progressive releas
             ProductionPhase.verticalSlice.name
         ? 'Phase 3 · Vertical Slice Polish: Upgrade EVERY existing feature in Epic $epicCode with observable VFX/particles, SFX audio cues, camera shake/hit-stop, animation states, and HUD readability.'
         : (releasePhase == ProductionPhase.fullProduction.name
-            ? 'Phase 4 · Full Production Scaling: Upgrade EVERY existing feature in Epic $epicCode with content/wave variety scaling and promote any deferred exclusions for this Epic.'
+            ? 'Phase 4 · Full Production Pass: Upgrade EVERY existing feature in Full Production Epic $epicCode to the Vertical Slice quality bar (full content depth + VFX/SFX/HUD feel polish in one pass), reusing the core scripts already built.'
             : (releasePhase == ProductionPhase.postLaunch.name
                 ? 'Phase 5 · Post-Launch & Live Ops: Upgrade EVERY existing feature in Epic $epicCode with live balance tuning, [FIX] resolutions, and modular content depth.'
                 : 'Phase 2 · MVP Functional Depth: Upgrade EVERY existing v0.1 greybox feature in Epic $epicCode into a complete functional MVP mechanic.'));
@@ -2109,7 +2129,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
     final stageSuffix = isVs
         ? 'Slice Polish'
         : (isFullProd
-            ? 'Production Scale'
+            ? 'Production Pass'
             : (isPostLaunch ? 'Live Ops' : 'MVP Upgrade'));
 
     final baseFeatures = beatBp != null
@@ -2152,7 +2172,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       final defaultGoal = isVs
           ? '+VFX particles, +SFX audio cues, +HUD readability'
           : (isFullProd
-              ? '+Content wave scaling, +encounter tier parameters'
+              ? '+Full content depth, +Vertical Slice feel polish'
               : (isPostLaunch
                   ? '+Live balance tuning, +regression state guards'
                   : '+Functional MVP depth, +collision response, +HUD sync'));
@@ -3025,7 +3045,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
   }
 
   /// Builds an immediate, phase-accurate `ReleaseBlueprint` for `releaseDoc` (`v0.2+`)
-  /// from the existing Vault tree before the async `gemini-4-argon` HTTP call completes
+  /// from the existing Vault tree before the async `gemini-flash-latest` HTTP call completes
   /// (and as a safety net if the network request times out), ensuring `_releaseBlueprint`
   /// never retains a stale prior release (`v0.4`) while planning `v0.5`.
   static ReleaseBlueprint? buildImmediateProgressiveBaselineBlueprint({
@@ -3076,11 +3096,12 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
           existingFeaturesByBeat[eb.id] ?? const <TierDocument>[];
       final isTargetEpic = targetMvpEpicIndex != null
           ? bIdx == targetMvpEpicIndex
-          : (releasePhase == ProductionPhase.verticalSlice.name ||
-                  releasePhase == ProductionPhase.fullProduction.name ||
-                  releasePhase == ProductionPhase.postLaunch.name
-              ? true
-              : bIdx == defaultMvpBeatIdx);
+          : (releasePhase == ProductionPhase.fullProduction.name
+              ? eb.isFullProductionEpic
+              : (releasePhase == ProductionPhase.verticalSlice.name ||
+                      releasePhase == ProductionPhase.postLaunch.name
+                  ? true
+                  : bIdx == defaultMvpBeatIdx));
 
       final proposedFeats = <ProposedFeatureBlueprint>[];
       for (int fIdx = 0; fIdx < existingFeats.length; fIdx++) {
@@ -3311,6 +3332,9 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
     if (existingBeats.isEmpty) return parsed;
 
     final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
+    // Act 2 Skeleton: existing Epics match by exact ID only so brand-new Full Production Epics
+    // (e.g. "Boss Wave Encounters") are never folded into a core Epic that shares a keyword.
+    final isFpSkeleton = releaseDoc.sections['fpSkeleton'] == 'true';
     final matchedLlmBeatByExistingId = <String, ProposedBeatBlueprint>{};
     final unmatchedNewLlmBeats = <ProposedBeatBlueprint>[];
 
@@ -3326,6 +3350,27 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       final cleanLlmTitle = llmBeat.title.toLowerCase().trim();
       final llmKeywords = extractBeatKeywords(llmBeat.title);
       TierDocument? matchedBeatDoc;
+
+      if (isFpSkeleton) {
+        // Core Epics stay STABLE: if the LLM reused a core Epic ID, keep only its NEW features
+        // and move them into a fresh Full Production Epic so they are tracked in Act 2 coverage.
+        final reusedCoreId = existingBeats.any((eb) => eb.id == llmBeat.id);
+        if (reusedCoreId) {
+          llmBeat.id = 'fp_${llmBeat.id}_$bIdx';
+          llmBeat.features = llmBeat.features
+              .where((f) => f.lifecycle == FeatureLifecycleStatus.newFeature)
+              .toList();
+        }
+        if (llmBeat.features.isNotEmpty) {
+          for (final f in llmBeat.features) {
+            f.lifecycle = FeatureLifecycleStatus.newFeature;
+            f.included = true;
+            f.originVersion = versionTag;
+          }
+          unmatchedNewLlmBeats.add(llmBeat);
+        }
+        continue;
+      }
 
       // 1. Exact ID or exact title match
       for (final eb in existingBeats) {
@@ -3994,6 +4039,12 @@ class ReleaseExecutorAgent {
             tier: TierType.epic,
             parentId: releaseDoc.id,
           );
+      // Act 2: every brand-new Epic created by a Full Production release is a Full Production Epic.
+      if (existingBeat == null &&
+          releaseDoc.sections['phase'] == ProductionPhase.fullProduction.name) {
+        beatDoc.sections[TierDocument.actSectionKey] =
+            TierDocument.fullProductionAct;
+      }
       final priorBeatFeatureIds = List<String>.from(beatDoc.childrenIds);
       beatDoc.title = concreteBeatTitle;
       beatDoc.parentId = releaseDoc.id;

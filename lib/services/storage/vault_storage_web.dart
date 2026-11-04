@@ -88,7 +88,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
             'activeDocumentId': activeDocumentId,
             'apiKey': apiKey ?? '',
             'modelName': modelName ?? 'gemini-flash-latest',
-            'planningModel': planningModel ?? 'gemini-4-argon',
+            'planningModel': planningModel ?? 'gemini-flash-latest',
             'thinkingLevel': thinkingLevel ?? 'LOW',
             'themeMode': themeMode ?? currentThemeMode ?? 'dark',
           }));

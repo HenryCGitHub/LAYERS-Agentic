@@ -4817,7 +4817,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await provider.prepareProgressiveNextReleaseDraft();
         await provider.setDraftReleasePhase(ProductionPhase.fullProduction);
         expect(provider.currentPhase, equals(ProductionPhase.fullProduction));
-        expect(provider.activeReleaseVersionTag, equals('v1.0'));
+        // Manual phase override (no Full Production Blueprint) keeps v0.N numbering and legacy coverage
+        expect(provider.activeReleaseVersionTag, startsWith('v0.'));
         await provider.approveAndExecuteReleasePlan();
 
         // Mark all v1.0 Full Production checkpoints complete
@@ -6860,7 +6861,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final pass7PrevPhase = provider.currentPhase;
         await provider.prepareProgressiveNextReleaseDraft();
         await provider.setDraftReleasePhase(ProductionPhase.fullProduction);
-        expect(provider.activeRelease!.title, startsWith('v1.0:'));
+        // Act 2: Full Production releases continue v0.N numbering (v1.0 is reserved for the Launch Release)
+        expect(provider.activeRelease!.title, startsWith('v0.2:'));
+        expect(provider.activeReleaseVersionTag, equals('v0.2'));
         await provider.setDraftReleasePhase(ProductionPhase.mvp);
         expect(provider.activeRelease!.title, startsWith('v0.2:'));
         expect(provider.activeReleaseVersionTag, equals('v0.2'));
@@ -7701,6 +7704,297 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               isFalse,
             );
           }
+
+          // 13. Act 2 · Full Production Blueprint -> Full-Game Skeleton -> Production Pass -> v1.0 Launch Release -> v1.1 Post-Launch
+          GeminiAgentClient.testMockResponder = (
+            String prompt,
+            String preferredModel,
+          ) async {
+            if (prompt.contains('ACT 2 FULL-GAME SKELETON') ||
+                prompt.contains('commit_release_plan')) {
+              return {
+                'releaseTitle': 'v0.3: Full-Game Campaign Skeleton',
+                'goal':
+                    'Playable Campaign Outer Loop — Wire Hub forge, biome transitions, and save persistence end-to-end.',
+                'doneWhen':
+                    'Complete run and reload game → Unlocked relics and gold persist in Hub',
+                'explicitExclusions': [
+                  'No Online Co-Op Lobby',
+                  'No Procedural Dialogue Trees',
+                ],
+                'beats': [
+                  {
+                    'id': 'epic_fp_hub',
+                    'title': 'Hub Town & Forge',
+                    'goal': 'Equip weapons and upgrade tiers between runs',
+                    'doneWhen': 'Spend gold at forge → Weapon tier persists',
+                    'features': [
+                      {
+                        'id': 'feat_fp_forge',
+                        'title': 'Hub Weapon Forge',
+                        'lifecycle': 'newFeature',
+                        'included': true,
+                        'estimatedHours': 2,
+                        'goal': '+Weapon rack interactable, +gold upgrade button',
+                        'inScope': ['+Forge UI panel', '+Gold deduction'],
+                        'doneWhen': 'Click upgrade → Weapon damage increases',
+                        'primarySharedScriptOrScene': 'res://scripts/hub_forge.gd',
+                        'checkpoints': [
+                          {
+                            'title': 'Functional Baseline (Hub Weapon Forge)',
+                            'playtestCriteria':
+                                'Interact with forge → Buy Tier 2 upgrade',
+                            'tasks': [
+                              'Forge Trigger & Panel (2h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    'id': 'epic_fp_save',
+                    'title': 'Save & Campaign Flow',
+                    'goal': 'Persist campaign unlocks and roll credits on win',
+                    'doneWhen': 'Reload game → Unlocked relics remain active',
+                    'features': [
+                      {
+                        'id': 'feat_fp_save',
+                        'title': 'Save Slot & Cloud Sync',
+                        'lifecycle': 'newFeature',
+                        'included': true,
+                        'estimatedHours': 2,
+                        'goal': '+JSON save writer, +auto-load on boot',
+                        'inScope': ['+SaveManager singleton', '+Boot load'],
+                        'doneWhen': 'Restart game → Gold and relics restored',
+                        'primarySharedScriptOrScene':
+                            'res://scripts/save_manager.gd',
+                        'checkpoints': [
+                          {
+                            'title':
+                                'Functional Baseline (Save Slot & Cloud Sync)',
+                            'playtestCriteria':
+                                'Quit and relaunch → Save persistence works',
+                            'tasks': [
+                              'JSON Save Serializer (2h)',
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+            if (prompt.contains('commit_full_production_blueprint')) {
+              return {
+                'goal':
+                    'Complete 3-Biome Campaign — Hub town, relic unlocks, and final boss victory',
+                'contentScale': [
+                  'Biomes / Levels: 3 distinct arenas + final boss chamber',
+                  'Enemy Roster: 6 standard archetypes + 2 bosses',
+                  'Weapons / Unlocks: 5 weapons + 8 permanent relics',
+                  'Target Playtime: 20m per full campaign run',
+                ],
+                'fullGameLoop': [
+                  'Spawn in Hub Town → Equip weapon & relic loadouts at forge',
+                  'Clear 3 Biome Arenas → Defeat biome boss and bank gold',
+                  'Return to Hub or Beat Final Boss → Unlock permanent relics & roll credits',
+                ],
+                'promotedSystems': [
+                  'Save Slot & Cloud Sync — Persist unlocked relics and biome progress across runs',
+                  'Hub Weapon Forge — Spend banked gold on permanent weapon tiers',
+                ],
+                'permanentCuts': [
+                  'No Online Co-Op Lobby',
+                  'No Procedural Dialogue Trees',
+                ],
+                'doneWhen':
+                    'Beat Final Boss from fresh save → Credits roll & unlocked relics persist on reload',
+                'goalOptions': [
+                  'Complete 3-Biome Campaign — Hub town, relic unlocks, and final boss victory',
+                ],
+                'contentScaleOptions': [
+                  '3 Biomes + 6 Enemies + 5 Weapons (20m run)',
+                ],
+                'fullGameLoopOptions': [
+                  'Hub Forge → 3 Biome Runs → Final Boss Victory & Save',
+                ],
+                'promotedSystemsOptions': [
+                  'Save Slot & Cloud Sync | Hub Weapon Forge',
+                ],
+                'permanentCutsOptions': [
+                  'No Online Co-Op Lobby | No Procedural Dialogue Trees',
+                ],
+                'doneWhenOptions': [
+                  'Beat Final Boss from fresh save → Credits roll & unlocked relics persist on reload',
+                ],
+              };
+            }
+            return {
+              'featureTitle': 'Save Slot & Cloud Sync',
+              'featureSummary':
+                  'Persist unlocked relics and biome progress across runs',
+              'placementMode': 'newEpicAndFeature',
+              'proposedNewEpicTitle': 'Save & Campaign Flow',
+              'releaseTimingMode': 'futureRelease',
+              'targetFuturePhase': 'fullProduction',
+              'reasoning': 'Meta-progression save system belongs in Act 2.',
+            };
+          };
+
+          final fpInboxItem = await provider.submitFeatureIdeaToInbox(
+            'Save Slot & Cloud Sync: Persist unlocked relics and biome progress across runs',
+          );
+          expect(fpInboxItem, isNotNull);
+          provider.updateFeatureInboxItemTriage(
+            fpInboxItem!.id,
+            timingMode: InboxReleaseTimingMode.futureRelease,
+            targetFuturePhase: ProductionPhase.fullProduction,
+          );
+
+          // Simulate entering Act 2 Full Production Blueprint gate
+          await provider.prepareProgressiveNextReleaseDraft();
+          await provider.setDraftReleasePhase(ProductionPhase.fullProduction);
+          expect(provider.needsFullProductionBlueprint, isTrue);
+
+          await provider.draftFullProductionBlueprint();
+          final fpBp = provider.fullProductionBlueprint;
+          expect(fpBp, isNotNull);
+          expect(fpBp!.isReadyToApprove, isTrue);
+          expect(fpBp.goal, contains('Complete 3-Biome Campaign'));
+          expect(fpBp.fullGameLoop.length, equals(3));
+
+          final preCoreEpicIds = provider.activeReleaseBeats
+              .where((b) => !b.isFullProductionEpic)
+              .map((b) => b.id)
+              .toSet();
+
+          final skeletonOk =
+              await provider.approveFullProductionBlueprintAndBuildSkeleton();
+          expect(skeletonOk, isTrue);
+          expect(provider.needsFullProductionBlueprint, isFalse);
+
+          // Promoted inbox item should now be marked implemented
+          final updatedInboxItem = provider.featureInboxItems.firstWhere(
+            (i) => i.id == fpInboxItem.id,
+          );
+          expect(
+            updatedInboxItem.status,
+            equals(FeatureInboxStatus.implemented),
+          );
+
+          // Verify new Act 2 Full Production Epics were created & tagged with act=fullProduction, while Core Epics stayed intact
+          final fpEpics = provider.activeReleaseBeats
+              .where((b) => b.isFullProductionEpic)
+              .toList();
+          expect(fpEpics.length, equals(2));
+          expect(
+            fpEpics.map((e) => e.title),
+            containsAll(['Hub Town & Forge', 'Save & Campaign Flow']),
+          );
+          for (final coreId in preCoreEpicIds) {
+            expect(provider.documents.containsKey(coreId), isTrue);
+          }
+
+          // Skeleton release alone does not count as Production Pass coverage yet
+          final fpCovAfterSkeleton = provider.fullProductionCoverage();
+          expect(fpCovAfterSkeleton.isLegacy, isFalse);
+          expect(fpCovAfterSkeleton.totalBeats, equals(2));
+          expect(fpCovAfterSkeleton.coveredBeats, equals(0));
+          expect(fpCovAfterSkeleton.isReadyForLaunch, isFalse);
+
+          // Simulate a built Production Pass release (v0.4) that upgrades the 2 Act 2 Epics
+          final nextPassVer = provider.nextProgressiveVersionLabel;
+          expect(nextPassVer, startsWith('v0.'));
+          final passRelDoc = TierDocument(
+            id: 'rel_fp_pass_test',
+            title: '$nextPassVer: Act 2 Production Pass',
+            tier: TierType.release,
+            parentId: provider.activeProject!.id,
+            childrenIds: [for (final e in fpEpics) e.id],
+            sections: {
+              'versionTag': nextPassVer,
+              'phase': ProductionPhase.fullProduction.name,
+              'releaseScope': ReleaseScope.fullProduction.name,
+            },
+          );
+          provider.documents[passRelDoc.id] = passRelDoc;
+          provider.activeProject!.childrenIds.add(passRelDoc.id);
+
+          for (final fpEpic in fpEpics) {
+            for (final feat in provider.featuresForBeat(fpEpic.id)) {
+              final states = FeatureStateNode.getStatesForDocument(feat);
+              for (final s in states) {
+                for (final t in s.checklist) {
+                  t.completed = true;
+                  for (final c in t.children) {
+                    c.completed = true;
+                  }
+                }
+              }
+              states.add(
+                FeatureStateNode(
+                  id: '${feat.id}_${nextPassVer}_cp',
+                  name: 'Checkpoint 2: Production Pass (${feat.title})',
+                  trigger: 'Verify production depth & polish',
+                  order: states.length,
+                  checklist: [
+                    Subtask(
+                      id: '${feat.id}_prod_t1',
+                      text: 'Production Content & Feel Pass (2h)',
+                      completed: true,
+                    ),
+                  ],
+                  parameters: {'releaseVersion': nextPassVer},
+                ),
+              );
+              provider.updateFeatureStates(feat.id, states);
+            }
+          }
+
+          // Now all 2 Full Production Epics have a completed Production Pass beyond the skeleton release!
+          final fpCovReady = provider.fullProductionCoverage();
+          expect(fpCovReady.coveredBeats, equals(2));
+          expect(fpCovReady.totalBeats, equals(2));
+          expect(fpCovReady.isReadyForLaunch, isTrue);
+          expect(provider.isNextReleaseV1Launch, isTrue);
+          expect(provider.nextProgressiveVersionLabel, equals('v1.0'));
+
+          // Advance into the v1.0 Launch Release and verify Fast Path 0 builds the deterministic Release Build Export feature
+          await provider.prepareProgressiveNextReleaseDraft();
+          expect(provider.releaseBlueprint, isNotNull);
+          expect(provider.releaseBlueprint!.releaseVersionTag, equals('v1.0'));
+          await provider.approveAndExecuteReleasePlan();
+          expect(
+            provider.activeRelease?.sections['launchRelease'],
+            equals('true'),
+          );
+          final launchExportFeature = provider.documents.values.firstWhere(
+            (d) =>
+                d.tier == TierType.feature &&
+                d.title == 'Release Build Export',
+          );
+          expect(launchExportFeature, isNotNull);
+
+          // Complete the v1.0 Release Build Export tasks -> project graduates to 05 · Post-Launch (v1.1)
+          final exportStates =
+              FeatureStateNode.getStatesForDocument(launchExportFeature);
+          for (final s in exportStates) {
+            for (final t in s.checklist) {
+              t.completed = true;
+              for (final c in t.children) {
+                c.completed = true;
+              }
+            }
+          }
+          provider.updateFeatureStates(launchExportFeature.id, exportStates);
+
+          expect(
+            provider.inferNextProgressivePhase(),
+            equals(ProductionPhase.postLaunch),
+          );
+          expect(provider.nextProgressiveVersionLabel, equals('v1.1'));
         } finally {
           GeminiAgentClient.testMockResponder = prevResponder;
         }
