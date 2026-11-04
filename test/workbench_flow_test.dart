@@ -7499,6 +7499,59 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               'I-frame invulnerability window, animation cues, and cooldown tuning.',
             ),
           );
+          final extractedWithGoals =
+              ReleasePlannerAgent.extractCheckpointTasksFromMap({
+            'tasks': [
+              {
+                'role': 'entity_and_collision_foundation',
+                'title': 'Shard Physics Hull',
+                'goal':
+                    'Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.',
+              },
+              {
+                'role': 'core_action_and_math',
+                'title': 'Radial Scatter Impulse',
+                'goal':
+                    'Calculate radial scatter vectors with randomized pitch and roll impulse on monster death.',
+              },
+            ],
+          });
+          expect(
+            extractedWithGoals.first,
+            equals(
+              'Shard Physics Hull — Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.',
+            ),
+          );
+          final sampleBp = TaskHowToBlueprint(
+            numLabel: '01',
+            layerTag: 'PHYSICS',
+            cleanTitle: extractedWithGoals.first,
+            durationChip: '1h',
+            whereLocation: 'Script: ScrapShard.gd',
+            engineLabel: 'GODOT 4',
+            subSteps: [
+              TaskHowToSubStep(
+                subtask: Subtask(id: 's1', text: 'Setup Shard Physics Hull'),
+                stepNumberLabel: 'STEP 1.1',
+                shortTitle: 'Setup Shard Physics Hull',
+                instruction: 'Attach RigidBody3D and CollisionShape3D.',
+                verifyResult:
+                    'Drop ScrapShard from 3m → bounces twice before resting',
+                codeFormula: 'gravity_scale = 1.8',
+              ),
+            ],
+          );
+          expect(sampleBp.shortTaskTitle, equals('Shard Physics Hull'));
+          expect(
+            sampleBp.taskGoalSentence,
+            equals(
+              'Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.',
+            ),
+          );
+          expect(
+            sampleBp.taskDoneCheck,
+            equals('Drop ScrapShard from 3m → bounces twice before resting'),
+          );
 
           // 10. Built feature never flips to "Waiting" when selected while another feature is synthesizing
           GeminiAgentClient.testMockResponder = (

@@ -4260,6 +4260,10 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
                 'type': 'STRING',
                 'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
               },
+              'goal': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.taskGroupGoalSchemaDesc,
+              },
             },
           },
         },
@@ -4377,6 +4381,10 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
                 'type': 'STRING',
                 'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
               },
+              'goal': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.taskGroupGoalSchemaDesc,
+              },
             },
           },
         },
@@ -4420,6 +4428,10 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               'title': {
                 'type': 'STRING',
                 'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+              },
+              'goal': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.taskGroupGoalSchemaDesc,
               },
             },
           },

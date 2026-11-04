@@ -15,7 +15,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 - Release Goals (BLUF): "[2-4 Word Payoff] — [Scope]" (e.g. "3-Wave Arena Combat — Complete E02 Shotgun Hazards and E03 Enemy Waves for MVP.").
 - Feature Goals & In-Scope (Changelog +Delta): Direct 5-10 word summary of concrete mechanics/deltas (e.g. "+6-pellet cone spread, +knockback impulse" for upgrades; "Magnetic ore shard spawn on enemy kill" for new features). NEVER start feature goals with "Build a playable..." or "Upgrade <Feature> into/with..." and NEVER copy-paste raw user instructions verbatim.
 - Done When, Playtest Gates & Verify (Causal Trigger -> Result): "[Player Action] -> [Observable Screen Result]" (<= 14 words, e.g. "Press Fire within 4m of target -> 6 pellets fan out + push enemy back 2.5m"). NEVER use FPS/60fps targets.
-- Parent Task Group Titles (tasks[].title): Strictly 2-4 Title-Case words naming 1-2 concrete components (e.g. "Collision Layer & Flags", "Impulse & Window Timer", "Ghost Trail & SFX"). NO verbs (Setup, Code, Write, Create, Trigger, Implement), NO 3-item lists (A, B, & C), NO "while/when" clauses, NO "(2h)" tags.
+- Parent Task Group Titles & Goals (tasks[]): tasks[].title = strictly 2-4 Title-Case words naming 1-2 concrete components (e.g. "Shard Physics Hull", "Radial Scatter Impulse", "Floor Clink & Settle"; NO verbs, NO 3-item lists, NO "(2h)" tags); tasks[].goal = 1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").
 - Sub-Step Titles & Instructions (Imperative Runbook): subSteps[].title = 3-4 Title-Case "Verb + Object" words (e.g. "Spawn 6 Pellet Raycasts", NO "STEP X.Y" prefix); instruction = 1 imperative sentence (<= 18 words) starting with a command verb + exact node/script and tuning value.''';
 
   // ── Stage 1: Concept Blueprint Schema Descriptions ────────────────────────
@@ -74,7 +74,140 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
       '2-3 telegraphic 2-4 word changelog deltas without articles a/an/the (prefix upgrades with "+", e.g. "+6-pellet cone spread", "+knockback impulse").';
 
   static const String taskGroupTitleSchemaDesc =
-      'Strictly 2-4 Title-Case words naming 1-2 concrete components (e.g. "Collision Layer & Flags", "Impulse & Window Timer", "Ghost Trail & SFX"). NO verbs (Setup/Code/Create/Trigger/Implement), NO 3-item lists, NO "while/when" clauses, NO "(2h)" duration tags.';
+      'Strictly 2-4 Title-Case words naming 1-2 concrete components (e.g. "Shard Physics Hull", "Radial Scatter Impulse", "Floor Clink & Settle"). NO verbs (Setup/Code/Create/Trigger/Implement), NO 3-item lists, NO "while/when" clauses, NO "(2h)" duration tags.';
+
+  static const String taskGroupGoalSchemaDesc =
+      '1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").';
+
+  static final RegExp _leadingTaskVerbRegex = RegExp(
+    r'^(?:configure|setup|set\s+up|create|build|implement|add|write|code|bind|wire|define|establish|calculate|apply|trigger|spawn|attach|initialize|declare|enable|clamp|verify|test|update|upgrade|connect|hook\s+up|register|assign|expose|tune|polish|integrate|handle|enforce)\s+(?:the\s+|a\s+|an\s+)?',
+    caseSensitive: false,
+  );
+  static final RegExp _trailingTaskClauseRegex = RegExp(
+    r'\s+(?:while|when|after|before|during|upon|on\s+[a-z0-9_]+\s+(?:event|death|hit|kill|trigger|overlap|collision|enter|exit)|for\s+(?:the\s+|a\s+)?[a-z0-9_\s]+|in\s+(?:the\s+|a\s+)?(?:greybox|arena|scene|level|chamber|inspector|viewport).*|so\s+that.*|to\s+(?:prevent|ensure|allow|enable|support|clamp|block).*)$',
+    caseSensitive: false,
+  );
+  static final RegExp _taskListSplitRegex = RegExp(
+    r'\s*(?:,\s*(?:and\s+|&\s*)?|\s+&\s+|\s+and\s+)\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static const Set<String> _taskFillerWords = <String>{
+    'the',
+    'a',
+    'an',
+    'with',
+    'using',
+    'into',
+    'onto',
+    'from',
+    'low-poly',
+    'low',
+    'poly',
+    'custom',
+    'basic',
+    'simple',
+    'initial',
+    'core',
+    'proper',
+    'clean',
+    'playable',
+    'functional',
+    'dynamic',
+    'stylized',
+  };
+
+  /// Deterministically condenses a legacy verbose task title (when no `" — "` separator is present)
+  /// into a clean `2–4` word Title-Case micro-label (Style 5) so `01 STEPS` and the Step Picker
+  /// dropdown never overflow or wrap across 3 lines.
+  static String formatConciseTaskTitle(String rawTitle) {
+    var t = rawTitle.trim();
+    if (t.isEmpty) return t;
+    final dashIdx = t.indexOf(' — ');
+    if (dashIdx > 0) {
+      t = t.substring(0, dashIdx).trim();
+    }
+
+    String? badgePrefix;
+    if (t.startsWith('[FIX]')) {
+      badgePrefix = '[FIX] ';
+      t = t.substring(5).trim();
+    } else if (t.startsWith('[POLISH]')) {
+      badgePrefix = '[POLISH] ';
+      t = t.substring(8).trim();
+    }
+
+    final initialWords =
+        t.split(_whitespaceRegex).where((w) => w.isNotEmpty).toList();
+    if (initialWords.length <= 4 &&
+        !_leadingTaskVerbRegex.hasMatch(t) &&
+        !t.contains(',')) {
+      return badgePrefix != null ? '$badgePrefix$t' : t;
+    }
+
+    t = t.replaceFirst(_leadingTaskVerbRegex, '').trim();
+    t = t.replaceFirst(_trailingTaskClauseRegex, '').trim();
+
+    final clauses = t
+        .split(_taskListSplitRegex)
+        .map((c) => c.replaceFirst(_leadingTaskVerbRegex, '').trim())
+        .where((c) => c.isNotEmpty)
+        .toList();
+
+    List<String> cleanClauseWords(String clause) {
+      final rawWords = clause
+          .replaceAll(RegExp(r'[^\w\s\-/]'), '')
+          .split(_whitespaceRegex)
+          .where((w) => w.isNotEmpty)
+          .toList();
+      final filtered = rawWords
+          .where((w) => !_taskFillerWords.contains(w.toLowerCase()))
+          .toList();
+      final source = filtered.isNotEmpty ? filtered : rawWords;
+      if (source.length <= 2) return source;
+      return source.sublist(source.length - 2);
+    }
+
+    String titleCaseWord(String w) {
+      if (w.isEmpty) return w;
+      if (w.toUpperCase() == w && w.length >= 2) return w;
+      return '${w[0].toUpperCase()}${w.substring(1)}';
+    }
+
+    String result;
+    if (clauses.length >= 2) {
+      final firstPart = cleanClauseWords(clauses.first).map(titleCaseWord).join(' ');
+      final secondPart = cleanClauseWords(clauses[1]).map(titleCaseWord).join(' ');
+      if (firstPart.isNotEmpty &&
+          secondPart.isNotEmpty &&
+          firstPart.toLowerCase() != secondPart.toLowerCase()) {
+        final combinedWords = '$firstPart & $secondPart'.split(_whitespaceRegex);
+        if (combinedWords.length <= 5) {
+          result = '$firstPart & $secondPart';
+        } else {
+          final shortFirst = titleCaseWord(cleanClauseWords(clauses.first).last);
+          final shortSecond = titleCaseWord(cleanClauseWords(clauses[1]).last);
+          result = '$shortFirst & $shortSecond';
+        }
+      } else {
+        result = firstPart.isNotEmpty ? firstPart : secondPart;
+      }
+    } else {
+      final words = (clauses.isNotEmpty ? clauses.first : t)
+          .replaceAll(RegExp(r'[^\w\s\-/&]'), '')
+          .split(_whitespaceRegex)
+          .where((w) => w.isNotEmpty && !_taskFillerWords.contains(w.toLowerCase()))
+          .toList();
+      final capped = words.length > 4 ? words.take(4).toList() : words;
+      result = capped.map(titleCaseWord).join(' ');
+    }
+
+    if (result.isEmpty) {
+      final fallback = initialWords.take(4).map(titleCaseWord).join(' ');
+      return badgePrefix != null ? '$badgePrefix$fallback' : fallback;
+    }
+    return badgePrefix != null ? '$badgePrefix$result' : result;
+  }
 
   static const String tuningParamSchemaDesc =
       'paramName: numericValue unit (e.g. "dashSpeed: 14.0 m/s")';

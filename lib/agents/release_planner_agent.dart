@@ -55,15 +55,23 @@ class ReleasePlannerAgent {
                   .toString()
                   .trim();
           if (title.isEmpty || title == '...') continue;
+          final goal =
+              (item['goal'] ?? item['scope'] ?? '').toString().trim();
+          final combined = (goal.isNotEmpty &&
+                  goal != '...' &&
+                  !title.contains(' — ') &&
+                  title.toLowerCase() != goal.toLowerCase())
+              ? '$title — $goal'
+              : title;
           final role = (item['role'] ?? '').toString().trim().toLowerCase();
           if (role.contains('foundation') || role.contains('entity')) {
-            foundations.add(title);
+            foundations.add(combined);
           } else if (role.contains('guard') ||
               role.contains('feedback') ||
               role.contains('boundary')) {
-            guards.add(title);
+            guards.add(combined);
           } else {
-            actions.add(title);
+            actions.add(combined);
           }
         } else {
           final str = item.toString().trim();
@@ -241,6 +249,11 @@ class ReleasePlannerAgent {
                                   'description': LayersTextStyleGuide
                                       .taskGroupTitleSchemaDesc,
                                 },
+                                'goal': {
+                                  'type': 'STRING',
+                                  'description': LayersTextStyleGuide
+                                      .taskGroupGoalSchemaDesc,
+                                },
                               },
                             },
                           },
@@ -393,6 +406,11 @@ class ReleasePlannerAgent {
                       'type': 'STRING',
                       'description':
                           LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+                    },
+                    'goal': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.taskGroupGoalSchemaDesc,
                     },
                   },
                 },
@@ -562,6 +580,11 @@ class ReleasePlannerAgent {
                       'description':
                           LayersTextStyleGuide.taskGroupTitleSchemaDesc,
                     },
+                    'goal': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.taskGroupGoalSchemaDesc,
+                    },
                   },
                 },
               },
@@ -675,6 +698,11 @@ class ReleasePlannerAgent {
                                   'type': 'STRING',
                                   'description': LayersTextStyleGuide
                                       .taskGroupTitleSchemaDesc,
+                                },
+                                'goal': {
+                                  'type': 'STRING',
+                                  'description': LayersTextStyleGuide
+                                      .taskGroupGoalSchemaDesc,
                                 },
                               },
                             },

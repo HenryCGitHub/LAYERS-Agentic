@@ -1781,6 +1781,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       final isFixTask = task.text.trim().startsWith('[FIX]');
                       final isTaskActive =
                           cpIdx == checkpointIndex && tIdx == selectedTaskIdx;
+                      final isParentOverviewActive =
+                          isTaskActive && activeSubStepIdx == -1;
                       final doneSubCount = bp.subSteps
                           .where((s) => s.subtask.completed)
                           .length;
@@ -1857,13 +1859,32 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     _manualCheckpointFocusFeatureId = feat.id;
                                     _selectedTaskIndexByCheckpoint[cpNode.id] =
                                         tIdx;
+                                    _selectedSubStepIndexByTask[
+                                        '${cpNode.id}_$tIdx'] = -1;
                                   });
                                 },
-                                borderRadius: BorderRadius.circular(4),
-                                child: Padding(
+                                borderRadius: BorderRadius.circular(5),
+                                child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 2,
+                                    horizontal: 6,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isParentOverviewActive
+                                        ? bgSurface
+                                        : Colors.transparent,
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(5),
+                                      bottomRight: Radius.circular(5),
+                                    ),
+                                    border: isParentOverviewActive
+                                        ? Border(
+                                            left: BorderSide(
+                                              color: textPrimary,
+                                              width: 2.0,
+                                            ),
+                                          )
+                                        : null,
                                   ),
                                   child: Row(
                                     mainAxisAlignment:

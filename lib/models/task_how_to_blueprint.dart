@@ -216,11 +216,79 @@ class TaskHowToBlueprint {
     'reset_in_progress',
   };
 
-  /// Concise 3–4 word task title for the Left Outliner (condensing legacy verbose task sentences).
+  /// Concise 2–4 word task title for `01 STEPS` and the Step Picker dropdown.
   String get shortTaskTitle => formatConciseTaskTitle(cleanTitle);
+
+  /// Clear 1-sentence imperative goal for `02 TASK OVERVIEW` (`GOAL:`).
+  /// Uses the explicit `goal` part when `cleanTitle` is formatted as `"Title — Goal"`,
+  /// or uses the full sentence when `cleanTitle` is a legacy long sentence, or synthesizes
+  /// a natural 1-sentence goal from the child sub-steps when `cleanTitle` is a short 2–4 word label.
+  String get taskGoalSentence {
+    final raw = cleanTitle.replaceAll(_anyDurationTagRe, '').trim();
+    final dashIdx = raw.indexOf(' — ');
+    if (dashIdx > 0 && dashIdx + 3 < raw.length) {
+      final goalPart = raw.substring(dashIdx + 3).trim();
+      if (goalPart.isNotEmpty) {
+        return goalPart.endsWith('.') ? goalPart : '$goalPart.';
+      }
+    }
+    final words = raw.split(_whitespaceRegex).where((w) => w.isNotEmpty).toList();
+    if (words.length >= 6) {
+      final cap = raw[0].toUpperCase() + raw.substring(1);
+      return cap.endsWith('.') ? cap : '$cap.';
+    }
+    if (subSteps.isNotEmpty) {
+      final stepTitles = subSteps
+          .map((s) => s.shortTitle.trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
+      if (stepTitles.length == 1) {
+        final firstInst = subSteps.first.instruction.trim();
+        if (firstInst.isNotEmpty) {
+          return firstInst.endsWith('.') ? firstInst : '$firstInst.';
+        }
+      } else if (stepTitles.length >= 2) {
+        String lowerFirst(String s) =>
+            s.length > 1 ? '${s[0].toLowerCase()}${s.substring(1)}' : s.toLowerCase();
+        final first = stepTitles.first;
+        final rest = stepTitles.skip(1).take(2).map(lowerFirst).toList();
+        final joined = rest.length == 1
+            ? '$first and ${rest.first}'
+            : '$first, ${rest.first}, and ${rest.last}';
+        return joined.endsWith('.') ? joined : '$joined.';
+      }
+    }
+    if (raw.isEmpty) return 'Complete the implementation steps for this task group.';
+    return 'Configure and wire $raw in $whereLocation.';
+  }
+
+  /// Causal `Trigger → Result` verification check for `02 TASK OVERVIEW` (`✓ DONE:`),
+  /// reused directly from the task's final sub-step `verifyResult` (`0` extra tokens).
+  String get taskDoneCheck {
+    for (int i = subSteps.length - 1; i >= 0; i--) {
+      final rawVerify = subSteps[i]
+          .verifyResult
+          .replaceFirst(
+            RegExp(
+              r'^✓?\s*VERIFY(?:\s+IN\s+ENGINE|\s+BEFORE\s+CHECKING\s*\[✓\])?\s*:\s*',
+              caseSensitive: false,
+            ),
+            '',
+          )
+          .trim();
+      if (rawVerify.isNotEmpty) {
+        return rawVerify;
+      }
+    }
+    return 'Complete all ${subSteps.length} steps in $shortTaskTitle → behavior responds cleanly in Play mode.';
+  }
 
   static String formatConciseTaskTitle(String rawCleanTitle) {
     var text = rawCleanTitle.replaceAll(_anyDurationTagRe, '').trim();
+    final dashIdx = text.indexOf(' — ');
+    if (dashIdx > 0) {
+      text = text.substring(0, dashIdx).trim();
+    }
     final lower = text.toLowerCase();
     if (lower.startsWith('create actor/node structure') ||
         lower.startsWith('create actor / node structure')) {
