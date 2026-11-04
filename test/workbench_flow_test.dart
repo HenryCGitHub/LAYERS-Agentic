@@ -8034,5 +8034,123 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
       },
     );
+
+    group('Stage 1A "What\'s Missing" nudge', () {
+      Map<String, dynamic> intakeJson(Object? missing) => {
+            'workingTitle': 'Crop Shotgun',
+            'baseSummary':
+                'Fire grown vegetables at mutant beetle swarms in a top-down arena.',
+            'mechanics': ['Crop Firing'],
+            'expansionCards': [
+              for (int i = 1; i <= 3; i++)
+                {
+                  'badge': '0$i · TWIST',
+                  'title': 'Card $i',
+                  'description': 'Desc $i',
+                  'additionSummary': 'card $i',
+                },
+            ],
+            if (missing != null) 'missing': missing,
+          };
+
+      Future<WorkbenchProvider> pumpWithResponse(
+        WidgetTester tester,
+        Map<String, dynamic> response,
+      ) async {
+        tester.view.physicalSize = const Size(1440, 960);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final prev = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (p, m) async => response;
+        addTearDown(() => GeminiAgentClient.testMockResponder = prev);
+
+        final provider = WorkbenchProvider();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (ctx, _) => ProjectPitchScreen(workbench: provider),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_input_field')),
+          'Fire vegetables at beetles',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
+        await tester.pumpAndSettle();
+        return provider;
+      }
+
+      testWidgets('shows missing twist, seeds input on tap, ignores bare seed',
+          (tester) async {
+        final provider = await pumpWithResponse(
+          tester,
+          intakeJson([
+            {'kind': 'TWIST', 'question': 'What makes it stressful?'},
+            {'kind': 'bogus', 'question': 'ignored'},
+          ]),
+        );
+        expect(provider.sparkIntake!.missing!.length, 1);
+        expect(find.byKey(const ValueKey('spark_missing_nudge')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('spark_missing_TWIST')),
+            findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('spark_missing_TWIST')));
+        await tester.pump();
+        final field = tester.widget<TextField>(
+          find.byKey(const ValueKey('spark_input_field')),
+        );
+        expect(field.controller!.text, equals('Twist: '));
+        expect(find.byType(TextField), findsOneWidget);
+
+        // Bare seed submit is ignored (text stays, summary unchanged)
+        final before = provider.sparkIntake!.baseSummary;
+        await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
+        await tester.pumpAndSettle();
+        expect(field.controller!.text, equals('Twist: '));
+        expect(provider.sparkIntake!.baseSummary, equals(before));
+      });
+
+      testWidgets('empty missing shows covered line', (tester) async {
+        await pumpWithResponse(tester, intakeJson(<Object>[]));
+        expect(find.text('✓ Action, twist, and setup covered'),
+            findsOneWidget);
+      });
+
+      testWidgets('absent missing key shows no nudge row', (tester) async {
+        final provider = await pumpWithResponse(tester, intakeJson(null));
+        expect(provider.sparkIntake!.missing, isNull);
+        expect(find.byKey(const ValueKey('spark_missing_nudge')), findsNothing);
+      });
+
+      testWidgets('Undo hides the nudge', (tester) async {
+        await pumpWithResponse(
+          tester,
+          intakeJson([
+            {'kind': 'SETUP', 'question': 'What camera and engine?'},
+          ]),
+        );
+        expect(find.byKey(const ValueKey('spark_missing_nudge')),
+            findsOneWidget);
+        // Refine once so an Undo snapshot exists
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_input_field')),
+          'Add wall runs',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('spark_undo_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('spark_missing_nudge')), findsNothing);
+      });
+    });
   });
 }

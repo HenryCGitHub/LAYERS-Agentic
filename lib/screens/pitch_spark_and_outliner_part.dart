@@ -2,6 +2,11 @@ part of 'project_pitch_screen.dart';
 
 extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
   static const int _kSparkMaxCharsPerLine = 80;
+  static const Set<String> _kSparkNudgeSeeds = {
+    'twist:',
+    'camera and engine:',
+    'core action:',
+  };
 
   // ── Single-Input 80-Character Word Document Composer + Progress Animation (00 · PITCH & CONCEPT) ──
   Widget _buildInitialSparkLauncher() {
@@ -30,6 +35,8 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
           .replaceAll(_newlineCollapseRegex, ' ')
           .trim();
       if (singleLineInput.isEmpty && !hasSubmittedIdea) return;
+      // A bare nudge seed (e.g. "Twist:") has no answer yet; keep it in the box.
+      if (_kSparkNudgeSeeds.contains(singleLineInput.toLowerCase())) return;
 
       final previousSummary = intake?.baseSummary;
       _rebuild(() {
@@ -49,6 +56,8 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
       if (_sparkUndoStack.isEmpty || intake == null || isBusy) return;
       _rebuild(() {
         intake.baseSummary = _sparkUndoStack.removeLast();
+        // The nudge belongs to the newer summary; the next refine recomputes it.
+        intake.missing = null;
       });
     }
 
@@ -224,6 +233,10 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                         ),
                       ),
                     ),
+
+                  // "What's missing" nudge: only when Gemini checked (`missing != null`)
+                  if (hasSubmittedIdea && !isBusy && intake.missing != null)
+                    _buildMissingNudgeRow(intake.missing!, docPadX),
 
                   // Live Work-In-Progress Status Banner (Visible while AI is working)
                   if (isBusy)
@@ -470,6 +483,66 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
           ],
         ),
       ),
+    );
+  }
+
+  // ── "What's Missing" Nudge Row (plain text buttons, no pills) ──
+  Widget _buildMissingNudgeRow(List<SparkMissingPiece> missing, double docPadX) {
+    final labelStyle = GoogleFonts.jetBrainsMono(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.6,
+      color: textMuted,
+    );
+    return Container(
+      key: const ValueKey('spark_missing_nudge'),
+      padding: EdgeInsets.symmetric(horizontal: docPadX, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: borderSubtle)),
+      ),
+      child: missing.isEmpty
+          ? Text(
+              '✓ Action, twist, and setup covered',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: const Color(0xFF10B981),
+              ),
+            )
+          : Wrap(
+              spacing: 16,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('MISSING', style: labelStyle),
+                for (final piece in missing)
+                  InkWell(
+                    key: ValueKey('spark_missing_${piece.kind}'),
+                    onTap: () {
+                      _sparkController.value = TextEditingValue(
+                        text: piece.seed,
+                        selection:
+                            TextSelection.collapsed(offset: piece.seed.length),
+                      );
+                      _sparkFocusNode.requestFocus();
+                      _rebuild();
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: textMuted),
+                        ),
+                      ),
+                      child: Text(
+                        '${piece.kind} · ${piece.question}',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }

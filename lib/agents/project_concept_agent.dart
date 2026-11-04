@@ -23,6 +23,22 @@ class SparkExpansionCard {
   });
 }
 
+/// One thing the blueprint needs that the user's pitch doesn't state yet
+/// (`TWIST`, `SETUP`, or `ACTION`) plus a short question about their idea.
+class SparkMissingPiece {
+  final String kind;
+  final String question;
+
+  const SparkMissingPiece({required this.kind, required this.question});
+
+  /// Text dropped into the pitch input when the user taps this nudge.
+  String get seed => switch (kind) {
+        'TWIST' => 'Twist: ',
+        'SETUP' => 'Camera and engine: ',
+        _ => 'Core action: ',
+      };
+}
+
 /// Holds the ingested AI summary of the user's raw game idea on the New Project screen,
 /// plus the 3 toggleable Concept Expansion Cards tailored to that idea.
 class SparkIdeaIntakeResult {
@@ -32,12 +48,16 @@ class SparkIdeaIntakeResult {
   List<String> mechanics;
   List<SparkExpansionCard> expansionCards;
 
+  /// `null` = unknown (Gemini didn't say); `[]` = checked and nothing is missing.
+  List<SparkMissingPiece>? missing;
+
   SparkIdeaIntakeResult({
     required this.rawIdea,
     required this.workingTitle,
     required this.baseSummary,
     required this.mechanics,
     required this.expansionCards,
+    this.missing,
   });
 
   /// Returns the effective summary including any selected Expansion Cards.
@@ -120,6 +140,25 @@ class ProjectConceptAgent {
       result[0] = 'Godot 4 (GDScript)';
     } else {
       result[0] = 'Unreal Engine 5 (Blueprints / C++)';
+    }
+    return result;
+  }
+
+  /// Parses the optional `missing` array; returns `null` when absent/malformed.
+  static List<SparkMissingPiece>? _parseMissingPieces(dynamic raw) {
+    if (raw is! List) return null;
+    const kinds = {'TWIST', 'SETUP', 'ACTION'};
+    final seen = <String>{};
+    final result = <SparkMissingPiece>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final kind = (item['kind'] ?? '').toString().trim().toUpperCase();
+      final question = (item['question'] ?? '').toString().trim();
+      if (!kinds.contains(kind) || question.isEmpty || !seen.add(kind)) {
+        continue;
+      }
+      result.add(SparkMissingPiece(kind: kind, question: question));
+      if (result.length >= 2) break;
     }
     return result;
   }
@@ -360,6 +399,27 @@ class ProjectConceptAgent {
         'mechanics': {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
+        },
+        'missing': {
+          'type': 'ARRAY',
+          'description':
+              'At most 2 things the developer\'s own text does not state yet. Empty array when the action, twist, and setup are all present.',
+          'items': {
+            'type': 'OBJECT',
+            'required': ['kind', 'question'],
+            'properties': {
+              'kind': {
+                'type': 'STRING',
+                'description':
+                    'TWIST (the risk or cost), SETUP (camera and engine), or ACTION (what the player does every few seconds).',
+              },
+              'question': {
+                'type': 'STRING',
+                'description':
+                    'One short plain question about this specific idea, 12 words or fewer.',
+              },
+            },
+          },
         },
         'expansionCards': {
           'type': 'ARRAY',
@@ -1528,6 +1588,7 @@ ${existingIntake != null ? 'Original Premise: "${existingIntake.rawIdea}"\nPrevi
 ${GeminiAgentClient.compactStyleRules}
 - `workingTitle` MUST be a concrete 2-3 word game title naming the setting/role/mechanic (NEVER just copy the first 3 words of the user's sentence).
 - `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop in game-design language (NEVER quote, echo, or replace the summary with the user's raw input sentence verbatim).
+- `missing` lists (max 2) only what the developer's own text truly lacks: `TWIST` (a risk or cost), `SETUP` (camera and engine), `ACTION` (what the player does every few seconds). Never invent one; return an empty array when all three are present.
 ${existingIntake != null ? '- Preserve the core genre, role, and setting of `Previous Summary` while smoothly integrating `User Update Direction` (never switch to an unrelated genre).' : ''}
 
 Call `commit_spark_intake` with the structured summary.
@@ -1569,6 +1630,7 @@ Call `commit_spark_intake` with the structured summary.
       expansionCards: cards.isNotEmpty
           ? cards
           : (existingIntake?.expansionCards ?? const <SparkExpansionCard>[]),
+      missing: _parseMissingPieces(json['missing']),
     );
   }
 
