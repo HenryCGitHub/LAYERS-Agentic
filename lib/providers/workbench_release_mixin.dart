@@ -3455,11 +3455,15 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       final primaryAssetLine = primaryAsset.isNotEmpty
           ? 'Primary Shared Asset (modify this exact script/scene): $primaryAsset\n'
           : '';
+      final structuralSnapshot = _buildPriorCheckpointStructuralSnapshot(
+        states,
+        checkpointIndex + 1,
+      );
 
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize the exact number of concrete engine fix steps needed to resolve and verify it:
-$specContext$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}Reported Bug: "$issueDescription"
+$specContext$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
@@ -3653,6 +3657,10 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
       final primaryAssetLine = primaryAsset.isNotEmpty
           ? 'Primary Shared Asset (modify this exact script/scene): $primaryAsset\n'
           : '';
+      final structuralSnapshot = _buildPriorCheckpointStructuralSnapshot(
+        states,
+        checkpointIndex + 1,
+      );
 
       final prompt = '''
 You are a senior game engine programmer assisting with a concrete implementation task.
@@ -3660,7 +3668,7 @@ Engine: $engineLabel
 ${specContext}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
 Playtest Gate: "${cpNode.playtestCondition}"
 Target Task ($taskNum of ${cpNode.checklist.length}): "${parentTask.text}"
-$primaryAssetLine${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+$primaryAssetLine${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
@@ -3994,6 +4002,9 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
 
   static final RegExp _ledgerAssetTokenRegex = RegExp(
     r'\b(?:BP_[A-Za-z0-9_]+|IA_[A-Za-z0-9_]+|IMC_[A-Za-z0-9_]+|WBP_[A-Za-z0-9_]+|[A-Z][A-Za-z0-9_]+(?:Character|Controller|Pawn|Actor|Component|Spawner|Projectile|Weapon|Manager)\b|[A-Za-z0-9_]+\.(?:cs|gd|tscn|h|cpp))\b',
+  );
+  static final RegExp _scriptSymbolRegex = RegExp(
+    r'\b(?:func|signal|void|IEnumerator)\s+([A-Za-z_][A-Za-z0-9_]*)\b',
   );
 
   /// Native Gemini Tool (`functionDeclarations`) for Stage 2 3-Area How-To synthesis (`synthesizeFeatureHowToStepsWithAi`).
@@ -4489,14 +4500,110 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
     },
   };
 
+  /// Builds a consolidated, deduplicated structural snapshot of `CP1..CP(upToIndex)`
+  /// (short task badges, 1-line `area1Hierarchy` node tree, script functions/signals, and latest tuning vars)
+  /// so `CP2..CP5+` upgrades, task tailoring, and playtest fixes extend existing nodes/scripts in-place
+  /// without repeating verbose task sentences across releases.
+  String _buildPriorCheckpointStructuralSnapshot(
+    List<FeatureStateNode> states,
+    int upToIndex,
+  ) {
+    final effectiveEnd = upToIndex < states.length ? upToIndex : states.length;
+    if (effectiveEnd <= 0 || states.isEmpty) return '';
+
+    final stageBadges = <String>[];
+    final hierarchyNodes = <String>{};
+    final scriptSymbols = <String>{};
+    final latestTuningByKey = <String, String>{};
+    final guardItems = <String>{};
+
+    for (int i = 0; i < effectiveEnd; i++) {
+      final cp = states[i];
+      final shortTasks = cp.checklist
+          .map((t) => LayersTextStyleGuide.formatConciseTaskTitle(t.text))
+          .where((s) => s.isNotEmpty)
+          .take(3)
+          .join(', ');
+      stageBadges.add(
+        'CP${i + 1} (${cp.releaseVersion}: ${cp.cleanStageTitle}${shortTasks.isNotEmpty ? ' [$shortTasks]' : ''})',
+      );
+
+      for (final param in cp.tuningParams) {
+        final clean = param.trim();
+        if (clean.isEmpty) continue;
+        final key = clean.split(':').first.trim().toLowerCase();
+        if (key.isNotEmpty) {
+          latestTuningByKey[key] = clean;
+        }
+      }
+      for (final g in cp.edgeCases) {
+        final cleanG = g.replaceAll(_leadingBracketTagsRegex, '').trim();
+        if (cleanG.isNotEmpty) guardItems.add(cleanG);
+      }
+
+      for (final task in cp.checklist) {
+        for (final sub in task.children) {
+          final decoded =
+              TaskHowToBlueprint.decodeThreeAreaNotes(sub.specNotes);
+          final area1Text = decoded.area1Hierarchy?.trim() ?? '';
+          if (area1Text.isNotEmpty) {
+            for (final rawLine in area1Text.split('\n')) {
+              final cleanNode =
+                  rawLine.replaceAll(_treeGlyphPrefixRegex, '').trim();
+              if (cleanNode.isNotEmpty) {
+                hierarchyNodes.add(cleanNode);
+              }
+            }
+          }
+          final snippet = sub.codeSnippet ?? '';
+          if (snippet.isNotEmpty) {
+            for (final m in _scriptSymbolRegex.allMatches(snippet)) {
+              final sym = m.group(1)?.trim() ?? '';
+              if (sym.isNotEmpty) {
+                scriptSymbols.add(sym);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    final lines = <String>[
+      '- Built Checkpoints: ${stageBadges.join(' → ')}',
+    ];
+    if (hierarchyNodes.isNotEmpty) {
+      final nodeList = hierarchyNodes.take(8).toList();
+      final formattedTree = nodeList.length == 1
+          ? nodeList.first
+          : '${nodeList.first} > ${nodeList.skip(1).join(', ')}';
+      lines.add(
+        '- Existing Scene Hierarchy (extend in-place — do NOT recreate): $formattedTree',
+      );
+    }
+    final symbolParts = <String>[
+      if (scriptSymbols.isNotEmpty)
+        'funcs=[${scriptSymbols.take(6).join(', ')}]',
+      if (latestTuningByKey.isNotEmpty)
+        'vars=[${latestTuningByKey.values.take(6).join(', ')}]',
+      if (guardItems.isNotEmpty) 'guards=[${guardItems.take(4).join(', ')}]',
+    ];
+    if (symbolParts.isNotEmpty) {
+      lines.add('- Existing Script Symbols & Vars: ${symbolParts.join(' | ')}');
+    }
+    return lines.join('\n');
+  }
+
   /// Extracts a compact Cumulative Project Ledger entry for an already-synthesized feature
   /// so subsequent features reuse exact Actor/Scene/Script names and tuning variables without prose bloat.
   String _summarizeFeatureForProjectLedger(
     TierDocument featDoc,
-    int orderNumber,
-  ) {
+    int orderNumber, {
+    bool includeTuningVars = true,
+    bool includePlannedScopeFallback = false,
+  }) {
     final states = FeatureStateNode.getStatesForDocument(featDoc);
     final assetTokens = <String>{};
+    final hierarchyNodes = <String>{};
     final primaryAsset = (featDoc.sections['primary_asset'] ?? '').trim();
     if (primaryAsset.isNotEmpty) {
       assetTokens.add(primaryAsset);
@@ -4505,9 +4612,11 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
     final tuningTokens = <String>{};
 
     for (final cp in states) {
-      for (final param in cp.tuningParams) {
-        final clean = param.trim();
-        if (clean.isNotEmpty) tuningTokens.add(clean);
+      if (includeTuningVars) {
+        for (final param in cp.tuningParams) {
+          final clean = param.trim();
+          if (clean.isNotEmpty) tuningTokens.add(clean);
+        }
       }
       for (final task in cp.checklist) {
         for (final sub in task.children) {
@@ -4523,13 +4632,19 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               TaskHowToBlueprint.decodeThreeAreaNotes(sub.specNotes);
           final area1Text = decoded.area1Hierarchy?.trim() ?? '';
           if (area1Text.isNotEmpty) {
-            final rootLine = area1Text
-                .split('\n')
-                .first
+            final areaLines = area1Text.split('\n');
+            final rootLine = areaLines.first
                 .replaceAll(_treeGlyphPrefixRegex, '')
                 .trim();
             if (rootLine.isNotEmpty) {
               assetTokens.add(rootLine);
+            }
+            for (final rawLine in areaLines) {
+              final cleanNode =
+                  rawLine.replaceAll(_treeGlyphPrefixRegex, '').trim();
+              if (cleanNode.isNotEmpty) {
+                hierarchyNodes.add(cleanNode);
+              }
             }
           }
           final combinedText =
@@ -4559,7 +4674,21 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
     } else if (pathTokens.isNotEmpty) {
       parts.add('paths=[${pathTokens.take(2).join(', ')}]');
     }
-    if (tuningTokens.isNotEmpty) {
+    if (includePlannedScopeFallback && hierarchyNodes.length > 1) {
+      final nodePreview = hierarchyNodes.take(4).toList();
+      parts.add(
+        'nodes=[${nodePreview.first} > ${nodePreview.skip(1).join(', ')}]',
+      );
+    }
+    if (includePlannedScopeFallback) {
+      final scopeItems = SectionTextUtils.resolveInScope(featDoc.sections)
+          .take(2)
+          .toList();
+      if (scopeItems.isNotEmpty) {
+        parts.add('scope=[${scopeItems.join(', ')}]');
+      }
+    }
+    if (includeTuningVars && tuningTokens.isNotEmpty) {
       parts.add('vars=[${tuningTokens.take(5).join(', ')}]');
     }
     final summaryTail =
@@ -4667,50 +4796,54 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
           ? 'Project Build State: FEATURE #1 OF THE ENTIRE PROJECT (Greenfield). Create the foundational scene/character/arena asset ($engineAssetHint) and place it in the active level before wiring input and physics.'
           : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
 
-      // Build Focused Cumulative Project Ledger (max 5 relevant preceding features:
-      // Epic 1 foundational #1-#2 + same-Epic earlier siblings + immediate predecessor)
+      // Build Epic-Scoped Cumulative Project Ledger:
+      // 1) Root Project Anchor (`E01` foundational #1-#2 assets only, omitting cross-epic tuning vars)
+      // 2) Same-Epic earlier siblings (with assets, scene nodes, planned scope fallback, and tuning vars)
+      // Notice `featOrderIdx - 1` is NOT included when it belongs to a different Epic!
       final cumulativeLedgerLines = <String>[];
       if (featOrderIdx > 0) {
+        final firstEpicParentId = allReleaseFeatures.first.parentId;
         final selectedPrecedingIndices = <int>{
           0,
-          if (featOrderIdx > 1) 1,
+          if (featOrderIdx > 1 &&
+              allReleaseFeatures[1].parentId == firstEpicParentId)
+            1,
           for (int pIdx = 0; pIdx < featOrderIdx; pIdx++)
             if (feat.parentId != null &&
                 allReleaseFeatures[pIdx].parentId == feat.parentId)
               pIdx,
-          featOrderIdx - 1,
         }.toList()
           ..sort();
         final cappedIndices = selectedPrecedingIndices.length <= 5
             ? selectedPrecedingIndices
             : <int>[
                 selectedPrecedingIndices[0],
-                selectedPrecedingIndices[1],
+                if (selectedPrecedingIndices.length > 1)
+                  selectedPrecedingIndices[1],
                 ...selectedPrecedingIndices
                     .sublist(selectedPrecedingIndices.length - 3),
               ];
         for (final pIdx in cappedIndices) {
+          final isSameEpic = feat.parentId != null &&
+              allReleaseFeatures[pIdx].parentId == feat.parentId;
           cumulativeLedgerLines.add(
             _summarizeFeatureForProjectLedger(
               allReleaseFeatures[pIdx],
               pIdx + 1,
+              includeTuningVars: isSameEpic,
+              includePlannedScopeFallback: isSameEpic,
             ),
           );
         }
       }
 
-      // Gather previous checkpoints (including completed tasks across all prior releases) & Same-Epic Multi-Feature Scope Boundaries
-      final priorCheckpointsSummary = <String>[];
-      for (int i = 0; i < effectiveCpIndex; i++) {
-        final prev = states[i];
-        final prevTasks = prev.checklist
-            .map((t) => t.text.trim())
-            .where((t) => t.isNotEmpty)
-            .join(', ');
-        priorCheckpointsSummary.add(
-          '- ${prev.cleanStageTitle} (${prev.releaseVersion}): tasks=[$prevTasks], vars=[${prev.tuningParams.join(', ')}], guards=[${prev.edgeCases.join(', ')}]',
-        );
-      }
+      // Build Consolidated Prior-Checkpoint Structural Snapshot (`CP1..CP(effectiveCpIndex)`)
+      final priorCheckpointSnapshot = _buildPriorCheckpointStructuralSnapshot(
+        states,
+        effectiveCpIndex,
+      );
+
+      // Build Unified Same-Epic Multi-Feature Scope Boundaries (each sibling appears once)
       final sameEpicSiblingBoundaryLines = <String>[];
       if (feat.parentId != null) {
         final parentBeatDoc = documents[feat.parentId!];
@@ -4718,32 +4851,30 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         final selfBeatIdx = beatSiblings.indexWhere((s) => s.id == feat.id);
         if (beatSiblings.length > 1) {
           sameEpicSiblingBoundaryLines.add(
-            'SAME-EPIC MULTI-FEATURE SCOPE BOUNDARIES (Epic "${parentBeatDoc?.title ?? 'Active Epic'}" contains ${beatSiblings.length} distinct Features — current is ${selfBeatIdx + 1} of ${beatSiblings.length}):',
+            'SAME-EPIC MULTI-FEATURE SCOPE BOUNDARIES (Epic "${parentBeatDoc?.title ?? 'Active Epic'}" contains ${beatSiblings.length} distinct Sibling Features — current is ${selfBeatIdx + 1} of ${beatSiblings.length}):',
           );
-        }
-        for (int sIdx = 0; sIdx < beatSiblings.length; sIdx++) {
-          final sib = beatSiblings[sIdx];
-          if (sib.id == feat.id) continue;
-          final isEarlierInEpic = selfBeatIdx >= 0 && sIdx < selfBeatIdx;
-          if (!isEarlierInEpic) {
-            final sibStates = FeatureStateNode.getStatesForDocument(sib);
-            final sibVars = <String>{
-              for (final sibCp in sibStates) ...sibCp.tuningParams,
-            };
-            if (sibVars.isNotEmpty) {
-              priorCheckpointsSummary.add(
-                '- Sibling Feature "${sib.title}" (${sibStates.last.releaseVersion}): vars=[${sibVars.join(', ')}]',
-              );
-            }
-          }
-          if (beatSiblings.length > 1) {
+          for (int sIdx = 0; sIdx < beatSiblings.length; sIdx++) {
+            final sib = beatSiblings[sIdx];
+            if (sib.id == feat.id) continue;
+            final isEarlierInEpic = selfBeatIdx >= 0 && sIdx < selfBeatIdx;
             if (isEarlierInEpic) {
               sameEpicSiblingBoundaryLines.add(
-                '- Earlier Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}" -> ALREADY BUILT (reuse shared Actor/Script).',
+                '- Earlier Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}" -> ALREADY BUILT (reuse shared Actor/Script; see Ledger above).',
               );
             } else {
+              final sibStates = FeatureStateNode.getStatesForDocument(sib);
+              final sibScope = SectionTextUtils.resolveInScope(sib.sections)
+                  .take(2)
+                  .join(', ');
+              final sibVars = <String>{
+                for (final sibCp in sibStates) ...sibCp.tuningParams,
+              }.take(3).join(', ');
+              final details = <String>[
+                if (sibScope.isNotEmpty) 'reserved scope=[$sibScope]',
+                if (sibVars.isNotEmpty) 'reserved vars=[$sibVars]',
+              ].join(', ');
               sameEpicSiblingBoundaryLines.add(
-                '- Later Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}" -> QUEUED LATER IN THIS EPIC (do not implement here).',
+                '- Later Sibling in Same Epic (${sIdx + 1}/${beatSiblings.length}): "${sib.title}" -> QUEUED LATER IN THIS EPIC (do not implement here${details.isNotEmpty ? '; $details' : ''}).',
               );
             }
           }
@@ -4801,13 +4932,13 @@ You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle"
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
 ${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$phaseInstructionBlock
 $projectBuildStateContext
-${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Already Built in Earlier Features — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
+${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
 ${sameEpicSiblingBoundaryLines.isNotEmpty ? sameEpicSiblingBoundaryLines.join('\n') : ''}
 Tasks:
 ${taskSummaries.join('\n')}
 Active Tuning Parameters (MUST use exact variable names): ${cpNode.tuningParams.join(', ')}
 Active Guards (MUST enforce in code without raw [TAG] brackets in prose): ${cleanEdgeCases.join(', ')}
-${priorCheckpointsSummary.isNotEmpty ? 'Previous Checkpoints & Project Variable Context (reuse exact identifiers):\n${priorCheckpointsSummary.join('\n')}' : ''}
+${priorCheckpointSnapshot.isNotEmpty ? 'Previous Checkpoints Structural Snapshot (extend existing nodes & functions in-place):\n$priorCheckpointSnapshot' : ''}
 
 CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
 - ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.

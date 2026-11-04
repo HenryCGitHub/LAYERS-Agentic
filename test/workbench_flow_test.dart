@@ -7554,10 +7554,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
 
           // 10. Built feature never flips to "Waiting" when selected while another feature is synthesizing
+          String? capturedCp2Prompt;
           GeminiAgentClient.testMockResponder = (
             String prompt,
             String preferredModel,
           ) async {
+            capturedCp2Prompt = prompt;
             return {
               'primarySharedScriptOrScene':
                   'PlayerDashController (res://scripts/player_dash.gd)',
@@ -7573,7 +7575,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                             'Attach RayCast2D to Player and set target_position.',
                         'area1Hierarchy': 'Player\n └─ DashRay (RayCast2D)',
                         'area2Inspector': 'target_position = Vector2(120, 0)',
-                        'codeFormula': 'var dash_speed: float = 900.0',
+                        'codeFormula':
+                            'func _physics_process(delta: float) -> void:\n\tvar dash_speed: float = 900.0',
                         'verifyResult':
                             'Press Shift → Player dashes 4m forward.',
                       },
@@ -7592,6 +7595,56 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           expect(
             provider.isFeatureWaitingForStepsInLiveMode(firstFeat.id),
             isFalse,
+          );
+
+          // 11. Prior-Checkpoint Structural Snapshot extracts Existing Scene Hierarchy (area1Hierarchy) and Script Symbols (funcs=[...]) on CP2+
+          final statesForCp2 = FeatureStateNode.getStatesForDocument(firstFeat);
+          for (final t in statesForCp2.first.checklist) {
+            t.completed = true;
+            for (final c in t.children) {
+              c.completed = true;
+            }
+          }
+          statesForCp2.add(
+            FeatureStateNode(
+              id: '${firstFeat.id}_cp_2',
+              name: 'Checkpoint 2: Dash Ghost Trail',
+              trigger: 'Playtest: Press Shift → leaves 3 ghost sprites',
+              order: 1,
+              checklist: [
+                Subtask(
+                  id: 'cp2_t1',
+                  text:
+                      'Ghost Sprite Spawner — Spawn 3 fading afterimage sprites along the dash trajectory.',
+                ),
+              ],
+              coveredScope: const ['+3 fading afterimage sprites'],
+              tuningParams: const ['ghostFadeDuration: 0.25 s'],
+              edgeCases: const ['[STATE GUARD] Pool ghost sprites at 6'],
+              parameters: {
+                'releaseVersion': provider.activeReleaseVersionTag,
+              },
+            ),
+          );
+          provider.updateFeatureStates(firstFeat.id, statesForCp2);
+          await provider.synthesizeFeatureHowToStepsWithAi(
+            firstFeat.id,
+            forceRefresh: true,
+          );
+          expect(capturedCp2Prompt, isNotNull);
+          expect(
+            capturedCp2Prompt,
+            contains('Previous Checkpoints Structural Snapshot'),
+          );
+          expect(
+            capturedCp2Prompt,
+            contains(
+              'Existing Scene Hierarchy (extend in-place — do NOT recreate): Player > DashRay (RayCast2D)',
+            ),
+          );
+          expect(
+            capturedCp2Prompt,
+            contains('funcs=[_physics_process]'),
           );
         } finally {
           GeminiAgentClient.testMockResponder = prevResponder;
