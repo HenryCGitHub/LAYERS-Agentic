@@ -685,13 +685,50 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
     }
 
-    // Once v0.2+ releases are built, or when 06 · Core Loop itself was not modified,
-    // keep synthesized Stage 2 Epics intact rather than reconstructing them from Stage 1's v0.1 Core Loop.
+    // Once v0.2+ releases are built, keep existing synthesized Stage 2 Epics intact while
+    // non-destructively appending any brand-new Core Loop Beats added in Stage 1 (`06 · Core Loop`).
     final currentLoopSig = draft.coreLoopBeats.join('||');
     final previousLoopSig = rel.sections['synced_core_loop_sig'] ?? '';
-    if (!isSingleV01Release ||
-        draft.coreLoopBeats.isEmpty ||
-        currentLoopSig == previousLoopSig) {
+    if (draft.coreLoopBeats.isEmpty || currentLoopSig == previousLoopSig) {
+      return;
+    }
+    if (!isSingleV01Release) {
+      if (previousLoopSig.isNotEmpty) {
+        final prevSet = previousLoopSig
+            .split('||')
+            .map((s) => s.toLowerCase().trim())
+            .where((s) => s.isNotEmpty)
+            .toSet();
+        final currentLiveBeats = activeReleaseBeats;
+        final existingKeywordsList = [
+          for (final b in currentLiveBeats)
+            _extractBeatKeywords('${b.title} ${b.sections['scope'] ?? ''}'),
+        ];
+        final existingTitles = {
+          for (final b in currentLiveBeats) b.title.toLowerCase().trim(),
+        };
+        for (int i = 0; i < draft.coreLoopBeats.length; i++) {
+          final rawBeat = draft.coreLoopBeats[i].trim();
+          if (rawBeat.isEmpty || prevSet.contains(rawBeat.toLowerCase())) {
+            continue;
+          }
+          final parsed = _parseStage1CoreLoopBeat(rawBeat, i);
+          final normTitle = parsed.title.toLowerCase().trim();
+          if (existingTitles.contains(normTitle)) continue;
+          final newKw =
+              _extractBeatKeywords('${parsed.title} ${parsed.description}');
+          final matchesExisting = existingKeywordsList.any(
+            (ek) => _keywordSetOverlap(newKw, ek) >= 0.45,
+          );
+          if (!matchesExisting) {
+            addLiveEpicToActiveRelease(rawBeat);
+            existingTitles.add(normTitle);
+            existingKeywordsList.add(newKw);
+          }
+        }
+      }
+      rel.sections['synced_core_loop_sig'] = currentLoopSig;
+      _persistDocument(rel);
       return;
     }
     rel.sections['synced_core_loop_sig'] = currentLoopSig;

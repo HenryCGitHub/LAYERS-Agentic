@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/tier_document.dart';
 import '../local_vault_service.dart';
@@ -105,7 +106,9 @@ class VaultStorageWebImpl implements VaultStorageBackend {
       if (docIds.add(doc.id)) {
         await prefs.setStringList(_keyDocIds, docIds.toList());
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[VaultStorageWebImpl] Failed to save document ${doc.id}: $e');
+    }
   }
 
   @override

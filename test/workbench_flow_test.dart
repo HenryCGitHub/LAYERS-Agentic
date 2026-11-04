@@ -7646,6 +7646,61 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             capturedCp2Prompt,
             contains('funcs=[_physics_process]'),
           );
+
+          // 12. Full-Project Audit Upgrades: Direct Epic Creation, STABLE Sibling MVP Coverage, & v0.2+ Stage 1 Core Loop Append
+          final initialBeatCount = provider.activeReleaseBeats.length;
+          final newEpicId = provider.addLiveEpicToActiveRelease(
+            'Save & Meta-Progression: Persist unlocked relics between runs',
+          );
+          expect(newEpicId, isNotNull);
+          expect(
+            provider.activeReleaseBeats.length,
+            equals(initialBeatCount + 1),
+          );
+          final createdEpic = provider.documents[newEpicId!]!;
+          expect(createdEpic.title, equals('Save & Meta-Progression'));
+          expect(provider.featuresForBeat(newEpicId), isNotEmpty);
+
+          // Verify that a 100% complete STABLE v0.1 sibling feature in an Epic that also has an MVP feature does not deadlock mvpBeatCoverage()
+          final beatWithSiblings = provider.activeReleaseBeats.first;
+          final siblingFeats = provider.featuresForBeat(beatWithSiblings.id);
+          if (siblingFeats.length >= 2) {
+            final stableFeat = siblingFeats[0];
+            final upgradedFeat = siblingFeats[1];
+            final st0 = FeatureStateNode.getStatesForDocument(stableFeat);
+            for (final s in st0) {
+              for (final t in s.checklist) {
+                t.completed = true;
+                for (final c in t.children) {
+                  c.completed = true;
+                }
+              }
+            }
+            provider.updateFeatureStates(stableFeat.id, st0);
+
+            final st1 = FeatureStateNode.getStatesForDocument(upgradedFeat);
+            st1.add(
+              FeatureStateNode(
+                id: '${upgradedFeat.id}_v0.2_cp',
+                name: 'Checkpoint 2: MVP Upgrade',
+                trigger: 'Playtest MVP',
+                order: st1.length,
+                checklist: [
+                  Subtask(id: 'mvp_t1', text: 'MVP Task (2h)', completed: true),
+                ],
+                parameters: const {'releaseVersion': 'v0.2'},
+              ),
+            );
+            provider.updateFeatureStates(upgradedFeat.id, st1);
+
+            final mvpCov = provider.mvpBeatCoverage();
+            expect(mvpCov.completedBeatCodes, contains('E01'));
+            expect(
+              mvpCov.unupgradedProtoFeatureTitles
+                  .any((t) => t.contains(stableFeat.title)),
+              isFalse,
+            );
+          }
         } finally {
           GeminiAgentClient.testMockResponder = prevResponder;
         }

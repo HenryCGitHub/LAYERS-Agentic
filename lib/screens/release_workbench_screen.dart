@@ -70,6 +70,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final TextEditingController _stage2InlineEditController =
       TextEditingController();
   final TextEditingController _inboxCaptureCtrl = TextEditingController();
+  String _outlinerSearchQuery = '';
+  final TextEditingController _outlinerSearchController =
+      TextEditingController();
 
   @override
   void dispose() {
@@ -78,7 +81,25 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     _inlineTuningEditController.dispose();
     _stage2InlineEditController.dispose();
     _inboxCaptureCtrl.dispose();
+    _outlinerSearchController.dispose();
     super.dispose();
+  }
+
+  bool _featureMatchesOutlinerSearch(TierDocument feat, String rawQuery) {
+    final q = rawQuery.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    if (feat.title.toLowerCase().contains(q)) return true;
+    final pAsset = (feat.sections['primary_asset'] ?? '').toLowerCase();
+    if (pAsset.contains(q)) return true;
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    for (final s in states) {
+      final cpAsset =
+          (s.parameters['primarySharedScriptOrScene'] ?? '').toLowerCase();
+      if (cpAsset.contains(q)) return true;
+      if (s.tuningParams.any((tp) => tp.toLowerCase().contains(q))) return true;
+      if (s.edgeCases.any((ec) => ec.toLowerCase().contains(q))) return true;
+    }
+    return false;
   }
 
   String _formatOutlineBeatDisplayTitle(String rawBeatTitle) {

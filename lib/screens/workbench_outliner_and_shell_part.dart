@@ -829,6 +829,78 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               },
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            child: Container(
+              height: 30,
+              decoration: BoxDecoration(
+                color: bgSurface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _outlinerSearchQuery.trim().isNotEmpty
+                      ? borderBright
+                      : borderSubtle,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    size: 13,
+                    color: textMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('outliner_feature_search_input'),
+                      controller: _outlinerSearchController,
+                      onChanged: (val) {
+                        _rebuild(() {
+                          _outlinerSearchQuery = val;
+                        });
+                      },
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Filter features, scripts, vars...',
+                        hintStyle: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: textMuted,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+                  if (_outlinerSearchQuery.isNotEmpty)
+                    InkWell(
+                      key: const ValueKey('clear_outliner_search_btn'),
+                      onTap: () {
+                        _outlinerSearchController.clear();
+                        _rebuild(() {
+                          _outlinerSearchQuery = '';
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Text(
+                          '✕',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
           if (widget.workbench.releaseViewFilter == 'archived' &&
               archivedFeats.isNotEmpty) ...[
             Padding(
@@ -920,7 +992,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               widget.workbench.featuresForBeat(beat.id);
                           final showAllLiveFeatures =
                               widget.workbench.releaseViewFilter == 'all';
-                          final beatFeats = (!showAllLiveFeatures &&
+                          final baseBeatFeats = (!showAllLiveFeatures &&
                                   releaseHasActiveFeats)
                               ? allBeatFeats
                                   .where(
@@ -929,6 +1001,16 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   )
                                   .toList()
                               : allBeatFeats;
+                          final beatFeats = _outlinerSearchQuery.trim().isEmpty
+                              ? baseBeatFeats
+                              : baseBeatFeats
+                                  .where(
+                                    (f) => _featureMatchesOutlinerSearch(
+                                      f,
+                                      _outlinerSearchQuery,
+                                    ),
+                                  )
+                                  .toList();
                           final isSynthesizingBeat = widget.workbench
                               .isSynthesizingBeatFeatures(beat.id);
                           if (beatFeats.isEmpty &&
@@ -1032,21 +1114,32 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           ),
                                         ),
                                       ],
-                                      SizedBox(
-                                        width: 1,
-                                        height: 1,
-                                        child: Opacity(
-                                          opacity: 0,
-                                          child: InkWell(
-                                            key: ValueKey(
-                                              'rail_add_feat_to_beat_${beat.id}',
+                                      const SizedBox(width: 6),
+                                      Tooltip(
+                                        message: 'Add Feature to Epic',
+                                        child: InkWell(
+                                          key: ValueKey(
+                                            'rail_add_feat_to_beat_${beat.id}',
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          onTap: () => _startStage2InlineEdit(
+                                            'add_feat_${beat.id}',
+                                            '',
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                              vertical: 1,
                                             ),
-                                            onTap: () =>
-                                                _startStage2InlineEdit(
-                                              'add_feat_${beat.id}',
-                                              '',
+                                            child: Text(
+                                              '+',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: textMuted,
+                                              ),
                                             ),
-                                            child: const SizedBox.shrink(),
                                           ),
                                         ),
                                       ),
@@ -1093,6 +1186,54 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                             ],
                           );
                         },
+                      ),
+                    if (_activeStage2InlineEditKey == 'add_epic')
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+                        child: _buildStage2InlineEditor(
+                          editKey: 'add_epic',
+                          inputKey: const ValueKey(
+                            'workbench_add_live_epic_input',
+                          ),
+                          saveBtnKey: const ValueKey(
+                            'confirm_workbench_add_live_epic_btn',
+                          ),
+                          hintText:
+                              'New Epic (e.g. Save & Meta-Progression)...',
+                          onSave: (val) {
+                            _rebuild(() {
+                              _manualCheckpointFocusIndex = null;
+                              _manualCheckpointFocusFeatureId = null;
+                            });
+                            widget.workbench.addLiveEpicToActiveRelease(val);
+                          },
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: InkWell(
+                            key: const ValueKey('rail_add_epic_btn'),
+                            borderRadius: BorderRadius.circular(5),
+                            onTap: () => _startStage2InlineEdit('add_epic', ''),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 4,
+                              ),
+                              child: Text(
+                                '+ Add Epic',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: textMuted,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                   ],
                 );

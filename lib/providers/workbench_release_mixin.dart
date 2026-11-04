@@ -566,6 +566,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }) mvpBeatCoverage() {
     final builtReleases =
         projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
+    final protoVerTags = <String>{
+      'v0.1',
+      for (final r in builtReleases)
+        if (releasePhaseFor(r) == ProductionPhase.prototype)
+          releaseVersionTagFor(r).toLowerCase(),
+    };
     final mvpVerTags = <String>{
       for (final r in builtReleases)
         if (releasePhaseFor(r) == ProductionPhase.mvp)
@@ -580,6 +586,20 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final completedBeatCodes = <String>[];
     final incompleteBeatCodes = <String>[];
 
+    bool featureHasMvpPass(TierDocument f) {
+      final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
+      final states = FeatureStateNode.getStatesForDocument(f);
+      final hasMvpCheckpoint = mvpVerTags.contains(originVer) ||
+          states.any(
+            (s) => mvpVerTags.contains(s.releaseVersion.toLowerCase()),
+          );
+      final upgradedPostProto = !protoVerTags.contains(originVer) ||
+          states.any(
+            (s) => !protoVerTags.contains(s.releaseVersion.toLowerCase()),
+          );
+      return (upgradedPostProto || hasMvpCheckpoint) && states.isNotEmpty;
+    }
+
     for (int bIdx = 0; bIdx < beats.length; bIdx++) {
       final b = beats[bIdx];
       final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
@@ -590,28 +610,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
                 FeatureLifecycleStatus.superseded.name,
           )
           .toList();
-      bool allProtoFeaturesInBeatUpgraded = feats.isNotEmpty;
+      final beatHasAnyMvpPass = feats.any(featureHasMvpPass);
+      bool allFeaturesInBeatCovered = feats.isNotEmpty && beatHasAnyMvpPass;
       for (final f in feats) {
-        final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
-        final states = FeatureStateNode.getStatesForDocument(f);
-        final hasMvpCheckpoint = mvpVerTags.contains(originVer) ||
-            states.any(
-              (s) => mvpVerTags.contains(s.releaseVersion.toLowerCase()),
-            );
-        if (originVer == 'v0.1') {
-          totalProtoFeatures++;
-          final upgradedPostV01 = states.any(
-            (s) => s.releaseVersion.toLowerCase() != 'v0.1',
-          );
-          if (upgradedPostV01 || hasMvpCheckpoint) {
-            upgradedProtoFeatures++;
-          } else {
-            allProtoFeaturesInBeatUpgraded = false;
-            unupgradedProtoFeatureTitles.add('$eTag · ${f.title}');
-          }
+        totalProtoFeatures++;
+        final hasMvpPass = featureHasMvpPass(f);
+        final isStableCompletedInCoveredBeat =
+            beatHasAnyMvpPass && getDocumentProgress(f.id) >= 100;
+        if (hasMvpPass || isStableCompletedInCoveredBeat) {
+          upgradedProtoFeatures++;
+        } else {
+          allFeaturesInBeatCovered = false;
+          unupgradedProtoFeatureTitles.add('$eTag · ${f.title}');
         }
       }
-      if (allProtoFeaturesInBeatUpgraded) {
+      if (allFeaturesInBeatCovered) {
         coveredBeats++;
         completedBeatCodes.add(eTag);
       } else {
@@ -638,8 +651,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
   /// Evaluates how many Core Loop Epics (`activeReleaseBeats`) and live Features have received
   /// `Vertical Slice` polish coverage across built `ProductionPhase.verticalSlice` releases.
-  /// An Epic only counts as complete (`polishedBeats++`) once ALL of its non-superseded
-  /// features have received a `Vertical Slice` polish checkpoint.
+  /// An Epic counts as complete (`polishedBeats++`) once it has received a Vertical Slice polish
+  /// checkpoint and all of its non-superseded features are either Vertical-Slice polished or
+  /// `100%` complete `STABLE ✓` features.
   ({
     int polishedBeats,
     int totalBeats,
@@ -667,6 +681,15 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final completedBeatCodes = <String>[];
     final incompleteBeatCodes = <String>[];
 
+    bool featureHasVsPass(TierDocument f) {
+      final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
+      final states = FeatureStateNode.getStatesForDocument(f);
+      return vsVerTags.contains(originVer) ||
+          states.any(
+            (s) => vsVerTags.contains(s.releaseVersion.toLowerCase()),
+          );
+    }
+
     for (int bIdx = 0; bIdx < beats.length; bIdx++) {
       final b = beats[bIdx];
       final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
@@ -677,16 +700,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
                 FeatureLifecycleStatus.superseded.name,
           )
           .toList();
-      bool allFeaturesInBeatPolished = feats.isNotEmpty;
+      final beatHasAnyVsPass = feats.any(featureHasVsPass);
+      bool allFeaturesInBeatPolished = feats.isNotEmpty && beatHasAnyVsPass;
       for (final f in feats) {
         totalFeatures++;
-        final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
-        final states = FeatureStateNode.getStatesForDocument(f);
-        final hasVsCheckpoint = vsVerTags.contains(originVer) ||
-            states.any(
-              (s) => vsVerTags.contains(s.releaseVersion.toLowerCase()),
-            );
-        if (hasVsCheckpoint) {
+        final hasVsCheckpoint = featureHasVsPass(f);
+        final isStableCompletedInPolishedBeat =
+            beatHasAnyVsPass && getDocumentProgress(f.id) >= 100;
+        if (hasVsCheckpoint || isStableCompletedInPolishedBeat) {
           polishedFeatures++;
         } else {
           allFeaturesInBeatPolished = false;
@@ -1817,7 +1838,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       final priorRelDoc = documents[priorBp.releaseDocId];
       if (priorRelDoc != null) {
         priorRelDoc.sections['release_blueprint_json'] =
-            jsonEncode(priorBp.toJson());
+            _encodeCompactArchivedReleaseBlueprint(priorBp);
         _persistDocument(priorRelDoc);
       }
     }
@@ -2846,6 +2867,208 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       shortTitle.isNotEmpty ? shortTitle : cleanEx,
       customGoal: 'Promote "$shortTitle" into playable ${bp.releaseVersionTag} scope.',
     );
+  }
+
+  /// Compacts an archived `ReleaseBlueprint` JSON snapshot when shipping/advancing a release
+  /// so browser `localStorage` (`5 MB` quota) does not accumulate redundant `questions`,
+  /// `lastAgentReply`, or duplicate `stable` feature checkpoints across 10+ releases.
+  String _encodeCompactArchivedReleaseBlueprint(ReleaseBlueprint bp) {
+    final map = bp.toJson();
+    map['questions'] = const <Map<String, dynamic>>[];
+    map.remove('lastAgentReply');
+    final rawBeats = map['beats'];
+    if (rawBeats is List) {
+      for (final b in rawBeats) {
+        if (b is Map<String, dynamic>) {
+          final rawFeats = b['features'];
+          if (rawFeats is List) {
+            for (final f in rawFeats) {
+              if (f is Map<String, dynamic> && f['lifecycle'] == 'stable') {
+                f['checkpoints'] = const <Map<String, dynamic>>[];
+              }
+            }
+          }
+        }
+      }
+    }
+    return jsonEncode(map);
+  }
+
+  /// Adds a new Epic (`TierType.epic`) with a starter Playable Feature directly into the
+  /// active release inside `2. Workbench` and returns the created Epic's document ID.
+  String? addLiveEpicToActiveRelease(
+    String rawTitle, {
+    String? initialFeatureTitle,
+  }) {
+    final rel = activeRelease;
+    final trimmed = rawTitle.trim();
+    if (rel == null || trimmed.isEmpty) return null;
+
+    String epicTitle = trimmed;
+    String epicDesc = trimmed;
+    final colonIdx = trimmed.indexOf(':');
+    final dashIdx = trimmed.indexOf('—');
+    int splitIdx = -1;
+    if (colonIdx > 0 && (dashIdx < 0 || colonIdx < dashIdx)) {
+      splitIdx = colonIdx;
+    } else if (dashIdx > 0) {
+      splitIdx = dashIdx;
+    }
+    if (splitIdx > 0) {
+      final t = trimmed.substring(0, splitIdx).trim();
+      final d = trimmed.substring(splitIdx + 1).trim();
+      if (t.isNotEmpty) epicTitle = t;
+      if (d.isNotEmpty) epicDesc = d;
+    }
+
+    final versionTag = activeReleaseVersionTag;
+    final beatIndex = rel.childrenIds.length;
+    final beatId =
+        'beat_${rel.id}_${beatIndex + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
+    final featTitle = (initialFeatureTitle != null &&
+            initialFeatureTitle.trim().isNotEmpty)
+        ? initialFeatureTitle.trim()
+        : ReleasePlannerAgent.disambiguateFeatureTitleFromBeat(
+            epicTitle,
+            beatTitle: epicTitle,
+            featureGoal: epicDesc,
+            beatIndex: beatIndex,
+          );
+    final featId = 'feat_${beatId}_1';
+    final playtestGate =
+        'Trigger $featTitle in the test scene -> $epicTitle responds cleanly';
+    final starterTasks = <String>[
+      'Create actor/node structure and base properties for $featTitle (2h)',
+      'Implement core state transitions and player input for $featTitle (1h)',
+      'Hook visual/audio feedback cues and state guard for $featTitle (1h)',
+    ];
+    final starterGuards = <String>[
+      '[STATE GUARD] Block duplicate $featTitle activation while active',
+    ];
+    final stateNode = FeatureStateNode(
+      id: '${featId}_${versionTag}_cp_1',
+      name: 'Checkpoint 1: $featTitle',
+      trigger: 'Playtest: $playtestGate',
+      order: 0,
+      checklist: [
+        for (int tIdx = 0; tIdx < starterTasks.length; tIdx++)
+          Subtask(
+            id: '${featId}_t_${tIdx + 1}',
+            text: starterTasks[tIdx],
+            completed: false,
+          ),
+      ],
+      coveredScope: [featTitle],
+      tuningParams: const ['cooldown: 0.4 s', 'speed: 1.0 x'],
+      edgeCases: starterGuards,
+      parameters: {'releaseVersion': versionTag},
+    );
+    for (int tIdx = 0; tIdx < stateNode.checklist.length; tIdx++) {
+      TaskHowToBlueprint.resolve(
+        parentTask: stateNode.checklist[tIdx],
+        taskIndex: tIdx,
+        checkpointNode: stateNode,
+        engineHint: _activeEngineHint,
+        phase: _currentPhase,
+      );
+    }
+
+    final featDoc = TierDocument(
+      id: featId,
+      title: featTitle,
+      tier: TierType.feature,
+      parentId: beatId,
+      estimatedDuration: '4h',
+      sections: {
+        'originVersion': versionTag,
+        'activeReleaseVersion': versionTag,
+        'lifecycle': FeatureLifecycleStatus.newFeature.name,
+        'scope':
+            'Goal: +$featTitle\n\nIn Scope:\n• $featTitle\n\nDone When: $playtestGate',
+        'variables': '• cooldown: 0.4 s\n• speed: 1.0 x',
+        'tuning': '• cooldown: 0.4 s\n• speed: 1.0 x',
+        'edge_cases': starterGuards.map((e) => '• $e').join('\n'),
+      },
+    );
+    FeatureStateNode.saveStatesToDocument(featDoc, [stateNode]);
+    documents[featId] = featDoc;
+    _persistDocument(featDoc);
+
+    final beatDoc = TierDocument(
+      id: beatId,
+      title: epicTitle,
+      tier: TierType.epic,
+      parentId: rel.id,
+      estimatedDuration: '4h',
+      childrenIds: [featId],
+      sections: {
+        'scope':
+            'Goal: Build and playtest $epicDesc\n\nIn Scope:\n• $featTitle\n\nDone When: $playtestGate',
+      },
+    );
+    documents[beatId] = beatDoc;
+    _persistDocument(beatDoc);
+
+    for (final r in projectReleases) {
+      if (r.id == rel.id || r.childrenIds.isNotEmpty) {
+        if (!r.childrenIds.contains(beatId)) {
+          r.childrenIds.add(beatId);
+          _persistDocument(r);
+        }
+      }
+    }
+
+    final bp = _releaseBlueprint;
+    if (bp != null) {
+      bp.beats.add(
+        ProposedBeatBlueprint(
+          id: beatId,
+          title: epicTitle,
+          goal: epicDesc,
+          doneWhen: playtestGate,
+          features: [
+            ProposedFeatureBlueprint(
+              id: featId,
+              title: featTitle,
+              goal: '+$featTitle',
+              doneWhen: playtestGate,
+              estimatedHours: 4,
+              included: true,
+              lifecycle: FeatureLifecycleStatus.newFeature,
+              originVersion: versionTag,
+              inScope: [featTitle],
+              outOfScope: const [],
+              tuningParams: const ['cooldown: 0.4 s', 'speed: 1.0 x'],
+              edgeCases: starterGuards,
+              checkpoints: [
+                ProposedCheckpointBlueprint(
+                  title: featTitle,
+                  playtestCriteria: playtestGate,
+                  tasks: starterTasks,
+                  coveredScope: [featTitle],
+                  tuningParams: const ['cooldown: 0.4 s', 'speed: 1.0 x'],
+                  edgeCases: starterGuards,
+                  releaseVersion: versionTag,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      rel.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
+      _persistDocument(rel);
+    }
+
+    _selectedBeatId = beatId;
+    selectFeature(featId, triggerAiSynthesis: false);
+    _syncActiveProjectMetadata();
+    if (GeminiAgentClient.hasKey(_apiKey) ||
+        GeminiAgentClient.testMockResponder != null) {
+      _enrichLiveFeatureWithAi(featId, epicTitle);
+    } else {
+      notifyListeners();
+    }
+    return beatId;
   }
 
   /// Adds a new Playable Feature directly into an active Epic (`beatId`) inside `2. Workbench`

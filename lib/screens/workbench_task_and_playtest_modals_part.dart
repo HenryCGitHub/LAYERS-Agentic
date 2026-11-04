@@ -572,6 +572,21 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         ),
         actions: [
           TextButton(
+            key: const ValueKey('open_sync_code_from_spec_dialog_btn'),
+            onPressed: () {
+              Navigator.of(ctx).pop(false);
+              _showSyncFeatureFromCodeDialog(feat, node);
+            },
+            child: Text(
+              '⇄ Sync from Code',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: accentEmerald,
+              ),
+            ),
+          ),
+          TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'Cancel',
