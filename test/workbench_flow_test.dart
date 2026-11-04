@@ -8075,8 +8075,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             intake.baseSummary.toLowerCase(),
             contains(chip.currentValue.toLowerCase()),
           );
-          expect(chip.alternatives.length, greaterThanOrEqualTo(2));
+          expect(chip.alternatives, isNotEmpty);
         }
+        // Mock responder returns no AI alternatives; seed chip 0 as Gemini would.
+        intake.expressiveChips[0].alternatives = [
+          intake.expressiveChips[0].currentValue,
+          'magnetic rail dashing',
+          'tether-driven wall running',
+        ];
         expect(
           find.byKey(const ValueKey('spark_expressive_chip_0')),
           findsOneWidget,
@@ -8148,6 +8154,19 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('magnetic tether boots'),
         );
         expect(intake.baseSummary, contains('magnetic tether boots'));
+
+        // Regression: no chip option is a sentence or repeated across chips
+        final seenAlts = <String>{};
+        for (final chip in intake.expressiveChips) {
+          for (final alt in chip.alternatives) {
+            expect(alt.trim().endsWith('.'), isFalse);
+            expect(alt.split(RegExp(r'\s+')).length, lessThanOrEqualTo(6));
+            if (alt.toLowerCase() != chip.currentValue.toLowerCase()) {
+              expect(seenAlts.add(alt.toLowerCase()), isTrue,
+                  reason: 'Option "$alt" repeated across chips');
+            }
+          }
+        }
       },
     );
   });
