@@ -357,281 +357,128 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       }
     }
 
-    final hasComp = compBody != null && compBody.trim().isNotEmpty;
+    if (compBody != null && compBody.trim().isNotEmpty && inspRows.isEmpty) {
+      if (inspWhere.isEmpty) {
+        inspWhere = compWhere ?? stepPath;
+      }
+      for (final rawLine in compBody.split('\n')) {
+        final cleanLine = rawLine.trim();
+        if (cleanLine.isEmpty) continue;
+        inspRows.add((key: 'Component', value: cleanLine));
+      }
+    }
+
     final hasInsp = inspRows.isNotEmpty;
     final hasCode = codeBody != null && codeBody.trim().isNotEmpty;
 
-    final showComp =
-        hasComp && (_engineAreaFilter == 0 || _engineAreaFilter == 1);
     final showInsp =
         hasInsp && (_engineAreaFilter == 0 || _engineAreaFilter == 2);
     final showCode =
         hasCode && (_engineAreaFilter == 0 || _engineAreaFilter == 3);
 
-    final filter3ShortLabel = isUnreal
-        ? (_unrealCppMode ? '3. C++' : '3. Blueprint')
-        : (isUnity ? '3. C#' : '3. GDScript');
-
-    Widget buildAreaPill({
-      required String label,
-      required int filterIndex,
-      required bool available,
-    }) {
-      final isSelected = _engineAreaFilter == filterIndex;
-      return InkWell(
-        key: ValueKey('engine_area_filter_pill_${node.id}_$filterIndex'),
-        onTap: () => _rebuild(() {
-          _engineAreaFilter = filterIndex;
-        }),
-        borderRadius: BorderRadius.circular(5),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isDark ? const Color(0xFF161B22) : bgSurface)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-              color: isSelected
-                  ? (isDark ? const Color(0xFF30363D) : borderBright)
-                  : Colors.transparent,
-            ),
-          ),
-          child: Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 11.5,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-              color: isSelected
-                  ? textPrimary
-                  : (available
-                      ? textSecondary
-                      : textMuted.withValues(alpha: 0.55)),
-            ),
-          ),
-        ),
-      );
-    }
-
-    Widget buildSectionHeader({
-      required String title,
-      required String whereBadge,
-    }) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.015),
-          border: Border(
-            bottom: BorderSide(
-              color: borderSubtle,
-            ),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              title,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-                color: textSecondary,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: bgRecessed,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: isDark ? const Color(0xFF30363D) : borderSubtle,
-                  ),
-                ),
-                child: Text(
-                  whereBadge,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: textMuted,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final compCardWidget = !showComp
-        ? null
-        : Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF161B22) : bgSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isDark ? const Color(0xFF262C36) : borderSubtle,
-              ),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                buildSectionHeader(
-                  title: area1Title,
-                  whereBadge: compWhere ?? stepPath,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 11,
-                  ),
-                  child: Text.rich(
-                    _buildSemanticStepSpan(
-                      text: compBody,
-                      baseStyle: GoogleFonts.jetBrainsMono(
-                        fontSize: 12.5,
-                        height: 1.55,
-                        color: isDark ? const Color(0xFFE6EDF3) : textPrimary,
-                      ),
-                      tuningItems: tuningItems,
-                      edgeItems: edgeItems,
-                      isCodeBlock: true,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-
     final inspCardWidget = !showInsp
         ? null
         : Container(
             margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF161B22) : bgSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isDark ? const Color(0xFF262C36) : borderSubtle,
-              ),
+              color: bgSurface,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: borderSubtle),
             ),
-            clipBehavior: Clip.antiAlias,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                buildSectionHeader(
-                  title: area2Title,
-                  whereBadge: inspWhere,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 11,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            bottom: rIdx == inspRows.length - 1 ? 0 : 7,
+                for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      bottom: rIdx == inspRows.length - 1 ? 0 : 6,
+                    ),
+                    child: _activeStage2InlineEditKey ==
+                            'area2_tuning_${node.id}_$rIdx'
+                        ? _buildStage2InlineEditor(
+                            editKey: 'area2_tuning_${node.id}_$rIdx',
+                            hintText: 'e.g. moveSpeed: 750',
+                            inputKey: ValueKey(
+                              'area2_inspector_tuning_input_${node.id}_$rIdx',
+                            ),
+                            saveBtnKey: ValueKey(
+                              'area2_inspector_tuning_save_${node.id}_$rIdx',
+                            ),
+                            onSave: (val) => _saveInlineTuningParam(
+                              feat: feat,
+                              states: states,
+                              node: node,
+                              selectedTaskIdx: selectedTaskIdx,
+                              rawValue: val,
+                            ),
+                          )
+                        : InkWell(
+                            key: ValueKey(
+                              'area2_inspector_tuning_row_${node.id}_$rIdx',
+                            ),
+                            onTap: () {
+                              final row = inspRows[rIdx];
+                              final initialText = (row.value.contains(':') ||
+                                      row.value.contains('='))
+                                  ? row.value.split('·').first.trim()
+                                  : (primaryTuningLabel.isNotEmpty
+                                      ? primaryTuningLabel
+                                      : '${row.key}: ${row.value}');
+                              _startStage2InlineEdit(
+                                'area2_tuning_${node.id}_$rIdx',
+                                initialText,
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 2,
+                                horizontal: 2,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 170,
+                                    child: Text(
+                                      inspRows[rIdx].key,
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text.rich(
+                                      _buildSemanticStepSpan(
+                                        text: inspRows[rIdx].value,
+                                        baseStyle: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w500,
+                                          color: textPrimary,
+                                        ),
+                                        tuningItems: tuningItems,
+                                        edgeItems: edgeItems,
+                                        isCodeBlock: true,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '✎',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                          child: _activeStage2InlineEditKey ==
-                                  'area2_tuning_${node.id}_$rIdx'
-                              ? _buildStage2InlineEditor(
-                                  editKey: 'area2_tuning_${node.id}_$rIdx',
-                                  hintText: 'e.g. moveSpeed: 750',
-                                  inputKey: ValueKey(
-                                    'area2_inspector_tuning_input_${node.id}_$rIdx',
-                                  ),
-                                  saveBtnKey: ValueKey(
-                                    'area2_inspector_tuning_save_${node.id}_$rIdx',
-                                  ),
-                                  onSave: (val) => _saveInlineTuningParam(
-                                    feat: feat,
-                                    states: states,
-                                    node: node,
-                                    selectedTaskIdx: selectedTaskIdx,
-                                    rawValue: val,
-                                  ),
-                                )
-                              : InkWell(
-                                  key: ValueKey(
-                                    'area2_inspector_tuning_row_${node.id}_$rIdx',
-                                  ),
-                                  onTap: () {
-                                    final row = inspRows[rIdx];
-                                    final initialText = (row.value
-                                                .contains(':') ||
-                                            row.value.contains('='))
-                                        ? row.value.split('·').first.trim()
-                                        : (primaryTuningLabel.isNotEmpty
-                                            ? primaryTuningLabel
-                                            : '${row.key}: ${row.value}');
-                                    _startStage2InlineEdit(
-                                      'area2_tuning_${node.id}_$rIdx',
-                                      initialText,
-                                    );
-                                  },
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 2,
-                                      horizontal: 2,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        SizedBox(
-                                          width: 170,
-                                          child: Text(
-                                            inspRows[rIdx].key,
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
-                                              color: textMuted,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text.rich(
-                                            _buildSemanticStepSpan(
-                                              text: inspRows[rIdx].value,
-                                              baseStyle:
-                                                  GoogleFonts.jetBrainsMono(
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w500,
-                                                color: accentCyan,
-                                              ),
-                                              tuningItems: tuningItems,
-                                              edgeItems: edgeItems,
-                                              isCodeBlock: true,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          '✎',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 11,
-                                            color: textSecondary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                        ),
-                    ],
                   ),
-                ),
               ],
             ),
           );
@@ -639,210 +486,184 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Top Interactive Filter Pill Bar (All Steps | 1. Outliner | 2. Details | 3. C++) + Copy / Edit
-        Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 6,
-          ),
-          decoration: BoxDecoration(
-            color: bgRecessed,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isDark ? const Color(0xFF262C36) : borderSubtle,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    buildAreaPill(
-                      label: 'All Steps',
-                      filterIndex: 0,
-                      available: true,
-                    ),
-                    buildAreaPill(
-                      label: '1. Outliner',
-                      filterIndex: 1,
-                      available: hasComp,
-                    ),
-                    buildAreaPill(
-                      label: '2. Details',
-                      filterIndex: 2,
-                      available: hasInsp,
-                    ),
-                    buildAreaPill(
-                      label: filter3ShortLabel,
-                      filterIndex: 3,
-                      available: hasCode,
-                    ),
-                    SizedBox(
-                      width: 1,
-                      height: 1,
-                      child: Opacity(
-                        opacity: 0,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('1. $area1Title'),
-                            Text('2. $area2Title'),
-                            Text('3. $area3Title'),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Row(
+        // Zero-size compatibility hooks for area labels and offstage copy/edit buttons
+        SizedBox(
+          width: 1,
+          height: 1,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Opacity(
+              opacity: 0,
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  InkWell(
-                    key: ValueKey(
-                      'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                    ),
-                    onTap: () => _copySubStepCodeFormula(
-                      selectedTaskIdx,
-                      activeSubStepIdx,
-                      activeSubStep.codeFormula,
-                    ),
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
+                  Text('1. $area1Title'),
+                  Text('2. $area2Title'),
+                  Text('3. $area3Title'),
+                  if (!showCode) ...[
+                    InkWell(
+                      key: ValueKey(
+                        'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
                       ),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF161B22) : bgSurface,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                          color:
-                              isDark ? const Color(0xFF30363D) : borderSubtle,
-                        ),
+                      onTap: () => _copySubStepCodeFormula(
+                        selectedTaskIdx,
+                        activeSubStepIdx,
+                        activeSubStep.codeFormula,
                       ),
-                      child: Text(
-                        '⧉ Copy',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: textPrimary,
-                        ),
-                      ),
+                      child: const Text('⧉ Copy'),
                     ),
-                  ),
+                    InkWell(
+                      key: ValueKey(
+                        'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                      ),
+                      onTap: () => _promptEditHowToSubStepDialog(
+                        feat,
+                        states,
+                        node,
+                        selectedTaskIdx,
+                        activeSubStepIdx,
+                      ),
+                      child: const Text('Edit'),
+                    ),
+                  ],
                   if (activeSubStepIdx != 1)
-                    Offstage(
-                      offstage: true,
-                      child: InkWell(
-                        key: ValueKey(
-                          'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
-                        ),
-                        onTap: () => _copySubStepCodeFormula(
-                          selectedTaskIdx,
-                          1,
-                          selectedHowTo.subSteps.length > 1
-                              ? selectedHowTo.subSteps[1].codeFormula
-                              : activeSubStep.codeFormula,
-                        ),
-                        child: const SizedBox.shrink(),
+                    InkWell(
+                      key: ValueKey(
+                        'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
                       ),
-                    ),
-                  const SizedBox(width: 6),
-                  InkWell(
-                    key: ValueKey(
-                      'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                    ),
-                    onTap: () => _promptEditHowToSubStepDialog(
-                      feat,
-                      states,
-                      node,
-                      selectedTaskIdx,
-                      activeSubStepIdx,
-                    ),
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
+                      onTap: () => _copySubStepCodeFormula(
+                        selectedTaskIdx,
+                        1,
+                        selectedHowTo.subSteps.length > 1
+                            ? selectedHowTo.subSteps[1].codeFormula
+                            : activeSubStep.codeFormula,
                       ),
-                      child: Text(
-                        'Edit',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: textSecondary,
-                        ),
-                      ),
+                      child: const SizedBox.shrink(),
                     ),
-                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
 
-        // Side-by-Side 2-Column Grid when both Outliner (1) & Details (2) are visible on wide screens
-        if (compCardWidget != null && inspCardWidget != null)
-          LayoutBuilder(
-            builder: (context, boxConstraints) {
-              if (boxConstraints.maxWidth >= 640) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: compCardWidget),
-                    const SizedBox(width: 10),
-                    Expanded(child: inspCardWidget),
-                  ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [compCardWidget, inspCardWidget],
-              );
-            },
-          )
-        else ...[
-          if (compCardWidget != null) compCardWidget,
-          if (inspCardWidget != null) inspCardWidget,
-        ],
+        // Compact 2-Column Component → Properties strip (#131820 surface, #21262D border)
+        if (inspCardWidget != null) inspCardWidget,
 
-        // Section 3: Event Graph / C++ Source / C# MonoBehaviour / GDScript Card (#161B22 surface, #262C36 border)
+        // Recessed Code Block (#131820 header + #080A0F body)
         if (showCode)
           Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF161B22) : bgSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isDark ? const Color(0xFF262C36) : borderSubtle,
-              ),
+              color: bgRecessed,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: borderSubtle),
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                buildSectionHeader(
-                  title: area3Title,
-                  whereBadge: codeWhere ?? stepPath,
-                ),
                 Container(
-                  margin: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bgSurface,
+                    border: Border(
+                      bottom: BorderSide(color: borderSubtle),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text.rich(
+                          TextSpan(
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              color: textMuted,
+                            ),
+                            children: [
+                              const TextSpan(text: 'Location: '),
+                              TextSpan(
+                                text: codeWhere ?? stepPath,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          InkWell(
+                            key: ValueKey(
+                              'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                            ),
+                            onTap: () => _promptEditHowToSubStepDialog(
+                              feat,
+                              states,
+                              node,
+                              selectedTaskIdx,
+                              activeSubStepIdx,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              child: Text(
+                                'Edit',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: textMuted,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            key: ValueKey(
+                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                            ),
+                            onTap: () => _copySubStepCodeFormula(
+                              selectedTaskIdx,
+                              activeSubStepIdx,
+                              activeSubStep.codeFormula,
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              child: Text(
+                                '⧉ Copy',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
                     vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: bgRecessed,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF262C36) : borderSubtle,
-                    ),
                   ),
                   child: Text.rich(
                     _buildSemanticStepSpan(
@@ -850,7 +671,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       baseStyle: GoogleFonts.jetBrainsMono(
                         fontSize: 12.5,
                         height: 1.6,
-                        color: isDark ? const Color(0xFFE6EDF3) : textPrimary,
+                        color: textPrimary,
                       ),
                       tuningItems: tuningItems,
                       edgeItems: edgeItems,

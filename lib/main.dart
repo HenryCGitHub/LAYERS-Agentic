@@ -433,7 +433,7 @@ class WorkbenchShell extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '${workbench.activeReleaseVersionTag} · ${workbench.activeRelease!.title}',
+                              '${workbench.activeReleaseVersionTag} · ${workbench.releaseDisplayName(workbench.activeRelease!)}',
                               style: GoogleFonts.inter(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,

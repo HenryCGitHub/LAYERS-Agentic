@@ -52,9 +52,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Map<String, int> _selectedSubStepIndexByTask = {};
   bool _unrealCppMode = false;
   double _outlinerWidth = 240.0;
-  int _engineAreaFilter = 0; // 0 = All Steps, 1 = 1. Outliner, 2 = 2. Details, 3 = 3. C++
+  final int _engineAreaFilter = 0;
   final Set<String> _collapsedBeatIds = {};
   String? _accordionInitReleaseId;
+  String? _lastSyncedAccordionFeatureId;
   bool _isHalfScreenOutlinerOpen = false;
   bool _isProgressiveModalOpen = false;
   bool _showProgressiveStableFeaturesDrawer = false;

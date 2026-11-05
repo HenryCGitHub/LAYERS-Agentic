@@ -174,13 +174,21 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         TaskHowToBlueprint.formatRemainingHoursShort(releaseRemMins);
     final isReleaseDone = relProgress >= 100 || releaseRemMins <= 0;
 
-    // Initialize collapsible Epic accordions once per release:
-    // E01 (bIdx == 0) defaults to expanded; E02–E06 (bIdx >= 1) default to collapsed.
-    if (_accordionInitReleaseId != rel.id && beats.isNotEmpty) {
+    // Sync single-Epic accordion so strictly 1 Epic (the selected feature's Epic) is expanded.
+    final selectedFeatId = widget.workbench.selectedFeatureId;
+    final selectedBeatId = widget.workbench.selectedFeature?.parentId;
+    if ((_accordionInitReleaseId != rel.id ||
+            _lastSyncedAccordionFeatureId != selectedFeatId) &&
+        beats.isNotEmpty) {
       _accordionInitReleaseId = rel.id;
+      _lastSyncedAccordionFeatureId = selectedFeatId;
+      final openBeatId = (selectedBeatId != null &&
+              beats.any((b) => b.id == selectedBeatId))
+          ? selectedBeatId
+          : beats.first.id;
       _collapsedBeatIds
         ..clear()
-        ..addAll(beats.skip(1).map((b) => b.id));
+        ..addAll(beats.where((b) => b.id != openBeatId).map((b) => b.id));
     }
 
     final topHeader = SizedBox(
@@ -1069,7 +1077,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           );
                           final isExpanded =
                               !_collapsedBeatIds.contains(beat.id) ||
-                              isBeatActive ||
                               _outlinerSearchQuery.trim().isNotEmpty ||
                               _activeStage2InlineEditKey ==
                                   'add_feat_${beat.id}';
@@ -1084,9 +1091,18 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   key: ValueKey('rail_beat_${beat.id}'),
                                   borderRadius: BorderRadius.circular(5),
                                   onTap: () {
+                                    final wasCollapsed =
+                                        _collapsedBeatIds.contains(beat.id);
                                     _rebuild(() {
-                                      if (_collapsedBeatIds.contains(beat.id)) {
-                                        _collapsedBeatIds.remove(beat.id);
+                                      if (wasCollapsed) {
+                                        // Single-accordion: collapse all other Epics and open only this Epic
+                                        _collapsedBeatIds
+                                          ..clear()
+                                          ..addAll(
+                                            beats
+                                                .where((b) => b.id != beat.id)
+                                                .map((b) => b.id),
+                                          );
                                       } else {
                                         _collapsedBeatIds.add(beat.id);
                                       }
@@ -1108,6 +1124,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       );
                                       _rebuild(() {
                                         _manualCheckpointFocusIndex = null;
+                                        _lastSyncedAccordionFeatureId =
+                                            targetFeat.id;
                                       });
                                       widget.workbench
                                           .selectFeature(targetFeat.id);
@@ -1213,7 +1231,15 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                             borderRadius:
                                                 BorderRadius.circular(4),
                                             onTap: () {
-                                              _collapsedBeatIds.remove(beat.id);
+                                              _collapsedBeatIds
+                                                ..clear()
+                                                ..addAll(
+                                                  beats
+                                                      .where(
+                                                        (b) => b.id != beat.id,
+                                                      )
+                                                      .map((b) => b.id),
+                                                );
                                               _startStage2InlineEdit(
                                                 'add_feat_${beat.id}',
                                                 '',
@@ -1355,6 +1381,61 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                       ),
+                    Builder(
+                      builder: (context) {
+                        final showAllLiveFeatures =
+                            widget.workbench.releaseViewFilter == 'all';
+                        int stableCount = 0;
+                        if (releaseHasActiveFeats) {
+                          for (final b in beats) {
+                            for (final f
+                                in widget.workbench.featuresForBeat(b.id)) {
+                              if (!widget.workbench
+                                      .isFeatureActiveInRelease(f) &&
+                                  f.sections['lifecycle'] !=
+                                      FeatureLifecycleStatus.superseded.name) {
+                                stableCount++;
+                              }
+                            }
+                          }
+                        }
+                        if (stableCount <= 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: InkWell(
+                              key: const ValueKey(
+                                'rail_toggle_stable_features_btn',
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              onTap: () =>
+                                  widget.workbench.setReleaseViewFilter(
+                                showAllLiveFeatures ? 'active' : 'all',
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 4,
+                                ),
+                                child: Text(
+                                  showAllLiveFeatures
+                                      ? 'Hide STABLE ✓ ($stableCount)'
+                                      : 'Show STABLE ✓ ($stableCount)',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: showAllLiveFeatures
+                                        ? accentEmerald
+                                        : textMuted,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 );
               },
@@ -1535,6 +1616,31 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     final isWaitingForStepsInLiveMode =
         widget.workbench.isFeatureWaitingForStepsInLiveMode(feat.id);
 
+    int doneStepCount = 0;
+    int totalStepCount = 0;
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    if (states.isNotEmpty) {
+      final activeCp = states.lastWhere(
+        (cp) => cp.releaseVersion == activeVer,
+        orElse: () => states.last,
+      );
+      final hint = _engineHint;
+      final phase = widget.workbench.currentPhase;
+      for (int tIdx = 0; tIdx < activeCp.checklist.length; tIdx++) {
+        final bp = TaskHowToBlueprint.resolve(
+          parentTask: activeCp.checklist[tIdx],
+          taskIndex: tIdx,
+          checkpointNode: activeCp,
+          engineHint: hint,
+          unrealCppMode: _unrealCppMode,
+          phase: phase,
+        );
+        totalStepCount += bp.subSteps.length;
+        doneStepCount +=
+            bp.subSteps.where((s) => s.subtask.completed).length;
+      }
+    }
+
     return Opacity(
       opacity: shouldDim ? 0.78 : 1.0,
       child: Container(
@@ -1579,42 +1685,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 1),
-                      child: InkWell(
-                        key: ValueKey('outline_feat_chevron_${feat.id}'),
-                        onTap: () {
-                          if (_isProgressiveModalOpen) {
-                            _closeProgressiveReleasePlanner(confirmed: false);
-                          }
-                          _rebuild(() {
-                            _manualCheckpointFocusIndex = null;
-                          });
-                          widget.workbench.selectFeature(feat.id);
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: SizedBox(
-                          width: 14,
-                          height: 18,
-                          child: Center(
-                            child: Text(
-                              isDone ? '✓' : (isSelected ? '●' : '○'),
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11,
-                                fontWeight: isSelected
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: isDone
-                                    ? accentEmerald
-                                    : (isSelected ? textPrimary : textMuted),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                    SizedBox(
+                      key: ValueKey('outline_feat_chevron_${feat.id}'),
+                      width: 0,
+                      height: 0,
                     ),
-                    const SizedBox(width: 7),
                     Expanded(
                       child: _activeStage2InlineEditKey ==
                               'rename_rail_feat_${feat.id}'
@@ -1791,6 +1866,32 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                       ),
+                    ] else if (isDone) ...[
+                      const SizedBox(width: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          '✓',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: accentEmerald,
+                          ),
+                        ),
+                      ),
+                    ] else if (totalStepCount > 0) ...[
+                      const SizedBox(width: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          '$doneStepCount/$totalStepCount',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: textMuted,
+                          ),
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -1798,687 +1899,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  /// Framed Step Timeline rendered inside the Work Area (Full-Width mode).
-  /// Displays the active checkpoint's Task Groups and atomic Sub-Steps in sequential order.
-  Widget _buildFlatFeatureStepTimeline({
-    required TierDocument feat,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-    required FeatureStateNode node,
-    required List<TaskHowToBlueprint> howToBlueprints,
-    required int selectedTaskIdx,
-    required int activeSubStepIdx,
-  }) {
-    final engineHint = _engineHint;
-    final unifiedTaskGroups = <({
-      int cpIdx,
-      FeatureStateNode cpNode,
-      int tIdx,
-      Subtask task,
-      TaskHowToBlueprint bp,
-    })>[];
-    int totalDoneSteps = 0;
-    int totalStepsCount = 0;
-
-    final currentPhase = widget.workbench.currentPhase;
-    final scheduledUpgrades =
-        widget.workbench.scheduledInboxUpgradesForFeature(feat.id);
-
-    for (int tIdx = 0; tIdx < node.checklist.length; tIdx++) {
-      final bp = tIdx < howToBlueprints.length
-          ? howToBlueprints[tIdx]
-          : TaskHowToBlueprint.resolve(
-              parentTask: node.checklist[tIdx],
-              taskIndex: tIdx,
-              checkpointNode: node,
-              engineHint: engineHint,
-              unrealCppMode: _unrealCppMode,
-              phase: currentPhase,
-            );
-      totalStepsCount += bp.subSteps.length;
-      totalDoneSteps += bp.subSteps.where((s) => s.subtask.completed).length;
-      unifiedTaskGroups.add((
-        cpIdx: checkpointIndex,
-        cpNode: node,
-        tIdx: tIdx,
-        task: node.checklist[tIdx],
-        bp: bp,
-      ));
-    }
-
-    return Container(
-      key: ValueKey('work_area_step_timeline_${node.id}'),
-      padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
-      decoration: BoxDecoration(
-        color: bgRecessed,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Stage 1 Style Card Header Bar (01 STEPS + Done Counter + 1px Hairline)
-          Container(
-            padding: const EdgeInsets.only(bottom: 10),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: borderSubtle),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '01',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: textMuted,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'STEPS',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.7,
-                            color: textMuted,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '$totalDoneSteps/$totalStepsCount',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: textMuted,
-                      ),
-                    ),
-                    SizedBox(
-                      width: 1,
-                      height: 1,
-                      child: Opacity(
-                        opacity: 0,
-                        child: Text('$totalDoneSteps/$totalStepsCount Done'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (states.length == 1 && scheduledUpgrades.isEmpty)
-            Offstage(
-              offstage: true,
-              child: InkWell(
-                key: ValueKey('outline_cp_${feat.id}_0'),
-                onTap: () {
-                  _rebuild(() {
-                    _manualCheckpointFocusIndex = 0;
-                    _manualCheckpointFocusFeatureId = feat.id;
-                  });
-                },
-                child: const SizedBox.shrink(),
-              ),
-            )
-          else if (states.length > 1 || scheduledUpgrades.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: bgRecessed,
-                border: Border(
-                  bottom: BorderSide(color: borderSubtle),
-                ),
-              ),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 6,
-                children: [
-                  for (int cpIdx = 0; cpIdx < states.length; cpIdx++)
-                    InkWell(
-                      key: ValueKey('outline_cp_${feat.id}_$cpIdx'),
-                      borderRadius: BorderRadius.circular(4),
-                      onTap: () {
-                        _rebuild(() {
-                          _manualCheckpointFocusIndex = cpIdx;
-                          _manualCheckpointFocusFeatureId = feat.id;
-                        });
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          border: cpIdx == checkpointIndex
-                              ? Border(
-                                  bottom: BorderSide(
-                                    color: textPrimary,
-                                    width: 2,
-                                  ),
-                                )
-                              : null,
-                        ),
-                        child: Text(
-                          'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}${states[cpIdx].isCompleted ? ' ✓' : ''}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11.5,
-                            fontWeight: cpIdx == checkpointIndex
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                            color: cpIdx == checkpointIndex
-                                ? textPrimary
-                                : textMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                  for (final upg in scheduledUpgrades)
-                    InkWell(
-                      key: ValueKey(
-                        'outline_scheduled_inbox_chip_${feat.id}_${upg.id}',
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                      onTap: () => _showFeatureInboxModal(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: accentEmerald.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: accentEmerald.withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: Text(
-                          '🗓 Queued · ${upg.targetFuturePhase.shortName}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: accentEmerald,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-                for (int gIdx = 0; gIdx < unifiedTaskGroups.length; gIdx++)
-                  Builder(
-                    builder: (context) {
-                      final grp = unifiedTaskGroups[gIdx];
-                      final cpIdx = grp.cpIdx;
-                      final cpNode = grp.cpNode;
-                      final tIdx = grp.tIdx;
-                      final bp = grp.bp;
-                      final task = grp.task;
-                      final globalNumLabel =
-                          (tIdx + 1).toString().padLeft(2, '0');
-                      final isFixTask = task.text.trim().startsWith('[FIX]');
-                      final isTaskActive =
-                          cpIdx == checkpointIndex && tIdx == selectedTaskIdx;
-                      final isParentOverviewActive =
-                          isTaskActive && activeSubStepIdx == -1;
-                      final doneSubCount = bp.subSteps
-                          .where((s) => s.subtask.completed)
-                          .length;
-                      final totalSubCount = bp.subSteps.length;
-                      final groupTitle = bp.shortTaskTitle;
-
-                      return Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 2,
-                          vertical: isTaskActive ? 10 : 8,
-                        ),
-                        decoration: BoxDecoration(
-                          border: gIdx == 0
-                              ? null
-                              : Border(
-                                  top: BorderSide(color: borderSubtle),
-                                ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Clean Task Group Overline (or Inline Editor when editing task title)
-                            if (_activeStage2InlineEditKey ==
-                                'edit_task_${cpNode.id}_$tIdx')
-                              _buildStage2InlineEditor(
-                                editKey: 'edit_task_${cpNode.id}_$tIdx',
-                                inputKey: const ValueKey(
-                                  'edit_stage3_task_title_input',
-                                ),
-                                saveBtnKey: const ValueKey(
-                                  'save_stage3_task_title_btn',
-                                ),
-                                deleteBtnKey: const ValueKey(
-                                  'delete_stage3_task_btn',
-                                ),
-                                hintText: 'Edit task title...',
-                                onSave: (val) {
-                                  task.text = val;
-                                  TaskHowToBlueprint.clearCache();
-                                  widget.workbench.updateFeatureStates(
-                                    feat.id,
-                                    states,
-                                  );
-                                },
-                                onDelete: cpNode.checklist.length > 1
-                                    ? () {
-                                        cpNode.checklist.removeAt(tIdx);
-                                        TaskHowToBlueprint.clearCache();
-                                        widget.workbench.updateFeatureStates(
-                                          feat.id,
-                                          states,
-                                        );
-                                        _rebuild(() {
-                                          final nextIdx = cpNode.checklist.isEmpty
-                                              ? 0
-                                              : tIdx.clamp(
-                                                  0,
-                                                  cpNode.checklist.length - 1,
-                                                );
-                                          _selectedTaskIndexByCheckpoint[
-                                              cpNode.id] = nextIdx;
-                                          _selectedSubStepIndexByTask[
-                                              '${cpNode.id}_$nextIdx'] = 0;
-                                        });
-                                      }
-                                    : null,
-                              )
-                            else
-                              InkWell(
-                                key: ValueKey('outline_task_${cpNode.id}_$tIdx'),
-                                onTap: () {
-                                  _rebuild(() {
-                                    _manualCheckpointFocusIndex = cpIdx;
-                                    _manualCheckpointFocusFeatureId = feat.id;
-                                    _selectedTaskIndexByCheckpoint[cpNode.id] =
-                                        tIdx;
-                                    _selectedSubStepIndexByTask[
-                                        '${cpNode.id}_$tIdx'] = -1;
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(5),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isParentOverviewActive
-                                        ? bgSurface
-                                        : Colors.transparent,
-                                    borderRadius: const BorderRadius.only(
-                                      topRight: Radius.circular(5),
-                                      bottomRight: Radius.circular(5),
-                                    ),
-                                    border: isParentOverviewActive
-                                        ? Border(
-                                            left: BorderSide(
-                                              color: textPrimary,
-                                              width: 2.0,
-                                            ),
-                                          )
-                                        : null,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: RichText(
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          text: TextSpan(
-                                            children: [
-                                              TextSpan(
-                                                text:
-                                                    '${isTaskActive ? '▾' : '▸'} $globalNumLabel · ',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isFixTask
-                                                      ? accentCrimson
-                                                      : (isTaskActive
-                                                          ? textPrimary
-                                                          : textMuted),
-                                                ),
-                                              ),
-                                              TextSpan(
-                                                text: groupTitle,
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 12.5,
-                                                  fontWeight: isTaskActive
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w500,
-                                                  color: isFixTask
-                                                      ? accentCrimson
-                                                      : (isTaskActive
-                                                          ? textPrimary
-                                                          : textSecondary),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      InkWell(
-                                        key: ValueKey(
-                                          'edit_active_task_title_btn_${cpNode.id}_$tIdx',
-                                        ),
-                                        onTap: () => _startStage2InlineEdit(
-                                          'edit_task_${cpNode.id}_$tIdx',
-                                          task.text,
-                                        ),
-                                        borderRadius: BorderRadius.circular(3),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 3,
-                                            vertical: 1,
-                                          ),
-                                          child: Icon(
-                                            Icons.edit_outlined,
-                                            size: 12,
-                                            color: isTaskActive
-                                                ? textSecondary
-                                                : textMuted,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      InkWell(
-                                        key: ValueKey(
-                                          'complete_task_group_${cpNode.id}_$tIdx',
-                                        ),
-                                        onTap: () => _toggleTaskGroupCompletion(
-                                          feat,
-                                          states,
-                                          cpNode,
-                                          tIdx,
-                                        ),
-                                        borderRadius: BorderRadius.circular(3),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 3,
-                                            vertical: 1,
-                                          ),
-                                          child: Text(
-                                            task.completed
-                                                ? '✓ $doneSubCount/$totalSubCount'
-                                                : '$doneSubCount/$totalSubCount',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: isTaskActive
-                                                  ? textSecondary
-                                                  : textMuted,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            if (isTaskActive) ...[
-                              const SizedBox(height: 6),
-                              // Continuous 1px vertical track line with crisp 1-line Steps
-                              Container(
-                                margin: const EdgeInsets.only(left: 7),
-                                padding: const EdgeInsets.only(left: 8),
-                                decoration: BoxDecoration(
-                                  border: Border(
-                                    left: BorderSide(
-                                      color: borderSubtle,
-                                      width: 1,
-                                    ),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    for (int sIdx = 0;
-                                        sIdx < bp.subSteps.length;
-                                        sIdx++)
-                                      Builder(
-                                        builder: (context) {
-                                          final stepItem = bp.subSteps[sIdx];
-                                          final isStepActive = isTaskActive &&
-                                              sIdx == activeSubStepIdx;
-                                          final isStepDone =
-                                              stepItem.subtask.completed;
-                                          return Opacity(
-                                            opacity: isStepActive
-                                                ? 1.0
-                                                : (isStepDone ? 0.65 : 0.85),
-                                            child: InkWell(
-                                              key: ValueKey(
-                                                'task_sheet_step_row_${cpNode.id}_${tIdx}_$sIdx',
-                                              ),
-                                              onTap: () {
-                                                _rebuild(() {
-                                                  _manualCheckpointFocusIndex =
-                                                      cpIdx;
-                                                  _manualCheckpointFocusFeatureId =
-                                                      feat.id;
-                                                  _selectedTaskIndexByCheckpoint[
-                                                      cpNode.id] = tIdx;
-                                                  _selectedSubStepIndexByTask[
-                                                      '${cpNode.id}_$tIdx'] = sIdx;
-                                                });
-                                              },
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              child: Container(
-                                                margin: const EdgeInsets.only(
-                                                  bottom: 2,
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 9,
-                                                  vertical: 6,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: isStepActive
-                                                      ? bgSurface
-                                                      : Colors.transparent,
-                                                  borderRadius:
-                                                      const BorderRadius.only(
-                                                    topRight:
-                                                        Radius.circular(5),
-                                                    bottomRight:
-                                                        Radius.circular(5),
-                                                  ),
-                                                  border: isStepActive
-                                                      ? Border(
-                                                          left: BorderSide(
-                                                            color: textPrimary,
-                                                            width: 2.0,
-                                                          ),
-                                                        )
-                                                      : null,
-                                                ),
-                                                child: Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.center,
-                                                  children: [
-                                                    SizedBox(
-                                                      width: 18,
-                                                      child: Text(
-                                                        isStepDone &&
-                                                                !isStepActive
-                                                            ? '✓'
-                                                            : (isStepActive
-                                                                ? '●'
-                                                                : '○'),
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                              isStepActive
-                                                                  ? FontWeight
-                                                                      .w700
-                                                                  : FontWeight
-                                                                      .w500,
-                                                          color: isStepDone &&
-                                                                  !isStepActive
-                                                              ? accentEmerald
-                                                              : (isStepActive
-                                                                  ? textPrimary
-                                                                  : textMuted),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Expanded(
-                                                      child: Text(
-                                                        '${(sIdx + 1).toString().padLeft(2, '0')} · ${stepItem.shortTitle}',
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style:
-                                                            GoogleFonts.inter(
-                                                          fontSize: 12.5,
-                                                          height: 1.3,
-                                                          fontWeight:
-                                                              isStepActive
-                                                                  ? FontWeight
-                                                                      .w600
-                                                                  : FontWeight
-                                                                      .w400,
-                                                          color: isStepDone &&
-                                                                  !isStepActive
-                                                              ? textMuted
-                                                              : (isStepActive
-                                                                  ? textPrimary
-                                                                  : textSecondary),
-                                                          decoration: isStepDone &&
-                                                                  !isStepActive
-                                                              ? TextDecoration
-                                                                  .lineThrough
-                                                              : TextDecoration
-                                                                  .none,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    if (!isStepDone)
-                                                      SizedBox(
-                                                        width: 1,
-                                                        height: 1,
-                                                        child: Opacity(
-                                                          opacity: 0,
-                                                          child: Text(
-                                                            stepItem.etaLabel,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ] else
-                              for (int sIdx = 0;
-                                  sIdx < bp.subSteps.length;
-                                  sIdx++)
-                                Offstage(
-                                  offstage: true,
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'task_sheet_step_row_${cpNode.id}_${tIdx}_$sIdx',
-                                    ),
-                                    onTap: () {
-                                      _rebuild(() {
-                                        _manualCheckpointFocusIndex = cpIdx;
-                                        _manualCheckpointFocusFeatureId =
-                                            feat.id;
-                                        _selectedTaskIndexByCheckpoint[
-                                            cpNode.id] = tIdx;
-                                        _selectedSubStepIndexByTask[
-                                            '${cpNode.id}_$tIdx'] = sIdx;
-                                      });
-                                    },
-                                    child: const SizedBox.shrink(),
-                                  ),
-                                ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                const SizedBox(height: 12),
-                if (_activeStage2InlineEditKey == 'add_task_${node.id}')
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: _buildStage2InlineEditor(
-                      editKey: 'add_task_${node.id}',
-                      inputKey: const ValueKey('add_stage3_task_title_input'),
-                      saveBtnKey: const ValueKey('confirm_add_stage3_task_btn'),
-                      hintText: 'Add build task (e.g. Wall-jump impulse (2h))...',
-                      onSave: (val) => _commitInlineAddBuildTask(
-                        feat,
-                        states,
-                        checkpointIndex,
-                        val,
-                      ),
-                    ),
-                  )
-                else
-                  InkWell(
-                    key: ValueKey('outline_add_task_btn_${node.id}'),
-                    onTap: () => _startStage2InlineEdit(
-                      'add_task_${node.id}',
-                      '',
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-                      child: Text(
-                        '+ Add Build Task...',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-        ],
       ),
     );
   }

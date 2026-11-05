@@ -2,29 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // ── Dark Palette (40 · 30 · 20 · 10 Ratio · Palette A: Obsidian & Emerald) ─
+  // ── Dark Palette (60 · 30 · 10 Ratio & WCAG AAA Grayscale Hierarchy) ──────
   static const Color bgBase =
-      Color(0xFF090C10); // 40% Dominant Base App Background (#090C10)
+      Color(0xFF0D1117); // 60% Dominant Runbook & Page Canvas (#0D1117)
   static const Color bgPanel =
-      Color(0xFF0D1117); // 40% Left Feature Rail & Center Steps Pane (#0D1117)
+      Color(0xFF080A0F); // 30% Recessed Left Rail & Top Chrome (#080A0F)
   static const Color bgSurface =
-      Color(0xFF161B22); // 30% Elevated Inspector Cards & Active Rows (#161B22)
+      Color(0xFF131820); // 30% Property Strip, Code Header & Active Row (#131820)
   static const Color bgSurfaceHover =
-      Color(0xFF1C2128); // Hover / secondary surface (#1C2128)
+      Color(0xFF19202B); // Hover / secondary surface (#19202B)
   static const Color bgSurfaceActive =
-      Color(0xFF21262D); // 20% Active/selected row & pill surface (#21262D)
+      Color(0xFF21262D); // Active/selected pill surface (#21262D)
 
   static const Color borderSubtle =
-      Color(0xFF262C36); // Crisp 1px card & hairline divider (#262C36)
+      Color(0xFF21262D); // Crisp 1px card & hairline divider (#21262D)
   static const Color borderBright =
       Color(0xFF30363D); // Focused / active pill & badge border (#30363D)
 
   static const Color textPrimary =
-      Color(0xFFF0F6FC); // T1 Crisp white primary lead text (#F0F6FC)
+      Color(0xFFF0F6FC); // L1 Crisp white primary lead text (#F0F6FC, 17.4:1)
   static const Color textSecondary =
-      Color(0xFF9CA3AF); // T2 Boosted secondary contrast (#9CA3AF)
+      Color(0xFFC9D1D9); // L2 WCAG AAA secondary body text (#C9D1D9, 11.8:1)
   static const Color textMuted =
-      Color(0xFF8B949E); // T3 Boosted muted label / metadata contrast (#8B949E)
+      Color(0xFF8B949E); // L3 Muted label / metadata contrast (#8B949E, 5.6:1)
 
   // ── Light Palette (Crisp Cool Slate Paper · Deep Slate Ink & Accent) ───────
   static const Color bgBaseLight =
@@ -48,11 +48,11 @@ class AppTheme {
   static const Color textMutedLight =
       Color(0xFF64748B); // Muted slate metadata text
 
-  // ── Semantic Surface Scale (40 · 30 · 20 · 10 Depth Ladder) ───────────────
+  // ── Semantic Surface Scale (60 · 30 · 10 Depth Ladder) ────────────────────
   static const Color bgSurfaceRaised =
-      Color(0xFF161B22); // Elevated cards, chiclets, floating toolbars (Dark)
+      Color(0xFF131820); // Elevated cards, chiclets, floating toolbars (Dark)
   static const Color bgSurfaceRecessed =
-      Color(0xFF0D1117); // 20% Recessed Outliner Rail, Steps Pane & Code Well (#0D1117)
+      Color(0xFF080A0F); // 30% Recessed Outliner Rail & Code Well (#080A0F)
   static const Color bgSurfaceRaisedLight =
       Color(0xFFFFFFFF); // Elevated cards on light
   static const Color bgSurfaceRecessedLight =
@@ -60,7 +60,7 @@ class AppTheme {
   static const Color bgSurfaceActiveLight =
       Color(0xFFE2E8F0); // Active/selected list item on light
 
-  static const Color bgInset = Color(0xFF0D1117); // 20% Deep recessed code well (Dark)
+  static const Color bgInset = Color(0xFF080A0F); // Deep recessed code well (Dark)
   static const Color bgInsetLight = Color(0xFFF1F5F9); // Recessed insets / inner cards (Light)
 
   // ── Reversible Polarity Focal Accent (Crisp White in Dark ↔ Deep Slate in Light) ─
@@ -125,7 +125,7 @@ class AppTheme {
   static const Color accentOrangeLight = Color(0xFFB45309); // Muted Ochre (Light)
   static Color accentOrangeFor(bool isDark) => isDark ? accentOrange : accentOrangeLight;
 
-  static const Color accentGreen = Color(0xFF10B981); // Crisp Emerald (--emerald: #10B981)
+  static const Color accentGreen = Color(0xFF3FB950); // 10% Accent Emerald (#3FB950)
   static const Color accentGreenLight = Color(0xFF059669); // Emerald (Light)
   static Color accentGreenFor(bool isDark) => isDark ? accentGreen : accentGreenLight;
 
@@ -133,7 +133,7 @@ class AppTheme {
   static const Color accentRedLight = Color(0xFFC25450); // Brick Coral (Light)
   static Color accentRedFor(bool isDark) => isDark ? accentRed : accentRedLight;
 
-  static const Color accentCyan = Color(0xFF60A5FA); // 20% Secondary Technical Spec Ice-Blue (Dark: #60A5FA)
+  static const Color accentCyan = Color(0xFF79C0FF); // 10% Focused Node/Method Sky (#79C0FF)
   static const Color accentCyanLight = Color(0xFF2563EB); // Technical Spec Blue (Light)
   static Color accentCyanFor(bool isDark) => isDark ? accentCyan : accentCyanLight;
 
