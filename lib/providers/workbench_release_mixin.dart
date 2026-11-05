@@ -5643,6 +5643,12 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
           'Checkpoint Playtest Gate: "${cpNode.playtestCondition}"',
       ].join('\n');
 
+      final codeFormulaModeGuide = engineLabel == 'UNREAL 5'
+          ? (unrealCppMode
+              ? '2-6 lines of concrete Unreal 5 C++ (.h / .cpp) code using `->`, `FTransform`, `FVector`, `CreateDefaultSubobject`, or `UPROPERTY` with the exact tuning variables and guard checks (NEVER Blueprint node arrows)'
+              : '2-6 lines of concrete Unreal 5 Blueprint Event Graph node wiring formatted as `[Event / Input Node] ──► [Function Node (Target: ..., Pin: Value)]` using `──►` / `└──►` arrows and exact tuning variables (NEVER C++ `->` pointer syntax or `FTransform`/`FVector` C++ constructors)')
+          : '2-6 lines of concrete $targetEngineMode code using the exact tuning variables and guard checks';
+
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
 Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
@@ -5670,7 +5676,7 @@ For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequent
 3. "instruction": 1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value
 4. "area1Hierarchy": Optional Scene/Component hierarchy tree using ├─ / └─ when the step adds or modifies nodes/components (or "" if pure code step)
 5. "area2Inspector": Inspector/Details bindings formatted as "Property: Value | Property2: Value2" using the exact tuning parameter names
-6. "codeFormula": 2-6 lines of concrete $targetEngineMode code or node graph wiring using the exact tuning variables and guard checks
+6. "codeFormula": $codeFormulaModeGuide
 7. "verifyResult": Causal Trigger -> Result check formatted as "<Player Action> -> <Observable Screen Result>" (<= 14 words)
 
 Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each task.''';

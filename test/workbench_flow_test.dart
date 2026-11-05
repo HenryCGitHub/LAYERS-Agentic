@@ -2106,6 +2106,59 @@ void main() {
         expect(unrealCpp.subSteps[4].codeFormula,
             contains('FMath::FInterpConstantTo'));
 
+        // Verify custom_snippet C++ code adapts to Blueprint node chain when unrealCppMode == false
+        final customRampTask = Subtask(
+          id: 'custom_ramp',
+          text: 'Dock Collision Bounds',
+          children: [
+            Subtask(
+              id: 'custom_ramp_s1',
+              text: 'Spawn Cargo Delivery Ramp',
+              specNotes:
+                  'Spawn cargo ramp StaticMeshActor in dock arena and set pitch rotation to rampInclineAngle: 25.0 deg.',
+              codeTargetFile: 'custom_snippet',
+              codeSnippet: '''// Place cargo ramp actor aligned to dock apron
+FTransform RampTransform(FRotator(25.0f, 0.0f, 0.0f), FVector(1200.f, -400.f, 0.f), FVector(4.f, 3.f, 1.5f));
+Ramp_CargoDelivery->SetActorTransform(RampTransform);
+Ramp_CargoDelivery->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));''',
+            ),
+          ],
+        );
+        final resolvedRampBp = TaskHowToBlueprint.resolve(
+          parentTask: customRampTask,
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5',
+          unrealCppMode: false,
+        );
+        final resolvedRampCpp = TaskHowToBlueprint.resolve(
+          parentTask: customRampTask,
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5',
+          unrealCppMode: true,
+        );
+        expect(
+          resolvedRampBp.subSteps.first.codeFormula,
+          contains('[Make Transform'),
+        );
+        expect(
+          resolvedRampBp.subSteps.first.codeFormula,
+          contains('[Set Actor Transform (Target: Ramp_CargoDelivery'),
+        );
+        expect(
+          resolvedRampBp.subSteps.first.codeFormula,
+          contains('[Set Collision Profile Name'),
+        );
+        expect(
+          resolvedRampCpp.subSteps.first.codeFormula,
+          contains('Ramp_CargoDelivery->SetActorTransform(RampTransform);'),
+        );
+        expect(
+          resolvedRampBp.subSteps.first.codeFormula,
+          isNot(equals(resolvedRampCpp.subSteps.first.codeFormula)),
+        );
+
         // Verify Task 01 (Setup), Task 02 (State Logic), and Task 03 (Input/Raycast) have non-repeating step titles
         final t0 = TaskHowToBlueprint.resolve(
           parentTask: Subtask(id: 't0', text: 'Create Grid Tile Actor (2h)'),

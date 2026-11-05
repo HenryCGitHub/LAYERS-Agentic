@@ -2396,7 +2396,7 @@ class TaskHowToBlueprint {
                   ? decodedNotes.cleanInstruction
                   : 'Implement and verify "$rawLabel" inside $whereLocation.'));
       final instruction = formatConciseStepInstruction(rawInstruction);
-      final code = isCustomSnippet &&
+      final rawResolvedCode = isCustomSnippet &&
               child.codeSnippet != null &&
               child.codeSnippet!.trim().isNotEmpty
           ? child.codeSnippet!.trim()
@@ -2405,6 +2405,14 @@ class TaskHowToBlueprint {
               : (child.codeSnippet != null && child.codeSnippet!.trim().isNotEmpty
                   ? child.codeSnippet!.trim()
                   : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)'));
+      final code = (engineLabel == 'UNREAL 5' && isCustomSnippet)
+          ? adaptUnrealCodeForMode(
+              rawResolvedCode,
+              unrealCppMode: unrealCppMode,
+              fallbackSpecCode: spec.code,
+              primaryVarName: primaryVarName,
+            )
+          : rawResolvedCode;
       final shortTitle = (!isCustomSnippet && hasDynamicSpec)
           ? spec.shortTitle
           : formatTelegraphicStepTitle(rawLabel);
@@ -2491,5 +2499,216 @@ class TaskHowToBlueprint {
       blueprint: result,
     );
     return result;
+  }
+
+  /// Deterministically adapts Unreal Engine 5 `codeFormula` between Blueprint Event Graph node wiring
+  /// (`[Node] ──► [Node]`) and Unreal C++ statements (`->`, `FTransform`, `CreateDefaultSubobject`, `UPROPERTY`)
+  /// in 0ms with zero extra Gemini API calls when toggling `[ Blueprint | C++ ]`.
+  static String adaptUnrealCodeForMode(
+    String rawCode, {
+    required bool unrealCppMode,
+    required String fallbackSpecCode,
+    required String primaryVarName,
+  }) {
+    final trimmed = rawCode.trim();
+    if (trimmed.isEmpty) return fallbackSpecCode;
+
+    final hasBpArrows = trimmed.contains('──►') ||
+        trimmed.contains('└──►') ||
+        trimmed.contains('├──►') ||
+        RegExp(r'^\[(?:Event|Function|Custom Event|Branch|IA_|EnhancedInput)', multiLine: true)
+            .hasMatch(trimmed);
+    final hasCppSyntax = trimmed.contains('->') ||
+        trimmed.contains('CreateDefaultSubobject<') ||
+        trimmed.contains('UPROPERTY(') ||
+        trimmed.contains('UFUNCTION(') ||
+        trimmed.contains('#include ') ||
+        RegExp(r'\b(?:FTransform|FVector|FRotator)\s+[A-Za-z_][A-Za-z0-9_]*\s*\(')
+            .hasMatch(trimmed) ||
+        RegExp(r'\b(?:float|int32|bool|void)\s+[A-Za-z_][A-Za-z0-9_]*\s*[=;()]')
+            .hasMatch(trimmed);
+
+    // 1. Blueprint Mode (`unrealCppMode == false`): Convert C++ code into visual Blueprint Event Graph node chains
+    if (!unrealCppMode) {
+      if (hasBpArrows || !hasCppSyntax) {
+        return trimmed;
+      }
+      final lines = trimmed.split('\n');
+      final outLines = <String>[];
+      int chainDepth = 0;
+
+      String humanizeMethod(String camel) {
+        return camel
+            .replaceAllMapped(
+              RegExp(r'([a-z0-9])([A-Z])'),
+              (m) => '${m.group(1)} ${m.group(2)}',
+            )
+            .trim();
+      }
+
+      String cleanCppArg(String arg) {
+        return arg
+            .replaceAllMapped(
+              RegExp(r'TEXT\(\s*"([^"]*)"\s*\)'),
+              (m) => '"${m.group(1)}"',
+            )
+            .replaceAllMapped(
+              RegExp(r'FVector\(\s*([^)]*)\s*\)'),
+              (m) => '(${m.group(1)})',
+            )
+            .replaceAllMapped(
+              RegExp(r'FRotator\(\s*([^)]*)\s*\)'),
+              (m) => '(${m.group(1)})',
+            )
+            .replaceAll(RegExp(r'(\d+\.\d+|\d+)f\b'), r'$1')
+            .trim();
+      }
+
+      for (final rawLine in lines) {
+        final line = rawLine.trim();
+        if (line.isEmpty || line == '{' || line == '}') continue;
+        if (line.startsWith('//')) {
+          outLines.add(line);
+          continue;
+        }
+        // FTransform Name(FRotator(...), FVector(...), FVector(...));
+        final transformMatch = RegExp(
+          r'FTransform\s+([A-Za-z0-9_]+)\s*\(\s*FRotator\(([^)]*)\)\s*,\s*FVector\(([^)]*)\)\s*,\s*FVector\(([^)]*)\)\s*\)\s*;?',
+        ).firstMatch(line);
+        if (transformMatch != null) {
+          final varName = transformMatch.group(1)!;
+          final rot = cleanCppArg(transformMatch.group(2)!);
+          final loc = cleanCppArg(transformMatch.group(3)!);
+          final scale = cleanCppArg(transformMatch.group(4)!);
+          outLines.add(
+            '[Make Transform ($varName → Rotation: ($rot), Location: ($loc), Scale: ($scale))]',
+          );
+          chainDepth++;
+          continue;
+        }
+        // Comp = CreateDefaultSubobject<UType>(TEXT("Name"));
+        final subobjMatch = RegExp(
+          r'([A-Za-z0-9_]+)\s*=\s*CreateDefaultSubobject<\s*([A-Za-z0-9_]+)\s*>\s*\(\s*(?:TEXT\(\s*)?"([^"]+)"\s*\)?\s*\)\s*;?',
+        ).firstMatch(line);
+        if (subobjMatch != null) {
+          final compType = subobjMatch.group(2)!.replaceFirst(RegExp(r'^U'), '');
+          final compName = subobjMatch.group(3)!;
+          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
+          outLines.add('$prefix[Add Component: $compType ("$compName")]');
+          chainDepth++;
+          continue;
+        }
+        // UPROPERTY(...) Type Name = Val;
+        if (line.startsWith('UPROPERTY(')) {
+          continue;
+        }
+        final propDeclMatch = RegExp(
+          r'^(?:float|int32|int|bool|FVector|FRotator)\s+([A-Za-z0-9_]+)\s*=\s*([^;]+);',
+        ).firstMatch(line);
+        if (propDeclMatch != null) {
+          final vName = propDeclMatch.group(1)!;
+          final vVal = cleanCppArg(propDeclMatch.group(2)!);
+          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
+          outLines.add(
+            '$prefix[Set Variable: $vName = $vVal  (👁 Instance Editable)]',
+          );
+          chainDepth++;
+          continue;
+        }
+        // Chained pointer call: Obj->GetSubComp()->Method(Args); or Obj->Method(Args);
+        final nestedCallMatch = RegExp(
+          r'([A-Za-z0-9_]+)->([A-Za-z0-9_]+)\(\)->([A-Za-z0-9_]+)\((.*)\)\s*;?',
+        ).firstMatch(line);
+        if (nestedCallMatch != null) {
+          final obj = nestedCallMatch.group(1)!;
+          final getter = nestedCallMatch
+              .group(2)!
+              .replaceFirst(RegExp(r'^Get'), '');
+          final method = humanizeMethod(nestedCallMatch.group(3)!);
+          final args = cleanCppArg(nestedCallMatch.group(4)!);
+          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
+          outLines.add(
+            '$prefix[$method (Target: $obj.$getter${args.isNotEmpty ? ', Value: $args' : ''})]',
+          );
+          chainDepth++;
+          continue;
+        }
+        final directCallMatch = RegExp(
+          r'([A-Za-z0-9_.]+)->([A-Za-z0-9_]+)\((.*)\)\s*;?',
+        ).firstMatch(line);
+        if (directCallMatch != null) {
+          final obj = directCallMatch.group(1)!;
+          final method = humanizeMethod(directCallMatch.group(2)!);
+          final args = cleanCppArg(directCallMatch.group(3)!);
+          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
+          outLines.add(
+            '$prefix[$method (Target: $obj${args.isNotEmpty ? ', Value: $args' : ''})]',
+          );
+          chainDepth++;
+          continue;
+        }
+        // Assignment: Obj->Prop = Val; or Prop = Val;
+        final assignMatch = RegExp(
+          r'([A-Za-z0-9_]+(?:->[A-Za-z0-9_]+)?)\s*=\s*([^;]+);?',
+        ).firstMatch(line);
+        if (assignMatch != null) {
+          final lhs = assignMatch.group(1)!.replaceAll('->', '.');
+          final rhs = cleanCppArg(assignMatch.group(2)!);
+          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
+          outLines.add('$prefix[Set $lhs = $rhs]');
+          chainDepth++;
+          continue;
+        }
+        final cleanFallback = cleanCppArg(line.replaceAll(';', ''));
+        final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
+        outLines.add('$prefix[$cleanFallback]');
+        chainDepth++;
+      }
+      return outLines.isNotEmpty ? outLines.join('\n') : fallbackSpecCode;
+    }
+
+    // 2. C++ Mode (`unrealCppMode == true`): Convert Blueprint Event Graph node chains into Unreal C++ statements
+    if (hasCppSyntax && !hasBpArrows) {
+      return trimmed;
+    }
+    if (hasBpArrows) {
+      final lines = trimmed.split('\n');
+      final cppLines = <String>[];
+      for (final rawLine in lines) {
+        final line = rawLine.trim();
+        if (line.isEmpty) continue;
+        if (line.startsWith('//')) {
+          cppLines.add(line);
+          continue;
+        }
+        final nodeMatches = RegExp(r'\[([^\]]+)\]').allMatches(line);
+        for (final m in nodeMatches) {
+          final nodeContent = m.group(1)!.trim();
+          if (nodeContent.startsWith('Event ') ||
+              nodeContent.startsWith('IA_') ||
+              nodeContent.startsWith('EnhancedInputAction ')) {
+            cppLines.add('// $nodeContent');
+          } else if (nodeContent.startsWith('Branch:')) {
+            final cond = nodeContent.substring(7).trim();
+            cppLines.add('if (!($cond)) return;');
+          } else if (nodeContent.startsWith('Set ')) {
+            final expr = nodeContent.substring(4).trim();
+            cppLines.add('$expr;');
+          } else if (nodeContent.startsWith('AddMovementInput') ||
+              nodeContent.startsWith('Add Movement Input')) {
+            cppLines.add('AddMovementInput(GetActorForwardVector(), $primaryVarName);');
+          } else {
+            final safeIdent = nodeContent
+                .replaceAll(RegExp(r'[^A-Za-z0-9_(),.= ]'), '')
+                .trim();
+            if (safeIdent.isNotEmpty) {
+              cppLines.add('$safeIdent;');
+            }
+          }
+        }
+      }
+      return cppLines.isNotEmpty ? cppLines.join('\n') : fallbackSpecCode;
+    }
+    return trimmed;
   }
 }
