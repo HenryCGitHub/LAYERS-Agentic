@@ -65,13 +65,19 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     // Classify the active step based on its actual content & step context
     final lowerPath = stepPath.toLowerCase();
-    final isTreeHierarchyStep = rawCode.contains('└─') ||
-        rawCode.contains('├─') ||
-        lowerPath.contains('scene dock') ||
-        lowerPath.contains('hierarchy') ||
-        lowerPath.contains('add child node') ||
-        lowerPath.contains('create empty') ||
-        lowerPath.contains('components panel');
+    final hasBpGraphArrows = rawCode.contains('──►') ||
+        rawCode.contains('└──►') ||
+        rawCode.contains('├──►') ||
+        RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(rawCode);
+    final hasHierarchyTreeChars =
+        RegExp(r'[└├]─(?!─►)').hasMatch(rawCode) && !hasBpGraphArrows;
+    final isTreeHierarchyStep = !hasBpGraphArrows &&
+        (hasHierarchyTreeChars ||
+            lowerPath.contains('scene dock') ||
+            lowerPath.contains('hierarchy') ||
+            lowerPath.contains('add child node') ||
+            lowerPath.contains('create empty') ||
+            lowerPath.contains('components panel'));
     final isCppConstructorSubobjectsStep = isUnrealCpp &&
         rawCode.contains('CreateDefaultSubobject<');
     final isLevelPlacementStep = !isTreeHierarchyStep &&
@@ -305,6 +311,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     if (aiArea1.isNotEmpty) {
       compWhere ??= stepPath;
       compBody = aiArea1;
+      if (rawCode.isNotEmpty && rawCode != aiArea1) {
+        codeWhere ??= stepPath;
+        codeBody ??= rawCode;
+      }
+    } else if (hasBpGraphArrows && rawCode.isNotEmpty) {
+      codeWhere ??= stepPath;
+      codeBody ??= rawCode;
     }
     final aiArea2 = activeSubStep.area2Inspector?.trim() ?? '';
     if (aiArea2.isNotEmpty) {

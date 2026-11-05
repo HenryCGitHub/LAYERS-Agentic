@@ -2516,14 +2516,13 @@ class TaskHowToBlueprint {
     final hasBpArrows = trimmed.contains('──►') ||
         trimmed.contains('└──►') ||
         trimmed.contains('├──►') ||
-        RegExp(r'^\[(?:Event|Function|Custom Event|Branch|IA_|EnhancedInput)', multiLine: true)
-            .hasMatch(trimmed);
+        RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(trimmed);
     final hasCppSyntax = trimmed.contains('->') ||
         trimmed.contains('CreateDefaultSubobject<') ||
         trimmed.contains('UPROPERTY(') ||
         trimmed.contains('UFUNCTION(') ||
         trimmed.contains('#include ') ||
-        RegExp(r'\b(?:FTransform|FVector|FRotator)\s+[A-Za-z_][A-Za-z0-9_]*\s*\(')
+        RegExp(r'\b(?:FTransform|FVector|FRotator|FHitResult)\s+[A-Za-z_][A-Za-z0-9_]*')
             .hasMatch(trimmed) ||
         RegExp(r'\b(?:float|int32|bool|void)\s+[A-Za-z_][A-Za-z0-9_]*\s*[=;()]')
             .hasMatch(trimmed);
@@ -2672,8 +2671,45 @@ class TaskHowToBlueprint {
       return trimmed;
     }
     if (hasBpArrows) {
+      List<String> splitTopLevelArgs(String input) {
+        final parts = <String>[];
+        final buf = StringBuffer();
+        int depth = 0;
+        for (int i = 0; i < input.length; i++) {
+          final ch = input[i];
+          if (ch == '(') depth++;
+          if (ch == ')' && depth > 0) depth--;
+          if (ch == ',' && depth == 0) {
+            parts.add(buf.toString().trim());
+            buf.clear();
+          } else {
+            buf.write(ch);
+          }
+        }
+        final tail = buf.toString().trim();
+        if (tail.isNotEmpty) parts.add(tail);
+        return parts;
+      }
+
+      String formatCppValue(String rawVal) {
+        var v = rawVal.trim();
+        if (v.toLowerCase() == 'true') return 'true';
+        if (v.toLowerCase() == 'false') return 'false';
+        v = v.replaceAllMapped(
+          RegExp(r'\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)'),
+          (m) => 'FVector(${m.group(1)}.f, ${m.group(2)}.f, ${m.group(3)}.f)',
+        );
+        v = v.replaceAll('.0.f', '.0f');
+        if (v.startsWith('"') && v.endsWith('"')) {
+          return 'TEXT($v)';
+        }
+        return v;
+      }
+
       final lines = trimmed.split('\n');
       final cppLines = <String>[];
+      bool openBranchBlock = false;
+
       for (final rawLine in lines) {
         final line = rawLine.trim();
         if (line.isEmpty) continue;
@@ -2684,28 +2720,168 @@ class TaskHowToBlueprint {
         final nodeMatches = RegExp(r'\[([^\]]+)\]').allMatches(line);
         for (final m in nodeMatches) {
           final nodeContent = m.group(1)!.trim();
+          final indent = openBranchBlock ? '    ' : '';
+
+          // 2a. Component Hit / Overlap Event Node
+          if (nodeContent.contains('OnComponentHit') ||
+              nodeContent.contains('OnComponentBeginOverlap')) {
+            final compMatch = RegExp(r'([A-Za-z0-9_]+)\s*\(\s*(OnComponent[A-Za-z0-9_]+)\s*\)')
+                    .firstMatch(nodeContent) ??
+                RegExp(r'(OnComponent[A-Za-z0-9_]+)\s*\(\s*([A-Za-z0-9_]+)\s*\)')
+                    .firstMatch(nodeContent);
+            if (compMatch != null) {
+              final g1 = compMatch.group(1)!;
+              final g2 = compMatch.group(2)!;
+              final isG1Event = g1.startsWith('OnComponent');
+              final comp = isG1Event ? g2 : g1;
+              final ev = isG1Event ? g1 : g2;
+              cppLines.add('// $comp->$ev.AddDynamic(this, &ThisClass::OnHit);');
+            } else {
+              cppLines.add('// $nodeContent');
+            }
+            continue;
+          }
+
+          // 2b. Standard Event / Enhanced Input Node
           if (nodeContent.startsWith('Event ') ||
               nodeContent.startsWith('IA_') ||
               nodeContent.startsWith('EnhancedInputAction ')) {
             cppLines.add('// $nodeContent');
-          } else if (nodeContent.startsWith('Branch:')) {
-            final cond = nodeContent.substring(7).trim();
-            cppLines.add('if (!($cond)) return;');
-          } else if (nodeContent.startsWith('Set ')) {
-            final expr = nodeContent.substring(4).trim();
-            cppLines.add('$expr;');
-          } else if (nodeContent.startsWith('AddMovementInput') ||
-              nodeContent.startsWith('Add Movement Input')) {
-            cppLines.add('AddMovementInput(GetActorForwardVector(), $primaryVarName);');
-          } else {
-            final safeIdent = nodeContent
-                .replaceAll(RegExp(r'[^A-Za-z0-9_(),.= ]'), '')
+            continue;
+          }
+
+          // 2c. LineTraceByChannel / SphereTraceByChannel
+          if (nodeContent.startsWith('LineTraceByChannel') ||
+              nodeContent.startsWith('Line Trace By Channel')) {
+            final parenStart = nodeContent.indexOf('(');
+            final parenEnd = nodeContent.lastIndexOf(')');
+            String startExpr = 'GetActorLocation()';
+            String endExpr = 'GetActorLocation() - FVector(0.f, 0.f, 150.f)';
+            String channelExpr = 'ECC_Visibility';
+            if (parenStart != -1 && parenEnd > parenStart) {
+              final pins = splitTopLevelArgs(
+                nodeContent.substring(parenStart + 1, parenEnd),
+              );
+              for (final p in pins) {
+                final colon = p.indexOf(':');
+                if (colon > 0) {
+                  final k = p.substring(0, colon).trim().toLowerCase();
+                  final val = formatCppValue(p.substring(colon + 1));
+                  if (k.contains('start')) startExpr = val;
+                  if (k.contains('end')) endExpr = val;
+                  if (k.contains('channel')) channelExpr = val;
+                }
+              }
+            }
+            cppLines.add('${indent}FHitResult HitResult;');
+            cppLines.add(
+              '${indent}const bool bBlockingHit = GetWorld()->LineTraceSingleByChannel(HitResult, $startExpr, $endExpr, $channelExpr);',
+            );
+            continue;
+          }
+
+          // 2d. Branch Node (`[Branch: Cond]` or `[Branch (Cond)]`)
+          if (nodeContent.startsWith('Branch')) {
+            String cond = '';
+            if (nodeContent.startsWith('Branch:')) {
+              cond = nodeContent.substring(7).trim();
+            } else {
+              final pStart = nodeContent.indexOf('(');
+              final pEnd = nodeContent.lastIndexOf(')');
+              if (pStart != -1 && pEnd > pStart) {
+                cond = nodeContent.substring(pStart + 1, pEnd).trim();
+              }
+            }
+            if (cond.toLowerCase().contains('hit')) {
+              cppLines.add('if (bBlockingHit)');
+              cppLines.add('{');
+              openBranchBlock = true;
+            } else if (cond.startsWith('NOT ') || cond.startsWith('!')) {
+              final cleanFlag =
+                  cond.replaceFirst(RegExp(r'^(?:NOT\s+|!)'), '').trim();
+              cppLines.add('if ($cleanFlag) return;');
+            } else if (cond.isNotEmpty) {
+              final safeCond =
+                  cond.replaceAll(RegExp(r'[^A-Za-z0-9_!=<>|&() ]'), '').trim();
+              cppLines.add('if ($safeCond)');
+              cppLines.add('{');
+              openBranchBlock = true;
+            }
+            continue;
+          }
+
+          // 2e. Simple Variable Assignment (`[Set X = Y]` or `[Set Variable: X = Y]`)
+          if ((nodeContent.startsWith('Set ') ||
+                  nodeContent.startsWith('Set Variable:')) &&
+              nodeContent.contains('=') &&
+              !nodeContent.contains('Target:')) {
+            final expr = nodeContent
+                .replaceFirst(RegExp(r'^Set(?:\s+Variable:)?\s+'), '')
+                .replaceFirst(RegExp(r'\s*\(👁[^)]*\)\s*$'), '')
                 .trim();
-            if (safeIdent.isNotEmpty) {
-              cppLines.add('$safeIdent;');
+            cppLines.add('$indent$expr;');
+            continue;
+          }
+
+          // 2f. AddMovementInput
+          if (nodeContent.startsWith('AddMovementInput') ||
+              nodeContent.startsWith('Add Movement Input')) {
+            cppLines.add(
+              '${indent}AddMovementInput(GetActorForwardVector(), $primaryVarName);',
+            );
+            continue;
+          }
+
+          // 2g. General Node with Pins: `[Node Title (Target: Obj, Pin1: Val1, ...)]`
+          final pStart = nodeContent.indexOf('(');
+          final pEnd = nodeContent.lastIndexOf(')');
+          if (pStart > 0 && pEnd > pStart) {
+            final rawNodeTitle = nodeContent.substring(0, pStart).trim();
+            final pascalMethod = rawNodeTitle
+                .split(RegExp(r'\s+'))
+                .where((w) => w.isNotEmpty)
+                .map((w) => w[0].toUpperCase() + w.substring(1))
+                .join()
+                .replaceAll(RegExp(r'[^A-Za-z0-9_]'), '');
+            final pins = splitTopLevelArgs(
+              nodeContent.substring(pStart + 1, pEnd),
+            );
+            String? targetObj;
+            final callArgs = <String>[];
+            for (final p in pins) {
+              final colon = p.indexOf(':');
+              if (colon > 0) {
+                final k = p.substring(0, colon).trim();
+                final val = formatCppValue(p.substring(colon + 1));
+                if (k.toLowerCase() == 'target') {
+                  targetObj = val.replaceAll('.', '->');
+                } else {
+                  callArgs.add(val);
+                }
+              } else {
+                callArgs.add(formatCppValue(p));
+              }
+            }
+            if (pascalMethod.isNotEmpty) {
+              final receiver =
+                  (targetObj != null && targetObj.isNotEmpty) ? '$targetObj->' : '';
+              cppLines.add(
+                '$indent$receiver$pascalMethod(${callArgs.join(', ')});',
+              );
+              continue;
             }
           }
+
+          final safeIdent = nodeContent
+              .replaceAll(RegExp(r'[^A-Za-z0-9_(),.= ]'), '')
+              .trim();
+          if (safeIdent.isNotEmpty) {
+            cppLines.add('$indent$safeIdent;');
+          }
         }
+      }
+      if (openBranchBlock) {
+        cppLines.add('}');
       }
       return cppLines.isNotEmpty ? cppLines.join('\n') : fallbackSpecCode;
     }

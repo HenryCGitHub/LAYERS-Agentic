@@ -2159,6 +2159,62 @@ Ramp_CargoDelivery->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("Bloc
           isNot(equals(resolvedRampCpp.subSteps.first.codeFormula)),
         );
 
+        // Verify custom_snippet Blueprint node chain (Smoke Beacon Marker) adapts to real Unreal C++ when unrealCppMode == true
+        final customBeaconTask = Subtask(
+          id: 'custom_beacon',
+          text: 'Beacon Collision Hull',
+          children: [
+            Subtask(
+              id: 'custom_beacon_s1',
+              text: 'Configure Flare Mesh Collision',
+              specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+                instruction:
+                    'Configure FlareCylinderMesh physics collision and position ScorchDecal onto ground pavement upon first rigid body contact.',
+                area1Hierarchy:
+                    'BP_DropFlareBeacon (Actor)\n└─ SceneRoot (DefaultSceneRoot)\n   ├─ FlareCylinderMesh (StaticMeshComponent)',
+                area2Inspector:
+                    'Simulate Physics: True | Collision Profile: BlockAllDynamic',
+              ),
+              codeTargetFile: 'custom_snippet',
+              codeSnippet: '''[FlareCylinderMesh (OnComponentHit)]
+└──► [LineTraceByChannel (Start: HitLocation, End: HitLocation - (0,0,150), TraceChannel: ECC_Visibility)]
+└──► [Branch (Is Hit Valid)]
+   ├──► [Set World Location (Target: ScorchDecal, NewLocation: TraceHitLocation)]
+   └──► [Set Visibility (Target: ScorchDecal, NewVisibility: True)]''',
+            ),
+          ],
+        );
+        final resolvedBeaconBp = TaskHowToBlueprint.resolve(
+          parentTask: customBeaconTask,
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5',
+          unrealCppMode: false,
+        );
+        final resolvedBeaconCpp = TaskHowToBlueprint.resolve(
+          parentTask: customBeaconTask,
+          taskIndex: 0,
+          checkpointNode: cp,
+          engineHint: 'Unreal Engine 5',
+          unrealCppMode: true,
+        );
+        expect(
+          resolvedBeaconBp.subSteps.first.codeFormula,
+          contains('└──► [LineTraceByChannel'),
+        );
+        expect(
+          resolvedBeaconCpp.subSteps.first.codeFormula,
+          contains('GetWorld()->LineTraceSingleByChannel('),
+        );
+        expect(
+          resolvedBeaconCpp.subSteps.first.codeFormula,
+          contains('ScorchDecal->SetWorldLocation(TraceHitLocation);'),
+        );
+        expect(
+          resolvedBeaconCpp.subSteps.first.codeFormula,
+          contains('ScorchDecal->SetVisibility(true);'),
+        );
+
         // Verify Task 01 (Setup), Task 02 (State Logic), and Task 03 (Input/Raycast) have non-repeating step titles
         final t0 = TaskHowToBlueprint.resolve(
           parentTask: Subtask(id: 't0', text: 'Create Grid Tile Actor (2h)'),
