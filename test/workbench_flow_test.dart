@@ -1067,6 +1067,10 @@ void main() {
         // ── Stage 1A: Single-Input 80-Character Word Document Composer (00 · PITCH & CONCEPT) ──
         expect(find.byKey(const ValueKey('connected_pipeline_track')),
             findsOneWidget);
+        expect(find.byKey(const ValueKey('rail_concept_blueprint_btn')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('rail_pre_release_empty_state')),
+            findsOneWidget);
         expect(find.text('00 · PITCH & CONCEPT'), findsOneWidget);
         expect(
             find.byKey(const ValueKey('spark_composer_card')), findsOneWidget);
@@ -1330,6 +1334,22 @@ void main() {
         expect(find.byKey(ValueKey('pinned_active_step_window_$cp0NodeId')),
             findsOneWidget);
         expect(find.byKey(const ValueKey('checkpoint_spec_pane_0')),
+            findsOneWidget);
+
+        // Verify clicking Concept Blueprint in the Left Rail swaps the Main Canvas to the Concept Blueprint,
+        // and clicking the Feature row in the Left Rail swaps back to the Feature Step Runbook!
+        await tester.tap(
+          find.byKey(const ValueKey('rail_concept_blueprint_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('project_blueprint_card')),
+            findsOneWidget);
+        expect(find.byKey(const ValueKey('stage3_active_feature_sheet')),
+            findsNothing);
+
+        await tester.tap(find.byKey(ValueKey('rail_feat_${activeFeat0.id}')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage3_active_feature_sheet')),
             findsOneWidget);
 
         // Verify clicking Feature 2 in the Left Outline and marking Step 1.1 done preserves focus on Feature 2

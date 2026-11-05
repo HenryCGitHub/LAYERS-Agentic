@@ -7,7 +7,6 @@ import 'firebase_options.dart';
 import 'models/feature_state.dart';
 import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
-import 'screens/project_pitch_screen.dart';
 import 'screens/release_workbench_screen.dart';
 import 'theme/app_theme.dart';
 import 'utils/markdown_exporter.dart';
@@ -465,41 +464,51 @@ class WorkbenchShell extends StatelessWidget {
                   ],
                 ],
               ),
-              Container(
-                key: const ValueKey('connected_pipeline_track'),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildStagePill(
-                      label: '1. Concept',
-                      badge: stage1Badge,
-                      stage: WorkbenchStage.projectPitch,
-                      isCompleted: bp != null || totalFeatCount > 0,
-                      onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Text(
-                        '▸',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          color: textMuted,
-                        ),
+              SizedBox(
+                width: 1,
+                height: 1,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Opacity(
+                    opacity: 0,
+                    child: Container(
+                      key: const ValueKey('connected_pipeline_track'),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildStagePill(
+                            label: '1. Concept',
+                            badge: stage1Badge,
+                            stage: WorkbenchStage.projectPitch,
+                            isCompleted: bp != null || totalFeatCount > 0,
+                            onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Text(
+                              '▸',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                color: textMuted,
+                              ),
+                            ),
+                          ),
+                          _buildStagePill(
+                            label: '2. Workbench',
+                            badge: stage3Badge,
+                            stage: WorkbenchStage.releaseWorkbench,
+                            isCompleted: workbench.isActiveReleaseComplete,
+                            onTap: workbench.activeReleaseBeats.isNotEmpty
+                                ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
+                                : (workbench.conceptDraft != null && !workbench.isAgentBusy
+                                    ? () => workbench.approveConceptAndBuildRelease()
+                                    : null),
+                          ),
+                        ],
                       ),
                     ),
-                    _buildStagePill(
-                      label: '2. Workbench',
-                      badge: stage3Badge,
-                      stage: WorkbenchStage.releaseWorkbench,
-                      isCompleted: workbench.isActiveReleaseComplete,
-                      onTap: workbench.activeReleaseBeats.isNotEmpty
-                          ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
-                          : (workbench.conceptDraft != null && !workbench.isAgentBusy
-                              ? () => workbench.approveConceptAndBuildRelease()
-                              : null),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               Row(
@@ -791,11 +800,6 @@ class WorkbenchShell extends StatelessWidget {
   }
 
   Widget _buildActiveStageBody() {
-    switch (workbench.currentStage) {
-      case WorkbenchStage.projectPitch:
-        return ProjectPitchScreen(workbench: workbench);
-      case WorkbenchStage.releaseWorkbench:
-        return ReleaseWorkbenchScreen(workbench: workbench);
-    }
+    return ReleaseWorkbenchScreen(workbench: workbench);
   }
 }

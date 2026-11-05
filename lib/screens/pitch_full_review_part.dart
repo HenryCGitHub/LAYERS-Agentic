@@ -1,16 +1,14 @@
 part of 'project_pitch_screen.dart';
 
 extension _PitchFullReviewExt on _ProjectPitchScreenState {
-  Color get _gsT1Primary => isDark ? const Color(0xFFF9FAFB) : textPrimary;
-  Color get _gsT3Label => isDark ? const Color(0xFF8E95A5) : textMuted;
-  Color get _gsT4Muted => isDark ? const Color(0xFF646D7D) : textMuted;
-  Color get _gsCardBg => isDark ? const Color(0xFF13161D) : bgSurface;
-  Color get _gsCardLaunchBg => isDark ? const Color(0xFF13161D) : bgSurface;
-  Color get _gsCardBorder => isDark ? const Color(0xFF222733) : borderSubtle;
-  Color get _gsCardHoverBorder =>
-      isDark ? const Color(0xFF333B4D) : borderBright;
-  Color get _gsHairline =>
-      isDark ? const Color(0xFF222733) : borderSubtle;
+  Color get _gsT1Primary => textPrimary;
+  Color get _gsT3Label => textSecondary;
+  Color get _gsT4Muted => textMuted;
+  Color get _gsCardBg => bgSurface;
+  Color get _gsCardLaunchBg => bgSurface;
+  Color get _gsCardBorder => borderSubtle;
+  Color get _gsCardHoverBorder => borderBright;
+  Color get _gsHairline => borderSubtle;
 
   Widget _buildReleaseTrainPipeline(ProjectConceptBlueprint draft) {
     final firstReleaseTitle = draft.releaseTrainTitles.isNotEmpty
@@ -168,9 +166,10 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                                 child: Text(
                                   draft.title,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTheme.displayFont(
+                                  style: GoogleFonts.inter(
                                     fontSize: _measureTitleFontSize,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.35,
                                     color: _gsT1Primary,
                                   ),
                                 ),
@@ -302,70 +301,13 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           ),
         ),
 
-        // 4-Row Grid on desktop (>= 900px):
-        // Row 1 (100%): 01 GOAL
-        // Row 2 (50% | 50%): 02 GAME SPEC | 03 TECH SPEC
-        // Row 3 (50% | 50%): 04 DESIGN PILLARS | 05 TRADE-OFFS
-        // Row 4 (50% | 50%): 06 CORE LOOP (Left) | Triple Stack 07 OUT OF SCOPE > 08 DONE WHEN > 09 RELEASE TARGET (Right)
-        if (_viewportWidth >= 900) ...[
-          // Row 1 (Double Width 100%): 01 GOAL
-          sectionCard(0),
-          SizedBox(height: _measureCardGap),
-          // Row 2 (Half Width 50% | 50%): 02 GAME SPEC | 03 TECH SPEC
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: sectionCard(1)),
-                SizedBox(width: _measureCardGap),
-                Expanded(child: sectionCard(2)),
-              ],
-            ),
-          ),
-          SizedBox(height: _measureCardGap),
-          // Row 3 (Half Width 50% | 50%): 04 DESIGN PILLARS | 05 TRADE-OFFS
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: sectionCard(3)),
-                SizedBox(width: _measureCardGap),
-                Expanded(child: sectionCard(4)),
-              ],
-            ),
-          ),
-          SizedBox(height: _measureCardGap),
-          // Row 4 (Half Width 50% | 50%): 06 CORE LOOP (Left) | Triple Stack: 07 OUT OF SCOPE > 08 DONE WHEN > 09 RELEASE TARGET (Right)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: sectionCard(5)),
-                SizedBox(width: _measureCardGap),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      sectionCard(6),
-                      SizedBox(height: _measureCardGap),
-                      sectionCard(7),
-                      SizedBox(height: _measureCardGap),
-                      launchpadCard,
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ] else ...[
-          for (int idx = 0; idx < _sections.length; idx++) ...[
-            if (idx > 0) SizedBox(height: _measureCardGap),
-            sectionCard(idx),
-          ],
-          SizedBox(height: _measureCardGap),
-          launchpadCard,
+        // Single-Column 680px Quiet Document Stack (01 -> 08 -> 09 Release Target):
+        for (int idx = 0; idx < _sections.length; idx++) ...[
+          if (idx > 0) SizedBox(height: _measureCardGap),
+          sectionCard(idx),
         ],
+        SizedBox(height: _measureCardGap),
+        launchpadCard,
       ],
     );
   }
@@ -383,7 +325,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
       ),
       decoration: BoxDecoration(
         color: _gsCardLaunchBg,
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: _gsCardBorder,
         ),
@@ -637,7 +579,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
           ),
           decoration: BoxDecoration(
             color: _gsCardBg,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: (isFocused || isDrawerOpen || isDraftingThisSection)
                   ? _gsT1Primary.withValues(alpha: 0.75)

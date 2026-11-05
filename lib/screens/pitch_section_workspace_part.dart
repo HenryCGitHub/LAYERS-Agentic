@@ -1,12 +1,11 @@
 part of 'project_pitch_screen.dart';
 
 extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
-  Color get _secT1Primary => isDark ? const Color(0xFFF9FAFB) : textPrimary;
-  Color get _secT2Body => isDark ? const Color(0xFFD1D5DB) : textSecondary;
-  Color get _secT3Label => isDark ? const Color(0xFF8E95A5) : textMuted;
-  Color get _secT4Muted => isDark ? const Color(0xFF646D7D) : textMuted;
-  Color get _secHairline =>
-      isDark ? const Color(0xFF222733) : borderSubtle;
+  Color get _secT1Primary => textPrimary;
+  Color get _secT2Body => textSecondary;
+  Color get _secT3Label => textMuted;
+  Color get _secT4Muted => textMuted;
+  Color get _secHairline => borderSubtle;
 
   // ── Inline Click-to-Edit Box (Replaces Popup AlertDialogs Across Stage 1) ──
   Widget _buildInlineEditorBox({

@@ -161,11 +161,12 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
   }
 
   Widget _buildLeftBeatFeatureRail(
-    TierDocument rel, {
+    TierDocument? rel, {
     bool isOverlayDrawer = false,
   }) {
     final beats = widget.workbench.activeReleaseBeats;
-    final relProgress = widget.workbench.getDocumentProgress(rel.id);
+    final relProgress =
+        rel != null ? widget.workbench.getDocumentProgress(rel.id) : 0;
     final releases = widget.workbench.projectReleases;
     final archivedFeats = widget.workbench.supersededFeatures;
     final activeVer = widget.workbench.activeReleaseVersionTag;
@@ -173,11 +174,21 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     final releaseRemHoursStr =
         TaskHowToBlueprint.formatRemainingHoursShort(releaseRemMins);
     final isReleaseDone = relProgress >= 100 || releaseRemMins <= 0;
+    final isConceptActive =
+        widget.workbench.currentStage == WorkbenchStage.projectPitch ||
+        rel == null ||
+        (beats.isEmpty && !widget.workbench.isAgentBusy);
+    final hasBuiltFeatures = beats.isNotEmpty;
+    final hasConceptDraft = widget.workbench.conceptDraft != null;
+    final String conceptBadgeText = hasBuiltFeatures
+        ? '08/08 ✓'
+        : (hasConceptDraft ? '08/08' : 'Draft');
 
     // Sync single-Epic accordion so strictly 1 Epic (the selected feature's Epic) is expanded.
     final selectedFeatId = widget.workbench.selectedFeatureId;
     final selectedBeatId = widget.workbench.selectedFeature?.parentId;
-    if ((_accordionInitReleaseId != rel.id ||
+    if (rel != null &&
+        (_accordionInitReleaseId != rel.id ||
             _lastSyncedAccordionFeatureId != selectedFeatId) &&
         beats.isNotEmpty) {
       _accordionInitReleaseId = rel.id;
@@ -191,7 +202,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         ..addAll(beats.where((b) => b.id != openBeatId).map((b) => b.id));
     }
 
-    final topHeader = SizedBox(
+    final topHeader = rel == null
+        ? const SizedBox.shrink()
+        : SizedBox(
       height: 1,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -812,6 +825,138 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: borderSubtle),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+                  child: Text(
+                    'Project',
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: isConceptActive ? bgSurface : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: isConceptActive
+                        ? Border.all(color: borderSubtle)
+                        : null,
+                  ),
+                  child: InkWell(
+                    key: const ValueKey('rail_concept_blueprint_btn'),
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () {
+                      if (_isProgressiveModalOpen) {
+                        _closeProgressiveReleasePlanner(confirmed: false);
+                      }
+                      if (isOverlayDrawer) {
+                        _rebuild(() {
+                          _isHalfScreenOutlinerOpen = false;
+                        });
+                      }
+                      widget.workbench.setStage(WorkbenchStage.projectPitch);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Concept Blueprint',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: isConceptActive
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: isConceptActive
+                                    ? textPrimary
+                                    : textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            conceptBadgeText,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: hasBuiltFeatures
+                                  ? accentEmerald
+                                  : (hasConceptDraft
+                                      ? textSecondary
+                                      : textMuted),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (widget.workbench.fullProductionBlueprint != null &&
+                    widget.workbench.fullProductionCoverage().skeletonBuilt) ...[
+                  const SizedBox(height: 2),
+                  InkWell(
+                    key: const ValueKey('rail_fp_blueprint_btn'),
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => _showFullProductionBlueprintModal(
+                      context,
+                      readOnly: true,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'v1.0 Blueprint',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w400,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '06/06 ✓',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: accentEmerald,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             decoration: BoxDecoration(
               border: Border(
@@ -829,124 +974,127 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     color: textMuted,
                   ),
                 ),
-                InkWell(
-                  key: const ValueKey('toggle_outliner_search_btn'),
-                  borderRadius: BorderRadius.circular(4),
-                  onTap: () {
-                    _rebuild(() {
-                      _isOutlinerSearchOpen = !_isOutlinerSearchOpen;
-                      if (!_isOutlinerSearchOpen &&
-                          _outlinerSearchQuery.isNotEmpty) {
-                        _outlinerSearchController.clear();
-                        _outlinerSearchQuery = '';
-                      }
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 2,
-                    ),
-                    child: Text(
-                      '⌕',
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        color: (_isOutlinerSearchOpen ||
-                                _outlinerSearchQuery.isNotEmpty)
-                            ? textPrimary
-                            : textMuted,
+                if (beats.isNotEmpty || archivedFeats.isNotEmpty)
+                  InkWell(
+                    key: const ValueKey('toggle_outliner_search_btn'),
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: () {
+                      _rebuild(() {
+                        _isOutlinerSearchOpen = !_isOutlinerSearchOpen;
+                        if (!_isOutlinerSearchOpen &&
+                            _outlinerSearchQuery.isNotEmpty) {
+                          _outlinerSearchController.clear();
+                          _outlinerSearchQuery = '';
+                        }
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        '⌕',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          color: (_isOutlinerSearchOpen ||
+                                  _outlinerSearchQuery.isNotEmpty)
+                              ? textPrimary
+                              : textMuted,
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
-          if (_isOutlinerSearchOpen || _outlinerSearchQuery.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
-              child: Container(
-                height: 28,
-                decoration: BoxDecoration(
-                  color: bgSurface,
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
-                    color: _outlinerSearchQuery.trim().isNotEmpty
-                        ? borderBright
-                        : borderSubtle,
+          if (beats.isNotEmpty || archivedFeats.isNotEmpty) ...[
+            if (_isOutlinerSearchOpen || _outlinerSearchQuery.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+                child: Container(
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: bgSurface,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: _outlinerSearchQuery.trim().isNotEmpty
+                          ? borderBright
+                          : borderSubtle,
+                    ),
                   ),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        key: const ValueKey('outliner_feature_search_input'),
-                        controller: _outlinerSearchController,
-                        onChanged: (val) {
-                          _rebuild(() {
-                            _outlinerSearchQuery = val;
-                          });
-                        },
-                        style: GoogleFonts.inter(
-                          fontSize: 11.5,
-                          color: textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Filter features...',
-                          hintStyle: GoogleFonts.inter(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const ValueKey('outliner_feature_search_input'),
+                          controller: _outlinerSearchController,
+                          onChanged: (val) {
+                            _rebuild(() {
+                              _outlinerSearchQuery = val;
+                            });
+                          },
+                          style: GoogleFonts.inter(
                             fontSize: 11.5,
-                            color: textMuted,
+                            color: textPrimary,
                           ),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 5),
+                          decoration: InputDecoration(
+                            hintText: 'Filter features...',
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: textMuted,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 5),
+                          ),
                         ),
                       ),
-                    ),
-                    if (_outlinerSearchQuery.isNotEmpty)
-                      InkWell(
-                        key: const ValueKey('clear_outliner_search_btn'),
-                        onTap: () {
-                          _outlinerSearchController.clear();
-                          _rebuild(() {
-                            _outlinerSearchQuery = '';
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Text(
-                            '✕',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: textMuted,
+                      if (_outlinerSearchQuery.isNotEmpty)
+                        InkWell(
+                          key: const ValueKey('clear_outliner_search_btn'),
+                          onTap: () {
+                            _outlinerSearchController.clear();
+                            _rebuild(() {
+                              _outlinerSearchQuery = '';
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Text(
+                              '✕',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: textMuted,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 1,
+                child: Opacity(
+                  opacity: 0,
+                  child: TextField(
+                    key: const ValueKey('outliner_feature_search_input'),
+                    controller: _outlinerSearchController,
+                    onChanged: (val) {
+                      _rebuild(() {
+                        _outlinerSearchQuery = val;
+                        if (val.isNotEmpty) _isOutlinerSearchOpen = true;
+                      });
+                    },
+                  ),
                 ),
               ),
-            )
-          else
-            SizedBox(
-              height: 1,
-              child: Opacity(
-                opacity: 0,
-                child: TextField(
-                  key: const ValueKey('outliner_feature_search_input'),
-                  controller: _outlinerSearchController,
-                  onChanged: (val) {
-                    _rebuild(() {
-                      _outlinerSearchQuery = val;
-                      if (val.isNotEmpty) _isOutlinerSearchOpen = true;
-                    });
-                  },
-                ),
-              ),
-            ),
+          ],
           if (widget.workbench.releaseViewFilter == 'archived' &&
               archivedFeats.isNotEmpty) ...[
             Padding(
@@ -1354,7 +1502,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           },
                         ),
                       )
-                    else
+                    else if (beats.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
                         child: Align(
@@ -1376,6 +1524,26 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   color: textMuted,
                                 ),
                               ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (!widget.workbench.isAgentBusy)
+                      Padding(
+                        key: const ValueKey('rail_pre_release_empty_state'),
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Text(
+                            'No release built yet — approve Concept Blueprint to generate v0.1.',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              height: 1.45,
+                              color: textMuted,
                             ),
                           ),
                         ),
@@ -1639,7 +1807,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     String? beatTitle,
     int beatIndex = 0,
   }) {
-    final isSelected = widget.workbench.selectedFeatureId == feat.id;
+    final isConceptActive =
+        widget.workbench.currentStage == WorkbenchStage.projectPitch;
+    final isSelected = !isConceptActive &&
+        !_isProgressiveModalOpen &&
+        widget.workbench.selectedFeatureId == feat.id;
     final progress = widget.workbench.getDocumentProgress(feat.id);
     final featRemMins = _computeFeatureRemainingMinutes(feat);
     final featRemLabel =
@@ -1701,6 +1873,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               onTap: () {
                 if (_isProgressiveModalOpen) {
                   _closeProgressiveReleasePlanner(confirmed: false);
+                }
+                if (widget.workbench.currentStage !=
+                    WorkbenchStage.releaseWorkbench) {
+                  widget.workbench.setStage(WorkbenchStage.releaseWorkbench);
                 }
                 _rebuild(() {
                   _manualCheckpointFocusIndex = null;

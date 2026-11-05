@@ -188,29 +188,18 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
   @override
   bool get isDark => widget.workbench.isDark;
 
-  // Responsive Strict 50% | 50% Center-Spine Grid Container Width:
-  // - Desktop (>= 1024px): 1040px container (~512px / ~55ch per 50% half-column)
-  // - Tablet (640–1023px): 860px container
-  // - Mobile (< 640px):    460px container
+  // Unified Single-Column 680px Quiet Document Measure (matches Feature Runbook & Progressive Release):
   double get _viewportWidth => MediaQuery.sizeOf(context).width;
   bool get _isMobileMeasure => _viewportWidth < 640;
   bool get _isTabletMeasure => _viewportWidth >= 640 && _viewportWidth < 1024;
-  double get _measureColumnMaxWidth =>
-      _isMobileMeasure ? 460.0 : (_isTabletMeasure ? 860.0 : 1040.0);
-  double get _measureBodyFontSize =>
-      _isMobileMeasure ? 14.5 : (_isTabletMeasure ? 15.0 : 15.5);
-  double get _measureLeadFontSize =>
-      _isMobileMeasure ? 16.5 : (_isTabletMeasure ? 17.5 : 18.0);
-  double get _measureTitleFontSize =>
-      _isMobileMeasure ? 21.0 : (_isTabletMeasure ? 24.0 : 26.0);
-  double get _measureSpecValueSize =>
-      _isMobileMeasure ? 13.0 : (_isTabletMeasure ? 13.5 : 14.0);
-  double get _measureCardPadH =>
-      _isMobileMeasure ? 18.0 : (_isTabletMeasure ? 22.0 : 24.0);
-  double get _measureCardPadV =>
-      _isMobileMeasure ? 16.0 : (_isTabletMeasure ? 18.0 : 20.0);
-  double get _measureCardGap =>
-      _isMobileMeasure ? 14.0 : (_isTabletMeasure ? 16.0 : 16.0);
+  double get _measureColumnMaxWidth => _isMobileMeasure ? 460.0 : 680.0;
+  double get _measureBodyFontSize => 13.5;
+  double get _measureLeadFontSize => 15.0;
+  double get _measureTitleFontSize => _isMobileMeasure ? 20.0 : 22.0;
+  double get _measureSpecValueSize => 12.5;
+  double get _measureCardPadH => _isMobileMeasure ? 14.0 : 16.0;
+  double get _measureCardPadV => _isMobileMeasure ? 12.0 : 14.0;
+  double get _measureCardGap => 10.0;
 
   void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
 

@@ -7,6 +7,7 @@ import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/section_text_utils.dart';
+import 'project_pitch_screen.dart';
 
 part 'workbench_engine_areas_card.dart';
 part 'workbench_modals_part.dart';
@@ -132,17 +133,95 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   Color get bgSurfaceHover =>
       isDark ? const Color(0xFF181D28) : const Color(0xFFF1F5F9);
 
+  Widget _buildHalfScreenDrawerTriggerBar(String viewLabel) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: bgRecessed,
+        border: Border(
+          bottom: BorderSide(color: borderSubtle),
+        ),
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            key: const ValueKey('halfscreen_outliner_global_trigger'),
+            borderRadius: BorderRadius.circular(5),
+            onTap: () {
+              setState(() {
+                _isHalfScreenOutlinerOpen = true;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              child: Text(
+                '☰',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: textSecondary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            viewLabel,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveMainCanvas(
+    BuildContext context,
+    TierDocument? rel, {
+    required bool isHalfScreenOverlayMode,
+  }) {
+    final isConceptView =
+        widget.workbench.currentStage == WorkbenchStage.projectPitch ||
+        rel == null ||
+        (widget.workbench.activeReleaseBeats.isEmpty &&
+            !widget.workbench.isAgentBusy);
+    if (isConceptView) {
+      final conceptScreen = ProjectPitchScreen(workbench: widget.workbench);
+      if (!isHalfScreenOverlayMode) return conceptScreen;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHalfScreenDrawerTriggerBar('Concept Blueprint'),
+          Expanded(child: conceptScreen),
+        ],
+      );
+    }
+    if (_isProgressiveModalOpen) {
+      final progressiveCanvas = _buildProgressiveReleasePlannerCanvas(context);
+      if (!isHalfScreenOverlayMode) return progressiveCanvas;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHalfScreenDrawerTriggerBar(
+            'Next release · ${widget.workbench.nextProgressiveVersionLabel}',
+          ),
+          Expanded(child: progressiveCanvas),
+        ],
+      );
+    }
+    return _buildFeatureMainCanvas(
+      rel,
+      isHalfScreenOverlayMode: isHalfScreenOverlayMode,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rel = widget.workbench.activeRelease;
-    if (rel == null) {
-      return Center(
-        child: Text(
-          'No active Release loaded.',
-          style: GoogleFonts.inter(color: textMuted),
-        ),
-      );
-    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -182,12 +261,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 ),
               ),
               Expanded(
-                child: _isProgressiveModalOpen
-                    ? _buildProgressiveReleasePlannerCanvas(context)
-                    : _buildFeatureMainCanvas(
-                        rel,
-                        isHalfScreenOverlayMode: false,
-                      ),
+                child: _buildActiveMainCanvas(
+                  context,
+                  rel,
+                  isHalfScreenOverlayMode: false,
+                ),
               ),
             ],
           );
@@ -199,12 +277,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         return Stack(
           children: [
             Positioned.fill(
-              child: _isProgressiveModalOpen
-                  ? _buildProgressiveReleasePlannerCanvas(context)
-                  : _buildFeatureMainCanvas(
-                      rel,
-                      isHalfScreenOverlayMode: true,
-                    ),
+              child: _buildActiveMainCanvas(
+                context,
+                rel,
+                isHalfScreenOverlayMode: true,
+              ),
             ),
             if (_isHalfScreenOutlinerOpen)
               Positioned.fill(

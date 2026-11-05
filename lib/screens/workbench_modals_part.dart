@@ -36,6 +36,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
     final prevReleaseId = widget.workbench.activeReleaseId;
     final prevPhase = widget.workbench.currentPhase;
 
+    if (widget.workbench.currentStage != WorkbenchStage.releaseWorkbench) {
+      widget.workbench.setStage(WorkbenchStage.releaseWorkbench);
+    }
+
     _rebuild(() {
       _isProgressiveModalOpen = true;
       _showProgressiveStableFeaturesDrawer = false;
