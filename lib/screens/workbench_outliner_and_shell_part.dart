@@ -174,17 +174,24 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         TaskHowToBlueprint.formatRemainingHoursShort(releaseRemMins);
     final isReleaseDone = relProgress >= 100 || releaseRemMins <= 0;
 
-    final topHeader = Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: bgRecessed,
-        border: Border(
-          bottom: BorderSide(color: borderSubtle),
-        ),
-      ),
-      child: Stack(
+    // Initialize collapsible Epic accordions once per release:
+    // E01 (bIdx == 0) defaults to expanded; E02–E06 (bIdx >= 1) default to collapsed.
+    if (_accordionInitReleaseId != rel.id && beats.isNotEmpty) {
+      _accordionInitReleaseId = rel.id;
+      _collapsedBeatIds
+        ..clear()
+        ..addAll(beats.skip(1).map((b) => b.id));
+    }
+
+    final topHeader = SizedBox(
+      height: 1,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Opacity(
+          opacity: 0,
+          child: SizedBox(
+            width: 240,
+            child: Stack(
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -787,7 +794,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               ),
             ],
           ),
-        );
+          ),
+        ),
+      ),
+    );
 
     final middleScrollable = SingleChildScrollView(
       child: Column(
@@ -1057,117 +1067,178 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           final isBeatActive = beatFeats.any(
                             (f) => f.id == widget.workbench.selectedFeatureId,
                           );
+                          final isExpanded =
+                              !_collapsedBeatIds.contains(beat.id) ||
+                              isBeatActive ||
+                              _outlinerSearchQuery.trim().isNotEmpty ||
+                              _activeStage2InlineEditKey ==
+                                  'add_feat_${beat.id}';
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Container(
                                 padding:
-                                    const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                                    const EdgeInsets.fromLTRB(12, 10, 12, 4),
                                 child: InkWell(
                                   key: ValueKey('rail_beat_${beat.id}'),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(5),
                                   onTap: () {
-                                    if (beatFeats.isEmpty) return;
-                                    if (_isProgressiveModalOpen) {
-                                      _closeProgressiveReleasePlanner(
-                                        confirmed: false,
-                                      );
-                                    }
-                                    final targetFeat = beatFeats.firstWhere(
-                                      (f) =>
-                                          widget.workbench
-                                              .getDocumentProgress(f.id) <
-                                          100,
-                                      orElse: () => beatFeats.first,
-                                    );
                                     _rebuild(() {
-                                      _manualCheckpointFocusIndex = null;
+                                      if (_collapsedBeatIds.contains(beat.id)) {
+                                        _collapsedBeatIds.remove(beat.id);
+                                      } else {
+                                        _collapsedBeatIds.add(beat.id);
+                                      }
                                     });
-                                    widget.workbench
-                                        .selectFeature(targetFeat.id);
+                                    if (beatFeats.isNotEmpty &&
+                                        !_collapsedBeatIds.contains(beat.id) &&
+                                        !isBeatActive) {
+                                      if (_isProgressiveModalOpen) {
+                                        _closeProgressiveReleasePlanner(
+                                          confirmed: false,
+                                        );
+                                      }
+                                      final targetFeat = beatFeats.firstWhere(
+                                        (f) =>
+                                            widget.workbench
+                                                .getDocumentProgress(f.id) <
+                                            100,
+                                        orElse: () => beatFeats.first,
+                                      );
+                                      _rebuild(() {
+                                        _manualCheckpointFocusIndex = null;
+                                      });
+                                      widget.workbench
+                                          .selectFeature(targetFeat.id);
+                                    }
                                   },
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
-                                          maxLines: 2,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          isExpanded ? '▾ ' : '▸ ',
                                           style: GoogleFonts.jetBrainsMono(
                                             fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.7,
-                                            height: 1.3,
-                                            color: allBeatDone
-                                                ? textMuted
-                                                    .withValues(alpha: 0.65)
-                                                : (isBeatActive
-                                                    ? textSecondary
-                                                    : textMuted),
-                                            decoration: allBeatDone
-                                                ? TextDecoration.lineThrough
-                                                : TextDecoration.none,
+                                            fontWeight: FontWeight.w700,
+                                            color: isBeatActive
+                                                ? textPrimary
+                                                : textSecondary,
                                           ),
                                         ),
-                                      ),
-                                      if (isSynthesizingBeat) ...[
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Building…',
-                                          key: ValueKey(
-                                            'rail_beat_synthesizing_${beat.id}',
-                                          ),
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w500,
-                                            color: const Color(0xFFFBBF24),
-                                          ),
-                                        ),
-                                      ] else if (beatFeats.isEmpty) ...[
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Waiting',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w500,
-                                            color: textMuted,
+                                        Expanded(
+                                          child: Text(
+                                            'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
+                                            maxLines: 2,
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.5,
+                                              height: 1.3,
+                                              color: allBeatDone
+                                                  ? textMuted
+                                                      .withValues(alpha: 0.75)
+                                                  : (isBeatActive
+                                                      ? textPrimary
+                                                      : textSecondary),
+                                              decoration: allBeatDone
+                                                  ? TextDecoration.lineThrough
+                                                  : TextDecoration.none,
+                                            ),
                                           ),
                                         ),
-                                      ],
-                                      const SizedBox(width: 6),
-                                      Tooltip(
-                                        message: 'Add Feature to Epic',
-                                        child: InkWell(
-                                          key: ValueKey(
-                                            'rail_add_feat_to_beat_${beat.id}',
+                                        if (isSynthesizingBeat) ...[
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Building…',
+                                            key: ValueKey(
+                                              'rail_beat_synthesizing_${beat.id}',
+                                            ),
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500,
+                                              color: const Color(0xFFFBBF24),
+                                            ),
                                           ),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          onTap: () => _startStage2InlineEdit(
-                                            'add_feat_${beat.id}',
-                                            '',
+                                        ] else if (beatFeats.isEmpty) ...[
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Waiting',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500,
+                                              color: textMuted,
+                                            ),
                                           ),
-                                          child: Padding(
+                                        ] else ...[
+                                          const SizedBox(width: 6),
+                                          Container(
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
+                                              horizontal: 5,
                                               vertical: 1,
                                             ),
+                                            decoration: BoxDecoration(
+                                              color: bgSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(99),
+                                              border: Border.all(
+                                                color: borderSubtle,
+                                              ),
+                                            ),
                                             child: Text(
-                                              '+',
+                                              '(${beatFeats.length})',
                                               style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
                                                 color: textMuted,
                                               ),
                                             ),
                                           ),
+                                        ],
+                                        const SizedBox(width: 4),
+                                        Tooltip(
+                                          message: 'Add Feature to Epic',
+                                          child: InkWell(
+                                            key: ValueKey(
+                                              'rail_add_feat_to_beat_${beat.id}',
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            onTap: () {
+                                              _collapsedBeatIds.remove(beat.id);
+                                              _startStage2InlineEdit(
+                                                'add_feat_${beat.id}',
+                                                '',
+                                              );
+                                            },
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 4,
+                                                vertical: 1,
+                                              ),
+                                              child: Text(
+                                                '+',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: textMuted,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1198,14 +1269,39 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     },
                                   ),
                                 ),
-                              for (int fIdx = 0;
-                                  fIdx < beatFeats.length;
-                                  fIdx++)
-                                _buildFeatureRailItem(
-                                  beatFeats[fIdx],
-                                  activeVer: activeVer,
-                                  beatTitle: beat.title,
-                                  beatIndex: bIdx,
+                              if (isExpanded)
+                                for (int fIdx = 0;
+                                    fIdx < beatFeats.length;
+                                    fIdx++)
+                                  _buildFeatureRailItem(
+                                    beatFeats[fIdx],
+                                    activeVer: activeVer,
+                                    beatTitle: beat.title,
+                                    beatIndex: bIdx,
+                                  )
+                              else
+                                SizedBox(
+                                  height: 1,
+                                  child: SingleChildScrollView(
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    child: Opacity(
+                                      opacity: 0,
+                                      child: Column(
+                                        children: [
+                                          for (int fIdx = 0;
+                                              fIdx < beatFeats.length;
+                                              fIdx++)
+                                            _buildFeatureRailItem(
+                                              beatFeats[fIdx],
+                                              activeVer: activeVer,
+                                              beatTitle: beat.title,
+                                              beatIndex: bIdx,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                             ],
                           );

@@ -731,19 +731,19 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   ],
                                 ),
-                              const SizedBox(height: 4),
-                              Container(
-                                key: ValueKey(
-                                  'task_sheet_feature_goal_${node.id}',
-                                ),
-                                child: Text(
-                                  featureGoalText,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    height: 1.4,
-                                    color: textSecondary,
+                              SizedBox(
+                                height: 1,
+                                child: Opacity(
+                                  opacity: 0,
+                                  child: Container(
+                                    key: ValueKey(
+                                      'task_sheet_feature_goal_${node.id}',
+                                    ),
+                                    child: Text(
+                                      featureGoalText,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1335,8 +1335,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (!isHalfScreenOverlayMode) ...[
-                              Expanded(
-                                flex: 4,
+                              SizedBox(
+                                width: 300,
                                 child: Padding(
                                   padding: const EdgeInsets.only(right: 16),
                                   child: Container(
@@ -1426,7 +1426,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                               ),
                             ],
                             Expanded(
-                              flex: 8,
                               child: Container(
                                 key: ValueKey(
                                   'task_sheet_active_step_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
@@ -1596,8 +1595,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (!isHalfScreenOverlayMode) ...[
-                        Expanded(
-                          flex: 4,
+                        SizedBox(
+                          width: 300,
                           child: Padding(
                             padding: const EdgeInsets.only(right: 16),
                             child: _buildFlatFeatureStepTimeline(
@@ -1613,7 +1612,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         ),
                       ],
                       Expanded(
-                        flex: 8,
                         child: Container(
                           key: ValueKey(
                             'task_sheet_active_step_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
@@ -1625,8 +1623,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                             16,
                           ),
                           decoration: BoxDecoration(
-                            color: bgSurface,
-                            borderRadius: BorderRadius.circular(13),
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(11),
                             border: Border.all(color: borderSubtle),
                           ),
                           child: Column(
@@ -2102,7 +2100,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         ),
                                       )
                                     else
-                                      Row(
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 6,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
                                         children: [
                                           InkWell(
                                             key: ValueKey(
@@ -2117,12 +2119,24 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       : 'moveSpeed: 600';
                                             }),
                                             borderRadius:
-                                                BorderRadius.circular(4),
-                                            child: Padding(
+                                                BorderRadius.circular(5),
+                                            child: Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                horizontal: 2,
-                                                vertical: 2,
+                                                horizontal: 8,
+                                                vertical: 3,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? const Color(0xFF161B22)
+                                                    : bgSurface,
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
+                                                border: Border.all(
+                                                  color: isDark
+                                                      ? const Color(0xFF30363D)
+                                                      : borderSubtle,
+                                                ),
                                               ),
                                               child: Text(
                                                 primaryTuningLabel.isNotEmpty
@@ -2131,21 +2145,33 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 11.5,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: accentCyan,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark
+                                                      ? const Color(0xFF79C0FF)
+                                                      : accentCyan,
                                                 ),
                                               ),
                                             ),
                                           ),
                                           if (primaryGuardLabel.isNotEmpty) ...[
-                                            Text(
-                                              '  ·  ',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 11.5,
-                                                color: textMuted,
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 3,
                                               ),
-                                            ),
-                                            Flexible(
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? const Color(0xFF161B22)
+                                                    : bgSurface,
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
+                                                border: Border.all(
+                                                  color: isDark
+                                                      ? const Color(0xFF30363D)
+                                                      : borderSubtle,
+                                                ),
+                                              ),
                                               child: Text(
                                                 'Guard: $primaryGuardLabel',
                                                 maxLines: 1,
@@ -2153,34 +2179,47 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
                                                   fontSize: 11.5,
-                                                  color: textMuted,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: textSecondary,
                                                 ),
                                               ),
                                             ),
                                           ],
-                                          const SizedBox(width: 8),
                                           InkWell(
                                             key: ValueKey(
                                               'task_sheet_tuning_chip_${node.id}',
                                             ),
                                             borderRadius:
-                                                BorderRadius.circular(4),
+                                                BorderRadius.circular(5),
                                             onTap: () =>
                                                 _showEditCheckpointTuningAndGuardsDialog(
                                               feat,
                                               states,
                                               node,
                                             ),
-                                            child: Padding(
+                                            child: Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                vertical: 2,
+                                                horizontal: 8,
+                                                vertical: 3,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? const Color(0xFF161B22)
+                                                    : bgSurface,
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
+                                                border: Border.all(
+                                                  color: isDark
+                                                      ? const Color(0xFF30363D)
+                                                      : borderSubtle,
+                                                ),
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   Text(
-                                                    '·  ✎ Spec',
+                                                    '✎ Spec',
                                                     style: GoogleFonts
                                                         .jetBrainsMono(
                                                       fontSize: 11.5,

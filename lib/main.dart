@@ -358,6 +358,119 @@ class WorkbenchShell extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (workbench.activeRelease != null &&
+                      workbench.projectReleases.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '|',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11,
+                        color: borderColor,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    PopupMenuButton<String>(
+                      key: const ValueKey('global_bar_release_selector_btn'),
+                      tooltip: 'Switch Release Version',
+                      color: bgSurface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: borderColor),
+                      ),
+                      onSelected: (val) {
+                        workbench.selectActiveRelease(val);
+                      },
+                      itemBuilder: (ctx) => [
+                        for (final r in workbench.projectReleases)
+                          PopupMenuItem<String>(
+                            value: r.id,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  r.id == workbench.activeRelease?.id
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.layers_outlined,
+                                  size: 13,
+                                  color: r.id == workbench.activeRelease?.id
+                                      ? textPrimary
+                                      : textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    r.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight:
+                                          r.id == workbench.activeRelease?.id
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                      color: r.id == workbench.activeRelease?.id
+                                          ? textPrimary
+                                          : textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: bgSurface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: AppTheme.borderBrightFor(isDark),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${workbench.activeReleaseVersionTag} · ${workbench.activeRelease!.title}',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accentGreenFor(isDark)
+                                    .withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${workbench.getDocumentProgress(workbench.activeRelease!.id)}%',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.accentGreenFor(isDark),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 13,
+                              color: textMuted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               Container(

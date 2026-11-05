@@ -4,27 +4,27 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   // ── Dark Palette (40 · 30 · 20 · 10 Ratio · Palette A: Obsidian & Emerald) ─
   static const Color bgBase =
-      Color(0xFF0C0E12); // 40% Dominant Canvas & Rail (L1 Carbon: #0C0E12)
+      Color(0xFF090C10); // 40% Dominant Base App Background (#090C10)
   static const Color bgPanel =
-      Color(0xFF0A0C10); // 40% Recessed Left Outliner Rail & Top Bar (#0A0C10)
+      Color(0xFF0D1117); // 40% Left Feature Rail & Center Steps Pane (#0D1117)
   static const Color bgSurface =
-      Color(0xFF13161D); // 30% Free-Floating Rounded Cards (L2 Slate: #13161D)
+      Color(0xFF161B22); // 30% Elevated Inspector Cards & Active Rows (#161B22)
   static const Color bgSurfaceHover =
-      Color(0xFF181C26); // Hover / secondary surface (#181C26)
+      Color(0xFF1C2128); // Hover / secondary surface (#1C2128)
   static const Color bgSurfaceActive =
-      Color(0xFF1D222D); // 20% Active/selected row & pill surface (L3: #1D222D)
+      Color(0xFF21262D); // 20% Active/selected row & pill surface (#21262D)
 
   static const Color borderSubtle =
-      Color(0xFF222733); // Crisp 1px card & hairline divider (#222733)
+      Color(0xFF262C36); // Crisp 1px card & hairline divider (#262C36)
   static const Color borderBright =
-      Color(0xFF333B4D); // Focused / active pill border (#333B4D)
+      Color(0xFF30363D); // Focused / active pill & badge border (#30363D)
 
   static const Color textPrimary =
-      Color(0xFFF9FAFB); // T1 Crisp white primary lead text (#F9FAFB)
+      Color(0xFFF0F6FC); // T1 Crisp white primary lead text (#F0F6FC)
   static const Color textSecondary =
-      Color(0xFFD1D5DB); // T2 High-contrast body prose (#D1D5DB)
+      Color(0xFF9CA3AF); // T2 Boosted secondary contrast (#9CA3AF)
   static const Color textMuted =
-      Color(0xFF8E95A5); // T3 Muted slate label / metadata text (#8E95A5)
+      Color(0xFF8B949E); // T3 Boosted muted label / metadata contrast (#8B949E)
 
   // ── Light Palette (Crisp Cool Slate Paper · Deep Slate Ink & Accent) ───────
   static const Color bgBaseLight =
@@ -50,9 +50,9 @@ class AppTheme {
 
   // ── Semantic Surface Scale (40 · 30 · 20 · 10 Depth Ladder) ───────────────
   static const Color bgSurfaceRaised =
-      Color(0xFF181C26); // Elevated cards, chiclets, floating toolbars (Dark)
+      Color(0xFF161B22); // Elevated cards, chiclets, floating toolbars (Dark)
   static const Color bgSurfaceRecessed =
-      Color(0xFF080A0D); // 20% Recessed 3-Area Engine Well & Refine Drawer (#080A0D)
+      Color(0xFF0D1117); // 20% Recessed Outliner Rail, Steps Pane & Code Well (#0D1117)
   static const Color bgSurfaceRaisedLight =
       Color(0xFFFFFFFF); // Elevated cards on light
   static const Color bgSurfaceRecessedLight =
@@ -60,7 +60,7 @@ class AppTheme {
   static const Color bgSurfaceActiveLight =
       Color(0xFFE2E8F0); // Active/selected list item on light
 
-  static const Color bgInset = Color(0xFF080A0D); // 20% Deep recessed code well (Dark)
+  static const Color bgInset = Color(0xFF0D1117); // 20% Deep recessed code well (Dark)
   static const Color bgInsetLight = Color(0xFFF1F5F9); // Recessed insets / inner cards (Light)
 
   // ── Reversible Polarity Focal Accent (Crisp White in Dark ↔ Deep Slate in Light) ─
