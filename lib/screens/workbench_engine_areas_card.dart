@@ -466,14 +466,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '✎',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      color: textMuted,
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -500,7 +492,20 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   Text('1. $area1Title'),
                   Text('2. $area2Title'),
                   Text('3. $area3Title'),
-                  if (!showCode) ...[
+                  InkWell(
+                    key: ValueKey(
+                      'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                    ),
+                    onTap: () => _promptEditHowToSubStepDialog(
+                      feat,
+                      states,
+                      node,
+                      selectedTaskIdx,
+                      activeSubStepIdx,
+                    ),
+                    child: const Text('Edit'),
+                  ),
+                  if (!showCode)
                     InkWell(
                       key: ValueKey(
                         'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
@@ -510,22 +515,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         activeSubStepIdx,
                         activeSubStep.codeFormula,
                       ),
-                      child: const Text('⧉ Copy'),
+                      child: const Text('Copy'),
                     ),
-                    InkWell(
-                      key: ValueKey(
-                        'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                      ),
-                      onTap: () => _promptEditHowToSubStepDialog(
-                        feat,
-                        states,
-                        node,
-                        selectedTaskIdx,
-                        activeSubStepIdx,
-                      ),
-                      child: const Text('Edit'),
-                    ),
-                  ],
                   if (activeSubStepIdx != 1)
                     InkWell(
                       key: ValueKey(
@@ -549,139 +540,84 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         // Compact 2-Column Component → Properties strip (#131820 surface, #21262D border)
         if (inspCardWidget != null) inspCardWidget,
 
-        // Recessed Code Block (#131820 header + #080A0F body)
-        if (showCode)
-          Container(
-            decoration: BoxDecoration(
-              color: bgRecessed,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: borderSubtle),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        // .code-wrap: .code-hdr (Location + Copy) directly above #080A0F .code-pre box
+        if (showCode) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: bgSurface,
-                    border: Border(
-                      bottom: BorderSide(color: borderSubtle),
+                Flexible(
+                  child: Text(
+                    'Location: ${codeWhere ?? stepPath}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: textMuted,
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Text.rich(
-                          TextSpan(
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11,
-                              color: textMuted,
-                            ),
-                            children: [
-                              const TextSpan(text: 'Location: '),
-                              TextSpan(
-                                text: codeWhere ?? stepPath,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          InkWell(
-                            key: ValueKey(
-                              'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                            ),
-                            onTap: () => _promptEditHowToSubStepDialog(
-                              feat,
-                              states,
-                              node,
-                              selectedTaskIdx,
-                              activeSubStepIdx,
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 2,
-                              ),
-                              child: Text(
-                                'Edit',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: textMuted,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          InkWell(
-                            key: ValueKey(
-                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                            ),
-                            onTap: () => _copySubStepCodeFormula(
-                              selectedTaskIdx,
-                              activeSubStepIdx,
-                              activeSubStep.codeFormula,
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              child: Text(
-                                '⧉ Copy',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
+                const SizedBox(width: 8),
+                InkWell(
+                  key: ValueKey(
+                    'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
                   ),
-                  child: Text.rich(
-                    _buildSemanticStepSpan(
-                      text: codeBody,
-                      baseStyle: GoogleFonts.jetBrainsMono(
-                        fontSize: 12.5,
-                        height: 1.6,
-                        color: textPrimary,
+                  onTap: () => _copySubStepCodeFormula(
+                    selectedTaskIdx,
+                    activeSubStepIdx,
+                    activeSubStep.codeFormula,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: bgSurface,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: borderSubtle),
+                    ),
+                    child: Text(
+                      'Copy',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: textSecondary,
                       ),
-                      tuningItems: tuningItems,
-                      edgeItems: edgeItems,
-                      isCodeBlock: true,
                     ),
                   ),
                 ),
               ],
             ),
           ),
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 13,
+              vertical: 11,
+            ),
+            decoration: BoxDecoration(
+              color: bgRecessed,
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: borderSubtle),
+            ),
+            child: Text.rich(
+              _buildSemanticStepSpan(
+                text: codeBody,
+                baseStyle: GoogleFonts.jetBrainsMono(
+                  fontSize: 12,
+                  height: 1.55,
+                  color: textPrimary,
+                ),
+                tuningItems: tuningItems,
+                edgeItems: edgeItems,
+                isCodeBlock: true,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

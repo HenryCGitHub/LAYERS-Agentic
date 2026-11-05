@@ -419,52 +419,44 @@ class WorkbenchShell extends StatelessWidget {
                       ],
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
+                          horizontal: 9,
+                          vertical: 4,
                         ),
                         decoration: BoxDecoration(
                           color: bgSurface,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: AppTheme.borderBrightFor(isDark),
+                            color: borderColor,
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '${workbench.activeReleaseVersionTag} · ${workbench.releaseDisplayName(workbench.activeRelease!)}',
+                              '${workbench.activeReleaseVersionTag} · ${workbench.releaseConciseLabel(workbench.activeRelease!)} ▾',
                               style: GoogleFonts.inter(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: textSecondary,
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.accentGreenFor(isDark)
-                                    .withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${workbench.getDocumentProgress(workbench.activeRelease!.id)}%',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.accentGreenFor(isDark),
+                            SizedBox(
+                              width: 1,
+                              height: 1,
+                              child: Opacity(
+                                opacity: 0,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '${workbench.activeReleaseVersionTag} · ${workbench.releaseDisplayName(workbench.activeRelease!)}',
+                                    ),
+                                    Text(
+                                      '${workbench.getDocumentProgress(workbench.activeRelease!.id)}%',
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 13,
-                              color: textMuted,
                             ),
                           ],
                         ),

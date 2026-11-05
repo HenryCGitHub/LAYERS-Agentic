@@ -76,6 +76,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       TextEditingController();
   final TextEditingController _inboxCaptureCtrl = TextEditingController();
   String _outlinerSearchQuery = '';
+  bool _isOutlinerSearchOpen = false;
   final TextEditingController _outlinerSearchController =
       TextEditingController();
 

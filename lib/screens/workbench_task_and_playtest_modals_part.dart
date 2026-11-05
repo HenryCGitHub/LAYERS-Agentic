@@ -417,6 +417,16 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
   ) {
     if (pIdx < 0 || pIdx >= node.checklist.length) return;
     final parentTask = node.checklist[pIdx];
+    if (parentTask.children.isEmpty) {
+      TaskHowToBlueprint.resolve(
+        parentTask: parentTask,
+        taskIndex: pIdx,
+        checkpointNode: node,
+        engineHint: _engineHint,
+        unrealCppMode: _unrealCppMode,
+        phase: widget.workbench.currentPhase,
+      );
+    }
     if (sIdx < 0 || sIdx >= parentTask.children.length) return;
     final wasDone = node.isCompleted;
     final nextCompleted = !parentTask.children[sIdx].completed;
@@ -424,7 +434,12 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     parentTask.completed = parentTask.children.isNotEmpty &&
         parentTask.children.every((c) => c.completed);
     final nowDone = node.isCompleted;
-        _rebuild(() {
+    _rebuild(() {
+      final cpIdx = states.indexWhere((s) => s.id == node.id);
+      if (cpIdx != -1) {
+        _manualCheckpointFocusIndex = cpIdx;
+        _manualCheckpointFocusFeatureId = feat.id;
+      }
       _selectedTaskIndexByCheckpoint[node.id] = pIdx;
       _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
       if (!wasDone && nowDone) {
@@ -444,15 +459,28 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
   ) {
     if (tIdx < 0 || tIdx >= node.checklist.length) return;
     final task = node.checklist[tIdx];
-    final markDone = !task.completed;
+    if (task.children.isEmpty) {
+      TaskHowToBlueprint.resolve(
+        parentTask: task,
+        taskIndex: tIdx,
+        checkpointNode: node,
+        engineHint: _engineHint,
+        unrealCppMode: _unrealCppMode,
+        phase: widget.workbench.currentPhase,
+      );
+    }
+    final allChildrenDone =
+        task.children.isNotEmpty && task.children.every((c) => c.completed);
+    final markDone = !(task.completed || allChildrenDone);
     task.completed = markDone;
     for (final c in task.children) {
       c.completed = markDone;
     }
-        _rebuild(() {
+    _rebuild(() {
       final nextTaskIdx = node.checklist.indexWhere((t) => !t.completed);
       if (markDone && nextTaskIdx != -1) {
         _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
+        _manualCheckpointFocusFeatureId = feat.id;
         _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
         _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
       } else if (markDone) {
@@ -465,6 +493,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         }
         if (nextCpIdx != -1) {
           _manualCheckpointFocusIndex = nextCpIdx;
+          _manualCheckpointFocusFeatureId = feat.id;
           final nextCp = states[nextCpIdx];
           _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
           _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
@@ -473,7 +502,9 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         }
       } else {
         _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
+        _manualCheckpointFocusFeatureId = feat.id;
         _selectedTaskIndexByCheckpoint[node.id] = tIdx;
+        _selectedSubStepIndexByTask['${node.id}_$tIdx'] = 0;
       }
     });
     widget.workbench.updateFeatureStates(feat.id, states);

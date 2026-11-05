@@ -6675,6 +6675,13 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
   void updateFeatureStates(String featureId, List<FeatureStateNode> states) {
     final feat = documents[featureId];
     if (feat == null) return;
+    if (states.any((s) => !s.isCompleted) &&
+        feat.sections['lifecycle'] == FeatureLifecycleStatus.stable.name) {
+      feat.sections['lifecycle'] = states.length > 1
+          ? FeatureLifecycleStatus.upgrade.name
+          : FeatureLifecycleStatus.newFeature.name;
+      feat.sections['activeReleaseVersion'] = activeReleaseVersionTag;
+    }
     FeatureStateNode.saveStatesToDocument(feat, states);
     if (states.isNotEmpty) {
       final activeVer = activeReleaseVersionTag;

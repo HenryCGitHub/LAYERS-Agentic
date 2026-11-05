@@ -811,138 +811,142 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-            child: Builder(
-              builder: (context) {
-                final pendingCount =
-                    widget.workbench.pendingFeatureInboxItems.length;
-                final scheduledCount =
-                    widget.workbench.scheduledFeatureInboxItems.length;
-                final totalInbox = pendingCount + scheduledCount;
-                return InkWell(
-                  key: const ValueKey('open_feature_inbox_btn'),
-                  onTap: () => _showFeatureInboxModal(context),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: borderSubtle),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Features',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
+                  ),
+                ),
+                InkWell(
+                  key: const ValueKey('toggle_outliner_search_btn'),
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () {
+                    _rebuild(() {
+                      _isOutlinerSearchOpen = !_isOutlinerSearchOpen;
+                      if (!_isOutlinerSearchOpen &&
+                          _outlinerSearchQuery.isNotEmpty) {
+                        _outlinerSearchController.clear();
+                        _outlinerSearchQuery = '';
+                      }
+                    });
+                  },
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
+                      horizontal: 4,
+                      vertical: 2,
                     ),
-                    decoration: BoxDecoration(
-                      color: bgSurface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: pendingCount > 0 ? borderBright : borderSubtle,
+                    child: Text(
+                      '⌕',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        color: (_isOutlinerSearchOpen ||
+                                _outlinerSearchQuery.isNotEmpty)
+                            ? textPrimary
+                            : textMuted,
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_isOutlinerSearchOpen || _outlinerSearchQuery.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+              child: Container(
+                height: 28,
+                decoration: BoxDecoration(
+                  color: bgSurface,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: _outlinerSearchQuery.trim().isNotEmpty
+                        ? borderBright
+                        : borderSubtle,
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('outliner_feature_search_input'),
+                        controller: _outlinerSearchController,
+                        onChanged: (val) {
+                          _rebuild(() {
+                            _outlinerSearchQuery = val;
+                          });
+                        },
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Filter features...',
+                          hintStyle: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            color: textMuted,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 5),
+                        ),
+                      ),
+                    ),
+                    if (_outlinerSearchQuery.isNotEmpty)
+                      InkWell(
+                        key: const ValueKey('clear_outliner_search_btn'),
+                        onTap: () {
+                          _outlinerSearchController.clear();
+                          _rebuild(() {
+                            _outlinerSearchQuery = '';
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
                           child: Text(
-                            totalInbox > 0
-                                ? 'Feature Inbox ($totalInbox)'
-                                : 'Feature Inbox',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w500,
-                              color: textPrimary,
+                            '✕',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: textMuted,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          pendingCount > 0 ? '$pendingCount new' : '+ Add',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: pendingCount > 0
-                                ? const Color(0xFF10B981)
-                                : textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-            child: Container(
-              height: 30,
-              decoration: BoxDecoration(
-                color: bgSurface,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: _outlinerSearchQuery.trim().isNotEmpty
-                      ? borderBright
-                      : borderSubtle,
+                      ),
+                  ],
                 ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    size: 13,
-                    color: textMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: TextField(
-                      key: const ValueKey('outliner_feature_search_input'),
-                      controller: _outlinerSearchController,
-                      onChanged: (val) {
-                        _rebuild(() {
-                          _outlinerSearchQuery = val;
-                        });
-                      },
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: textPrimary,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Filter features, scripts, vars...',
-                        hintStyle: GoogleFonts.inter(
-                          fontSize: 11.5,
-                          color: textMuted,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 6),
-                      ),
-                    ),
-                  ),
-                  if (_outlinerSearchQuery.isNotEmpty)
-                    InkWell(
-                      key: const ValueKey('clear_outliner_search_btn'),
-                      onTap: () {
-                        _outlinerSearchController.clear();
-                        _rebuild(() {
-                          _outlinerSearchQuery = '';
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: Text(
-                          '✕',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: textMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+            )
+          else
+            SizedBox(
+              height: 1,
+              child: Opacity(
+                opacity: 0,
+                child: TextField(
+                  key: const ValueKey('outliner_feature_search_input'),
+                  controller: _outlinerSearchController,
+                  onChanged: (val) {
+                    _rebuild(() {
+                      _outlinerSearchQuery = val;
+                      if (val.isNotEmpty) _isOutlinerSearchOpen = true;
+                    });
+                  },
+                ),
               ),
             ),
-          ),
           if (widget.workbench.releaseViewFilter == 'archived' &&
               archivedFeats.isNotEmpty) ...[
             Padding(
@@ -1142,34 +1146,19 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text(
-                                          isExpanded ? '▾ ' : '▸ ',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: isBeatActive
-                                                ? textPrimary
-                                                : textSecondary,
-                                          ),
-                                        ),
                                         Expanded(
                                           child: Text(
-                                            'E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title).toUpperCase()}',
-                                            maxLines: 2,
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11,
+                                            '${isExpanded ? '▾' : '▸'} E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title)}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11.5,
                                               fontWeight: FontWeight.w600,
-                                              letterSpacing: 0.5,
-                                              height: 1.3,
                                               color: allBeatDone
                                                   ? textMuted
-                                                      .withValues(alpha: 0.75)
                                                   : (isBeatActive
                                                       ? textPrimary
-                                                      : textSecondary),
-                                              decoration: allBeatDone
-                                                  ? TextDecoration.lineThrough
-                                                  : TextDecoration.none,
+                                                      : textMuted),
                                             ),
                                           ),
                                         ),
@@ -1198,71 +1187,19 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           ),
                                         ] else ...[
                                           const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 5,
-                                              vertical: 1,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: bgSurface,
-                                              borderRadius:
-                                                  BorderRadius.circular(99),
-                                              border: Border.all(
-                                                color: borderSubtle,
-                                              ),
-                                            ),
-                                            child: Text(
-                                              '(${beatFeats.length})',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: textMuted,
-                                              ),
+                                          Text(
+                                            allBeatDone
+                                                ? '✓'
+                                                : '$doneBeatCount/${beatFeats.length}',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w500,
+                                              color: allBeatDone
+                                                  ? accentEmerald
+                                                  : textMuted,
                                             ),
                                           ),
                                         ],
-                                        const SizedBox(width: 4),
-                                        Tooltip(
-                                          message: 'Add Feature to Epic',
-                                          child: InkWell(
-                                            key: ValueKey(
-                                              'rail_add_feat_to_beat_${beat.id}',
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            onTap: () {
-                                              _collapsedBeatIds
-                                                ..clear()
-                                                ..addAll(
-                                                  beats
-                                                      .where(
-                                                        (b) => b.id != beat.id,
-                                                      )
-                                                      .map((b) => b.id),
-                                                );
-                                              _startStage2InlineEdit(
-                                                'add_feat_${beat.id}',
-                                                '',
-                                              );
-                                            },
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 4,
-                                                vertical: 1,
-                                              ),
-                                              child: Text(
-                                                '+',
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: textMuted,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   ),
@@ -1295,7 +1232,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     },
                                   ),
                                 ),
-                              if (isExpanded)
+                              if (isExpanded) ...[
                                 for (int fIdx = 0;
                                     fIdx < beatFeats.length;
                                     fIdx++)
@@ -1304,8 +1241,46 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     activeVer: activeVer,
                                     beatTitle: beat.title,
                                     beatIndex: bIdx,
-                                  )
-                              else
+                                  ),
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(8, 1, 8, 2),
+                                  child: InkWell(
+                                    key: ValueKey(
+                                      'rail_add_feat_to_beat_${beat.id}',
+                                    ),
+                                    borderRadius: BorderRadius.circular(5),
+                                    onTap: () {
+                                      _collapsedBeatIds
+                                        ..clear()
+                                        ..addAll(
+                                          beats
+                                              .where((b) => b.id != beat.id)
+                                              .map((b) => b.id),
+                                        );
+                                      _startStage2InlineEdit(
+                                        'add_feat_${beat.id}',
+                                        '',
+                                      );
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        18,
+                                        4,
+                                        8,
+                                        4,
+                                      ),
+                                      child: Text(
+                                        '+ Add feature',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11.5,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ] else
                                 SizedBox(
                                   height: 1,
                                   child: SingleChildScrollView(
@@ -1315,6 +1290,30 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       opacity: 0,
                                       child: Column(
                                         children: [
+                                          InkWell(
+                                            key: ValueKey(
+                                              'rail_add_feat_to_beat_${beat.id}',
+                                            ),
+                                            onTap: () {
+                                              _collapsedBeatIds
+                                                ..clear()
+                                                ..addAll(
+                                                  beats
+                                                      .where(
+                                                        (b) => b.id != beat.id,
+                                                      )
+                                                      .map((b) => b.id),
+                                                );
+                                              _startStage2InlineEdit(
+                                                'add_feat_${beat.id}',
+                                                '',
+                                              );
+                                            },
+                                            child: const SizedBox(
+                                              width: 1,
+                                              height: 1,
+                                            ),
+                                          ),
                                           for (int fIdx = 0;
                                               fIdx < beatFeats.length;
                                               fIdx++)
@@ -1447,7 +1446,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     );
 
     final bottomFooter = Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
       decoration: BoxDecoration(
         color: bgRecessed,
         border: Border(
@@ -1458,6 +1457,52 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
+          Builder(
+            builder: (context) {
+              final pendingCount =
+                  widget.workbench.pendingFeatureInboxItems.length;
+              final scheduledCount =
+                  widget.workbench.scheduledFeatureInboxItems.length;
+              final totalInbox = pendingCount + scheduledCount;
+              return InkWell(
+                key: const ValueKey('open_feature_inbox_btn'),
+                onTap: () => _showFeatureInboxModal(context),
+                borderRadius: BorderRadius.circular(5),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Inbox',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$totalInbox',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          color: pendingCount > 0 ? accentEmerald : textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
           Builder(
             builder: (context) {
               final releaseHasActiveFeats = beats.any(
@@ -1485,7 +1530,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 borderRadius: BorderRadius.circular(5),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
+                    horizontal: 8,
                     vertical: 5,
                   ),
                   child: Row(
@@ -1493,11 +1538,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     children: [
                       Flexible(
                         child: Text(
-                          'Playtest Checklist',
+                          'Playtest',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 12.5,
+                            fontSize: 12,
                             fontWeight: FontWeight.w500,
                             color: textSecondary,
                           ),
@@ -1507,7 +1552,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       Text(
                         '$verifiedFeats/$totalActiveFeats',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.5,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w500,
                           color: textMuted,
                         ),
@@ -1518,7 +1563,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               );
             },
           ),
-          const SizedBox(height: 2),
           Builder(
             builder: (context) {
               final isRelComplete = widget.workbench.isActiveReleaseComplete;
@@ -1530,35 +1574,33 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 borderRadius: BorderRadius.circular(5),
                 child: Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Flexible(
                         child: Text(
-                          'Next Release · $nextVerLabel',
+                          'Next release · $nextVerLabel',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 12.5,
+                            fontSize: 12,
                             fontWeight: isRelComplete
                                 ? FontWeight.w600
                                 : FontWeight.w500,
                             color: isRelComplete
-                                ? const Color(0xFF10B981)
-                                : textMuted,
+                                ? accentEmerald
+                                : textSecondary,
                           ),
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        isRelComplete ? 'Ready →' : 'Locked',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isRelComplete
-                              ? const Color(0xFF10B981)
-                              : textMuted,
+                        isRelComplete ? 'ready →' : 'locked',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          color: isRelComplete ? accentEmerald : textMuted,
                         ),
                       ),
                     ],
@@ -1647,18 +1689,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
         decoration: BoxDecoration(
           color: isSelected ? bgSurface : Colors.transparent,
-          borderRadius: const BorderRadius.only(
-            topRight: Radius.circular(6),
-            bottomRight: Radius.circular(6),
-          ),
-          border: isSelected
-              ? Border(
-                  left: BorderSide(
-                    color: textPrimary,
-                    width: 2.0,
-                  ),
-                )
-              : null,
+          borderRadius: BorderRadius.circular(6),
+          border: isSelected ? Border.all(color: borderSubtle) : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

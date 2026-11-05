@@ -1369,6 +1369,30 @@ void main() {
           findsOneWidget,
         );
 
+        // Verify the step mark badge [1] / [✓] on the active step row checks and unchecks directly
+        final stepMarkFinder = find.byKey(
+          ValueKey('toggle_step_mark_${secondCp0NodeId}_0_0'),
+        );
+        expect(stepMarkFinder, findsOneWidget);
+        await tester.ensureVisible(stepMarkFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(stepMarkFinder);
+        await tester.pumpAndSettle();
+        expect(
+          FeatureStateNode.getStatesForDocument(
+            provider.documents[secondFeat.id]!,
+          ).first.checklist.first.children.first.completed,
+          isTrue,
+        );
+        await tester.tap(stepMarkFinder);
+        await tester.pumpAndSettle();
+        expect(
+          FeatureStateNode.getStatesForDocument(
+            provider.documents[secondFeat.id]!,
+          ).first.checklist.first.children.first.completed,
+          isFalse,
+        );
+
         // Tap the simple square Checkmark Box [✓] to mark Step 1 done in place and unlock Next →
         final markDoneFinder = find.byKey(
           ValueKey('mark_active_step_done_btn_$secondCp0NodeId'),
@@ -8261,5 +8285,38 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(find.byKey(const ValueKey('spark_missing_nudge')), findsNothing);
       });
     });
+
+    test(
+      'Stage 2 Quiet Workbench supports unchecking steps in STABLE features and restoring active upgrade lifecycle',
+      () async {
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview('Top-down arena shooter');
+        await provider.openReleasePlanGate();
+        await provider.approveAndExecuteReleasePlan();
+
+        final featId = provider.selectedFeatureId!;
+        final feat = provider.documents[featId]!;
+        feat.sections['lifecycle'] = FeatureLifecycleStatus.stable.name;
+        final updatedStates = FeatureStateNode.getStatesForDocument(feat);
+        for (final t in updatedStates.first.checklist) {
+          t.completed = true;
+          for (final c in t.children) {
+            c.completed = true;
+          }
+        }
+        provider.updateFeatureStates(featId, updatedStates);
+        expect(provider.getDocumentProgress(featId), 100);
+
+        // Uncheck one sub-step and update states -> lifecycle transitions out of STABLE and progress drops below 100%
+        updatedStates.first.checklist.first.children.first.completed = false;
+        updatedStates.first.checklist.first.completed = false;
+        provider.updateFeatureStates(featId, updatedStates);
+        expect(
+          provider.documents[featId]!.sections['lifecycle'],
+          isNot(FeatureLifecycleStatus.stable.name),
+        );
+        expect(provider.getDocumentProgress(featId), lessThan(100));
+      },
+    );
   });
 }
