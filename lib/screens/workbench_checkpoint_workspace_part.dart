@@ -10,6 +10,74 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     }
   }
 
+  void _passCheckpointPlaytestAndAdvance(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureStateNode node,
+  ) {
+    _completeAllCheckpointTasks(node);
+    final activeVer = widget.workbench.activeReleaseVersionTag;
+    int nextCpIdx = states.indexWhere(
+      (s) => s.releaseVersion == activeVer && !s.isCompleted,
+    );
+    if (nextCpIdx == -1) {
+      nextCpIdx = states.indexWhere((s) => !s.isCompleted);
+    }
+    _rebuild(() {
+      _awaitingPlaytestVerification.remove(node.id);
+      _inlineBugDrawerNodeId = null;
+      if (nextCpIdx != -1) {
+        _manualCheckpointFocusIndex = nextCpIdx;
+        _manualCheckpointFocusFeatureId = feat.id;
+        final nextCp = states[nextCpIdx];
+        _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
+        _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
+      } else {
+        _manualCheckpointFocusIndex = null;
+        _manualCheckpointFocusFeatureId = null;
+      }
+    });
+    widget.workbench.updateFeatureStates(feat.id, states);
+
+    if (widget.workbench.getDocumentProgress(feat.id) >= 100 ||
+        states.every((s) => s.isCompleted)) {
+      _rebuild(() {
+        _manualCheckpointFocusIndex = null;
+        _manualCheckpointFocusFeatureId = null;
+      });
+      final nextFeat = widget.workbench.nextIncompleteFeature;
+      if (nextFeat != null && nextFeat.id != feat.id) {
+        widget.workbench.selectFeature(nextFeat.id);
+      }
+    }
+  }
+
+  void _submitInlinePlaytestBug(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    int checkpointIndex,
+    FeatureStateNode node,
+  ) {
+    final desc = _inlineBugInputCtrl.text.trim();
+    if (desc.isEmpty) return;
+    final newIdx = widget.workbench.logPlaytestIssueOnCheckpoint(
+      featureId: feat.id,
+      states: states,
+      checkpointIndex: checkpointIndex,
+      issueDescription: desc,
+    );
+    _rebuild(() {
+      _inlineBugDrawerNodeId = null;
+      _inlineBugInputCtrl.clear();
+      if (newIdx >= 0 && checkpointIndex < states.length) {
+        final cpNode = states[checkpointIndex];
+        _manualCheckpointFocusIndex = checkpointIndex;
+        _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
+        _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+      }
+    });
+  }
+
   void _advanceToNextStep(
     TierDocument feat,
     List<FeatureStateNode> states,
@@ -3720,108 +3788,579 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
                                       // ── E. Bottom Playtest Gate & Complete Feature Bar ──
                                       const SizedBox(height: 16),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 14,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: bgSurface,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                          border: Border.all(
-                                            color: allCheckpointStepsDone
-                                                ? accentEmerald.withValues(
-                                                    alpha: 0.45,
-                                                  )
-                                                : borderSubtle,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    'FEATURE PLAYTEST GATE',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 10.5,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      letterSpacing: 0.5,
-                                                      color:
-                                                          allCheckpointStepsDone
+                                      Builder(
+                                        builder: (context) {
+                                          final isDrawerOpen =
+                                              _inlineBugDrawerNodeId == node.id;
+                                          final rawDoneWhen = SectionTextUtils
+                                              .resolveDoneWhen(feat.sections)
+                                              .trim();
+                                          final fallbackDoneWhen =
+                                              rawDoneWhen.isNotEmpty
+                                                  ? rawDoneWhen
+                                                  : 'Run scene in engine → feature works without errors.';
+                                          final gatePlaytestCheck =
+                                              TaskHowToBlueprint
+                                                  .formatConciseVerifySentence(
+                                            resolvedPlaytestCheck.isNotEmpty
+                                                ? resolvedPlaytestCheck
+                                                : fallbackDoneWhen,
+                                          );
+                                          final gateStatusText =
+                                              node.isCompleted
+                                                  ? '✓ Verified'
+                                                  : (allCheckpointStepsDone
+                                                      ? 'All $totalStepsCount steps complete'
+                                                      : '$totalDoneSteps/$totalStepsCount steps done');
+                                          return Container(
+                                            key: ValueKey(
+                                              'feature_playtest_gate_card_${node.id}',
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 14,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: bgSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: (node.isCompleted ||
+                                                        allCheckpointStepsDone)
+                                                    ? accentEmerald.withValues(
+                                                        alpha: 0.45,
+                                                      )
+                                                    : borderSubtle,
+                                              ),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceBetween,
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        'FEATURE PLAYTEST GATE · VERIFY IN ENGINE',
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10.5,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          letterSpacing: 0.5,
+                                                          color: (node
+                                                                      .isCompleted ||
+                                                                  allCheckpointStepsDone)
                                                               ? accentEmerald
                                                               : textMuted,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 2,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: (node
+                                                                    .isCompleted ||
+                                                                allCheckpointStepsDone)
+                                                            ? accentEmerald
+                                                                .withValues(
+                                                                alpha: 0.14,
+                                                              )
+                                                            : bgRecessed,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        border: Border.all(
+                                                          color: (node
+                                                                      .isCompleted ||
+                                                                  allCheckpointStepsDone)
+                                                              ? accentEmerald
+                                                                  .withValues(
+                                                                  alpha: 0.35,
+                                                                )
+                                                              : borderSubtle,
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        gateStatusText,
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: (node
+                                                                      .isCompleted ||
+                                                                  allCheckpointStepsDone)
+                                                              ? accentEmerald
+                                                              : textMuted,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  gatePlaytestCheck,
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w500,
+                                                    height: 1.4,
+                                                    color: textPrimary,
+                                                  ),
+                                                ),
+                                                if (edgeItems.isNotEmpty) ...[
+                                                  const SizedBox(height: 10),
+                                                  Wrap(
+                                                    spacing: 6,
+                                                    runSpacing: 6,
+                                                    children: [
+                                                      for (final rawGuard
+                                                          in edgeItems)
+                                                        Builder(
+                                                          builder: (context) {
+                                                            final isPlaytestGuard =
+                                                                rawGuard
+                                                                    .toUpperCase()
+                                                                    .contains(
+                                                                      'PLAYTEST GUARD',
+                                                                    );
+                                                            final formattedChip =
+                                                                isPlaytestGuard
+                                                                    ? rawGuard
+                                                                        .trim()
+                                                                    : TaskHowToBlueprint
+                                                                        .formatTelegraphicGuardChip(
+                                                                        rawGuard,
+                                                                      );
+                                                            return Container(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 3,
+                                                              ),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: isPlaytestGuard
+                                                                    ? const Color(
+                                                                        0xFFFBBF24,
+                                                                      ).withValues(
+                                                                        alpha:
+                                                                            0.12,
+                                                                      )
+                                                                    : bgRecessed,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  4,
+                                                                ),
+                                                                border:
+                                                                    Border.all(
+                                                                  color: isPlaytestGuard
+                                                                      ? const Color(
+                                                                          0xFFFBBF24,
+                                                                        ).withValues(
+                                                                          alpha:
+                                                                              0.35,
+                                                                        )
+                                                                      : borderSubtle,
+                                                                ),
+                                                              ),
+                                                              child: Text(
+                                                                formattedChip,
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize:
+                                                                      10.5,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
+                                                                  color: isPlaytestGuard
+                                                                      ? const Color(
+                                                                          0xFFFBBF24,
+                                                                        )
+                                                                      : textSecondary,
+                                                                ),
+                                                              ),
+                                                            );
+                                                          },
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ],
+                                                const SizedBox(height: 12),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                    top: 10,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    border: Border(
+                                                      top: BorderSide(
+                                                        color: borderSubtle,
+                                                      ),
                                                     ),
                                                   ),
-                                                  const SizedBox(height: 3),
-                                                  Text(
-                                                    resolvedPlaytestCheck,
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 12.5,
-                                                      color: textSecondary,
+                                                  child: Wrap(
+                                                    alignment: WrapAlignment
+                                                        .spaceBetween,
+                                                    crossAxisAlignment:
+                                                        WrapCrossAlignment
+                                                            .center,
+                                                    spacing: 10,
+                                                    runSpacing: 8,
+                                                    children: [
+                                                      InkWell(
+                                                        key: ValueKey(
+                                                          'feature_gate_log_bug_btn_${node.id}',
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(6),
+                                                        onTap: () {
+                                                          _rebuild(() {
+                                                            if (isDrawerOpen) {
+                                                              _inlineBugDrawerNodeId =
+                                                                  null;
+                                                            } else {
+                                                              _inlineBugDrawerNodeId =
+                                                                  node.id;
+                                                              _inlineBugInputCtrl
+                                                                  .clear();
+                                                            }
+                                                          });
+                                                        },
+                                                        child: Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 11,
+                                                            vertical: 7,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: isDrawerOpen
+                                                                ? const Color(
+                                                                    0xFFFBBF24,
+                                                                  ).withValues(
+                                                                    alpha: 0.1,
+                                                                  )
+                                                                : bgRecessed,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              6,
+                                                            ),
+                                                            border: Border.all(
+                                                              color: isDrawerOpen
+                                                                  ? const Color(
+                                                                      0xFFFBBF24,
+                                                                    ).withValues(
+                                                                      alpha:
+                                                                          0.45,
+                                                                    )
+                                                                  : borderBright,
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            '⚑ Found a Bug / Log Issue',
+                                                            style: GoogleFonts
+                                                                .inter(
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              color: isDrawerOpen
+                                                                  ? const Color(
+                                                                      0xFFFBBF24,
+                                                                    )
+                                                                  : textSecondary,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      ElevatedButton.icon(
+                                                        key: ValueKey(
+                                                          'feature_gate_pass_btn_${node.id}',
+                                                        ),
+                                                        style: ElevatedButton
+                                                            .styleFrom(
+                                                          backgroundColor: (allCheckpointStepsDone &&
+                                                                  !node
+                                                                      .isCompleted)
+                                                              ? accentEmerald
+                                                              : accentEmerald
+                                                                  .withValues(
+                                                                  alpha: 0.15,
+                                                                ),
+                                                          foregroundColor: (allCheckpointStepsDone &&
+                                                                  !node
+                                                                      .isCompleted)
+                                                              ? const Color(
+                                                                  0xFF051B0B,
+                                                                )
+                                                              : accentEmerald,
+                                                          elevation: 0,
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 14,
+                                                            vertical: 9,
+                                                          ),
+                                                          shape:
+                                                              RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              6,
+                                                            ),
+                                                            side: BorderSide(
+                                                              color: accentEmerald
+                                                                  .withValues(
+                                                                alpha: 0.45,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        onPressed: () {
+                                                          _passCheckpointPlaytestAndAdvance(
+                                                            feat,
+                                                            states,
+                                                            node,
+                                                          );
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.check_rounded,
+                                                          size: 15,
+                                                        ),
+                                                        label: Text(
+                                                          node.isCompleted
+                                                              ? 'Playtest Verified ✓'
+                                                              : 'Pass Playtest & Continue →',
+                                                          style:
+                                                              GoogleFonts.inter(
+                                                            fontSize: 12.5,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                if (isDrawerOpen) ...[
+                                                  const SizedBox(height: 12),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                      12,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: bgBase,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        6,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: const Color(
+                                                          0xFFFBBF24,
+                                                        ).withValues(
+                                                          alpha: 0.4,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .stretch,
+                                                      children: [
+                                                        Row(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .spaceBetween,
+                                                          children: [
+                                                            Text(
+                                                              'APPEND 3-STEP [FIX] TASK & [PLAYTEST GUARD]',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                color:
+                                                                    const Color(
+                                                                  0xFFFBBF24,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            InkWell(
+                                                              onTap: () {
+                                                                _rebuild(() {
+                                                                  _inlineBugDrawerNodeId =
+                                                                      null;
+                                                                });
+                                                              },
+                                                              child: Text(
+                                                                '✕ Cancel',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 10,
+                                                                  color:
+                                                                      textMuted,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(
+                                                          height: 8,
+                                                        ),
+                                                        Row(
+                                                          children: [
+                                                            Expanded(
+                                                              child: TextField(
+                                                                key: ValueKey(
+                                                                  'feature_gate_bug_input_${node.id}',
+                                                                ),
+                                                                controller:
+                                                                    _inlineBugInputCtrl,
+                                                                style: GoogleFonts
+                                                                    .inter(
+                                                                  fontSize:
+                                                                      12.5,
+                                                                  color:
+                                                                      textPrimary,
+                                                                ),
+                                                                decoration:
+                                                                    InputDecoration(
+                                                                  hintText:
+                                                                      'Describe what broke or felt off in the engine viewport...',
+                                                                  hintStyle:
+                                                                      GoogleFonts
+                                                                          .inter(
+                                                                    fontSize:
+                                                                        12,
+                                                                    color:
+                                                                        textMuted,
+                                                                  ),
+                                                                  filled: true,
+                                                                  fillColor:
+                                                                      bgRecessed,
+                                                                  isDense: true,
+                                                                  contentPadding:
+                                                                      const EdgeInsets
+                                                                          .symmetric(
+                                                                    horizontal:
+                                                                        10,
+                                                                    vertical: 9,
+                                                                  ),
+                                                                  border:
+                                                                      OutlineInputBorder(
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(
+                                                                      6,
+                                                                    ),
+                                                                    borderSide:
+                                                                        BorderSide(
+                                                                      color:
+                                                                          borderSubtle,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                onSubmitted:
+                                                                    (_) =>
+                                                                        _submitInlinePlaytestBug(
+                                                                  feat,
+                                                                  states,
+                                                                  index,
+                                                                  node,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 8,
+                                                            ),
+                                                            InkWell(
+                                                              key: ValueKey(
+                                                                'feature_gate_bug_submit_btn_${node.id}',
+                                                              ),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                6,
+                                                              ),
+                                                              onTap: () =>
+                                                                  _submitInlinePlaytestBug(
+                                                                feat,
+                                                                states,
+                                                                index,
+                                                                node,
+                                                              ),
+                                                              child: Container(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal:
+                                                                      12,
+                                                                  vertical: 9,
+                                                                ),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: const Color(
+                                                                    0xFFFBBF24,
+                                                                  ).withValues(
+                                                                    alpha: 0.16,
+                                                                  ),
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    6,
+                                                                  ),
+                                                                  border:
+                                                                      Border.all(
+                                                                    color: const Color(
+                                                                      0xFFFBBF24,
+                                                                    ).withValues(
+                                                                      alpha:
+                                                                          0.45,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  '+ Add [FIX] Task',
+                                                                  style: GoogleFonts
+                                                                      .inter(
+                                                                    fontSize:
+                                                                        12,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    color: const Color(
+                                                                      0xFFFBBF24,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
                                                 ],
-                                              ),
+                                              ],
                                             ),
-                                            if (allCheckpointStepsDone &&
-                                                !node.isCompleted) ...[
-                                              const SizedBox(width: 12),
-                                              ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      accentEmerald,
-                                                  foregroundColor:
-                                                      const Color(0xFF051B0B),
-                                                  elevation: 0,
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 14,
-                                                    vertical: 9,
-                                                  ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      6,
-                                                    ),
-                                                  ),
-                                                ),
-                                                onPressed: () {
-                                                  _completeAllCheckpointTasks(
-                                                    node,
-                                                  );
-                                                  _advanceToNextStep(
-                                                    feat,
-                                                    states,
-                                                    node,
-                                                    node.checklist.length - 1,
-                                                    node.checklist.last.children
-                                                            .length -
-                                                        1,
-                                                  );
-                                                },
-                                                icon: const Icon(
-                                                  Icons.check_rounded,
-                                                  size: 15,
-                                                ),
-                                                label: Text(
-                                                  'Complete Feature →',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 12.5,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
+                                          );
+                                        },
                                       ),
                                     ],
                                   ),

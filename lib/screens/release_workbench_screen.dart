@@ -76,6 +76,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final TextEditingController _stage2InlineEditController =
       TextEditingController();
   final TextEditingController _inboxCaptureCtrl = TextEditingController();
+  String? _inlineBugDrawerNodeId;
+  final TextEditingController _inlineBugInputCtrl = TextEditingController();
   String _outlinerSearchQuery = '';
   bool _isOutlinerSearchOpen = false;
   final TextEditingController _outlinerSearchController =
@@ -88,6 +90,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     _inlineTuningEditController.dispose();
     _stage2InlineEditController.dispose();
     _inboxCaptureCtrl.dispose();
+    _inlineBugInputCtrl.dispose();
     _outlinerSearchController.dispose();
     super.dispose();
   }

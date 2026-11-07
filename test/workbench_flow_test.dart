@@ -8338,5 +8338,87 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.getDocumentProgress(featId), lessThan(100));
       },
     );
+
+    testWidgets(
+      'Option A Inline Feature Playtest Gate logs inline [FIX] bug and passes feature gate in 1 click',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        await provider.startConceptInterview(
+          'Top-down arena shooter with dash and wave spawner in Godot 4.',
+        );
+        final buildFuture = provider.approveConceptAndBuildRelease();
+        await tester.pumpAndSettle();
+        await buildFuture;
+        await tester.pumpAndSettle();
+
+        final firstFeatId = provider.selectedFeatureId!;
+        final firstFeat = provider.documents[firstFeatId]!;
+        final statesBefore = FeatureStateNode.getStatesForDocument(firstFeat);
+        final cpId = statesBefore.last.id;
+        final initialTaskCount = statesBefore.last.checklist.length;
+
+        // 1. Open inline bug drawer on the bottom FEATURE PLAYTEST GATE card
+        final logBugBtn = find.byKey(
+          ValueKey('feature_gate_log_bug_btn_$cpId'),
+        );
+        expect(logBugBtn, findsOneWidget);
+        await tester.ensureVisible(logBugBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(logBugBtn);
+        await tester.pumpAndSettle();
+
+        final bugInput = find.byKey(ValueKey('feature_gate_bug_input_$cpId'));
+        expect(bugInput, findsOneWidget);
+        await tester.enterText(
+          bugInput,
+          'Dash clips through thin arena walls on diagonal input',
+        );
+        await tester.pumpAndSettle();
+
+        final submitBugBtn = find.byKey(
+          ValueKey('feature_gate_bug_submit_btn_$cpId'),
+        );
+        expect(submitBugBtn, findsOneWidget);
+        await tester.tap(submitBugBtn);
+        await tester.pumpAndSettle();
+
+        final statesAfterBug = FeatureStateNode.getStatesForDocument(
+          provider.documents[firstFeatId]!,
+        );
+        expect(
+          statesAfterBug.last.checklist.length,
+          equals(initialTaskCount + 1),
+        );
+        expect(
+          statesAfterBug.last.checklist.last.text,
+          contains('[FIX]'),
+        );
+        expect(
+          statesAfterBug.last.edgeCases.any(
+            (g) => g.contains('PLAYTEST GUARD'),
+          ),
+          isTrue,
+        );
+
+        // 2. Click "Pass Playtest & Continue ->" on the inline gate card
+        final passGateBtn = find.byKey(ValueKey('feature_gate_pass_btn_$cpId'));
+        expect(passGateBtn, findsOneWidget);
+        await tester.ensureVisible(passGateBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(passGateBtn);
+        await tester.pumpAndSettle();
+
+        expect(provider.getDocumentProgress(firstFeatId), equals(100));
+        expect(provider.selectedFeatureId, isNot(equals(firstFeatId)));
+      },
+    );
   });
 }
