@@ -378,21 +378,15 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     final inspCardWidget = !showInsp
         ? null
-        : Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: bgSurface,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: borderSubtle),
-            ),
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
                   Padding(
                     padding: EdgeInsets.only(
-                      bottom: rIdx == inspRows.length - 1 ? 0 : 6,
+                      bottom: rIdx == inspRows.length - 1 ? 0 : 5,
                     ),
                     child: _activeStage2InlineEditKey ==
                             'area2_tuning_${node.id}_$rIdx'
@@ -434,7 +428,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 vertical: 2,
-                                horizontal: 2,
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,7 +439,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.w600,
-                                        color: textSecondary,
+                                        color: textMuted,
                                       ),
                                     ),
                                   ),
@@ -458,12 +451,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                         baseStyle: GoogleFonts.jetBrainsMono(
                                           fontSize: 11.5,
                                           fontWeight: FontWeight.w500,
-                                          color: textPrimary,
+                                          color: textSecondary,
                                         ),
                                         tuningItems: tuningItems,
                                         edgeItems: edgeItems,
                                         isCodeBlock: true,
                                       ),
+                                      softWrap: true,
                                     ),
                                   ),
                                 ],
@@ -474,6 +468,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               ],
             ),
           );
+
+    final codeLines = showCode ? codeBody.split('\n') : const <String>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -537,87 +533,127 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           ),
         ),
 
-        // Compact 2-Column Component → Properties strip (#131820 surface, #21262D border)
+        // Unboxed 2-Column Component → Properties rows
         if (inspCardWidget != null) inspCardWidget,
 
-        // .code-wrap: .code-hdr (Location + Copy) directly above #080A0F .code-pre box
-        if (showCode) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 5),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(
-                    'Location: ${codeWhere ?? stepPath}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: textMuted,
-                    ),
-                  ),
+        // Recessed Code Strip (#0B0D12 + 2px left bar, strictly contained, zero 4-sided border)
+        if (showCode)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.fromLTRB(14, 10, 16, 12),
+            clipBehavior: Clip.hardEdge,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B0D12),
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(4),
+                bottomRight: Radius.circular(4),
+              ),
+              border: const Border(
+                left: BorderSide(
+                  color: Color(0xFF388BFD),
+                  width: 2,
                 ),
-                const SizedBox(width: 8),
-                InkWell(
-                  key: ValueKey(
-                    'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                  ),
-                  onTap: () => _copySubStepCodeFormula(
-                    selectedTaskIdx,
-                    activeSubStepIdx,
-                    activeSubStep.codeFormula,
-                  ),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: bgSurface,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: borderSubtle),
-                    ),
-                    child: Text(
-                      'Copy',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: textSecondary,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  margin: const EdgeInsets.only(bottom: 7),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: borderSubtle.withValues(alpha: 0.7),
                       ),
                     ),
                   ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          (codeWhere ?? stepPath).toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                            color: textMuted,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        key: ValueKey(
+                          'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                        ),
+                        onTap: () => _copySubStepCodeFormula(
+                          selectedTaskIdx,
+                          activeSubStepIdx,
+                          activeSubStep.codeFormula,
+                        ),
+                        borderRadius: BorderRadius.circular(3),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          child: Text(
+                            '⧉ Copy',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w500,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                for (int lineIdx = 0; lineIdx < codeLines.length; lineIdx++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      bottom: lineIdx == codeLines.length - 1 ? 0 : 2,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 26,
+                          child: Text(
+                            (lineIdx + 1).toString().padLeft(2, '0'),
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              height: 1.65,
+                              color: const Color(0xFF3D4656),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text.rich(
+                            _buildSemanticStepSpan(
+                              text: codeLines[lineIdx],
+                              baseStyle: GoogleFonts.jetBrainsMono(
+                                fontSize: 12,
+                                height: 1.65,
+                                color: textPrimary,
+                              ),
+                              tuningItems: tuningItems,
+                              edgeItems: edgeItems,
+                              isCodeBlock: true,
+                            ),
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 13,
-              vertical: 11,
-            ),
-            decoration: BoxDecoration(
-              color: bgRecessed,
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: borderSubtle),
-            ),
-            child: Text.rich(
-              _buildSemanticStepSpan(
-                text: codeBody,
-                baseStyle: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
-                  height: 1.55,
-                  color: textPrimary,
-                ),
-                tuningItems: tuningItems,
-                edgeItems: edgeItems,
-                isCodeBlock: true,
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }
