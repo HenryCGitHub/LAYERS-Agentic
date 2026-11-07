@@ -52,7 +52,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
   bool _unrealCppMode = false;
-  double _outlinerWidth = 240.0;
+  double _outlinerWidth = 360.0;
   final int _engineAreaFilter = 0;
   final Set<String> _collapsedBeatIds = {};
   String? _accordionInitReleaseId;
@@ -253,7 +253,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                           onHorizontalDragUpdate: (details) {
                             setState(() {
                               _outlinerWidth = (_outlinerWidth + details.delta.dx)
-                                  .clamp(220.0, 520.0);
+                                  .clamp(260.0, 560.0);
                             });
                           },
                           child: const SizedBox.expand(),

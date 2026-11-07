@@ -433,13 +433,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   SizedBox(
-                                    width: 170,
+                                    width: 195,
                                     child: Text(
                                       inspRows[rIdx].key,
                                       style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11.5,
+                                        fontSize: 15,
                                         fontWeight: FontWeight.w600,
-                                        color: textMuted,
+                                        color: textSecondary,
                                       ),
                                     ),
                                   ),
@@ -449,9 +449,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       _buildSemanticStepSpan(
                                         text: inspRows[rIdx].value,
                                         baseStyle: GoogleFonts.jetBrainsMono(
-                                          fontSize: 11.5,
+                                          fontSize: 15,
                                           fontWeight: FontWeight.w500,
-                                          color: textSecondary,
+                                          color: textPrimary,
                                         ),
                                         tuningItems: tuningItems,
                                         edgeItems: edgeItems,
@@ -577,9 +577,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
+                            letterSpacing: 0.4,
                             color: textMuted,
                           ),
                         ),
@@ -603,7 +603,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           child: Text(
                             '⧉ Copy',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
                               color: textSecondary,
                             ),
@@ -622,13 +622,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
-                          width: 26,
+                          width: 32,
                           child: Text(
                             (lineIdx + 1).toString().padLeft(2, '0'),
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
+                              fontSize: 13.5,
                               height: 1.65,
-                              color: const Color(0xFF3D4656),
+                              color: const Color(0xFF5A6478),
                             ),
                           ),
                         ),
@@ -637,7 +637,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             _buildSemanticStepSpan(
                               text: codeLines[lineIdx],
                               baseStyle: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
+                                fontSize: 15,
                                 height: 1.65,
                                 color: textPrimary,
                               ),

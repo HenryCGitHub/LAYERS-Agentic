@@ -1426,7 +1426,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         )
                       : Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 680),
+                            constraints: const BoxConstraints(maxWidth: 820),
                             child: Builder(
                               builder: (context) {
                                 int totalDoneSteps = 0;
@@ -1509,7 +1509,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       'Blueprint',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
-                                                        fontSize: 11,
+                                                        fontSize: 13.5,
                                                         fontWeight: FontWeight
                                                             .w600,
                                                         color: !_unrealCppMode
@@ -1557,7 +1557,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       'C++',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
-                                                        fontSize: 11,
+                                                        fontSize: 13.5,
                                                         fontWeight: FontWeight
                                                             .w600,
                                                         color: _unrealCppMode
@@ -1645,7 +1645,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                       .ellipsis,
                                                               style: GoogleFonts
                                                                   .inter(
-                                                                fontSize: 22,
+                                                                fontSize: 26,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w700,
@@ -1664,7 +1664,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                           padding:
                                                               const EdgeInsets
                                                                   .symmetric(
-                                                            horizontal: 7,
+                                                            horizontal: 8,
                                                             vertical: 2,
                                                           ),
                                                           decoration:
@@ -1698,7 +1698,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 : 'NEW',
                                                             style: GoogleFonts
                                                                 .jetBrainsMono(
-                                                              fontSize: 10.5,
+                                                              fontSize: 13.5,
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w600,
@@ -1905,7 +1905,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                           child: Text(
                                             featureGoalText,
                                             style: GoogleFonts.inter(
-                                              fontSize: 13.5,
+                                              fontSize: 16,
                                               height: 1.45,
                                               color: textSecondary,
                                             ),
@@ -1948,9 +1948,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             Text(
                                               '$remHoursStr · $totalDoneSteps of $totalStepsCount steps',
                                               style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 11.5,
+                                                fontSize: 14,
                                                 fontWeight: FontWeight.w500,
-                                                color: textMuted,
+                                                color: textSecondary,
                                               ),
                                             ),
                                             if (isHalfScreenOverlayMode &&
@@ -2366,12 +2366,12 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 .alphabetic,
                                                         children: [
                                                           SizedBox(
-                                                            width: 28,
+                                                            width: 36,
                                                             child: Text(
                                                               globalNumLabel,
                                                               style: GoogleFonts
                                                                   .jetBrainsMono(
-                                                                fontSize: 13,
+                                                                fontSize: 16,
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w700,
@@ -2398,7 +2398,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                     style: GoogleFonts
                                                                         .inter(
                                                                       fontSize:
-                                                                          17,
+                                                                          20,
                                                                       fontWeight:
                                                                           FontWeight
                                                                               .w700,
@@ -2462,7 +2462,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               child: Icon(
                                                                 Icons
                                                                     .edit_outlined,
-                                                                size: 13,
+                                                                size: 14,
                                                                 color: isTaskActive
                                                                     ? textSecondary
                                                                     : textMuted,
@@ -2499,14 +2499,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 '$doneSubCount/$totalSubCount ${isTaskActive ? "▾" : "▸"}',
                                                                 style: GoogleFonts
                                                                     .jetBrainsMono(
-                                                                  fontSize: 12,
+                                                                  fontSize: 14,
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .w500,
                                                                   color: task
                                                                           .completed
                                                                       ? accentEmerald
-                                                                      : textMuted,
+                                                                      : textSecondary,
                                                                 ),
                                                               ),
                                                             ),
@@ -2515,7 +2515,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                     ),
 
-                                                  // 2. Focused-Only Unboxed Task GOAL & DONE (aligned on 28px spine, no ✓ on DONE)
+                                                  // 2. Focused-Only Unboxed Task GOAL & DONE (aligned on 36px spine, no ✓ on DONE)
                                                   if (isTaskActive)
                                                     Container(
                                                       key: ValueKey(
@@ -2523,7 +2523,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                       padding:
                                                           const EdgeInsets.only(
-                                                        left: 28,
+                                                        left: 36,
                                                         top: 8,
                                                       ),
                                                       child: Column(
@@ -2540,13 +2540,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                     .alphabetic,
                                                             children: [
                                                               SizedBox(
-                                                                width: 48,
+                                                                width: 62,
                                                                 child: Text(
                                                                   'GOAL',
                                                                   style: GoogleFonts
                                                                       .jetBrainsMono(
                                                                     fontSize:
-                                                                        10.5,
+                                                                        13.5,
                                                                     fontWeight:
                                                                         FontWeight
                                                                             .w700,
@@ -2564,7 +2564,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                       GoogleFonts
                                                                           .inter(
                                                                     fontSize:
-                                                                        13.5,
+                                                                        16,
                                                                     height: 1.5,
                                                                     color:
                                                                         textSecondary,
@@ -2585,13 +2585,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                     .alphabetic,
                                                             children: [
                                                               SizedBox(
-                                                                width: 48,
+                                                                width: 62,
                                                                 child: Text(
                                                                   'DONE',
                                                                   style: GoogleFonts
                                                                       .jetBrainsMono(
                                                                     fontSize:
-                                                                        10.5,
+                                                                        13.5,
                                                                     fontWeight:
                                                                         FontWeight
                                                                             .w700,
@@ -2609,7 +2609,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                       GoogleFonts
                                                                           .inter(
                                                                     fontSize:
-                                                                        13.5,
+                                                                        16,
                                                                     height: 1.5,
                                                                     color:
                                                                         textSecondary,
@@ -2628,7 +2628,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       margin:
                                                           const EdgeInsets.only(
                                                         top: 16,
-                                                        left: 28,
+                                                        left: 36,
                                                       ),
                                                       padding:
                                                           const EdgeInsets.only(
@@ -2750,7 +2750,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                     TextSpan(
                                                                                       text: '${sIdx + 1}. ',
                                                                                       style: GoogleFonts.jetBrainsMono(
-                                                                                        fontSize: 13,
+                                                                                        fontSize: 16,
                                                                                         fontWeight: FontWeight.w700,
                                                                                         color: textMuted,
                                                                                         decoration: isStepDone
@@ -2762,7 +2762,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                     TextSpan(
                                                                                       text: stepItem.shortTitle,
                                                                                       style: GoogleFonts.inter(
-                                                                                        fontSize: 14,
+                                                                                        fontSize: 16,
                                                                                         fontWeight: FontWeight.w600,
                                                                                         color: isStepDone
                                                                                             ? textMuted
@@ -2787,14 +2787,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                 flex: 0,
                                                                                 child: ConstrainedBox(
                                                                                   constraints: const BoxConstraints(
-                                                                                    maxWidth: 220,
+                                                                                    maxWidth: 300,
                                                                                   ),
                                                                                   child: Text(
                                                                                     '$stepLoc ▸',
                                                                                     maxLines: 1,
                                                                                     overflow: TextOverflow.ellipsis,
                                                                                     style: GoogleFonts.jetBrainsMono(
-                                                                                      fontSize: 11.5,
+                                                                                      fontSize: 13.5,
                                                                                       color: textMuted,
                                                                                     ),
                                                                                   ),
@@ -2899,7 +2899,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                       TextSpan(
                                                                                         text: '${sIdx + 1}. ',
                                                                                         style: GoogleFonts.jetBrainsMono(
-                                                                                          fontSize: 13,
+                                                                                          fontSize: 16,
                                                                                           fontWeight: FontWeight.w700,
                                                                                           color: isStepDone
                                                                                               ? textMuted
@@ -2913,7 +2913,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                       TextSpan(
                                                                                         text: activeSubStep.shortTitle,
                                                                                         style: GoogleFonts.inter(
-                                                                                          fontSize: 14.5,
+                                                                                          fontSize: 17.5,
                                                                                           fontWeight: FontWeight.w700,
                                                                                           color: isStepDone
                                                                                               ? textMuted
@@ -2936,14 +2936,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   flex: 0,
                                                                                   child: ConstrainedBox(
                                                                                     constraints: const BoxConstraints(
-                                                                                      maxWidth: 220,
+                                                                                      maxWidth: 300,
                                                                                     ),
                                                                                     child: Text(
                                                                                       '$stepLoc ▾',
                                                                                       maxLines: 1,
                                                                                       overflow: TextOverflow.ellipsis,
                                                                                       style: GoogleFonts.jetBrainsMono(
-                                                                                        fontSize: 11.5,
+                                                                                        fontSize: 13.5,
                                                                                         color: textMuted,
                                                                                       ),
                                                                                     ),
@@ -3128,7 +3128,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                 activeSubStep.instruction,
                                                                             baseStyle:
                                                                                 GoogleFonts.inter(
-                                                                              fontSize: 13.5,
+                                                                              fontSize: 16,
                                                                               height: 1.55,
                                                                               color: textSecondary,
                                                                             ),
@@ -3172,7 +3172,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                     ? primaryTuningLabel
                                                                                     : '+ tuning',
                                                                                 style: GoogleFonts.jetBrainsMono(
-                                                                                  fontSize: 12,
+                                                                                  fontSize: 15,
                                                                                   color: const Color(0xFF79C0FF),
                                                                                 ),
                                                                               ),
@@ -3196,9 +3196,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           padding:
                                                                               const EdgeInsets.symmetric(
                                                                             horizontal:
-                                                                                8,
+                                                                                10,
                                                                             vertical:
-                                                                                3,
+                                                                                4,
                                                                           ),
                                                                           decoration:
                                                                               BoxDecoration(
@@ -3219,8 +3219,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                             '🛡 Guard: $primaryGuardLabel',
                                                                             style:
                                                                                 GoogleFonts.jetBrainsMono(
-                                                                              fontSize: 11,
-                                                                              color: textMuted,
+                                                                              fontSize: 14,
+                                                                              color: textSecondary,
                                                                             ),
                                                                           ),
                                                                         ),
@@ -3271,7 +3271,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           style: GoogleFonts
                                                                               .jetBrainsMono(
                                                                             fontSize:
-                                                                                10.5,
+                                                                                13.5,
                                                                             fontWeight:
                                                                                 FontWeight.w700,
                                                                             letterSpacing:
@@ -3288,9 +3288,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   .verifyResult,
                                                                               baseStyle:
                                                                                   GoogleFonts.inter(
-                                                                                fontSize: 12.5,
+                                                                                fontSize: 16,
                                                                                 height: 1.45,
-                                                                                color: textMuted,
+                                                                                color: textSecondary,
                                                                               ),
                                                                               tuningItems:
                                                                                   tuningItems,
@@ -3361,7 +3361,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                     : 'Done',
                                                                               style:
                                                                                   GoogleFonts.inter(
-                                                                                fontSize: 13,
+                                                                                fontSize: 16,
                                                                                 fontWeight: FontWeight.w600,
                                                                                 color: activeSubStep.subtask.completed
                                                                                     ? accentEmerald
@@ -3510,7 +3510,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                             child: Text(
                                                                               'More ▾',
                                                                               style: GoogleFonts.inter(
-                                                                                fontSize: 12,
+                                                                                fontSize: 13.5,
                                                                                 color: textMuted,
                                                                               ),
                                                                             ),
@@ -3659,7 +3659,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 '+ Add Build Task...',
                                                 style:
                                                     GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11.5,
+                                                  fontSize: 14,
                                                   fontWeight: FontWeight.w500,
                                                   color: textMuted,
                                                 ),
@@ -3733,7 +3733,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                         'FEATURE PLAYTEST GATE · VERIFY IN ENGINE',
                                                         style: GoogleFonts
                                                             .jetBrainsMono(
-                                                          fontSize: 10.5,
+                                                          fontSize: 13.5,
                                                           fontWeight:
                                                               FontWeight.w700,
                                                           letterSpacing: 0.5,
@@ -3779,7 +3779,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                         gateStatusText,
                                                         style: GoogleFonts
                                                             .jetBrainsMono(
-                                                          fontSize: 10,
+                                                          fontSize: 13.5,
                                                           fontWeight:
                                                               FontWeight.w600,
                                                           color: (node
@@ -3796,7 +3796,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 Text(
                                                   gatePlaytestCheck,
                                                   style: GoogleFonts.inter(
-                                                    fontSize: 13,
+                                                    fontSize: 16,
                                                     fontWeight: FontWeight.w500,
                                                     height: 1.4,
                                                     color: textPrimary,
@@ -3830,8 +3830,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               padding:
                                                                   const EdgeInsets
                                                                       .symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 3,
+                                                                horizontal: 10,
+                                                                vertical: 4,
                                                               ),
                                                               decoration:
                                                                   BoxDecoration(
@@ -3865,7 +3865,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 style: GoogleFonts
                                                                     .jetBrainsMono(
                                                                   fontSize:
-                                                                      10.5,
+                                                                      14,
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .w500,
@@ -3928,8 +3928,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                           padding:
                                                               const EdgeInsets
                                                                   .symmetric(
-                                                            horizontal: 11,
-                                                            vertical: 7,
+                                                            horizontal: 14,
+                                                            vertical: 8,
                                                           ),
                                                           decoration:
                                                               BoxDecoration(
@@ -3960,7 +3960,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                             '⚑ Found a Bug / Log Issue',
                                                             style: GoogleFonts
                                                                 .inter(
-                                                              fontSize: 12,
+                                                              fontSize: 15,
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w600,
@@ -3996,8 +3996,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                           padding:
                                                               const EdgeInsets
                                                                   .symmetric(
-                                                            horizontal: 14,
-                                                            vertical: 9,
+                                                            horizontal: 16,
+                                                            vertical: 10,
                                                           ),
                                                           shape:
                                                               RoundedRectangleBorder(
@@ -4023,7 +4023,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                         },
                                                         icon: const Icon(
                                                           Icons.check_rounded,
-                                                          size: 15,
+                                                          size: 16,
                                                         ),
                                                         label: Text(
                                                           isPlaytestVerified
@@ -4031,7 +4031,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               : 'Pass Playtest & Continue →',
                                                           style:
                                                               GoogleFonts.inter(
-                                                            fontSize: 12.5,
+                                                            fontSize: 15,
                                                             fontWeight:
                                                                 FontWeight.w700,
                                                           ),
