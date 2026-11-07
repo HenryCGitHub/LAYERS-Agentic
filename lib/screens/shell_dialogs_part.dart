@@ -34,24 +34,31 @@ extension _ShellDialogsExt on WorkbenchShell {
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        isSynced ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
-                        size: 18,
-                        color: isSynced ? textPrimary : textSecondary,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Firebase Cloud Sync & Local Vault',
-                        style: AppTheme.displayFont(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isSynced ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
+                          size: 18,
+                          color: isSynced ? textPrimary : textSecondary,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Firebase Cloud Sync & Local Vault',
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.displayFont(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   InkWell(
                     key: const ValueKey('cloud_sync_now_btn'),
                     onTap: () async {
