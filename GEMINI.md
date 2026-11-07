@@ -118,3 +118,24 @@ Every non-trivial plan, PRD, or task proposal must follow the canonical LAYERS 3
 ### 5. Milestone Batch Release Gate
 - Only propose pushing to `main` when a full deliverable passes the Playtest Gate.
 - Use `[skip ci]` in commit messages for documentation, rules, and non-deploy commits.
+
+## 8. Adaptive Model & Thinking Routing Protocol (Session & Subagent Automation)
+The assistant automatically classifies every task across 3 complexity tiers to determine the optimal model and thinking budget:
+
+### 1. Classification Rubric
+- **The 3-System Rule**: If solving a task requires reasoning about $\ge 3$ interconnected systems, state providers, or multi-file contracts simultaneously, it automatically escalates to **Argon (Pro)**.
+- **The Low Thinking Sweet Spot**: 80% of harder coding tasks (multi-file refactors, release plans, test suites) are handled with **Argon `LOW` thinking** for 3–6s latency with zero drift.
+- **User Override Authority**: Explicit user requests for a specific model or thinking level unconditionally override automated routing.
+
+### 2. Autonomous Tier Action Matrix
+1. **Tier 1 (Fast / Flash)**: Local UI edits, widget tests, git/bash commands, and direct file edits $\rightarrow$ Processed directly with **Gemini 3.8 Flash**.
+2. **Tier 2 (Architectural / Argon Low)**: Release planning, multi-file refactors, state architecture $\rightarrow$ Processed with **Gemini Argon (Pro)** using `LOW` thinking (via `pro` subagent or structured reasoning scratchpad).
+3. **Tier 3 (Deep Bug / Argon High)**: Asynchronous race conditions, flaky test root-cause debugging, ambiguous design $\rightarrow$ Processed with **Gemini Argon (Pro)** using `HIGH` thinking (via deep `pro` subagent).
+
+### 3. Dynamic In-Flight Escalation
+If an initially light task reveals coupling across $\ge 3$ systems during research, automatically halt code modifications, escalate to Tier 2 (Argon Pro · Thinking Low), and notify the user in the plan before proposing changes.
+
+### 4. Transparency Badge
+Whenever an operation is escalated to Tier 2 or Tier 3, prefix the turn or plan summary with:
+`[Auto-Route: Argon Pro · Thinking Low]` or `[Auto-Route: Argon Pro · Thinking High]`.
+
