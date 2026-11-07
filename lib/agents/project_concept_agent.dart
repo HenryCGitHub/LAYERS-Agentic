@@ -1153,7 +1153,7 @@ class ProjectConceptAgent {
     String rawSpark, {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
     bool isGddExtraction = false,
   }) async {
     final cleanSpark = ProjectConceptBlueprint.normalizeCommonTypos(
@@ -1257,7 +1257,7 @@ Call `commit_concept_blueprint` with the structured blueprint.
     String apiKey = '',
     String conversationModel = 'gemini-flash-latest',
     String planningModel = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     final cleanMsg = ProjectConceptBlueprint.normalizeCommonTypos(
       userMessage.trim(),
@@ -1465,7 +1465,7 @@ Call `$activeToolName` with the delta update.
     required int sectionIndex,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     if (sectionIndex < 0 || sectionIndex >= conceptSectionBuildOrder.length) {
       return false;
@@ -1563,7 +1563,7 @@ Call `$activeToolName` with the delta update.
     int suggestionVariantOffset = 0,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     final cleanInput = userInput.trim();
     final seedIdea =
@@ -1642,7 +1642,7 @@ Call `commit_spark_intake` with the structured summary.
     required int suggestionVariantOffset,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
 
@@ -1708,7 +1708,7 @@ Call `propose_spark_expansion_cards` with 3 fresh expansion cards.
     required List<String> currentOptions,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
 
@@ -1780,7 +1780,7 @@ Call `$sectionToolName` with 3 fresh options.
     String rawGdd, {
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     final cleanDoc = rawGdd.trim();
     if (cleanDoc.isEmpty || !GeminiAgentClient.hasKey(apiKey)) return null;

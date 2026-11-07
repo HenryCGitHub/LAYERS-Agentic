@@ -516,7 +516,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                 ),
               ),
               content: SizedBox(
-                width: 480,
+                width: 500,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -536,7 +536,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                         _buildModelOptionTile(
                           modelId: m,
                           subtitle:
-                              'Always Latest — Gemini Flash Latest with Full Model Thinking Budget',
+                              'Always Latest — Gemini 3.8 Flash (LOW thinking · \$0.75/1M in · \$3.75/1M out)',
                           isSelected: selectedConversationModel == m,
                           isRecommended: true,
                           onTap: () => setModalState(() => selectedConversationModel = m),
@@ -556,7 +556,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                         _buildModelOptionTile(
                           modelId: m,
                           subtitle:
-                              'Always Latest — Gemini Flash Latest with Full Model Thinking Budget',
+                              'Always Latest — Gemini 3.8 Flash (LOW thinking · \$0.75/1M in · \$3.75/1M out)',
                           isSelected: selectedPlanningModel == m,
                           isRecommended: true,
                           onTap: () => setModalState(() => selectedPlanningModel = m),
@@ -617,6 +617,179 @@ extension _ShellDialogsExt on WorkbenchShell {
                             borderRadius: BorderRadius.circular(6),
                             borderSide: BorderSide(color: borderBright, width: 1.4),
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        '04 · ACCUMULATIVE TOKEN USAGE & EST. COST',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4,
+                          color: textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: borderSubtle),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'INPUT TOKENS',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${workbench.totalInputTokens}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        '\$0.75 / 1M',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'OUTPUT TOKENS',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${workbench.totalOutputTokens}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        '\$3.75 / 1M (inc. thinking)',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        'EST. COST',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '\$${workbench.totalEstimatedCostUsd.toStringAsFixed(4)}',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF10B981),
+                                        ),
+                                      ),
+                                      Text(
+                                        'USD Session Total',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Session totals across Gemini calls',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10.5,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  key: const ValueKey('reset_token_usage_btn'),
+                                  onTap: () {
+                                    workbench.resetTokenUsage();
+                                    setModalState(() {});
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 3,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.refresh_rounded,
+                                          size: 11,
+                                          color: textMuted,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Reset Counter',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],

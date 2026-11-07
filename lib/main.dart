@@ -621,6 +621,46 @@ class WorkbenchShell extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message: 'Gemini 3.8 Flash Session Token Usage:\n'
+                            '• Input: ${workbench.totalInputTokens} tokens (\$0.75 / 1M)\n'
+                            '• Output: ${workbench.totalOutputTokens} tokens (\$3.75 / 1M inc. reasoning)\n'
+                            '• Est. Cost: \$${workbench.totalEstimatedCostUsd.toStringAsFixed(4)}\n\n'
+                            'Click to reset session token counter.',
+                        child: InkWell(
+                          key: const ValueKey('token_usage_tracker_pill'),
+                          onTap: workbench.resetTokenUsage,
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: bgSurface,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.token_outlined,
+                                  size: 11,
+                                  color: textMuted,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  workbench.tokenUsageCompactLabel,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    color: textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                       const SizedBox(width: 2),
                       Tooltip(
                         message: workbench.aiLastErrorStatus != null

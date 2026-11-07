@@ -954,11 +954,13 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
 void main() {
   group('LAYERS-Agentic 3-Stage End-to-End Flow Tests', () {
     setUp(() {
+      GeminiAgentClient.resetUsage();
       GeminiAgentClient.testMockResponder = _mockGeminiResponder;
     });
 
     tearDown(() {
       GeminiAgentClient.testMockResponder = null;
+      GeminiAgentClient.resetUsage();
     });
 
     test(
@@ -6184,12 +6186,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.activeProject!.title, equals('Submerged Mech Salvage'));
         expect(provider.conceptDraft!.title, equals('Submerged Mech Salvage'));
 
-        // 9. Verify Pure gemini-flash-latest (HIGH) configuration & Focused Context Architecture:
+        // 9. Verify Pure gemini-flash-latest (LOW) configuration & Focused Context Architecture:
         expect(
           WorkbenchProvider.availablePlanningModels,
           isNot(contains('gemini-4-argon')),
         );
-        expect(provider.thinkingLevel, equals('HIGH'));
+        expect(provider.thinkingLevel, equals('LOW'));
 
         String? capturedStepSynthPrompt;
         String? capturedTailorPrompt;
@@ -8418,6 +8420,89 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         expect(provider.getDocumentProgress(firstFeatId), equals(100));
         expect(provider.selectedFeatureId, isNot(equals(firstFeatId)));
+      },
+    );
+
+    testWidgets(
+      'Gemini 3.8 Flash LOW thinking standard, accumulative token usage tracking, pricing math, and reset',
+      (tester) async {
+        final provider = WorkbenchProvider();
+        expect(provider.thinkingLevel, equals('LOW'));
+        expect(provider.totalInputTokens, equals(0));
+        expect(provider.totalOutputTokens, equals(0));
+        expect(provider.totalEstimatedCostUsd, equals(0.0));
+        expect(provider.tokenUsageCompactLabel, equals('0 in · 0 out · \$0.00'));
+
+        // 1. Simulate multiple API calls accumulating tokens
+        // Call 1: 100,000 in, 20,000 out
+        // Cost: (100000 * 0.75 + 20000 * 3.75) / 1,000,000 = (75,000 + 75,000) / 1M = 0.15
+        provider.recordTokenUsage(
+          inputTokens: 100000,
+          outputTokens: 20000,
+          thinkingTokens: 5000,
+        );
+        expect(provider.totalInputTokens, equals(100000));
+        expect(provider.totalOutputTokens, equals(20000));
+        expect(provider.totalThinkingTokens, equals(5000));
+        expect(provider.totalEstimatedCostUsd, closeTo(0.15, 0.0001));
+        expect(provider.tokenUsageCompactLabel, equals('100k in · 20k out · \$0.150'));
+
+        // Call 2: Add 50,000 in, 10,000 out
+        // Total In: 150,000, Total Out: 30,000
+        // Cost: (150000 * 0.75 + 30000 * 3.75) / 1M = (112,500 + 112,500) / 1M = 0.225
+        provider.recordTokenUsage(
+          inputTokens: 50000,
+          outputTokens: 10000,
+          thinkingTokens: 2000,
+        );
+        expect(provider.totalInputTokens, equals(150000));
+        expect(provider.totalOutputTokens, equals(30000));
+        expect(provider.totalThinkingTokens, equals(7000));
+        expect(provider.totalEstimatedCostUsd, closeTo(0.225, 0.0001));
+        expect(provider.tokenUsageCompactLabel, equals('150k in · 30k out · \$0.225'));
+
+        // 2. Pump the app UI and verify top bar token tracker pill displays
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        final pillFinder = find.byKey(const ValueKey('token_usage_tracker_pill'));
+        expect(pillFinder, findsOneWidget);
+        expect(find.text('150k in · 30k out · \$0.225'), findsOneWidget);
+
+        // 3. Click the pill to reset token counters
+        await tester.tap(pillFinder);
+        await tester.pumpAndSettle();
+
+        expect(provider.totalInputTokens, equals(0));
+        expect(provider.totalOutputTokens, equals(0));
+        expect(provider.totalEstimatedCostUsd, equals(0.0));
+        expect(find.text('0 in · 0 out · \$0.00'), findsOneWidget);
+
+        // 4. Open AI settings dialog and verify pricing rates & reset button in dialog
+        final aiSettingsBtn = find.byKey(const ValueKey('ai_settings_btn'));
+        expect(aiSettingsBtn, findsOneWidget);
+        await tester.tap(aiSettingsBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('04 · ACCUMULATIVE TOKEN USAGE & EST. COST'), findsOneWidget);
+        expect(find.text('\$0.75 / 1M'), findsOneWidget);
+        expect(find.text('\$3.75 / 1M (inc. thinking)'), findsOneWidget);
+
+        final dialogResetBtn = find.byKey(const ValueKey('reset_token_usage_btn'));
+        expect(dialogResetBtn, findsOneWidget);
+        await tester.ensureVisible(dialogResetBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(dialogResetBtn);
+        await tester.pumpAndSettle();
+
+        expect(provider.totalInputTokens, equals(0));
       },
     );
   });

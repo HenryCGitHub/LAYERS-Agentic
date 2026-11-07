@@ -82,8 +82,55 @@ class WorkbenchProvider extends ChangeNotifier {
   /// True while the Act 2 Full Production Blueprint draft is being generated.
   bool _isDraftingFullProductionBlueprint = false;
 
-  String _thinkingLevel = 'HIGH';
+  String _thinkingLevel = 'LOW';
   String get thinkingLevel => _thinkingLevel;
+
+  /// Accumulative token usage across Gemini calls in this session.
+  int get totalInputTokens => GeminiAgentClient.totalInputTokens;
+  int get totalOutputTokens => GeminiAgentClient.totalOutputTokens;
+  int get totalThinkingTokens => GeminiAgentClient.totalThinkingTokens;
+  double get totalEstimatedCostUsd => GeminiAgentClient.totalEstimatedCostUsd;
+
+  /// Compact token usage label for top bar and status displays (e.g. "12.4k in · 1.8k out · $0.016").
+  String get tokenUsageCompactLabel {
+    final inStr = _formatCompactTokens(totalInputTokens);
+    final outStr = _formatCompactTokens(totalOutputTokens);
+    final costStr = totalEstimatedCostUsd == 0.0
+        ? '0.00'
+        : totalEstimatedCostUsd < 0.01
+            ? totalEstimatedCostUsd.toStringAsFixed(4)
+            : totalEstimatedCostUsd.toStringAsFixed(3);
+    return '$inStr in · $outStr out · \$$costStr';
+  }
+
+  static String _formatCompactTokens(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000.0).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000.0).toStringAsFixed(count >= 10000 ? 0 : 1)}k';
+    }
+    return '$count';
+  }
+
+  /// Resets accumulative session token counters and notifies listeners.
+  void resetTokenUsage() {
+    GeminiAgentClient.resetUsage();
+    notifyListeners();
+  }
+
+  /// Records token consumption manually or from mock responses and notifies listeners.
+  void recordTokenUsage({
+    required int inputTokens,
+    required int outputTokens,
+    int thinkingTokens = 0,
+  }) {
+    GeminiAgentClient.recordUsage(
+      inputTokens: inputTokens,
+      outputTokens: outputTokens,
+      thinkingTokens: thinkingTokens,
+    );
+    notifyListeners();
+  }
 
   static const List<String> availableConversationModels = [
     'gemini-flash-latest',

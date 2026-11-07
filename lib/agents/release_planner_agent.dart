@@ -1154,7 +1154,7 @@ Call `commit_release_plan` with the structured release blueprint.
     required TierDocument releaseDoc,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
     final preset = releaseDoc.releaseScope;
@@ -1300,7 +1300,7 @@ Call `commit_release_system_epics` with the structured system epics.
     required List<String> alreadyPlannedFeatures,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
     final versionTag = (explicitVerTag != null && explicitVerTag.isNotEmpty)
@@ -3636,7 +3636,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
     TierDocument? projectDoc,
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
   }) async {
     final cleanMsg = userMessage.trim();
     if (cleanMsg.isEmpty || !GeminiAgentClient.hasKey(apiKey)) return false;

@@ -31,6 +31,40 @@ class GeminiAgentClient {
   /// Records the last non-200 status hint (e.g., HTTP 402 prepayment credits depleted) for diagnostics.
   static String? lastErrorStatus;
 
+  /// Pricing rates for Gemini 3.8 Flash (`gemini-flash-latest`):
+  /// $0.75 per 1 million input tokens.
+  /// $3.75 per 1 million output tokens (includes candidate text and thinking/reasoning tokens).
+  static const double flashInputCostPerMillion = 0.75;
+  static const double flashOutputCostPerMillion = 3.75;
+
+  /// Accumulative token counters and estimated cost across all Gemini calls in the session.
+  static int totalInputTokens = 0;
+  static int totalOutputTokens = 0;
+  static int totalThinkingTokens = 0;
+  static double totalEstimatedCostUsd = 0.0;
+
+  /// Records token consumption from a Gemini API response and updates estimated cost.
+  static void recordUsage({
+    required int inputTokens,
+    required int outputTokens,
+    int thinkingTokens = 0,
+  }) {
+    totalInputTokens += inputTokens;
+    totalOutputTokens += outputTokens;
+    totalThinkingTokens += thinkingTokens;
+    totalEstimatedCostUsd = (totalInputTokens * flashInputCostPerMillion +
+            totalOutputTokens * flashOutputCostPerMillion) /
+        1000000.0;
+  }
+
+  /// Resets accumulative session token counters to 0.
+  static void resetUsage() {
+    totalInputTokens = 0;
+    totalOutputTokens = 0;
+    totalThinkingTokens = 0;
+    totalEstimatedCostUsd = 0.0;
+  }
+
   /// Optional test-only responder used by `flutter test` to simulate Gemini JSON responses
   /// without any hardcoded production scaffolds.
   static Future<Map<String, dynamic>?> Function(
@@ -114,43 +148,69 @@ class GeminiAgentClient {
     };
   }
 
-  static Map<String, dynamic>? _parseCandidateResponseJson(String responseBody) {
-    final body = jsonDecode(responseBody) as Map<String, dynamic>;
-    final candidates = body['candidates'] as List?;
-    if (candidates == null || candidates.isEmpty) return null;
-    final content = candidates.first['content'] as Map<String, dynamic>?;
-    final parts = content?['parts'] as List?;
-    if (parts == null || parts.isEmpty) return null;
-    final toolCalls = <Map<String, dynamic>>[];
-    for (final part in parts) {
-      if (part is Map && part['functionCall'] is Map) {
-        final fc = Map<String, dynamic>.from(part['functionCall'] as Map);
-        final fnName = (fc['name'] ?? '').toString().trim();
-        final rawArgs = fc['args'];
-        final argsMap = rawArgs is Map
-            ? Map<String, dynamic>.from(rawArgs)
-            : <String, dynamic>{};
-        toolCalls.add({
-          'name': fnName,
-          'args': argsMap,
-        });
-      }
-    }
-    if (toolCalls.isNotEmpty) {
-      final primaryArgs =
-          Map<String, dynamic>.from(toolCalls.first['args'] as Map);
-      primaryArgs['_toolName'] = toolCalls.first['name'];
-      primaryArgs['_toolCalls'] = toolCalls;
-      return primaryArgs;
-    }
-    for (final part in parts.reversed) {
-      if (part is Map && part['thought'] != true) {
-        final rawText = part['text']?.toString() ?? '';
-        final cleaned = _extractJsonObject(rawText);
-        if (cleaned.isNotEmpty) {
-          return jsonDecode(cleaned) as Map<String, dynamic>;
+  static void _recordUsageFromBody(Map<String, dynamic> body) {
+    try {
+      final rawUsage = body['usageMetadata'];
+      if (rawUsage is Map) {
+        final promptTokens =
+            (rawUsage['promptTokenCount'] as num?)?.toInt() ?? 0;
+        final candidateTokens =
+            (rawUsage['candidatesTokenCount'] as num?)?.toInt() ?? 0;
+        final thoughtsTokens =
+            (rawUsage['thoughtsTokenCount'] as num?)?.toInt() ?? 0;
+        if (promptTokens > 0 || candidateTokens > 0) {
+          recordUsage(
+            inputTokens: promptTokens,
+            outputTokens: candidateTokens,
+            thinkingTokens: thoughtsTokens,
+          );
         }
       }
+    } catch (_) {}
+  }
+
+  static Map<String, dynamic>? _parseCandidateResponseJson(String responseBody) {
+    try {
+      final body = jsonDecode(responseBody) as Map<String, dynamic>;
+      _recordUsageFromBody(body);
+      final candidates = body['candidates'] as List?;
+      if (candidates == null || candidates.isEmpty) return null;
+      final content = candidates.first['content'] as Map<String, dynamic>?;
+      final parts = content?['parts'] as List?;
+      if (parts == null || parts.isEmpty) return null;
+      final toolCalls = <Map<String, dynamic>>[];
+      for (final part in parts) {
+        if (part is Map && part['functionCall'] is Map) {
+          final fc = Map<String, dynamic>.from(part['functionCall'] as Map);
+          final fnName = (fc['name'] ?? '').toString().trim();
+          final rawArgs = fc['args'];
+          final argsMap = rawArgs is Map
+              ? Map<String, dynamic>.from(rawArgs)
+              : <String, dynamic>{};
+          toolCalls.add({
+            'name': fnName,
+            'args': argsMap,
+          });
+        }
+      }
+      if (toolCalls.isNotEmpty) {
+        final primaryArgs =
+            Map<String, dynamic>.from(toolCalls.first['args'] as Map);
+        primaryArgs['_toolName'] = toolCalls.first['name'];
+        primaryArgs['_toolCalls'] = toolCalls;
+        return primaryArgs;
+      }
+      for (final part in parts.reversed) {
+        if (part is Map && part['thought'] != true) {
+          final rawText = part['text']?.toString() ?? '';
+          final cleaned = _extractJsonObject(rawText);
+          if (cleaned.isNotEmpty) {
+            return jsonDecode(cleaned) as Map<String, dynamic>;
+          }
+        }
+      }
+    } catch (_) {
+      return null;
     }
     return null;
   }
@@ -167,7 +227,15 @@ class GeminiAgentClient {
   }) async {
     const resolvedModel = 'gemini-flash-latest';
     if (testMockResponder != null) {
-      return testMockResponder!(prompt, resolvedModel);
+      final mockRes = await testMockResponder!(prompt, resolvedModel);
+      if (mockRes != null &&
+          mockRes.containsKey('_usageMetadata') &&
+          mockRes['_usageMetadata'] is Map) {
+        _recordUsageFromBody({
+          'usageMetadata': mockRes['_usageMetadata'],
+        });
+      }
+      return mockRes;
     }
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
     if (key.isEmpty) {

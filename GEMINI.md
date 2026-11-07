@@ -5,8 +5,9 @@
 - **Live Web App (GitHub Pages)**: `https://henrycgithub.github.io/LAYERS-Agentic/`
 - **Deploy Command**: Run `./scripts/deploy.sh` from the project root (automatically encodes `$GEMINI_API_KEY` into base64 `--dart-define=GEMINI_API_KEY_B64=...` so GitHub Push Protection never blocks `gh-pages` pushes).
 - **AI Model (`lib/agents/gemini_agent_client.dart` & `lib/providers/workbench_provider.dart`)**:
-  - **Conversation & Concept Blueprint Model (Stage 1)**: `gemini-flash-latest` with `thinkingLevel: "LOW"` for fast turn-by-turn co-design chat and live Project Concept Blueprint updates.
-  - **Release Architecture Model (Stage 2)**: `gemini-flash-latest` (same model) for Release Plan Gate blueprint generation and multi-release evolution (`v0.1` → `v0.2` → `v1.0+`).
+  - **Standard Model Across Entire App**: `gemini-flash-latest` with `thinkingLevel: "LOW"` for Stage 1 Concept Blueprint co-design and Stage 2 Release Workbench planning and synthesis.
+  - **Active Pricing Rates**: Gemini 3.8 Flash rates of **$0.75 / 1M input tokens** and **$3.75 / 1M output tokens** (including reasoning/thinking tokens).
+  - **Accumulative Session Token Tracker**: Live token tracking badge in the Studio top bar and AI Settings dialog tracking input tokens, output tokens, and accumulative estimated session cost ($USD) with 1-click reset.
 - **2-Stage Antigravity Workflow (`1. Concept` → `2. Workbench`)**:
   1. **Stage 1 — Concept Blueprint (`1. Concept` in `lib/screens/project_pitch_screen.dart` & `lib/agents/project_concept_agent.dart`)**:
      - Structure-first Dynamic UI stepper (`01 Goal`, `02 Game Spec`, `03 Tech Spec`, `04 Design Pillars`, `05 Trade-Offs`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`) paired with a section-scoped Agent Console (`gemini-flash-latest`), followed by Step `09 · Full Concept Review`. Clicking **`Approve & Build v0.1 →`** generates `v0.1` and transitions directly into **`2. Workbench`**.
