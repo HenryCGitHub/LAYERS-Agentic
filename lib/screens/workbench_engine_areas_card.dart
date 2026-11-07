@@ -431,31 +431,31 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           ),
         ),
 
-        // UNIFIED STEP IMPLEMENTATION CARD (Header Path + Spec/Inspector Bar + Guard Bar + Code Body)
+        // UNIFIED STEP IMPLEMENTATION CARD (Deep Recessed Well #07090D inside Active Task Card #141821)
         Container(
           margin: const EdgeInsets.only(bottom: 10),
           clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
-            color: const Color(0xFF0A0D12),
+            color: const Color(0xFF07090D),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: const Color(0xFF1F2735),
+              color: const Color(0xFF262D3D),
             ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Card Header: Path + Copy Button
+              // 1. Card Header: Path + Copy Button (#0D1017)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 8,
                 ),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF11161F),
+                  color: Color(0xFF0D1017),
                   border: Border(
                     bottom: BorderSide(
-                      color: Color(0xFF1F2735),
+                      color: Color(0xFF1E2432),
                     ),
                   ),
                 ),
@@ -488,12 +488,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: 9,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
+                          color: const Color(0xFF161B26),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: borderSubtle),
+                          border: Border.all(color: const Color(0xFF2C3446)),
                         ),
                         child: Text(
                           '⧉ Copy',
@@ -509,18 +510,20 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 ),
               ),
 
-              // 2. Unified Spec & Inspector Bar (Interactive Tuning Pill + Interactive Inspector Rows)
-              if (primaryTuningLabel.isNotEmpty || showInsp)
+              // 2. Unified Spec, Inspector & State Guard Bar (#0B0E14, Unboxed Inline Text)
+              if (primaryTuningLabel.isNotEmpty ||
+                  showInsp ||
+                  primaryGuardLabel.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
-                    vertical: 7,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0E131B),
+                    color: const Color(0xFF0B0E14),
                     border: Border(
-                      bottom: (primaryGuardLabel.isNotEmpty || showCode)
-                          ? const BorderSide(color: Color(0xFF1A2230))
+                      bottom: showCode
+                          ? const BorderSide(color: Color(0xFF1A1F2C))
                           : BorderSide.none,
                     ),
                   ),
@@ -563,21 +566,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       primaryTuningLabel,
                                     ),
                                     borderRadius: BorderRadius.circular(4),
-                                    child: Container(
+                                    child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFFA371F7,
-                                        ).withValues(alpha: 0.10),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: const Color(
-                                            0xFFA371F7,
-                                          ).withValues(alpha: 0.28),
-                                        ),
+                                        vertical: 1,
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -585,8 +576,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           Text(
                                             '⚙ $primaryTuningLabel',
                                             style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 12.5,
-                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w600,
                                               color: const Color(0xFFD2A8FF),
                                             ),
                                           ),
@@ -603,7 +594,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                 ],
                               ),
                       if (primaryTuningLabel.isNotEmpty && showInsp)
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 5),
                       if (showInsp)
                         for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
                           Padding(
@@ -693,47 +684,26 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   ),
                           ),
+                      if (primaryGuardLabel.isNotEmpty) ...[
+                        if (primaryTuningLabel.isNotEmpty || showInsp)
+                          const SizedBox(height: 5),
+                        Text(
+                          '🛡 Guard: $primaryGuardLabel',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFE3B341),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
 
-              // 3. Unified State Guard Row (if present)
-              if (primaryGuardLabel.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD29922).withValues(alpha: 0.05),
-                    border: Border(
-                      bottom: showCode
-                          ? const BorderSide(color: Color(0xFF1A2230))
-                          : BorderSide.none,
-                    ),
-                  ),
-                  child: Text(
-                    '🛡 Guard: $primaryGuardLabel',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFFE3B341),
-                    ),
-                  ),
-                ),
-
-              // 4. Code / Node Graph Body
+              // 3. Code / Node Graph Body (#07090D, zero left vertical border stripe)
               if (showCode)
                 Container(
                   padding: const EdgeInsets.fromLTRB(14, 10, 16, 12),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: Color(0xFF388BFD),
-                        width: 2,
-                      ),
-                    ),
-                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -754,7 +724,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 13.5,
                                     height: 1.65,
-                                    color: const Color(0xFF5A6478),
+                                    color: const Color(0xFF6E7687),
                                   ),
                                 ),
                               ),

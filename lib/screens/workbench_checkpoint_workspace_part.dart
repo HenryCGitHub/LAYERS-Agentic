@@ -2239,14 +2239,34 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             final groupTitle = bp.shortTaskTitle;
 
                                             return Container(
-                                              padding: const EdgeInsets.only(
+                                              margin: const EdgeInsets.only(
                                                 bottom: 10,
                                               ),
+                                              padding: isTaskActive
+                                                  ? const EdgeInsets.fromLTRB(
+                                                      16,
+                                                      14,
+                                                      16,
+                                                      12,
+                                                    )
+                                                  : EdgeInsets.zero,
+                                              decoration: isTaskActive
+                                                  ? BoxDecoration(
+                                                      color: bgSurface,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        10,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: borderBright,
+                                                      ),
+                                                    )
+                                                  : null,
                                               child: Column(
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.stretch,
                                                 children: [
-                                                  // 1. Task Accordion Surface Bar (Inline T01 Badge + 17.5px Task Title + Count & Chevron)
+                                                  // 1. Task Header (Unboxed inline T01/T02/T03 + 17.5px Task Title + Count & Chevron)
                                                   if (_activeStage2InlineEditKey ==
                                                       'edit_task_${node.id}_$tIdx')
                                                     Padding(
@@ -2350,88 +2370,62 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                         8,
                                                       ),
                                                       child: Container(
-                                                        padding:
-                                                            const EdgeInsets
+                                                        padding: isTaskActive
+                                                            ? const EdgeInsets
+                                                                .only(
+                                                                bottom: 10,
+                                                              )
+                                                            : const EdgeInsets
                                                                 .symmetric(
-                                                          horizontal: 14,
-                                                          vertical: 11,
-                                                        ),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: isTaskActive
-                                                              ? accentCyan
-                                                                  .withValues(
-                                                                  alpha: 0.06,
-                                                                )
-                                                              : bgSurface
-                                                                  .withValues(
-                                                                  alpha: 0.45,
-                                                                ),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(8),
-                                                          border: Border.all(
-                                                            color: isTaskActive
-                                                                ? accentCyan
-                                                                    .withValues(
-                                                                    alpha: 0.25,
-                                                                  )
-                                                                : borderSubtle,
-                                                          ),
-                                                        ),
-                                                        child: Row(
-                                                          children: [
-                                                            Container(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                horizontal: 7,
-                                                                vertical: 2,
+                                                                horizontal: 14,
+                                                                vertical: 10,
                                                               ),
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                color: isFixTask
-                                                                    ? accentCrimson
-                                                                        .withValues(
-                                                                        alpha:
-                                                                            0.14,
-                                                                      )
-                                                                    : (task.completed
-                                                                        ? accentEmerald
-                                                                            .withValues(
-                                                                            alpha:
-                                                                                0.14,
-                                                                          )
-                                                                        : (isTaskActive
-                                                                            ? accentCyan.withValues(
-                                                                                alpha: 0.16,
-                                                                              )
-                                                                            : bgRecessed)),
+                                                        decoration: isTaskActive
+                                                            ? null
+                                                            : BoxDecoration(
+                                                                color: const Color(
+                                                                  0xFF0D1017,
+                                                                ),
                                                                 borderRadius:
                                                                     BorderRadius
                                                                         .circular(
-                                                                  4,
+                                                                  8,
+                                                                ),
+                                                                border:
+                                                                    Border.all(
+                                                                  color:
+                                                                      const Color(
+                                                                    0xFF1C212E,
+                                                                  ),
                                                                 ),
                                                               ),
-                                                              child: Text(
-                                                                'T$globalNumLabel',
-                                                                style: GoogleFonts
-                                                                    .jetBrainsMono(
-                                                                  fontSize:
-                                                                      13.5,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  letterSpacing:
-                                                                      0.3,
-                                                                  color: isFixTask
-                                                                      ? accentCrimson
-                                                                      : (task.completed
-                                                                          ? accentEmerald
-                                                                          : (isTaskActive
-                                                                              ? accentCyan
-                                                                              : textSecondary)),
-                                                                ),
+                                                        child: Row(
+                                                          children: [
+                                                            Text(
+                                                              'T$globalNumLabel',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize:
+                                                                    isTaskActive
+                                                                        ? 14
+                                                                        : 13.5,
+                                                                fontWeight:
+                                                                    isTaskActive
+                                                                        ? FontWeight
+                                                                            .w800
+                                                                        : FontWeight
+                                                                            .w600,
+                                                                letterSpacing:
+                                                                    0.3,
+                                                                color: isFixTask
+                                                                    ? accentCrimson
+                                                                    : (task.completed
+                                                                        ? accentEmerald
+                                                                        : (isTaskActive
+                                                                            ? textPrimary
+                                                                            : const Color(
+                                                                                0xFF6E7687,
+                                                                              ))),
                                                               ),
                                                             ),
                                                             const SizedBox(
@@ -2592,7 +2586,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                     ),
 
-                                                  // 2. Focused-Only Task GOAL & DONE Callout (Preserved 100% for Agent & Developer Context)
+                                                  // 2. Focused-Only Task GOAL & DONE Callout (Unboxed inline inside Active Task Card, 100% Preserved)
                                                   if (isTaskActive)
                                                     Container(
                                                       key: ValueKey(
@@ -2600,37 +2594,18 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                       margin:
                                                           const EdgeInsets.only(
-                                                        top: 8,
+                                                        bottom: 4,
                                                       ),
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 14,
-                                                        vertical: 10,
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                        bottom: 12,
                                                       ),
                                                       decoration: BoxDecoration(
-                                                        color: bgSurface
-                                                            .withValues(
-                                                          alpha: 0.28,
-                                                        ),
-                                                        borderRadius:
-                                                            const BorderRadius
-                                                                .only(
-                                                          topRight:
-                                                              Radius.circular(
-                                                            6,
-                                                          ),
-                                                          bottomRight:
-                                                              Radius.circular(
-                                                            6,
-                                                          ),
-                                                        ),
                                                         border: Border(
-                                                          left: BorderSide(
-                                                            color: accentCyan
-                                                                .withValues(
-                                                              alpha: 0.45,
+                                                          bottom: BorderSide(
+                                                            color: const Color(
+                                                              0xFF232938,
                                                             ),
-                                                            width: 2,
                                                           ),
                                                         ),
                                                       ),
@@ -2730,32 +2705,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                     ),
 
-                                                  // 3. Indented Steps Spine (ONLY expanded on the focused task!)
+                                                  // 3. Flush Steps List inside Active Task Card (Zero Vertical Spine Line)
                                                   if (isTaskActive)
-                                                    Container(
-                                                      margin:
-                                                          const EdgeInsets.only(
-                                                        top: 12,
-                                                        bottom: 8,
-                                                        left: 10,
-                                                      ),
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                        left: 16,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        border: Border(
-                                                          left: BorderSide(
-                                                            color: borderBright,
-                                                            width: 1.5,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .stretch,
-                                                        children: [
+                                                    Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .stretch,
+                                                      children: [
                                                           for (int sIdx = 0;
                                                               sIdx <
                                                                   bp.subSteps
@@ -3323,19 +3279,19 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   borderRadius: BorderRadius.circular(6),
                                                                                   child: Container(
                                                                                     padding: const EdgeInsets.symmetric(
-                                                                                      horizontal: 14,
+                                                                                      horizontal: 15,
                                                                                       vertical: 5,
                                                                                     ),
                                                                                     decoration: BoxDecoration(
                                                                                       color: activeSubStep.subtask.completed
                                                                                           ? accentEmerald.withValues(alpha: 0.14)
-                                                                                          : const Color(0xFF79C0FF).withValues(alpha: 0.14),
+                                                                                          : const Color(0xFFF0F6FC),
                                                                                       borderRadius: BorderRadius.circular(6),
-                                                                                      border: Border.all(
-                                                                                        color: activeSubStep.subtask.completed
-                                                                                            ? accentEmerald.withValues(alpha: 0.35)
-                                                                                            : const Color(0xFF79C0FF).withValues(alpha: 0.35),
-                                                                                      ),
+                                                                                      border: activeSubStep.subtask.completed
+                                                                                          ? Border.all(
+                                                                                              color: accentEmerald.withValues(alpha: 0.35),
+                                                                                            )
+                                                                                          : null,
                                                                                     ),
                                                                                     child: Text(
                                                                                       activeSubStep.subtask.completed
@@ -3343,10 +3299,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                           : 'Done',
                                                                                       style: GoogleFonts.inter(
                                                                                         fontSize: 15,
-                                                                                        fontWeight: FontWeight.w600,
+                                                                                        fontWeight: FontWeight.w700,
                                                                                         color: activeSubStep.subtask.completed
                                                                                             ? accentEmerald
-                                                                                            : const Color(0xFF79C0FF),
+                                                                                            : const Color(0xFF090B10),
                                                                                       ),
                                                                                     ),
                                                                                   ),
@@ -3437,7 +3393,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                         ],
                                                       ),
-                                                    ),
                                                 ],
                                               ),
                                             );

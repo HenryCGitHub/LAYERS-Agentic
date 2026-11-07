@@ -4,27 +4,27 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   // ── Dark Palette (60 · 30 · 10 Ratio & WCAG AAA Grayscale Hierarchy) ──────
   static const Color bgBase =
-      Color(0xFF0D1117); // 60% Dominant Runbook & Page Canvas (#0D1117)
+      Color(0xFF090B10); // 60% Dominant Runbook & Page Canvas (#090B10)
   static const Color bgPanel =
-      Color(0xFF080A0F); // 30% Recessed Left Rail & Top Chrome (#080A0F)
+      Color(0xFF06070B); // 60% Recessed Left Rail & Top Chrome (#06070B)
   static const Color bgSurface =
-      Color(0xFF131820); // 30% Property Strip, Code Header & Active Row (#131820)
+      Color(0xFF141821); // 30% Elevated Active Task Sheet & Surface (#141821)
   static const Color bgSurfaceHover =
-      Color(0xFF19202B); // Hover / secondary surface (#19202B)
+      Color(0xFF1A1F2B); // Hover / secondary surface (#1A1F2B)
   static const Color bgSurfaceActive =
-      Color(0xFF21262D); // Active/selected pill surface (#21262D)
+      Color(0xFF1F2534); // Active/selected pill surface (#1F2534)
 
   static const Color borderSubtle =
-      Color(0xFF21262D); // Crisp 1px card & hairline divider (#21262D)
+      Color(0xFF1E2330); // Crisp 1px card & hairline divider (#1E2330)
   static const Color borderBright =
-      Color(0xFF30363D); // Focused / active pill & badge border (#30363D)
+      Color(0xFF2E3546); // Focused / active card & pill border (#2E3546)
 
   static const Color textPrimary =
       Color(0xFFF0F6FC); // L1 Crisp white primary lead text (#F0F6FC, 17.4:1)
   static const Color textSecondary =
-      Color(0xFFC9D1D9); // L2 WCAG AAA secondary body text (#C9D1D9, 11.8:1)
+      Color(0xFFC2CAD8); // L2 WCAG AAA secondary body text (#C2CAD8)
   static const Color textMuted =
-      Color(0xFF8B949E); // L3 Muted label / metadata contrast (#8B949E, 5.6:1)
+      Color(0xFF8E96A8); // L3 Muted label / metadata contrast (#8E96A8)
 
   // ── Light Palette (Crisp Cool Slate Paper · Deep Slate Ink & Accent) ───────
   static const Color bgBaseLight =
@@ -50,9 +50,9 @@ class AppTheme {
 
   // ── Semantic Surface Scale (60 · 30 · 10 Depth Ladder) ────────────────────
   static const Color bgSurfaceRaised =
-      Color(0xFF131820); // Elevated cards, chiclets, floating toolbars (Dark)
+      Color(0xFF141821); // Elevated cards, chiclets, floating toolbars (Dark)
   static const Color bgSurfaceRecessed =
-      Color(0xFF080A0F); // 30% Recessed Outliner Rail & Code Well (#080A0F)
+      Color(0xFF06070B); // 60% Recessed Outliner Rail (#06070B)
   static const Color bgSurfaceRaisedLight =
       Color(0xFFFFFFFF); // Elevated cards on light
   static const Color bgSurfaceRecessedLight =
@@ -60,7 +60,7 @@ class AppTheme {
   static const Color bgSurfaceActiveLight =
       Color(0xFFE2E8F0); // Active/selected list item on light
 
-  static const Color bgInset = Color(0xFF080A0F); // Deep recessed code well (Dark)
+  static const Color bgInset = Color(0xFF07090D); // Deep recessed code well (Dark)
   static const Color bgInsetLight = Color(0xFFF1F5F9); // Recessed insets / inner cards (Light)
 
   // ── Reversible Polarity Focal Accent (Crisp White in Dark ↔ Deep Slate in Light) ─
