@@ -35394,7 +35394,7 @@ if(m<=1){s=a.a.c.id?p:new A.aAz(a)
 r=A.K(6)
 B.c.v(n,A.a([A.fq(A.ac(!1,r,!0,new A.a6(B.ht,A.h("\u21bb Rebuild v0.1",p,p,p,p,A.V().$3$color$fontSize$fontWeight(a.gn()?B.v:B.u,12,B.D),p,p),p),p,!0,p,p,B.a7y,p,p,p,p,s,p,p,p,p),p,"Regenerate v0.1 Workbench from scratch",p),B.ax],o))}o=a.a.c.id?p:new A.aAA(a)
 s=A.e8(p,p,B.bP,p,p,p,0,p,p,B.b7,p,p,B.qi,p,new A.bO(A.K(9),B.k),p,p,p,p,p)
-n.push(new A.cv(1,B.af,A.hw(A.h("\u2713 Return to Workbench \u2192",p,p,p,p,A.I().$2$fontSize$fontWeight(15,B.l),p,p),B.a7D,o,s),p))
+n.push(new A.cv(1,B.af,A.hw(A.h("Workbench",p,p,p,p,A.I().$2$fontSize$fontWeight(15,B.l),p,p),B.a7D,o,s),p))
 return A.a8(n,B.t,B.e,B.j,0,p)}o=a.a.c.id?p:new A.aAB(a)
 n=A.e8(p,p,B.bP,p,p,p,0,p,p,B.b7,p,p,B.Jg,p,new A.bO(A.K(9),B.k),p,p,p,p,p)
 s=a.a.c.id?"Building v0.1...":"Approve & Build v0.1 \u2192"
