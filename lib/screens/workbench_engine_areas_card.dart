@@ -651,7 +651,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             CrossAxisAlignment.start,
                                         children: [
                                           SizedBox(
-                                            width: 175,
+                                            width: MediaQuery.sizeOf(context).width < 1040 ? 124 : 175,
                                             child: Text(
                                               inspRows[rIdx].key,
                                               style: GoogleFonts.jetBrainsMono(

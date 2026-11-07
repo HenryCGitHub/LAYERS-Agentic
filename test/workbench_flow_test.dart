@@ -1695,7 +1695,7 @@ void main() {
         provider.updateFeatureStates(activeFeat.id, activeStates);
         await tester.pumpAndSettle();
 
-        // Resize to Half-Width (720px) and verify 1-Line Unified Context Bar + Step Dropdown
+        // Resize to Half-Width (720px) and verify Companion Sidecar Context Bar + Step Dropdown + Auto-Closing Drawer
         tester.view.physicalSize = const Size(720, 900);
         await tester.pumpAndSettle();
         expect(
@@ -1709,6 +1709,32 @@ void main() {
         expect(
           find.byKey(ValueKey('step_dropdown_${cp0Id}_0')),
           findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            ValueKey('halfscreen_feature_actions_menu_btn_${activeFeat.id}'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Done & Next →'), findsOneWidget);
+
+        // Open Slide-Over Outliner Drawer and verify selecting a feature automatically closes it
+        await tester.tap(
+          find.byKey(ValueKey('halfscreen_outliner_trigger_$cp0Id')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('halfscreen_outliner_scrim')),
+          findsOneWidget,
+        );
+        final railFeatFinder = find.byKey(ValueKey('rail_feat_${activeFeat.id}'));
+        await tester.ensureVisible(railFeatFinder);
+        await tester.pumpAndSettle();
+        await tester.tap(railFeatFinder);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('halfscreen_outliner_scrim')),
+          findsNothing,
         );
       },
     );

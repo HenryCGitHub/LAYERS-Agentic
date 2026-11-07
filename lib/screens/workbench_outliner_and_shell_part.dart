@@ -1720,7 +1720,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   ),
                   InkWell(
                     key: const ValueKey('outliner_new_progressive_release_btn'),
-                    onTap: () => _showProgressiveNextReleaseModal(context),
+                    onTap: () {
+                      if (isOverlayDrawer) {
+                        _rebuild(() {
+                          _isHalfScreenOutlinerOpen = false;
+                        });
+                      }
+                      _showProgressiveNextReleaseModal(context);
+                    },
                     borderRadius: BorderRadius.circular(5),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -1867,6 +1874,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 _rebuild(() {
                   _manualCheckpointFocusIndex = null;
                   _inlineBugDrawerNodeId = null;
+                  _isHalfScreenOutlinerOpen = false;
                 });
                 widget.workbench.selectFeature(feat.id);
               },

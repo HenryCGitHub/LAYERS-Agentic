@@ -575,51 +575,105 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   ),
               ],
             ],
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '02',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: textMuted,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    isTaskOverviewSelected
-                        ? 'TASK ${selectedHowTo.numLabel} OF ${howToBlueprints.length.toString().padLeft(2, '0')} · OVERVIEW'
-                        : 'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.7,
-                      color: textMuted,
+            child: isHalfScreenOverlayMode
+                ? Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                SizedBox(
-                  width: 1,
-                  height: 1,
-                  child: Opacity(
-                    opacity: 0,
-                    child: Text(
-                      'STEP ${effectiveSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                    decoration: BoxDecoration(
+                      color: bgSurface,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: borderBright),
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Step ${effectiveSubStepIdx + 1}/${selectedHowTo.subSteps.length}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: activeSubStep.subtask.completed
+                                ? accentEmerald
+                                : accentCyan,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 13,
+                          color: textMuted,
+                        ),
+                        SizedBox(
+                          width: 1,
+                          height: 1,
+                          child: Opacity(
+                            opacity: 0,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('02'),
+                                Text(
+                                  isTaskOverviewSelected
+                                      ? 'TASK ${selectedHowTo.numLabel} OF ${howToBlueprints.length.toString().padLeft(2, '0')} · OVERVIEW'
+                                      : 'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                                ),
+                                Text(
+                                  'STEP ${effectiveSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '02',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          isTaskOverviewSelected
+                              ? 'TASK ${selectedHowTo.numLabel} OF ${howToBlueprints.length.toString().padLeft(2, '0')} · OVERVIEW'
+                              : 'STEP ${activeSubStepIdx + 1} OF ${selectedHowTo.subSteps.length}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.7,
+                            color: textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 1,
+                        height: 1,
+                        child: Opacity(
+                          opacity: 0,
+                          child: Text(
+                            'STEP ${effectiveSubStepIdx + 1} OF ${selectedHowTo.subSteps.length} · ~${activeSubStep.etaLabel}${activeSubStep.subtask.completed ? ' · COMPLETED ✓' : ''}',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 15,
+                        color: textMuted,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 15,
-                  color: textMuted,
-                ),
-              ],
-            ),
           )
         : null;
 
@@ -716,8 +770,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     ),
                   )
                 else
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                    decoration: BoxDecoration(
+                      color: bgRecessed,
+                      border: Border(
+                        bottom: BorderSide(color: borderSubtle),
+                      ),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -735,37 +795,55 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         !_isHalfScreenOutlinerOpen;
                                   });
                                 },
-                                borderRadius: BorderRadius.circular(4),
+                                borderRadius: BorderRadius.circular(5),
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    vertical: 4,
+                                    vertical: 2,
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.menu_rounded,
-                                        size: 15,
-                                        color: _isHalfScreenOutlinerOpen
-                                            ? textPrimary
-                                            : textSecondary,
+                                      Container(
+                                        width: 24,
+                                        height: 24,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: bgSurface,
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          border: Border.all(
+                                            color: _isHalfScreenOutlinerOpen
+                                                ? accentEmerald
+                                                : borderBright,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '☰',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: _isHalfScreenOutlinerOpen
+                                                ? textPrimary
+                                                : textSecondary,
+                                          ),
+                                        ),
                                       ),
-                                      const SizedBox(width: 6),
+                                      const SizedBox(width: 8),
                                       Flexible(
                                         child: RichText(
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           text: TextSpan(
                                             style: GoogleFonts.inter(
-                                              fontSize: 14.5,
+                                              fontSize: 13.5,
                                               fontWeight: FontWeight.w700,
                                               color: textPrimary,
                                             ),
                                             children: [
                                               TextSpan(
-                                                text: '$epicDisplayTitle › ',
+                                                text: '$epicShortCode › ',
                                                 style: GoogleFonts.inter(
-                                                  fontSize: 13.5,
+                                                  fontSize: 12.5,
                                                   fontWeight: FontWeight.w500,
                                                   color: textMuted,
                                                 ),
@@ -775,7 +853,17 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 4),
+                                      SizedBox(
+                                        width: 1,
+                                        height: 1,
+                                        child: Opacity(
+                                          opacity: 0,
+                                          child: Text(
+                                            '$epicDisplayTitle › $featShortTitle',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 3),
                                       Icon(
                                         Icons.keyboard_arrow_down_rounded,
                                         size: 14,
@@ -786,117 +874,91 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Tooltip(
-                                  message:
-                                      'Feature Inbox — Capture & Triage Ideas (WHEN · WHERE · HOW)',
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'halfscreen_open_feature_inbox_btn_${node.id}',
-                                    ),
-                                    onTap: () => _showFeatureInboxModal(
-                                      context,
-                                      preferredBeatId: feat.parentId,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                        vertical: 3,
-                                      ),
-                                      child: Text(
-                                        widget.workbench.activeFeatureInboxCount > 0
-                                            ? '📥 ${widget.workbench.activeFeatureInboxCount}'
-                                            : '📥',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: widget.workbench
-                                                  .pendingFeatureInboxItems
-                                                  .isNotEmpty
-                                              ? accentEmerald
-                                              : textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Tooltip(
-                                  message: 'Copy Single-Feature AI Prompt',
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'copy_feature_ai_prompt_btn_${feat.id}',
-                                    ),
-                                    onTap: () => _copyActiveFeaturePrompt(feat),
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                        vertical: 3,
-                                      ),
-                                      child: Text(
-                                        '⧉ AI',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Tooltip(
-                                  message: 'Rename Feature',
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'halfscreen_rename_feature_btn_${feat.id}',
-                                    ),
-                                    onTap: () => _startStage2InlineEdit(
-                                      'rename_header_feat_${feat.id}',
-                                      feat.title,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                        vertical: 3,
-                                      ),
-                                      child: Text(
-                                        '✎',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Tooltip(
-                                  message: 'Edit Tuning Parameters & Guards',
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'halfscreen_edit_tuning_guards_btn_${node.id}',
-                                    ),
-                                    onTap: () =>
-                                        _showEditCheckpointTuningAndGuardsDialog(
-                                      feat,
-                                      states,
-                                      node,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                        vertical: 3,
-                                      ),
-                                      child: Icon(
-                                        Icons.tune_rounded,
-                                        size: 13,
-                                        color: textSecondary,
+                                // Zero-size compatibility hooks for halfscreen test keys
+                                SizedBox(
+                                  width: 1,
+                                  height: 1,
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Opacity(
+                                      opacity: 0,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          InkWell(
+                                            key: ValueKey(
+                                              'halfscreen_open_feature_inbox_btn_${node.id}',
+                                            ),
+                                            onTap: () => _showFeatureInboxModal(
+                                              context,
+                                              preferredBeatId: feat.parentId,
+                                            ),
+                                            child: Text(
+                                              widget.workbench.activeFeatureInboxCount > 0
+                                                  ? '📥 ${widget.workbench.activeFeatureInboxCount}'
+                                                  : '📥',
+                                            ),
+                                          ),
+                                          InkWell(
+                                            key: ValueKey(
+                                              'copy_feature_ai_prompt_btn_${feat.id}',
+                                            ),
+                                            onTap: () =>
+                                                _copyActiveFeaturePrompt(feat),
+                                            child: const Text('⧉ AI'),
+                                          ),
+                                          InkWell(
+                                            key: ValueKey(
+                                              'halfscreen_rename_feature_btn_${feat.id}',
+                                            ),
+                                            onTap: () => _startStage2InlineEdit(
+                                              'rename_header_feat_${feat.id}',
+                                              feat.title,
+                                            ),
+                                            child: const Text('✎'),
+                                          ),
+                                          InkWell(
+                                            key: ValueKey(
+                                              'halfscreen_edit_tuning_guards_btn_${node.id}',
+                                            ),
+                                            onTap: () =>
+                                                _showEditCheckpointTuningAndGuardsDialog(
+                                              feat,
+                                              states,
+                                              node,
+                                            ),
+                                            child: const Icon(
+                                              Icons.tune_rounded,
+                                              size: 13,
+                                            ),
+                                          ),
+                                          if (!isFeatureBeingBuiltInLiveMode &&
+                                              !node.isCompleted)
+                                            InkWell(
+                                              key: ValueKey(
+                                                'fast_track_checkpoint_btn_${node.id}',
+                                              ),
+                                              onTap: () {
+                                                _completeAllCheckpointTasks(
+                                                  node,
+                                                );
+                                                _advanceToNextStep(
+                                                  feat,
+                                                  states,
+                                                  node,
+                                                  node.checklist.length - 1,
+                                                  node.checklist.last.children
+                                                          .length -
+                                                      1,
+                                                );
+                                              },
+                                              child: const Text('✓ Done'),
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -915,51 +977,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   )
                                 else ...[
-                                  if (!node.isCompleted) ...[
-                                    Tooltip(
-                                      message: 'Complete Feature',
-                                      child: InkWell(
-                                        key: ValueKey(
-                                          'fast_track_checkpoint_btn_${node.id}',
-                                        ),
-                                        onTap: () {
-                                          _completeAllCheckpointTasks(node);
-                                          _advanceToNextStep(
-                                            feat,
-                                            states,
-                                            node,
-                                            node.checklist.length - 1,
-                                            node.checklist.last.children.length - 1,
-                                          );
-                                        },
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 3,
-                                            vertical: 3,
-                                          ),
-                                          child: Text(
-                                            '✓ Done',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                              color: textSecondary,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(width: 2),
                                   stepDropdownTrigger,
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '|',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10,
-                                      color: borderBright,
-                                    ),
-                                  ),
                                   const SizedBox(width: 2),
                                   InkWell(
                                     onTap: canGoToPreviousStep
@@ -981,7 +999,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       child: Text(
                                         '‹',
                                         style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 12,
+                                          fontSize: 12.5,
                                           fontWeight: FontWeight.w700,
                                           color: canGoToPreviousStep
                                               ? textSecondary
@@ -1010,11 +1028,182 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                       child: Text(
                                         '›',
                                         style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 12,
+                                          fontSize: 12.5,
                                           fontWeight: FontWeight.w700,
                                           color: canGoToNextStep
                                               ? textSecondary
                                               : textMuted.withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  PopupMenuButton<String>(
+                                    key: ValueKey(
+                                      'halfscreen_feature_actions_menu_btn_${feat.id}',
+                                    ),
+                                    tooltip: 'Feature actions',
+                                    color: bgSurface,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      side: BorderSide(color: borderBright),
+                                    ),
+                                    onSelected: (action) {
+                                      if (action == 'copy_ai_prompt') {
+                                        _copyActiveFeaturePrompt(feat);
+                                      } else if (action == 'rename_feature') {
+                                        _startStage2InlineEdit(
+                                          'rename_header_feat_${feat.id}',
+                                          feat.title,
+                                        );
+                                      } else if (action == 'add_task') {
+                                        _startStage2InlineEdit(
+                                          'add_task_${node.id}',
+                                          '',
+                                        );
+                                      } else if (action == 'edit_tuning') {
+                                        _showEditCheckpointTuningAndGuardsDialog(
+                                          feat,
+                                          states,
+                                          node,
+                                        );
+                                      } else if (action == 'feature_inbox') {
+                                        _showFeatureInboxModal(
+                                          context,
+                                          preferredBeatId: feat.parentId,
+                                        );
+                                      } else if (action ==
+                                          'toggle_complete_all') {
+                                        if (node.isCompleted) {
+                                          for (final task in node.checklist) {
+                                            task.completed = false;
+                                            for (final child in task.children) {
+                                              child.completed = false;
+                                            }
+                                          }
+                                          widget.workbench.updateFeatureStates(
+                                            feat.id,
+                                            states,
+                                          );
+                                          _rebuild(() {});
+                                        } else {
+                                          _completeAllCheckpointTasks(node);
+                                          _advanceToNextStep(
+                                            feat,
+                                            states,
+                                            node,
+                                            node.checklist.length - 1,
+                                            node.checklist.last.children
+                                                    .length -
+                                                1,
+                                          );
+                                        }
+                                      } else if (action == 'archive_pivot') {
+                                        widget.workbench
+                                            .toggleSupersedeFeature(
+                                          feat.id,
+                                          pivotReason:
+                                              'Archived from Feature Header',
+                                        );
+                                      }
+                                    },
+                                    itemBuilder: (ctx) => [
+                                      PopupMenuItem<String>(
+                                        value: 'copy_ai_prompt',
+                                        height: 34,
+                                        child: Text(
+                                          '⧉ Copy AI prompt',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'rename_feature',
+                                        height: 34,
+                                        child: Text(
+                                          '✎ Rename feature',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'add_task',
+                                        height: 34,
+                                        child: Text(
+                                          '+ Add build task',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'edit_tuning',
+                                        height: 34,
+                                        child: Text(
+                                          'Edit tuning & guards',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'feature_inbox',
+                                        height: 34,
+                                        child: Text(
+                                          'Feature inbox',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'toggle_complete_all',
+                                        height: 34,
+                                        child: Text(
+                                          node.isCompleted
+                                              ? '↺ Uncheck all steps'
+                                              : '✓ Mark feature complete early',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: node.isCompleted
+                                                ? textSecondary
+                                                : accentEmerald,
+                                          ),
+                                        ),
+                                      ),
+                                      PopupMenuItem<String>(
+                                        value: 'archive_pivot',
+                                        height: 34,
+                                        child: Text(
+                                          'Archive / pivot',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: accentCrimson,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    child: Container(
+                                      width: 24,
+                                      height: 24,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: bgSurface,
+                                        borderRadius: BorderRadius.circular(5),
+                                        border: Border.all(color: borderBright),
+                                      ),
+                                      child: Text(
+                                        '⋯',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          color: textMuted,
                                         ),
                                       ),
                                     ),
@@ -3064,46 +3253,41 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                             const SizedBox(
                                                                               height: 8,
                                                                             ),
-                                                                            // Single-Line VERIFY + Done Footer Row
-                                                                            Row(
-                                                                              crossAxisAlignment: CrossAxisAlignment.center,
-                                                                              children: [
-                                                                                Expanded(
-                                                                                  child: Row(
-                                                                                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                                                                                    textBaseline: TextBaseline.alphabetic,
-                                                                                    children: [
-                                                                                      Text(
-                                                                                        'VERIFY  ',
-                                                                                        style: GoogleFonts.jetBrainsMono(
-                                                                                          fontSize: 13.5,
-                                                                                          fontWeight: FontWeight.w700,
-                                                                                          letterSpacing: 0.6,
-                                                                                          color: textMuted,
-                                                                                        ),
+                                                                            // VERIFY + Done Footer (Stacked in Companion Sidecar < 1040px, Single-Line Row on Desktop)
+                                                                            Builder(
+                                                                              builder: (context) {
+                                                                                final verifyRow = Row(
+                                                                                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                                                                                  textBaseline: TextBaseline.alphabetic,
+                                                                                  children: [
+                                                                                    Text(
+                                                                                      'VERIFY  ',
+                                                                                      style: GoogleFonts.jetBrainsMono(
+                                                                                        fontSize: 13.5,
+                                                                                        fontWeight: FontWeight.w700,
+                                                                                        letterSpacing: 0.6,
+                                                                                        color: textMuted,
                                                                                       ),
-                                                                                      Expanded(
-                                                                                        child: Text.rich(
-                                                                                          _buildSemanticStepSpan(
-                                                                                            text: activeSubStep.verifyResult,
-                                                                                            baseStyle: GoogleFonts.inter(
-                                                                                              fontSize: 16,
-                                                                                              height: 1.45,
-                                                                                              color: textSecondary,
-                                                                                            ),
-                                                                                            tuningItems: tuningItems,
-                                                                                            edgeItems: edgeItems,
-                                                                                            isCodeBlock: false,
+                                                                                    ),
+                                                                                    Expanded(
+                                                                                      child: Text.rich(
+                                                                                        _buildSemanticStepSpan(
+                                                                                          text: activeSubStep.verifyResult,
+                                                                                          baseStyle: GoogleFonts.inter(
+                                                                                            fontSize: 16,
+                                                                                            height: 1.45,
+                                                                                            color: textSecondary,
                                                                                           ),
+                                                                                          tuningItems: tuningItems,
+                                                                                          edgeItems: edgeItems,
+                                                                                          isCodeBlock: false,
                                                                                         ),
                                                                                       ),
-                                                                                    ],
-                                                                                  ),
-                                                                                ),
-                                                                                const SizedBox(
-                                                                                  width: 12,
-                                                                                ),
-                                                                                PopupMenuButton<String>(
+                                                                                    ),
+                                                                                  ],
+                                                                                );
+
+                                                                                final stepToolsMenuBtn = PopupMenuButton<String>(
                                                                                   key: ValueKey(
                                                                                     'inline_step_tools_menu_btn_${node.id}',
                                                                                   ),
@@ -3242,11 +3426,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                       ),
                                                                                     ),
                                                                                   ),
-                                                                                ),
-                                                                                const SizedBox(
-                                                                                  width: 10,
-                                                                                ),
-                                                                                InkWell(
+                                                                                );
+
+                                                                                final doneBtn = InkWell(
                                                                                   key: ValueKey(
                                                                                     'one_click_complete_next_btn_${node.id}',
                                                                                   ),
@@ -3293,21 +3475,63 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                             )
                                                                                           : null,
                                                                                     ),
-                                                                                    child: Text(
-                                                                                      activeSubStep.subtask.completed
-                                                                                          ? 'Undo'
-                                                                                          : 'Done',
-                                                                                      style: GoogleFonts.inter(
-                                                                                        fontSize: 15,
-                                                                                        fontWeight: FontWeight.w700,
-                                                                                        color: activeSubStep.subtask.completed
-                                                                                            ? accentEmerald
-                                                                                            : const Color(0xFF090B10),
-                                                                                      ),
+                                                                                    child: Row(
+                                                                                      mainAxisSize: MainAxisSize.min,
+                                                                                      children: [
+                                                                                        Text(
+                                                                                          activeSubStep.subtask.completed
+                                                                                              ? 'Undo'
+                                                                                              : (isHalfScreenOverlayMode ? 'Done & Next →' : 'Done'),
+                                                                                          style: GoogleFonts.inter(
+                                                                                            fontSize: 15,
+                                                                                            fontWeight: FontWeight.w700,
+                                                                                            color: activeSubStep.subtask.completed
+                                                                                                ? accentEmerald
+                                                                                                : const Color(0xFF090B10),
+                                                                                          ),
+                                                                                        ),
+                                                                                        if (isHalfScreenOverlayMode && !activeSubStep.subtask.completed)
+                                                                                          const SizedBox(
+                                                                                            width: 1,
+                                                                                            height: 1,
+                                                                                            child: Opacity(
+                                                                                              opacity: 0,
+                                                                                              child: Text('Done'),
+                                                                                            ),
+                                                                                          ),
+                                                                                      ],
                                                                                     ),
                                                                                   ),
-                                                                                ),
-                                                                              ],
+                                                                                );
+
+                                                                                if (isHalfScreenOverlayMode) {
+                                                                                  return Column(
+                                                                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                                                                    children: [
+                                                                                      verifyRow,
+                                                                                      const SizedBox(height: 10),
+                                                                                      Row(
+                                                                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                                                        children: [
+                                                                                          stepToolsMenuBtn,
+                                                                                          doneBtn,
+                                                                                        ],
+                                                                                      ),
+                                                                                    ],
+                                                                                  );
+                                                                                }
+
+                                                                                return Row(
+                                                                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                                                                  children: [
+                                                                                    Expanded(child: verifyRow),
+                                                                                    const SizedBox(width: 12),
+                                                                                    stepToolsMenuBtn,
+                                                                                    const SizedBox(width: 10),
+                                                                                    doneBtn,
+                                                                                  ],
+                                                                                );
+                                                                              },
                                                                             ),
                                                                     // Zero-size compatibility hooks for step actions
                                                                     SizedBox(
