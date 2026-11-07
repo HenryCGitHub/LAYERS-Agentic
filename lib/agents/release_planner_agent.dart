@@ -307,30 +307,6 @@ class ReleasePlannerAgent {
                                   'description': LayersTextStyleGuide
                                       .taskGroupGoalSchemaDesc,
                                 },
-                                'subSteps': {
-                                  'type': 'ARRAY',
-                                  'description':
-                                      'Optional inline engine-specific Do / Copy / Verify sub-steps for this task.',
-                                  'items': {
-                                    'type': 'OBJECT',
-                                    'required': [
-                                      'title',
-                                      'stepPath',
-                                      'instruction',
-                                      'codeFormula',
-                                      'verifyResult',
-                                    ],
-                                    'properties': {
-                                      'title': {'type': 'STRING'},
-                                      'stepPath': {'type': 'STRING'},
-                                      'instruction': {'type': 'STRING'},
-                                      'area1Hierarchy': {'type': 'STRING'},
-                                      'area2Inspector': {'type': 'STRING'},
-                                      'codeFormula': {'type': 'STRING'},
-                                      'verifyResult': {'type': 'STRING'},
-                                    },
-                                  },
-                                },
                               },
                             },
                           },
@@ -780,30 +756,6 @@ class ReleasePlannerAgent {
                                   'type': 'STRING',
                                   'description': LayersTextStyleGuide
                                       .taskGroupGoalSchemaDesc,
-                                },
-                                'subSteps': {
-                                  'type': 'ARRAY',
-                                  'description':
-                                      'Optional inline engine-specific Do / Copy / Verify sub-steps for this task.',
-                                  'items': {
-                                    'type': 'OBJECT',
-                                    'required': [
-                                      'title',
-                                      'stepPath',
-                                      'instruction',
-                                      'codeFormula',
-                                      'verifyResult',
-                                    ],
-                                    'properties': {
-                                      'title': {'type': 'STRING'},
-                                      'stepPath': {'type': 'STRING'},
-                                      'instruction': {'type': 'STRING'},
-                                      'area1Hierarchy': {'type': 'STRING'},
-                                      'area2Inspector': {'type': 'STRING'},
-                                      'codeFormula': {'type': 'STRING'},
-                                      'verifyResult': {'type': 'STRING'},
-                                    },
-                                  },
                                 },
                               },
                             },

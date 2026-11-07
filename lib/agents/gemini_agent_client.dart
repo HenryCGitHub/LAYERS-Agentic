@@ -69,13 +69,13 @@ class GeminiAgentClient {
   static const Map<String, String> _jsonHeaders = {
     'Content-Type': 'application/json',
   };
-  static const Duration _heavyModelTimeout = Duration(seconds: 120);
-  static const Duration _standardModelTimeout = Duration(seconds: 120);
+  static const Duration _heavyModelTimeout = Duration(seconds: 180);
+  static const Duration _standardModelTimeout = Duration(seconds: 180);
   static const Duration _metadataTimeout = Duration(seconds: 6);
 
   static bool _modelMetadataChecked = false;
   static int? _cachedModelOutputTokenLimit;
-  static bool _cachedSupportsThinkingLevel = true;
+  static bool _cachedSupportsThinkingLevel = false;
 
   static const String _prefsTokenUsageKey = 'layers_gemini_token_usage_v1';
 
@@ -129,7 +129,7 @@ class GeminiAgentClient {
     return '$count';
   }
 
-  /// Resets the tracker and records the single latest API call's token usage (`IN`, `OUT`, `THINK`) and cost.
+  /// Accumulates a single API call's token usage (`IN`, `OUT`, `THINK`) and cost across the session until reset.
   static void recordTokenUsage({
     required String label,
     required String thinkingLevel,
@@ -140,22 +140,24 @@ class GeminiAgentClient {
     final safeIn = inputTokens < 0 ? 0 : inputTokens;
     final safeOut = outputTokens < 0 ? 0 : outputTokens;
     final safeThink = thinkingTokens < 0 ? 0 : thinkingTokens;
-    totalInputTokens = safeIn;
-    totalOutputTokens = safeOut;
-    totalThinkingTokens = safeThink;
-    totalApiCalls = 1;
-    callHistory
-      ..clear()
-      ..add(
-        GeminiTokenCallRecord(
-          label: label,
-          thinkingLevel: thinkingLevel.trim().toUpperCase(),
-          inputTokens: safeIn,
-          outputTokens: safeOut,
-          thinkingTokens: safeThink,
-          timestamp: DateTime.now(),
-        ),
-      );
+    totalInputTokens += safeIn;
+    totalOutputTokens += safeOut;
+    totalThinkingTokens += safeThink;
+    totalApiCalls += 1;
+    callHistory.insert(
+      0,
+      GeminiTokenCallRecord(
+        label: label,
+        thinkingLevel: thinkingLevel.trim().toUpperCase(),
+        inputTokens: safeIn,
+        outputTokens: safeOut,
+        thinkingTokens: safeThink,
+        timestamp: DateTime.now(),
+      ),
+    );
+    if (callHistory.length > 30) {
+      callHistory.removeRange(30, callHistory.length);
+    }
     _persistTokenUsageAsync();
     onUsageChanged?.call();
   }
@@ -402,7 +404,7 @@ class GeminiAgentClient {
     required String prompt,
     required String apiKey,
     String preferredModel = 'gemini-flash-latest',
-    String thinkingLevel = 'HIGH',
+    String thinkingLevel = 'LOW',
     double temperature = 0.5,
     List<Map<String, dynamic>>? functionDeclarations,
     String functionCallingMode = 'ANY',
@@ -417,7 +419,6 @@ class GeminiAgentClient {
         : 'json_response';
 
     if (testMockResponder != null) {
-      resetTokenUsage();
       final mockRes = await testMockResponder!(prompt, resolvedModel);
       if (mockRes != null) {
         final usage = mockRes['_usageMetadata'] ?? mockRes['usageMetadata'];
@@ -425,12 +426,12 @@ class GeminiAgentClient {
           recordTokenUsage(
             label: (mockRes['_toolName'] ?? callLabel).toString(),
             thinkingLevel:
-                normalizedThinking.isEmpty ? 'HIGH' : normalizedThinking,
+                normalizedThinking.isEmpty ? 'LOW' : normalizedThinking,
             inputTokens: (usage['promptTokenCount'] as num?)?.toInt() ?? 400,
             outputTokens:
                 (usage['candidatesTokenCount'] as num?)?.toInt() ?? 600,
             thinkingTokens:
-                (usage['thoughtsTokenCount'] as num?)?.toInt() ?? 800,
+                (usage['thoughtsTokenCount'] as num?)?.toInt() ?? 200,
           );
         } else {
           final estIn = (prompt.length ~/ 4).clamp(64, 32000);
@@ -441,7 +442,7 @@ class GeminiAgentClient {
           recordTokenUsage(
             label: (mockRes['_toolName'] ?? callLabel).toString(),
             thinkingLevel:
-                normalizedThinking.isEmpty ? 'HIGH' : normalizedThinking,
+                normalizedThinking.isEmpty ? 'LOW' : normalizedThinking,
             inputTokens: estIn,
             outputTokens: estOut,
             thinkingTokens: estThink,
@@ -455,9 +456,6 @@ class GeminiAgentClient {
       lastErrorStatus = 'Missing API Key';
       return null;
     }
-
-    // Reset live token tracker at the start of every new API call.
-    resetTokenUsage();
 
     await _ensureModelCapabilitiesLoaded(resolvedModel, key);
 

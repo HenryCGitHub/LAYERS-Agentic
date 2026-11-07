@@ -625,7 +625,7 @@ class WorkbenchShell extends StatelessWidget {
                       const SizedBox(width: 2),
                       Tooltip(
                         message:
-                            'Gemini 3.8 Flash Live Call Tracker (Auto-resets every API call) — Input: ${workbench.tokenInputCount} (\$0.75/1M) · Visible Output: ${workbench.tokenOutputCount} (\$3.75/1M) · Scratchpad Thinking [billed as Output]: ${workbench.tokenThinkingCount} (\$3.75/1M) · Est. Call Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
+                            'Gemini 3.8 Flash Live Token Tracker (Calls: ${workbench.tokenApiCallCount} · Input: ${workbench.tokenInputCount} [\$0.75/1M] · Visible Output: ${workbench.tokenOutputCount} [\$3.75/1M] · Scratchpad Thinking: ${workbench.tokenThinkingCount} [\$3.75/1M] · Est. Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}) — Click for breakdown',
                         child: InkWell(
                           key: const ValueKey('global_token_usage_pill'),
                           onTap: () => _showAiSettingsDialog(context),
@@ -641,12 +641,37 @@ class WorkbenchShell extends StatelessWidget {
                               border: Border.all(color: borderColor),
                             ),
                             child: Text(
-                              '⚡ IN ${GeminiAgentClient.formatTokenCount(workbench.tokenInputCount)} · OUT ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount)} · THINK ${GeminiAgentClient.formatTokenCount(workbench.tokenThinkingCount)} · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
+                              '⚡ ${workbench.tokenApiCallCount} · IN ${GeminiAgentClient.formatTokenCount(workbench.tokenInputCount)} · OUT ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount)} · THINK ${GeminiAgentClient.formatTokenCount(workbench.tokenThinkingCount)} · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w600,
                                 color: textSecondary,
                               ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Tooltip(
+                        message: 'Reset Token & Cost Tracker',
+                        child: InkWell(
+                          key: const ValueKey('global_token_reset_btn'),
+                          onTap: () => workbench.resetTokenUsage(),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: bgSurface,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Icon(
+                              Icons.refresh_rounded,
+                              size: 12,
+                              color: textSecondary,
                             ),
                           ),
                         ),

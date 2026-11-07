@@ -625,14 +625,15 @@ extension _ShellDialogsExt on WorkbenchShell {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: _buildTokenStatCell(
-                                    label: 'EST. CALL COST',
+                                    label: 'EST. COST',
                                     value: GeminiAgentClient.formatCostUsd(
                                       workbench.tokenEstimatedCostUsd,
                                     ),
                                     rawCount: workbench.tokenInputCount +
                                         workbench.tokenOutputCount +
                                         workbench.tokenThinkingCount,
-                                    subtitle: 'Resets each API call',
+                                    subtitle:
+                                        '${workbench.tokenApiCallCount} calls · Reset anytime',
                                     textPrimary: textPrimary,
                                     textSecondary: textSecondary,
                                     textMuted: textMuted,
@@ -642,7 +643,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Gemini 3.8 Flash Pricing: Input \$0.75/1M · Output + Scratchpad \$3.75/1M (5x Input) · Billed Output (OUT + THINK): ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount + workbench.tokenThinkingCount)} · Call Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
+                              'Gemini 3.8 Flash Pricing: Input \$0.75/1M · Output + Scratchpad \$3.75/1M (5x Input) · Billed Output (OUT + THINK): ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount + workbench.tokenThinkingCount)} · Total Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,

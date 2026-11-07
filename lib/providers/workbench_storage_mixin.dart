@@ -166,10 +166,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           loaded.planningModel!.trim().isNotEmpty) {
         _planningModel = 'gemini-flash-latest';
       }
-      if (loaded.thinkingLevel != null &&
-          loaded.thinkingLevel!.trim().isNotEmpty) {
-        _thinkingLevel = loaded.thinkingLevel!.trim().toUpperCase();
-      }
+      _thinkingLevel = 'LOW';
       final projs = savedProjects;
       if (projs.isNotEmpty) {
         final targetId = (loaded.activeDocumentId != null &&

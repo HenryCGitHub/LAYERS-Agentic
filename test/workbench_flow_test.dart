@@ -6184,12 +6184,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.activeProject!.title, equals('Submerged Mech Salvage'));
         expect(provider.conceptDraft!.title, equals('Submerged Mech Salvage'));
 
-        // 9. Verify Pure gemini-flash-latest (HIGH) configuration & Focused Context Architecture:
+        // 9. Verify Pure gemini-flash-latest (LOW default) configuration & Focused Context Architecture:
         expect(
           WorkbenchProvider.availablePlanningModels,
           isNot(contains('gemini-4-argon')),
         );
-        expect(provider.thinkingLevel, equals('HIGH'));
+        expect(provider.thinkingLevel, equals('LOW'));
 
         String? capturedStepSynthPrompt;
         String? capturedTailorPrompt;
@@ -7101,7 +7101,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals(8),
         );
 
-        // 11a-token. Live Token Usage & Scratchpad Tracker (IN · OUT · THINK · $Cost, resets per call)
+        // 11a-token. Live Token Usage & Scratchpad Tracker (IN · OUT · THINK · $Cost, accumulates & resets)
         provider.resetTokenUsage();
         expect(provider.tokenInputCount, equals(0));
         expect(provider.tokenOutputCount, equals(0));
@@ -7110,7 +7110,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         GeminiAgentClient.recordUsageFromResponseBody(
           '{"usageMetadata":{"promptTokenCount":2400,"candidatesTokenCount":3600,"thoughtsTokenCount":5200}}',
           label: 'commit_release_plan',
-          thinkingLevel: 'HIGH',
+          thinkingLevel: 'LOW',
         );
         expect(provider.tokenInputCount, equals(2400));
         expect(provider.tokenOutputCount, equals(3600));
@@ -7123,18 +7123,18 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           GeminiAgentClient.formatCostUsd(provider.tokenEstimatedCostUsd),
           equals(r'$0.0348'),
         );
-        // Second call automatically resets/replaces previous call's counts instead of accumulating
+        // Second call accumulates onto the session totals until Reset is clicked
         GeminiAgentClient.recordUsageFromResponseBody(
           '{"usageMetadata":{"promptTokenCount":1000,"candidatesTokenCount":1000,"thoughtsTokenCount":1000}}',
           label: 'commit_spark_intake',
-          thinkingLevel: 'HIGH',
+          thinkingLevel: 'LOW',
         );
-        expect(provider.tokenInputCount, equals(1000));
-        expect(provider.tokenOutputCount, equals(1000));
-        expect(provider.tokenThinkingCount, equals(1000));
-        expect(provider.tokenApiCallCount, equals(1));
-        expect(provider.tokenCallHistory.length, equals(1));
-        expect(provider.tokenEstimatedCostUsd, closeTo(0.00825, 0.0001));
+        expect(provider.tokenInputCount, equals(3400));
+        expect(provider.tokenOutputCount, equals(4600));
+        expect(provider.tokenThinkingCount, equals(6200));
+        expect(provider.tokenApiCallCount, equals(2));
+        expect(provider.tokenCallHistory.length, equals(2));
+        expect(provider.tokenEstimatedCostUsd, closeTo(0.04305, 0.0001));
         provider.resetTokenUsage();
         expect(provider.tokenApiCallCount, equals(0));
 

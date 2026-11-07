@@ -82,7 +82,7 @@ class WorkbenchProvider extends ChangeNotifier {
   /// True while the Act 2 Full Production Blueprint draft is being generated.
   bool _isDraftingFullProductionBlueprint = false;
 
-  String _thinkingLevel = 'HIGH';
+  String _thinkingLevel = 'LOW';
   String get thinkingLevel => _thinkingLevel;
 
   static const List<String> availableConversationModels = [

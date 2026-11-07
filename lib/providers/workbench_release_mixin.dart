@@ -165,7 +165,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }
 
   /// 2-Stage Flow (`1. Concept` -> `2. Workbench`): Transitions immediately to `2. Workbench`,
-  /// synthesizes the Release Blueprint in a single One-Shot call (`commit_release_plan`), and executes it into the active Workbench.
+  /// synthesizes the Release Blueprint (or reuses the pre-warmed blueprint), and executes it into the active Workbench.
   Future<void> approveConceptAndBuildRelease({String? releaseId}) async {
     if (_conceptDraft != null) {
       _commitConceptToVault(_conceptDraft!, syncBuiltWorkbench: false);
@@ -173,6 +173,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _releaseViewFilter = 'active';
     _currentStage = WorkbenchStage.releaseWorkbench;
     notifyListeners();
+
+    if (GeminiAgentClient.testMockResponder == null) {
+      await _buildInitialReleasePriorityFirst(releaseId: releaseId);
+      return;
+    }
 
     if (releaseId == null && _inFlightPrewarmFuture != null) {
       _isAgentBusy = true;
@@ -204,6 +209,274 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     } else if (activeReleaseBeats.isEmpty) {
       _currentStage = WorkbenchStage.projectPitch;
       notifyListeners();
+    }
+  }
+
+  /// Priority-First Section-by-Section Workbench Build (`1. System Epics E01..EN` -> `2. E01 Features` ->
+  /// `3. Feature 1.1 Engine Steps` -> `4. E02..EN Features`).
+  Future<void> _buildInitialReleasePriorityFirst({String? releaseId}) async {
+    final proj = activeProject;
+    if (proj == null || proj.childrenIds.isEmpty) {
+      _currentStage = WorkbenchStage.projectPitch;
+      notifyListeners();
+      return;
+    }
+    if (!GeminiAgentClient.hasKey(_apiKey)) {
+      _setOfflineState();
+      _currentStage = WorkbenchStage.projectPitch;
+      notifyListeners();
+      return;
+    }
+    final targetRelId =
+        releaseId ?? _activeReleaseId ?? proj.childrenIds.first;
+    _activeReleaseId = targetRelId;
+    final relDoc = documents[targetRelId];
+    if (relDoc == null) return;
+    final verTag = releaseVersionTagFor(relDoc);
+    relDoc.sections['versionTag'] = verTag;
+
+    _stepQueueGeneration++;
+    final currentGen = _stepQueueGeneration;
+    _pendingFeatureStepQueue.clear();
+    _aiSynthesizedFeatureSteps.clear();
+    _isAgentBusy = true;
+    _agentProgressStep =
+        'Determining Systems & Mechanics for $verTag ($_conversationModel)...';
+    notifyListeners();
+
+    try {
+      // 1. Clear any old v0.1 Beats/Features if rebuilding v0.1
+      final oldBeatIds = List<String>.from(relDoc.childrenIds);
+      final oldFeatureIds = <String>{
+        for (final bId in oldBeatIds)
+          ...(documents[bId]?.childrenIds ?? const <String>[]),
+      };
+      final user = _authService.currentUser;
+      for (final oldFeatId in oldFeatureIds) {
+        documents.remove(oldFeatId);
+        LocalVaultService.deleteDocument(oldFeatId);
+        if (user != null) {
+          _firestoreService.deleteDocument(uid: user.uid, docId: oldFeatId);
+        }
+      }
+      for (final oldBeatId in oldBeatIds) {
+        documents.remove(oldBeatId);
+        LocalVaultService.deleteDocument(oldBeatId);
+        if (user != null) {
+          _firestoreService.deleteDocument(uid: user.uid, docId: oldBeatId);
+        }
+      }
+      relDoc.childrenIds.clear();
+      _selectedBeatId = null;
+      _selectedFeatureId = null;
+      notifyListeners();
+
+      // Phase 1: Determine System Epics (E01..EN) needed to accomplish the Core Loop
+      final systemBp = await ReleasePlannerAgent.planReleaseSystemEpics(
+        projectDoc: proj,
+        releaseDoc: relDoc,
+        apiKey: _apiKey,
+        modelName: _planningModel,
+        thinkingLevel: _thinkingLevel,
+      );
+      if (systemBp == null) {
+        final fallbackBp =
+            ReleasePlannerAgent.buildImmediateInitialBaselineBlueprint(
+          projectDoc: proj,
+          releaseDoc: relDoc,
+        );
+        if (fallbackBp == null) {
+          _setOfflineState();
+          _currentStage = WorkbenchStage.projectPitch;
+          return;
+        }
+        _releaseBlueprint = fallbackBp;
+        await approveAndExecuteReleasePlan();
+        return;
+      }
+
+      if (systemBp.releaseTitle.isNotEmpty &&
+          systemBp.releaseTitle != relDoc.title) {
+        relDoc.title = systemBp.releaseTitle;
+      }
+      _releaseBlueprint = systemBp;
+
+      // Immediately materialize all System Epics (E01..EN) into the Left Outliner Rail
+      final createdEpics = ReleaseExecutorAgent.createInitialSystemEpicDocs(
+        releaseDoc: relDoc,
+        blueprint: systemBp,
+      );
+      for (final epicDoc in createdEpics) {
+        documents[epicDoc.id] = epicDoc;
+        _persistDocument(epicDoc);
+      }
+      _persistDocument(relDoc);
+
+      // Phase 2A: Determine Features for E01 FIRST so Feature 1.1 opens immediately
+      final e01Bp = systemBp.beats.first;
+      final e01Doc = createdEpics.first;
+      _synthesizingBeatId = e01Doc.id;
+      _agentProgressStep =
+          'Planning E01 · ${e01Bp.title} features ($_conversationModel)...';
+      notifyListeners();
+
+      final e01Features = await ReleasePlannerAgent.planFeaturesForSingleEpic(
+        projectDoc: proj,
+        releaseDoc: relDoc,
+        epicBlueprint: e01Bp,
+        epicIndex: 0,
+        allEpics: systemBp.beats,
+        alreadyPlannedFeatures: const <String>[],
+        apiKey: _apiKey,
+        modelName: _planningModel,
+        thinkingLevel: _thinkingLevel,
+      );
+      e01Bp.features = e01Features;
+
+      final createdE01Features =
+          ReleaseExecutorAgent.materializeFeaturesForSingleEpic(
+        releaseDoc: relDoc,
+        beatDoc: e01Doc,
+        blueprint: systemBp,
+        beatBp: e01Bp,
+        epicIndex: 0,
+        existingDocuments: documents,
+      );
+      for (final fDoc in createdE01Features) {
+        documents[fDoc.id] = fDoc;
+        _persistDocument(fDoc);
+        if (!_pendingFeatureStepQueue.contains(fDoc.id)) {
+          _pendingFeatureStepQueue.add(fDoc.id);
+        }
+      }
+      _persistDocument(e01Doc);
+      relDoc.sections['synced_engine_label'] = _activeEngineLabel;
+      relDoc.sections['release_blueprint_json'] = jsonEncode(systemBp.toJson());
+      _persistDocument(relDoc);
+      _selectFirstIncompleteFeatureInActiveRelease();
+      _syncActiveProjectMetadata();
+    } finally {
+      _synthesizingBeatId = null;
+      _isAgentBusy = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
+
+    final activeBp = _releaseBlueprint;
+    if (activeBp == null || activeReleaseBeats.isEmpty) return;
+
+    // Phase 3 & 4 (Background Priority-First):
+    // Immediately synthesize Feature 1.1's Engine Steps FIRST, then populate E02..EN Features & remaining steps sequentially
+    unawaited(
+      _completePriorityFirstWorkbenchBuild(
+        generation: currentGen,
+        projectDoc: proj,
+        releaseDoc: relDoc,
+        blueprint: activeBp,
+      ),
+    );
+  }
+
+  Future<void> _completePriorityFirstWorkbenchBuild({
+    required int generation,
+    required TierDocument projectDoc,
+    required TierDocument releaseDoc,
+    required ReleaseBlueprint blueprint,
+  }) async {
+    final startProjectId = _activeProjectId;
+    final startReleaseId = _activeReleaseId;
+    bool isCancelled() =>
+        _stepQueueGeneration != generation ||
+        _activeProjectId != startProjectId ||
+        _activeReleaseId != startReleaseId;
+
+    final e01BeatDoc = activeReleaseBeats.firstOrNull;
+    final e01FeatDocs = e01BeatDoc != null
+        ? featuresForBeat(e01BeatDoc.id)
+        : const <TierDocument>[];
+    final firstFeatureId = e01FeatDocs.firstOrNull?.id;
+    for (final f in e01FeatDocs.skip(1)) {
+      if (!_pendingFeatureStepQueue.contains(f.id)) {
+        _pendingFeatureStepQueue.add(f.id);
+      }
+    }
+
+    _isDrainingStepQueue = true;
+    try {
+      // Step 3: Immediately synthesize Feature 1.1's 3-Area Engine Steps BEFORE E02..EN
+      if (firstFeatureId != null && !isCancelled()) {
+        await synthesizeFeatureHowToStepsWithAi(firstFeatureId);
+      }
+
+      // Step 4A: Populate E02..EN Features top-down one Epic at a time in the Outliner
+      final plannedFeatureTitles = <String>[
+        for (final f in blueprint.beats.first.features) f.title,
+      ];
+
+      for (int bIdx = 1; bIdx < blueprint.beats.length; bIdx++) {
+        if (isCancelled()) break;
+        final epicBp = blueprint.beats[bIdx];
+        final targetBeatDoc = documents[epicBp.id] ??
+            documents['epic_${releaseDoc.id}_${bIdx + 1}'];
+        if (targetBeatDoc == null) continue;
+        _synthesizingBeatId = targetBeatDoc.id;
+        notifyListeners();
+        try {
+          final epicFeats = await ReleasePlannerAgent.planFeaturesForSingleEpic(
+            projectDoc: projectDoc,
+            releaseDoc: releaseDoc,
+            epicBlueprint: epicBp,
+            epicIndex: bIdx,
+            allEpics: blueprint.beats,
+            alreadyPlannedFeatures: plannedFeatureTitles,
+            apiKey: _apiKey,
+            modelName: _planningModel,
+            thinkingLevel: _thinkingLevel,
+          );
+          if (isCancelled()) break;
+          epicBp.features = epicFeats;
+          for (final ef in epicFeats) {
+            plannedFeatureTitles.add(ef.title);
+          }
+
+          final createdEpicFeatures =
+              ReleaseExecutorAgent.materializeFeaturesForSingleEpic(
+            releaseDoc: releaseDoc,
+            beatDoc: targetBeatDoc,
+            blueprint: blueprint,
+            beatBp: epicBp,
+            epicIndex: bIdx,
+            existingDocuments: documents,
+          );
+          for (final fDoc in createdEpicFeatures) {
+            documents[fDoc.id] = fDoc;
+            _persistDocument(fDoc);
+            if (!_pendingFeatureStepQueue.contains(fDoc.id)) {
+              _pendingFeatureStepQueue.add(fDoc.id);
+            }
+          }
+          _persistDocument(targetBeatDoc);
+          releaseDoc.sections['release_blueprint_json'] =
+              jsonEncode(blueprint.toJson());
+          _persistDocument(releaseDoc);
+          _syncActiveProjectMetadata();
+        } finally {
+          if (_synthesizingBeatId == targetBeatDoc.id) {
+            _synthesizingBeatId = null;
+          }
+          notifyListeners();
+        }
+      }
+    } finally {
+      _isDrainingStepQueue = false;
+    }
+
+    // Step 4B: Synthesize 3-Area Engine Steps for remaining Features (Feature 1.2, E02 Features, ...) sequentially at LOW thinking
+    if (_pendingFeatureStepQueue.isNotEmpty && !isCancelled()) {
+      await _prefetchRemainingFeatureStepsInBackground(
+        null,
+        generation,
+      );
     }
   }
 
@@ -2183,17 +2456,32 @@ Concept Blueprint:
       final completedPriorReleases = projectReleases
           .where((r) => r.id != targetRelId && r.childrenIds.isNotEmpty)
           .toList();
-      final planned = await ReleasePlannerAgent.planRelease(
-        projectDoc: proj,
-        releaseDoc: relDoc,
-        completedReleases: completedPriorReleases,
-        existingBeats: existingBeats,
-        existingFeaturesByBeat: existingFeaturesByBeat,
-        deferredByBeatIndex: deferredByBeatIndex,
-        apiKey: _apiKey,
-        modelName: _planningModel,
-        thinkingLevel: _thinkingLevel,
-      );
+      final ReleaseBlueprint? planned;
+      if (!isFirstPrototypeRelease &&
+          existingBeats.isNotEmpty &&
+          GeminiAgentClient.testMockResponder == null) {
+        planned = await planProgressiveReleaseSectionBySection(
+          projectDoc: proj,
+          releaseDoc: relDoc,
+          completedReleases: completedPriorReleases,
+          existingBeats: existingBeats,
+          existingFeaturesByBeat: existingFeaturesByBeat,
+          deferredByBeatIndex: deferredByBeatIndex,
+          generation: planGeneration,
+        );
+      } else {
+        planned = await ReleasePlannerAgent.planRelease(
+          projectDoc: proj,
+          releaseDoc: relDoc,
+          completedReleases: completedPriorReleases,
+          existingBeats: existingBeats,
+          existingFeaturesByBeat: existingFeaturesByBeat,
+          deferredByBeatIndex: deferredByBeatIndex,
+          apiKey: _apiKey,
+          modelName: _planningModel,
+          thinkingLevel: _thinkingLevel,
+        );
+      }
       if (planGeneration != _progressivePlanGeneration) return;
       if (planned != null) {
         if (planned.releaseTitle.isNotEmpty &&
@@ -4271,7 +4559,19 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               .toList();
           final currentGen = ++_stepQueueGeneration;
           _pendingFeatureStepQueue.clear();
-          if (GeminiAgentClient.testMockResponder != null) {
+          if (GeminiAgentClient.testMockResponder == null) {
+            final allOrderedFeatIds = <String>[
+              primaryFeatId,
+              ...remainingFeatIds,
+            ];
+            _pendingFeatureStepQueue.addAll(allOrderedFeatIds);
+            unawaited(
+              _prefetchRemainingFeatureStepsInBackground(
+                allOrderedFeatIds,
+                currentGen,
+              ),
+            );
+          } else {
             final primaryTitle =
                 documents[primaryFeatId]?.title ?? 'Feature 1';
             _agentProgressStep =
@@ -6334,8 +6634,7 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
       _persistDocument(proj, debounce: true);
     }
     notifyListeners();
-    final shouldTriggerAi =
-        triggerAiSynthesis ?? (GeminiAgentClient.testMockResponder != null);
+    final shouldTriggerAi = triggerAiSynthesis ?? true;
     if (shouldTriggerAi &&
         (GeminiAgentClient.hasKey(_apiKey) ||
             GeminiAgentClient.testMockResponder != null)) {
