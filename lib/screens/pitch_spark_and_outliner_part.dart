@@ -126,51 +126,56 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Subtle Cloud Sync Indicator
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bgSurface,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: widget.workbench.isCloudSynced
-                                ? const Color(0xFF10B981).withValues(alpha: 0.25)
-                                : borderSubtle,
+                      Tooltip(
+                        message: widget.workbench.isCloudSynced
+                            ? 'Synced to Firebase Cloud'
+                            : 'Saved to Local Vault',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
                           ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: widget.workbench.isCloudSynced
-                                    ? const Color(0xFF10B981)
-                                    : textMuted,
-                              ),
+                          decoration: BoxDecoration(
+                            color: bgSurface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: widget.workbench.isCloudSynced
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.25)
+                                  : borderSubtle,
                             ),
-                            const SizedBox(width: 5),
-                            Text(
-                              widget.workbench.isCloudSynced
-                                  ? 'Cloud Synced'
-                                  : 'Local Vault',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                                color: widget.workbench.isCloudSynced
-                                    ? const Color(0xFF10B981)
-                                    : textMuted,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 5,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: widget.workbench.isCloudSynced
+                                      ? const Color(0xFF10B981)
+                                      : textMuted,
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Text(
+                                widget.workbench.isCloudSynced
+                                    ? 'Synced'
+                                    : 'Local',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: widget.workbench.isCloudSynced
+                                      ? const Color(0xFF10B981)
+                                      : textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       if (widget.workbench.savedProjects.isNotEmpty) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         PopupMenuButton<String>(
                           key: const ValueKey('saved_projects_dropdown_btn'),
                           tooltip: 'Saved Projects',
@@ -215,13 +220,13 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                           ],
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
+                              horizontal: 5,
+                              vertical: 3,
                             ),
                             child: Text(
-                              'Saved Projects ▾',
+                              'Projects ▾',
                               style: GoogleFonts.inter(
-                                fontSize: 12.5,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: isDark ? const Color(0xFF9CA3AF) : textSecondary,
                               ),
