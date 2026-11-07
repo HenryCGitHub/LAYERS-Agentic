@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'agents/gemini_agent_client.dart';
 import 'firebase_options.dart';
 import 'models/feature_state.dart';
 import 'models/tier_document.dart';
@@ -622,6 +623,35 @@ class WorkbenchShell extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 2),
+                      Tooltip(
+                        message:
+                            'Live Gemini Token Tracker (Calls: ${workbench.tokenApiCallCount} · Input: ${workbench.tokenInputCount} · Visible Output: ${workbench.tokenOutputCount} · Scratchpad Thinking [billed as Output]: ${workbench.tokenThinkingCount}) — Click for breakdown & reset',
+                        child: InkWell(
+                          key: const ValueKey('global_token_usage_pill'),
+                          onTap: () => _showAiSettingsDialog(context),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: bgSurface,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Text(
+                              '⚡ ${workbench.tokenApiCallCount} · IN ${GeminiAgentClient.formatTokenCount(workbench.tokenInputCount)} · OUT ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount)} · THINK ${GeminiAgentClient.formatTokenCount(workbench.tokenThinkingCount)}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
                       Tooltip(
                         message: workbench.aiLastErrorStatus != null
                             ? 'AI API Key Notice (${workbench.aiLastErrorStatus}) — Click to update key'

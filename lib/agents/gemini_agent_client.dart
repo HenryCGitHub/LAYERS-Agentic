@@ -1,13 +1,60 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/text_style_guide.dart';
+
+/// Immutable record of a single Gemini API call's token breakdown (`IN · OUT · THINK`).
+class GeminiTokenCallRecord {
+  final String label;
+  final String thinkingLevel;
+  final int inputTokens;
+  final int outputTokens;
+  final int thinkingTokens;
+  final DateTime timestamp;
+
+  const GeminiTokenCallRecord({
+    required this.label,
+    required this.thinkingLevel,
+    required this.inputTokens,
+    required this.outputTokens,
+    required this.thinkingTokens,
+    required this.timestamp,
+  });
+
+  /// Total tokens across Input + Visible Output + Internal Scratchpad Thinking.
+  int get totalTokens => inputTokens + outputTokens + thinkingTokens;
+
+  /// Google bills both `candidatesTokenCount` (`OUT`) and `thoughtsTokenCount` (`THINK`) at the Output rate.
+  int get billedOutputTokens => outputTokens + thinkingTokens;
+
+  Map<String, dynamic> toJson() => {
+        'label': label,
+        'thinkingLevel': thinkingLevel,
+        'inputTokens': inputTokens,
+        'outputTokens': outputTokens,
+        'thinkingTokens': thinkingTokens,
+        'timestamp': timestamp.toIso8601String(),
+      };
+
+  factory GeminiTokenCallRecord.fromJson(Map<String, dynamic> json) {
+    return GeminiTokenCallRecord(
+      label: (json['label'] ?? 'gemini_call').toString(),
+      thinkingLevel: (json['thinkingLevel'] ?? 'HIGH').toString(),
+      inputTokens: (json['inputTokens'] as num?)?.toInt() ?? 0,
+      outputTokens: (json['outputTokens'] as num?)?.toInt() ?? 0,
+      thinkingTokens: (json['thinkingTokens'] as num?)?.toInt() ?? 0,
+      timestamp: DateTime.tryParse((json['timestamp'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+}
 
 /// Lightweight, resilient Gemini JSON client for LAYERS-Agentic.
 /// Supports:
 /// - Base64 build-time key decoding (`GEMINI_API_KEY_B64`) so GitHub Push Protection
 ///   never blocks public `gh-pages` deployments.
-/// - Runtime API key and Model override (`gemini-2.5-flash` default, `gemini-2.5-pro`, `gemini-2.0-flash`).
-/// - Automatic model fallback if a model quota/availability error occurs.
+/// - Runtime API key and Model override (`gemini-flash-latest` default).
+/// - Live Token Usage & Scratchpad Tracker (`IN` · `OUT` · `THINK`).
 class GeminiAgentClient {
   static const String _rawEnvKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String _b64EnvKey = String.fromEnvironment('GEMINI_API_KEY_B64');
@@ -16,13 +63,174 @@ class GeminiAgentClient {
   static const Map<String, String> _jsonHeaders = {
     'Content-Type': 'application/json',
   };
-  static const Duration _heavyModelTimeout = Duration(seconds: 60);
-  static const Duration _standardModelTimeout = Duration(seconds: 60);
+  static const Duration _heavyModelTimeout = Duration(seconds: 120);
+  static const Duration _standardModelTimeout = Duration(seconds: 120);
   static const Duration _metadataTimeout = Duration(seconds: 6);
 
   static bool _modelMetadataChecked = false;
   static int? _cachedModelOutputTokenLimit;
   static bool _cachedSupportsThinkingLevel = false;
+
+  static const String _prefsTokenUsageKey = 'layers_gemini_token_usage_v1';
+  static int totalInputTokens = 0;
+  static int totalOutputTokens = 0;
+  static int totalThinkingTokens = 0;
+  static int totalApiCalls = 0;
+  static final List<GeminiTokenCallRecord> callHistory =
+      <GeminiTokenCallRecord>[];
+  static void Function()? onUsageChanged;
+
+  /// Estimated USD cost on Gemini Flash pricing (`$0.30 / 1M` Input, `$2.50 / 1M` Output + Thinking).
+  static double get estimatedCostUsd {
+    final inCost = (totalInputTokens / 1000000.0) * 0.30;
+    final outAndThinkCost =
+        ((totalOutputTokens + totalThinkingTokens) / 1000000.0) * 2.50;
+    return inCost + outAndThinkCost;
+  }
+
+  /// Formats a token count compactly (e.g., `840`, `5.2k`, `1.4M`).
+  static String formatTokenCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000.0).toStringAsFixed(2)}M';
+    }
+    if (count >= 1000) {
+      return '${(count / 1000.0).toStringAsFixed(1)}k';
+    }
+    return '$count';
+  }
+
+  /// Records a single API call's token usage (`IN`, `OUT`, `THINK`) and notifies listeners.
+  static void recordTokenUsage({
+    required String label,
+    required String thinkingLevel,
+    required int inputTokens,
+    required int outputTokens,
+    required int thinkingTokens,
+  }) {
+    final safeIn = inputTokens < 0 ? 0 : inputTokens;
+    final safeOut = outputTokens < 0 ? 0 : outputTokens;
+    final safeThink = thinkingTokens < 0 ? 0 : thinkingTokens;
+    totalInputTokens += safeIn;
+    totalOutputTokens += safeOut;
+    totalThinkingTokens += safeThink;
+    totalApiCalls += 1;
+    callHistory.insert(
+      0,
+      GeminiTokenCallRecord(
+        label: label,
+        thinkingLevel: thinkingLevel.trim().toUpperCase(),
+        inputTokens: safeIn,
+        outputTokens: safeOut,
+        thinkingTokens: safeThink,
+        timestamp: DateTime.now(),
+      ),
+    );
+    if (callHistory.length > 30) {
+      callHistory.removeRange(30, callHistory.length);
+    }
+    _persistTokenUsageAsync();
+    onUsageChanged?.call();
+  }
+
+  /// Extracts `usageMetadata` (`promptTokenCount`, `candidatesTokenCount`, `thoughtsTokenCount`)
+  /// from a raw Gemini HTTP response body and records it.
+  static void recordUsageFromResponseBody(
+    String responseBody, {
+    required String label,
+    required String thinkingLevel,
+    int fallbackPromptChars = 0,
+  }) {
+    try {
+      final decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic>) {
+        final usage = decoded['usageMetadata'];
+        if (usage is Map) {
+          final inTok = (usage['promptTokenCount'] as num?)?.toInt() ??
+              (fallbackPromptChars ~/ 4);
+          final outTok = (usage['candidatesTokenCount'] as num?)?.toInt() ?? 0;
+          final thinkTok = (usage['thoughtsTokenCount'] as num?)?.toInt() ?? 0;
+          recordTokenUsage(
+            label: label,
+            thinkingLevel: thinkingLevel,
+            inputTokens: inTok,
+            outputTokens: outTok,
+            thinkingTokens: thinkTok,
+          );
+          return;
+        }
+      }
+    } catch (_) {}
+    recordTokenUsage(
+      label: label,
+      thinkingLevel: thinkingLevel,
+      inputTokens: fallbackPromptChars ~/ 4,
+      outputTokens: responseBody.length ~/ 4,
+      thinkingTokens: 0,
+    );
+  }
+
+  /// Loads persisted token counters and call log from `SharedPreferences`.
+  static Future<void> loadPersistedTokenUsage() async {
+    if (testMockResponder != null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefsTokenUsageKey);
+      if (raw == null || raw.trim().isEmpty) return;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      totalInputTokens = (map['totalInputTokens'] as num?)?.toInt() ?? 0;
+      totalOutputTokens = (map['totalOutputTokens'] as num?)?.toInt() ?? 0;
+      totalThinkingTokens = (map['totalThinkingTokens'] as num?)?.toInt() ?? 0;
+      totalApiCalls = (map['totalApiCalls'] as num?)?.toInt() ?? 0;
+      callHistory.clear();
+      final rawHistory = map['callHistory'];
+      if (rawHistory is List) {
+        for (final item in rawHistory) {
+          if (item is Map) {
+            callHistory.add(
+              GeminiTokenCallRecord.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            );
+          }
+        }
+      }
+      onUsageChanged?.call();
+    } catch (_) {}
+  }
+
+  /// Resets cumulative token counters and call history to zero.
+  static void resetTokenUsage() {
+    totalInputTokens = 0;
+    totalOutputTokens = 0;
+    totalThinkingTokens = 0;
+    totalApiCalls = 0;
+    callHistory.clear();
+    onUsageChanged?.call();
+    if (testMockResponder != null) return;
+    Future<void>(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefsTokenUsageKey);
+      } catch (_) {}
+    });
+  }
+
+  static void _persistTokenUsageAsync() {
+    if (testMockResponder != null) return;
+    Future<void>(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final payload = jsonEncode({
+          'totalInputTokens': totalInputTokens,
+          'totalOutputTokens': totalOutputTokens,
+          'totalThinkingTokens': totalThinkingTokens,
+          'totalApiCalls': totalApiCalls,
+          'callHistory': [for (final r in callHistory) r.toJson()],
+        });
+        await prefs.setString(_prefsTokenUsageKey, payload);
+      } catch (_) {}
+    });
+  }
 
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (sourced from `LayersTextStyleGuide`).
   static const String compactStyleRules =
@@ -100,14 +308,21 @@ class GeminiAgentClient {
   }) {
     final upper = normalizedThinking.trim().toUpperCase();
     if (useThinkingLevelEnum) {
+      final String level = switch (upper) {
+        'NONE' || 'MINIMAL' => upper,
+        'LOW' => 'LOW',
+        'MEDIUM' => 'MEDIUM',
+        _ => 'HIGH',
+      };
       return <String, dynamic>{
-        'thinkingLevel':
-            (upper == 'NONE' || upper == 'MINIMAL') ? upper : 'LOW',
+        'thinkingLevel': level,
       };
     }
     final int budget = switch (upper) {
       'NONE' || 'MINIMAL' => 0,
-      _ => 256,
+      'LOW' => 256,
+      'MEDIUM' => 2048,
+      _ => -1, // Uncapped dynamic thinking for HIGH
     };
     return <String, dynamic>{
       'thinkingBudget': budget,
@@ -159,15 +374,52 @@ class GeminiAgentClient {
     required String prompt,
     required String apiKey,
     String preferredModel = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
+    String thinkingLevel = 'HIGH',
     double temperature = 0.5,
     List<Map<String, dynamic>>? functionDeclarations,
     String functionCallingMode = 'ANY',
     Map<String, dynamic>? responseSchema,
   }) async {
     const resolvedModel = 'gemini-flash-latest';
+    final normalizedThinking = thinkingLevel.trim().toUpperCase();
+    final hasTools =
+        functionDeclarations != null && functionDeclarations.isNotEmpty;
+    final callLabel = hasTools
+        ? (functionDeclarations.first['name']?.toString() ?? 'tool_call')
+        : 'json_response';
+
     if (testMockResponder != null) {
-      return testMockResponder!(prompt, resolvedModel);
+      final mockRes = await testMockResponder!(prompt, resolvedModel);
+      if (mockRes != null) {
+        final usage = mockRes['_usageMetadata'] ?? mockRes['usageMetadata'];
+        if (usage is Map) {
+          recordTokenUsage(
+            label: (mockRes['_toolName'] ?? callLabel).toString(),
+            thinkingLevel:
+                normalizedThinking.isEmpty ? 'HIGH' : normalizedThinking,
+            inputTokens: (usage['promptTokenCount'] as num?)?.toInt() ?? 400,
+            outputTokens:
+                (usage['candidatesTokenCount'] as num?)?.toInt() ?? 600,
+            thinkingTokens:
+                (usage['thoughtsTokenCount'] as num?)?.toInt() ?? 800,
+          );
+        } else {
+          final estIn = (prompt.length ~/ 4).clamp(64, 32000);
+          final estOut = (jsonEncode(mockRes).length ~/ 4).clamp(64, 32000);
+          final estThink = normalizedThinking == 'HIGH'
+              ? 1024
+              : (normalizedThinking == 'MEDIUM' ? 512 : 128);
+          recordTokenUsage(
+            label: (mockRes['_toolName'] ?? callLabel).toString(),
+            thinkingLevel:
+                normalizedThinking.isEmpty ? 'HIGH' : normalizedThinking,
+            inputTokens: estIn,
+            outputTokens: estOut,
+            thinkingTokens: estThink,
+          );
+        }
+      }
+      return mockRes;
     }
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
     if (key.isEmpty) {
@@ -178,10 +430,6 @@ class GeminiAgentClient {
     await _ensureModelCapabilitiesLoaded(resolvedModel, key);
 
     const modelsToTry = <String>[resolvedModel];
-
-    final normalizedThinking = thinkingLevel.trim().toUpperCase();
-    final hasTools =
-        functionDeclarations != null && functionDeclarations.isNotEmpty;
     final contentsPayload = [
       {
         'parts': [
@@ -201,8 +449,7 @@ class GeminiAgentClient {
       try {
         final genConfig = <String, dynamic>{
           'temperature': temperature,
-          if (_cachedModelOutputTokenLimit != null)
-            'maxOutputTokens': _cachedModelOutputTokenLimit,
+          'maxOutputTokens': _cachedModelOutputTokenLimit ?? 65536,
           if (!hasTools) 'responseMimeType': 'application/json',
           if (!hasTools && responseSchema != null)
             'responseSchema': responseSchema,
@@ -255,6 +502,15 @@ class GeminiAgentClient {
         if (response.statusCode == 200) {
           lastErrorStatus = null;
           final parsed = _parseCandidateResponseJson(response.body);
+          final effectiveLabel =
+              (parsed?['_toolName'] ?? callLabel).toString();
+          recordUsageFromResponseBody(
+            response.body,
+            label: effectiveLabel,
+            thinkingLevel:
+                normalizedThinking.isEmpty ? 'HIGH' : normalizedThinking,
+            fallbackPromptChars: prompt.length,
+          );
           if (parsed != null) return parsed;
         } else if (response.statusCode == 401 ||
             response.statusCode == 402 ||
@@ -264,47 +520,7 @@ class GeminiAgentClient {
           return null;
         }
       } catch (_) {
-        // Proceed to JSON-mode fallback if tools were active, or next model
-      }
-
-      // If a deeply nested function-calling schema timed out or returned MALFORMED_FUNCTION_CALL,
-      // retry once in direct JSON mode (`responseMimeType: 'application/json'`) with LOW thinking budget.
-      if (hasTools) {
-        try {
-          final fallbackGenConfig = <String, dynamic>{
-            'temperature': temperature,
-            if (_cachedModelOutputTokenLimit != null)
-              'maxOutputTokens': _cachedModelOutputTokenLimit,
-            'responseMimeType': 'application/json',
-            'thinkingConfig': buildNativeThinkingConfig(
-              normalizedThinking: 'LOW',
-              useThinkingLevelEnum: _cachedSupportsThinkingLevel,
-            ),
-          };
-          final fallbackPayload = <String, dynamic>{
-            'contents': contentsPayload,
-            'generationConfig': fallbackGenConfig,
-          };
-          final fallbackRes = await http
-              .post(
-                uri,
-                headers: _jsonHeaders,
-                body: jsonEncode(fallbackPayload),
-              )
-              .timeout(timeoutDuration);
-          if (fallbackRes.statusCode == 200) {
-            lastErrorStatus = null;
-            final parsed = _parseCandidateResponseJson(fallbackRes.body);
-            if (parsed != null) return parsed;
-          } else if (fallbackRes.statusCode == 401 ||
-              fallbackRes.statusCode == 402 ||
-              fallbackRes.statusCode == 403) {
-            lastErrorStatus = 'HTTP ${fallbackRes.statusCode}';
-            return null;
-          }
-        } catch (_) {
-          continue;
-        }
+        continue;
       }
     }
     return null;

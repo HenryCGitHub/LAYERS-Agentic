@@ -210,10 +210,33 @@ class WorkbenchProvider extends ChangeNotifier {
 
   WorkbenchProvider({this.enableAutoLoad = false}) {
     _authService.addListener(_onAuthStateChanged);
+    GeminiAgentClient.onUsageChanged = notifyListeners;
     if (enableAutoLoad) {
       initVault();
     }
   }
+
+  /// Cumulative Input (`promptTokenCount`) tokens recorded across Gemini API calls.
+  int get tokenInputCount => GeminiAgentClient.totalInputTokens;
+
+  /// Cumulative Visible Output (`candidatesTokenCount`) tokens recorded across Gemini API calls.
+  int get tokenOutputCount => GeminiAgentClient.totalOutputTokens;
+
+  /// Cumulative Internal Scratchpad / Thinking (`thoughtsTokenCount`) tokens recorded across Gemini API calls.
+  int get tokenThinkingCount => GeminiAgentClient.totalThinkingTokens;
+
+  /// Total Gemini API calls recorded in the active tracker session.
+  int get tokenApiCallCount => GeminiAgentClient.totalApiCalls;
+
+  /// Estimated USD cost (`$0.30 / 1M` Input, `$2.50 / 1M` Output + Scratchpad Thinking).
+  double get tokenEstimatedCostUsd => GeminiAgentClient.estimatedCostUsd;
+
+  /// Recent per-call token breakdown history (`IN · OUT · THINK`).
+  List<GeminiTokenCallRecord> get tokenCallHistory =>
+      List.unmodifiable(GeminiAgentClient.callHistory);
+
+  /// Resets the live token usage counters and call history.
+  void resetTokenUsage() => GeminiAgentClient.resetTokenUsage();
 
   @override
   void notifyListeners() {
@@ -222,6 +245,9 @@ class WorkbenchProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (GeminiAgentClient.onUsageChanged == notifyListeners) {
+      GeminiAgentClient.onUsageChanged = null;
+    }
     for (final timer in _persistTimers.values) {
       timer.cancel();
     }

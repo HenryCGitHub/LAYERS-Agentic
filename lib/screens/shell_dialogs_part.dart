@@ -522,6 +522,146 @@ extension _ShellDialogsExt on WorkbenchShell {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '00 · LIVE TOKEN USAGE & SCRATCHPAD TRACKER',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              color: textSecondary,
+                            ),
+                          ),
+                          InkWell(
+                            key: const ValueKey('reset_token_usage_btn'),
+                            onTap: () {
+                              workbench.resetTokenUsage();
+                              setModalState(() {});
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: bgRecessed,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: borderSubtle),
+                              ),
+                              child: Text(
+                                'Reset Usage',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        key: const ValueKey('token_usage_breakdown_card'),
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: bgRecessed,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: borderSubtle),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTokenStatCell(
+                                    label: 'IN (INPUT)',
+                                    value: GeminiAgentClient.formatTokenCount(
+                                      workbench.tokenInputCount,
+                                    ),
+                                    rawCount: workbench.tokenInputCount,
+                                    subtitle: 'Prompt + Schema',
+                                    textPrimary: textPrimary,
+                                    textSecondary: textSecondary,
+                                    textMuted: textMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _buildTokenStatCell(
+                                    label: 'OUT (VISIBLE)',
+                                    value: GeminiAgentClient.formatTokenCount(
+                                      workbench.tokenOutputCount,
+                                    ),
+                                    rawCount: workbench.tokenOutputCount,
+                                    subtitle: 'JSON Response',
+                                    textPrimary: textPrimary,
+                                    textSecondary: textSecondary,
+                                    textMuted: textMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _buildTokenStatCell(
+                                    label: 'THINK (SCRATCHPAD)',
+                                    value: GeminiAgentClient.formatTokenCount(
+                                      workbench.tokenThinkingCount,
+                                    ),
+                                    rawCount: workbench.tokenThinkingCount,
+                                    subtitle: 'Billed as Output',
+                                    textPrimary: textPrimary,
+                                    textSecondary: textSecondary,
+                                    textMuted: textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Calls: ${workbench.tokenApiCallCount} · Billed Input: ${GeminiAgentClient.formatTokenCount(workbench.tokenInputCount)} · Billed Output (OUT + THINK): ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount + workbench.tokenThinkingCount)} · Est. Cost: \$${workbench.tokenEstimatedCostUsd.toStringAsFixed(4)}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: textSecondary,
+                              ),
+                            ),
+                            if (workbench.tokenCallHistory.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 96),
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      for (final rec
+                                          in workbench.tokenCallHistory.take(8))
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 3,
+                                          ),
+                                          child: Text(
+                                            '• ${rec.label} [${rec.thinkingLevel}] — IN ${rec.inputTokens} · OUT ${rec.outputTokens} · THINK ${rec.thinkingTokens}',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              color: textMuted,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
                       Text(
                         '01 · CONVERSATION & CONCEPT MODEL (STAGE 1)',
                         style: GoogleFonts.jetBrainsMono(
@@ -659,6 +799,48 @@ extension _ShellDialogsExt on WorkbenchShell {
           },
         );
       },
+    );
+  }
+
+  Widget _buildTokenStatCell({
+    required String label,
+    required String value,
+    required int rawCount,
+    required String subtitle,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color textMuted,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.3,
+            color: textMuted,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$value ($rawCount)',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: textPrimary,
+          ),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          subtitle,
+          style: GoogleFonts.inter(
+            fontSize: 10.5,
+            color: textSecondary,
+          ),
+        ),
+      ],
     );
   }
 

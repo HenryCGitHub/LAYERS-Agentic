@@ -7060,7 +7060,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
 
         // 11. Stage 2 Workbench & AI Release Architecture Audit Regressions
-        // 11a. GeminiAgentClient.buildNativeThinkingConfig uses capped fast thinking budget (256)
+        // 11a. GeminiAgentClient.buildNativeThinkingConfig keeps HIGH thinking uncapped (-1 / HIGH)
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'LOW',
@@ -7073,19 +7073,46 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             normalizedThinking: 'MEDIUM',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(256),
+          equals(2048),
         );
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'HIGH',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(256),
+          equals(-1),
+        );
+        expect(
+          GeminiAgentClient.buildNativeThinkingConfig(
+            normalizedThinking: 'HIGH',
+            useThinkingLevelEnum: true,
+          )['thinkingLevel'],
+          equals('HIGH'),
         );
         expect(
           ProjectConceptAgent.conceptSectionBuildOrder.length,
           equals(8),
         );
+
+        // 11a-token. Live Token Usage & Scratchpad Tracker (IN · OUT · THINK)
+        provider.resetTokenUsage();
+        expect(provider.tokenInputCount, equals(0));
+        expect(provider.tokenOutputCount, equals(0));
+        expect(provider.tokenThinkingCount, equals(0));
+        expect(provider.tokenApiCallCount, equals(0));
+        GeminiAgentClient.recordUsageFromResponseBody(
+          '{"usageMetadata":{"promptTokenCount":2400,"candidatesTokenCount":3600,"thoughtsTokenCount":5200}}',
+          label: 'commit_release_plan',
+          thinkingLevel: 'HIGH',
+        );
+        expect(provider.tokenInputCount, equals(2400));
+        expect(provider.tokenOutputCount, equals(3600));
+        expect(provider.tokenThinkingCount, equals(5200));
+        expect(provider.tokenApiCallCount, equals(1));
+        expect(provider.tokenCallHistory.first.billedOutputTokens, equals(8800));
+        expect(provider.tokenEstimatedCostUsd, greaterThan(0.02));
+        provider.resetTokenUsage();
+        expect(provider.tokenApiCallCount, equals(0));
 
         // 11b. ProjectConceptAgent.buildSectionOptionsTool('coreLoop') has zero hardcoded beat counts
         final coreLoopToolDesc =

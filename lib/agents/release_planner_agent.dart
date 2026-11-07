@@ -101,6 +101,59 @@ class ReleasePlannerAgent {
     ];
   }
 
+  /// Extracts optional inline `subSteps` (`Do -> Copy -> Verify`) attached to `tasks[]` in `commit_release_plan`.
+  static Map<int, List<Map<String, String>>> extractCheckpointTaskSubStepsFromMap(
+    Map cMap,
+  ) {
+    final rawTasks = cMap['tasks'];
+    if (rawTasks is! List || rawTasks.isEmpty) return const {};
+    final foundations = <List<Map<String, String>>>[];
+    final actions = <List<Map<String, String>>>[];
+    final guards = <List<Map<String, String>>>[];
+    for (final item in rawTasks) {
+      if (item is! Map) continue;
+      final title =
+          (item['title'] ?? item['task'] ?? item['text'] ?? '')
+              .toString()
+              .trim();
+      if (title.isEmpty || title == '...') continue;
+      final parsedSteps = <Map<String, String>>[];
+      final rawSubSteps = item['subSteps'];
+      if (rawSubSteps is List) {
+        for (final sub in rawSubSteps) {
+          if (sub is Map) {
+            parsedSteps.add({
+              for (final kv in sub.entries)
+                kv.key.toString(): kv.value?.toString().trim() ?? '',
+            });
+          }
+        }
+      }
+      final role = (item['role'] ?? '').toString().trim().toLowerCase();
+      if (role.contains('foundation') || role.contains('entity')) {
+        foundations.add(parsedSteps);
+      } else if (role.contains('guard') ||
+          role.contains('feedback') ||
+          role.contains('boundary')) {
+        guards.add(parsedSteps);
+      } else {
+        actions.add(parsedSteps);
+      }
+    }
+    final ordered = <List<Map<String, String>>>[
+      ...foundations,
+      ...actions,
+      ...guards,
+    ];
+    final result = <int, List<Map<String, String>>>{};
+    for (int i = 0; i < ordered.length; i++) {
+      if (ordered[i].isNotEmpty) {
+        result[i] = ordered[i];
+      }
+    }
+    return result;
+  }
+
   /// Native Gemini Tool Declaration for `planRelease` (`commit_release_plan`).
   /// Enforces 100% dynamic counts for Epics (`beats`), Features (`features`), and Checkpoint Tasks (`tasks`),
   /// while enforcing Foundation-First task role progression (`entity_and_collision_foundation` ->
@@ -253,6 +306,30 @@ class ReleasePlannerAgent {
                                   'type': 'STRING',
                                   'description': LayersTextStyleGuide
                                       .taskGroupGoalSchemaDesc,
+                                },
+                                'subSteps': {
+                                  'type': 'ARRAY',
+                                  'description':
+                                      'Optional inline engine-specific Do / Copy / Verify sub-steps for this task.',
+                                  'items': {
+                                    'type': 'OBJECT',
+                                    'required': [
+                                      'title',
+                                      'stepPath',
+                                      'instruction',
+                                      'codeFormula',
+                                      'verifyResult',
+                                    ],
+                                    'properties': {
+                                      'title': {'type': 'STRING'},
+                                      'stepPath': {'type': 'STRING'},
+                                      'instruction': {'type': 'STRING'},
+                                      'area1Hierarchy': {'type': 'STRING'},
+                                      'area2Inspector': {'type': 'STRING'},
+                                      'codeFormula': {'type': 'STRING'},
+                                      'verifyResult': {'type': 'STRING'},
+                                    },
+                                  },
                                 },
                               },
                             },
@@ -703,6 +780,30 @@ class ReleasePlannerAgent {
                                   'type': 'STRING',
                                   'description': LayersTextStyleGuide
                                       .taskGroupGoalSchemaDesc,
+                                },
+                                'subSteps': {
+                                  'type': 'ARRAY',
+                                  'description':
+                                      'Optional inline engine-specific Do / Copy / Verify sub-steps for this task.',
+                                  'items': {
+                                    'type': 'OBJECT',
+                                    'required': [
+                                      'title',
+                                      'stepPath',
+                                      'instruction',
+                                      'codeFormula',
+                                      'verifyResult',
+                                    ],
+                                    'properties': {
+                                      'title': {'type': 'STRING'},
+                                      'stepPath': {'type': 'STRING'},
+                                      'instruction': {'type': 'STRING'},
+                                      'area1Hierarchy': {'type': 'STRING'},
+                                      'area2Inspector': {'type': 'STRING'},
+                                      'codeFormula': {'type': 'STRING'},
+                                      'verifyResult': {'type': 'STRING'},
+                                    },
+                                  },
                                 },
                               },
                             },
@@ -2585,6 +2686,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
             final cScope = _parseStringList(cMap['coveredScope']);
             final cTuning = _parseStringList(cMap['tuningParams']);
             final cEdges = _parseStringList(cMap['edgeCases']);
+            final cSubSteps = extractCheckpointTaskSubStepsFromMap(cMap);
             checkpoints.add(
               ProposedCheckpointBlueprint(
                 title: cpTitle,
@@ -2594,6 +2696,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
                 coveredScope: cScope.isNotEmpty ? cScope : inScope,
                 tuningParams: cTuning.isNotEmpty ? cTuning : tuning,
                 edgeCases: cEdges.isNotEmpty ? cEdges : edges,
+                taskSubSteps: cSubSteps,
               ),
             );
           }
@@ -4367,13 +4470,50 @@ class ReleaseExecutorAgent {
             },
           };
           for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-            TaskHowToBlueprint.resolve(
-              parentTask: cpNode.checklist[tIdx],
-              taskIndex: tIdx,
-              checkpointNode: cpNode,
-              engineHint: engineHint,
-              phase: releasePhase,
-            );
+            final inlineSteps = cpBp.taskSubSteps[tIdx];
+            if (inlineSteps != null && inlineSteps.isNotEmpty) {
+              final parentTask = cpNode.checklist[tIdx];
+              parentTask.children = [
+                for (int sIdx = 0; sIdx < inlineSteps.length; sIdx++)
+                  () {
+                    final s = inlineSteps[sIdx];
+                    final sTitle = (s['title'] ?? 'Step ${tIdx + 1}.${sIdx + 1}')
+                        .replaceFirst(
+                          RegExp(r'^STEP\s*\d+\.\d+\s*[·:\-–—]?\s*',
+                              caseSensitive: false),
+                          '',
+                        )
+                        .trim();
+                    final sPath = (s['stepPath'] ?? '').trim();
+                    final sInst = (s['instruction'] ?? '').trim();
+                    final sA1 = (s['area1Hierarchy'] ?? '').trim();
+                    final sA2 = (s['area2Inspector'] ?? '').trim();
+                    final specLines = <String>[
+                      if (sPath.isNotEmpty) 'Path: $sPath',
+                      if (sInst.isNotEmpty) sInst,
+                      if (sA1.isNotEmpty) 'AREA 1 · HIERARCHY: $sA1',
+                      if (sA2.isNotEmpty) 'AREA 2 · INSPECTOR: $sA2',
+                    ];
+                    return Subtask(
+                      id: '${parentTask.id}_sub_${sIdx + 1}',
+                      text: 'STEP ${tIdx + 1}.${sIdx + 1} · $sTitle',
+                      completed: false,
+                      specNotes: specLines.join('\n'),
+                      codeTargetFile: 'custom_snippet',
+                      codeSnippet: (s['codeFormula'] ?? '').trim(),
+                      verification: (s['verifyResult'] ?? '').trim(),
+                    );
+                  }(),
+              ];
+            } else {
+              TaskHowToBlueprint.resolve(
+                parentTask: cpNode.checklist[tIdx],
+                taskIndex: tIdx,
+                checkpointNode: cpNode,
+                engineHint: engineHint,
+                phase: releasePhase,
+              );
+            }
           }
           stateNodes.add(cpNode);
         }
