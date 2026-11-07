@@ -1740,6 +1740,8 @@ void main() {
         // Verify Google Account & Cloud Sync Badge and Dialog
         final cloudSyncBtn = find.byKey(const ValueKey('cloud_sync_auth_btn'));
         expect(cloudSyncBtn, findsOneWidget);
+        await tester.ensureVisible(cloudSyncBtn);
+        await tester.pumpAndSettle();
         await tester.tap(cloudSyncBtn);
         await tester.pumpAndSettle();
         expect(find.text('Firebase Cloud Sync & Local Vault'), findsOneWidget);
