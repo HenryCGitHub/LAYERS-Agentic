@@ -69,9 +69,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       TextEditingController();
   final TextEditingController _progressiveNewFeatCtrl =
       TextEditingController();
-  String? _inlineEditingTuningNodeId;
-  final TextEditingController _inlineTuningEditController =
-      TextEditingController();
   String? _activeStage2InlineEditKey;
   final TextEditingController _stage2InlineEditController =
       TextEditingController();
@@ -87,7 +84,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   void dispose() {
     _progressiveDirectiveCtrl.dispose();
     _progressiveNewFeatCtrl.dispose();
-    _inlineTuningEditController.dispose();
     _stage2InlineEditController.dispose();
     _inboxCaptureCtrl.dispose();
     _inlineBugInputCtrl.dispose();

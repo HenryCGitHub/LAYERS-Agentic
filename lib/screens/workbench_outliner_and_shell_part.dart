@@ -19,6 +19,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     String hintText = 'Enter title...',
     VoidCallback? onDelete,
     ValueKey<String>? deleteBtnKey,
+    ValueKey<String>? cancelBtnKey,
   }) {
     void commitSave() {
       final trimmed = _stage2InlineEditController.text.trim();
@@ -116,6 +117,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           ],
           const SizedBox(width: 4),
           InkWell(
+            key: cancelBtnKey,
             onTap: cancelEdit,
             borderRadius: BorderRadius.circular(4),
             child: Padding(

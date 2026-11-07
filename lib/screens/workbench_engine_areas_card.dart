@@ -376,105 +376,15 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     final showCode =
         hasCode && (_engineAreaFilter == 0 || _engineAreaFilter == 3);
 
-    final inspCardWidget = !showInsp
-        ? null
-        : Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      bottom: rIdx == inspRows.length - 1 ? 0 : 5,
-                    ),
-                    child: _activeStage2InlineEditKey ==
-                            'area2_tuning_${node.id}_$rIdx'
-                        ? _buildStage2InlineEditor(
-                            editKey: 'area2_tuning_${node.id}_$rIdx',
-                            hintText: 'e.g. moveSpeed: 750',
-                            inputKey: ValueKey(
-                              'area2_inspector_tuning_input_${node.id}_$rIdx',
-                            ),
-                            saveBtnKey: ValueKey(
-                              'area2_inspector_tuning_save_${node.id}_$rIdx',
-                            ),
-                            onSave: (val) => _saveInlineTuningParam(
-                              feat: feat,
-                              states: states,
-                              node: node,
-                              selectedTaskIdx: selectedTaskIdx,
-                              rawValue: val,
-                            ),
-                          )
-                        : InkWell(
-                            key: ValueKey(
-                              'area2_inspector_tuning_row_${node.id}_$rIdx',
-                            ),
-                            onTap: () {
-                              final row = inspRows[rIdx];
-                              final initialText = (row.value.contains(':') ||
-                                      row.value.contains('='))
-                                  ? row.value.split('·').first.trim()
-                                  : (primaryTuningLabel.isNotEmpty
-                                      ? primaryTuningLabel
-                                      : '${row.key}: ${row.value}');
-                              _startStage2InlineEdit(
-                                'area2_tuning_${node.id}_$rIdx',
-                                initialText,
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 2,
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    width: 195,
-                                    child: Text(
-                                      inspRows[rIdx].key,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text.rich(
-                                      _buildSemanticStepSpan(
-                                        text: inspRows[rIdx].value,
-                                        baseStyle: GoogleFonts.jetBrainsMono(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w500,
-                                          color: textPrimary,
-                                        ),
-                                        tuningItems: tuningItems,
-                                        edgeItems: edgeItems,
-                                        isCodeBlock: true,
-                                      ),
-                                      softWrap: true,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                  ),
-              ],
-            ),
-          );
-
     final codeLines = showCode ? codeBody.split('\n') : const <String>[];
+    final effectiveHeaderPath = (codeWhere != null && codeWhere.trim().isNotEmpty)
+        ? codeWhere.trim()
+        : stepPath;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Zero-size compatibility hooks for area labels and offstage copy/edit buttons
+        // Zero-size compatibility hooks for area labels and offstage edit buttons
         SizedBox(
           width: 1,
           height: 1,
@@ -501,18 +411,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     ),
                     child: const Text('Edit'),
                   ),
-                  if (!showCode)
-                    InkWell(
-                      key: ValueKey(
-                        'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                      ),
-                      onTap: () => _copySubStepCodeFormula(
-                        selectedTaskIdx,
-                        activeSubStepIdx,
-                        activeSubStep.codeFormula,
-                      ),
-                      child: const Text('Copy'),
-                    ),
                   if (activeSubStepIdx != 1)
                     InkWell(
                       key: ValueKey(
@@ -533,127 +431,358 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           ),
         ),
 
-        // Unboxed 2-Column Component → Properties rows
-        if (inspCardWidget != null) inspCardWidget,
-
-        // Recessed Code Strip (#0B0D12 + 2px left bar, strictly contained, zero 4-sided border)
-        if (showCode)
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.fromLTRB(14, 10, 16, 12),
-            clipBehavior: Clip.hardEdge,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0B0D12),
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(4),
-                bottomRight: Radius.circular(4),
-              ),
-              border: const Border(
-                left: BorderSide(
-                  color: Color(0xFF388BFD),
-                  width: 2,
-                ),
-              ),
+        // UNIFIED STEP IMPLEMENTATION CARD (Header Path + Spec/Inspector Bar + Guard Bar + Code Body)
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0A0D12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0xFF1F2735),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  margin: const EdgeInsets.only(bottom: 7),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: borderSubtle.withValues(alpha: 0.7),
-                      ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Card Header: Path + Copy Button
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF11161F),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Color(0xFF1F2735),
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        effectiveHeaderPath.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      key: ValueKey(
+                        'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
+                      ),
+                      onTap: () => _copySubStepCodeFormula(
+                        selectedTaskIdx,
+                        activeSubStepIdx,
+                        activeSubStep.codeFormula,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: borderSubtle),
+                        ),
                         child: Text(
-                          (codeWhere ?? stepPath).toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          '⧉ Copy',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.4,
-                            color: textMuted,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: textSecondary,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      InkWell(
-                        key: ValueKey(
-                          'copy_howto_code_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                        ),
-                        onTap: () => _copySubStepCodeFormula(
-                          selectedTaskIdx,
-                          activeSubStepIdx,
-                          activeSubStep.codeFormula,
-                        ),
-                        borderRadius: BorderRadius.circular(3),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          child: Text(
-                            '⧉ Copy',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+
+              // 2. Unified Spec & Inspector Bar (Interactive Tuning Pill + Interactive Inspector Rows)
+              if (primaryTuningLabel.isNotEmpty || showInsp)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0E131B),
+                    border: Border(
+                      bottom: (primaryGuardLabel.isNotEmpty || showCode)
+                          ? const BorderSide(color: Color(0xFF1A2230))
+                          : BorderSide.none,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (primaryTuningLabel.isNotEmpty)
+                        _activeStage2InlineEditKey == 'tuning_${node.id}'
+                            ? _buildStage2InlineEditor(
+                                editKey: 'tuning_${node.id}',
+                                hintText: 'e.g. moveSpeed: 600',
+                                inputKey: ValueKey(
+                                  'inline_tuning_input_${node.id}',
+                                ),
+                                saveBtnKey: ValueKey(
+                                  'inline_tuning_save_btn_${node.id}',
+                                ),
+                                cancelBtnKey: ValueKey(
+                                  'inline_tuning_cancel_btn_${node.id}',
+                                ),
+                                onSave: (val) => _saveInlineTuningParam(
+                                  feat: feat,
+                                  states: states,
+                                  node: node,
+                                  selectedTaskIdx: selectedTaskIdx,
+                                  rawValue: val,
+                                ),
+                              )
+                            : Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 14,
+                                runSpacing: 6,
+                                children: [
+                                  InkWell(
+                                    key: ValueKey(
+                                      'inline_tuning_pill_${node.id}',
+                                    ),
+                                    onTap: () => _startStage2InlineEdit(
+                                      'tuning_${node.id}',
+                                      primaryTuningLabel,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFFA371F7,
+                                        ).withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: const Color(
+                                            0xFFA371F7,
+                                          ).withValues(alpha: 0.28),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            '⚙ $primaryTuningLabel',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFFD2A8FF),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 5),
+                                          const Icon(
+                                            Icons.edit_outlined,
+                                            size: 11,
+                                            color: Color(0xFFD2A8FF),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      if (primaryTuningLabel.isNotEmpty && showInsp)
+                        const SizedBox(height: 6),
+                      if (showInsp)
+                        for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              bottom: rIdx == inspRows.length - 1 ? 0 : 4,
                             ),
+                            child: _activeStage2InlineEditKey ==
+                                    'area2_tuning_${node.id}_$rIdx'
+                                ? _buildStage2InlineEditor(
+                                    editKey: 'area2_tuning_${node.id}_$rIdx',
+                                    hintText: 'e.g. moveSpeed: 750',
+                                    inputKey: ValueKey(
+                                      'area2_inspector_tuning_input_${node.id}_$rIdx',
+                                    ),
+                                    saveBtnKey: ValueKey(
+                                      'area2_inspector_tuning_save_${node.id}_$rIdx',
+                                    ),
+                                    onSave: (val) => _saveInlineTuningParam(
+                                      feat: feat,
+                                      states: states,
+                                      node: node,
+                                      selectedTaskIdx: selectedTaskIdx,
+                                      rawValue: val,
+                                    ),
+                                  )
+                                : InkWell(
+                                    key: ValueKey(
+                                      'area2_inspector_tuning_row_${node.id}_$rIdx',
+                                    ),
+                                    onTap: () {
+                                      final row = inspRows[rIdx];
+                                      final initialText =
+                                          (row.value.contains(':') ||
+                                                  row.value.contains('='))
+                                              ? row.value
+                                                  .split('·')
+                                                  .first
+                                                  .trim()
+                                              : (primaryTuningLabel.isNotEmpty
+                                                  ? primaryTuningLabel
+                                                  : '${row.key}: ${row.value}');
+                                      _startStage2InlineEdit(
+                                        'area2_tuning_${node.id}_$rIdx',
+                                        initialText,
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 2,
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(
+                                            width: 175,
+                                            child: Text(
+                                              inspRows[rIdx].key,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text.rich(
+                                              _buildSemanticStepSpan(
+                                                text: inspRows[rIdx].value,
+                                                baseStyle:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 13.5,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: textPrimary,
+                                                ),
+                                                tuningItems: tuningItems,
+                                                edgeItems: edgeItems,
+                                                isCodeBlock: true,
+                                              ),
+                                              softWrap: true,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                           ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
-                for (int lineIdx = 0; lineIdx < codeLines.length; lineIdx++)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      bottom: lineIdx == codeLines.length - 1 ? 0 : 2,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 32,
-                          child: Text(
-                            (lineIdx + 1).toString().padLeft(2, '0'),
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 13.5,
-                              height: 1.65,
-                              color: const Color(0xFF5A6478),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text.rich(
-                            _buildSemanticStepSpan(
-                              text: codeLines[lineIdx],
-                              baseStyle: GoogleFonts.jetBrainsMono(
-                                fontSize: 15,
-                                height: 1.65,
-                                color: textPrimary,
-                              ),
-                              tuningItems: tuningItems,
-                              edgeItems: edgeItems,
-                              isCodeBlock: true,
-                            ),
-                            softWrap: true,
-                          ),
-                        ),
-                      ],
+
+              // 3. Unified State Guard Row (if present)
+              if (primaryGuardLabel.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD29922).withValues(alpha: 0.05),
+                    border: Border(
+                      bottom: showCode
+                          ? const BorderSide(color: Color(0xFF1A2230))
+                          : BorderSide.none,
                     ),
                   ),
-              ],
-            ),
+                  child: Text(
+                    '🛡 Guard: $primaryGuardLabel',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFE3B341),
+                    ),
+                  ),
+                ),
+
+              // 4. Code / Node Graph Body
+              if (showCode)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 16, 12),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: Color(0xFF388BFD),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (int lineIdx = 0;
+                          lineIdx < codeLines.length;
+                          lineIdx++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: lineIdx == codeLines.length - 1 ? 0 : 2,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 32,
+                                child: Text(
+                                  (lineIdx + 1).toString().padLeft(2, '0'),
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 13.5,
+                                    height: 1.65,
+                                    color: const Color(0xFF5A6478),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text.rich(
+                                  _buildSemanticStepSpan(
+                                    text: codeLines[lineIdx],
+                                    baseStyle: GoogleFonts.jetBrainsMono(
+                                      fontSize: 15,
+                                      height: 1.65,
+                                      color: textPrimary,
+                                    ),
+                                    tuningItems: tuningItems,
+                                    edgeItems: edgeItems,
+                                    isCodeBlock: true,
+                                  ),
+                                  softWrap: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
           ),
+        ),
       ],
     );
   }
