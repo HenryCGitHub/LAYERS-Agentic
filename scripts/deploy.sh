@@ -33,9 +33,9 @@ BUILD_ARGS=(
     "--pwa-strategy=none"
 )
 
-if [ "${EMBED_PUBLIC_GEMINI_KEY:-0}" = "1" ] && [ -n "$GEMINI_API_KEY" ]; then
+if [ -n "$GEMINI_API_KEY" ]; then
     B64_KEY=$(printf "%s" "$GEMINI_API_KEY" | base64 | tr -d '\n')
-    echo "Injecting GEMINI_API_KEY_B64 from environment (EMBED_PUBLIC_GEMINI_KEY=1)..."
+    echo "Injecting GEMINI_API_KEY_B64 from environment..."
     BUILD_ARGS+=("--dart-define=GEMINI_API_KEY_B64=$B64_KEY")
 fi
 

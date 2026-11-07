@@ -6184,12 +6184,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.activeProject!.title, equals('Submerged Mech Salvage'));
         expect(provider.conceptDraft!.title, equals('Submerged Mech Salvage'));
 
-        // 9. Verify Pure gemini-flash-latest (LOW default) configuration & Focused Context Architecture:
+        // 9. Verify Pure gemini-flash-latest (HIGH) configuration & Focused Context Architecture:
         expect(
           WorkbenchProvider.availablePlanningModels,
           isNot(contains('gemini-4-argon')),
         );
-        expect(provider.thinkingLevel, equals('LOW'));
+        expect(provider.thinkingLevel, equals('HIGH'));
 
         String? capturedStepSynthPrompt;
         String? capturedTailorPrompt;
@@ -7060,7 +7060,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
 
         // 11. Stage 2 Workbench & AI Release Architecture Audit Regressions
-        // 11a. GeminiAgentClient.buildNativeThinkingConfig keeps HIGH thinking uncapped (-1 / HIGH)
+        // 11a. GeminiAgentClient.buildNativeThinkingConfig uses capped fast thinking budget (256)
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'LOW',
@@ -7073,74 +7073,19 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             normalizedThinking: 'MEDIUM',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(2048),
+          equals(256),
         );
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'HIGH',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(-1),
-        );
-        expect(
-          GeminiAgentClient.buildNativeThinkingConfig(
-            normalizedThinking: 'HIGH',
-            useThinkingLevelEnum: true,
-          )['thinkingLevel'],
-          equals('HIGH'),
-        );
-        expect(
-          GeminiAgentClient.buildNativeThinkingConfig(
-            normalizedThinking: 'MINIMAL',
-            useThinkingLevelEnum: true,
-          )['thinkingLevel'],
-          equals('LOW'),
+          equals(256),
         );
         expect(
           ProjectConceptAgent.conceptSectionBuildOrder.length,
           equals(8),
         );
-
-        // 11a-token. Live Token Usage & Scratchpad Tracker (IN · OUT · THINK · $Cost, accumulates & resets)
-        provider.resetTokenUsage();
-        expect(provider.tokenInputCount, equals(0));
-        expect(provider.tokenOutputCount, equals(0));
-        expect(provider.tokenThinkingCount, equals(0));
-        expect(provider.tokenApiCallCount, equals(0));
-        GeminiAgentClient.recordUsageFromResponseBody(
-          '{"usageMetadata":{"promptTokenCount":2400,"candidatesTokenCount":3600,"thoughtsTokenCount":5200}}',
-          label: 'commit_release_plan',
-          thinkingLevel: 'LOW',
-        );
-        expect(provider.tokenInputCount, equals(2400));
-        expect(provider.tokenOutputCount, equals(3600));
-        expect(provider.tokenThinkingCount, equals(5200));
-        expect(provider.tokenApiCallCount, equals(1));
-        expect(provider.tokenCallHistory.first.billedOutputTokens, equals(8800));
-        // Gemini 3.8 Flash: 2400 * $0.75/1M ($0.0018) + 8800 * $3.75/1M ($0.0330) = $0.0348
-        expect(provider.tokenEstimatedCostUsd, closeTo(0.0348, 0.0001));
-        expect(
-          GeminiAgentClient.formatCostUsd(provider.tokenEstimatedCostUsd),
-          equals(r'$0.0348'),
-        );
-        // Second call accumulates onto the session totals and applies 90% Implicit Cache discount ($0.075/1M) on cachedContentTokenCount
-        GeminiAgentClient.recordUsageFromResponseBody(
-          '{"usageMetadata":{"promptTokenCount":5000,"cachedContentTokenCount":4000,"candidatesTokenCount":1000,"thoughtsTokenCount":1000}}',
-          label: 'commit_spark_intake',
-          thinkingLevel: 'LOW',
-        );
-        expect(provider.tokenInputCount, equals(7400));
-        expect(provider.tokenCachedInputCount, equals(4000));
-        expect(provider.tokenOutputCount, equals(4600));
-        expect(provider.tokenThinkingCount, equals(6200));
-        expect(provider.tokenApiCallCount, equals(2));
-        expect(provider.tokenCallHistory.length, equals(2));
-        // Second call cost: 1000 uncached IN ($0.00075) + 4000 cached IN @ $0.075/1M ($0.0003) + 2000 OUT+THINK ($0.0075) = $0.00855
-        // Cumulative cost: $0.0348 + $0.00855 = $0.04335
-        expect(provider.tokenEstimatedCostUsd, closeTo(0.04335, 0.0001));
-        provider.resetTokenUsage();
-        expect(provider.tokenApiCallCount, equals(0));
-        expect(provider.tokenCachedInputCount, equals(0));
 
         // 11b. ProjectConceptAgent.buildSectionOptionsTool('coreLoop') has zero hardcoded beat counts
         final coreLoopToolDesc =

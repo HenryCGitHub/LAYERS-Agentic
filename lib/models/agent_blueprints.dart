@@ -630,7 +630,6 @@ class ProposedCheckpointBlueprint {
   final List<String> tuningParams;
   final List<String> edgeCases;
   final String releaseVersion;
-  final Map<int, List<Map<String, String>>> taskSubSteps;
 
   const ProposedCheckpointBlueprint({
     required this.title,
@@ -640,7 +639,6 @@ class ProposedCheckpointBlueprint {
     this.tuningParams = const [],
     this.edgeCases = const [],
     this.releaseVersion = 'v0.1',
-    this.taskSubSteps = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -651,30 +649,9 @@ class ProposedCheckpointBlueprint {
         'tuningParams': tuningParams,
         'edgeCases': edgeCases,
         'releaseVersion': releaseVersion,
-        if (taskSubSteps.isNotEmpty)
-          'taskSubSteps': {
-            for (final e in taskSubSteps.entries) '${e.key}': e.value,
-          },
       };
 
   factory ProposedCheckpointBlueprint.fromJson(Map<String, dynamic> json) {
-    final parsedSubSteps = <int, List<Map<String, String>>>{};
-    final rawSubSteps = json['taskSubSteps'];
-    if (rawSubSteps is Map) {
-      for (final entry in rawSubSteps.entries) {
-        final idx = int.tryParse(entry.key.toString());
-        if (idx != null && entry.value is List) {
-          parsedSubSteps[idx] = [
-            for (final item in entry.value as List)
-              if (item is Map)
-                {
-                  for (final kv in item.entries)
-                    kv.key.toString(): kv.value?.toString() ?? '',
-                },
-          ];
-        }
-      }
-    }
     return ProposedCheckpointBlueprint(
       title: json['title']?.toString() ?? '',
       playtestCriteria: json['playtestCriteria']?.toString() ?? '',
@@ -683,7 +660,6 @@ class ProposedCheckpointBlueprint {
       tuningParams: _parseStringList(json['tuningParams']),
       edgeCases: _parseStringList(json['edgeCases']),
       releaseVersion: json['releaseVersion']?.toString() ?? 'v0.1',
-      taskSubSteps: parsedSubSteps,
     );
   }
 }

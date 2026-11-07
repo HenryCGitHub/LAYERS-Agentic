@@ -144,7 +144,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   /// Loads saved projects from LocalStorage / SharedPreferences and starts Cloud Firestore sync if logged in.
   Future<void> initVault() async {
     try {
-      await GeminiAgentClient.loadPersistedTokenUsage();
       final loaded = await LocalVaultService.loadVaultData();
       // Ignore legacy static placeholder docs (`proj_vanguard`) if they don't have a concept_blueprint_json
       for (final doc in loaded.documents.values) {
@@ -166,7 +165,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           loaded.planningModel!.trim().isNotEmpty) {
         _planningModel = 'gemini-flash-latest';
       }
-      _thinkingLevel = 'LOW';
+      if (loaded.thinkingLevel != null &&
+          loaded.thinkingLevel!.trim().isNotEmpty) {
+        _thinkingLevel = loaded.thinkingLevel!.trim().toUpperCase();
+      }
       final projs = savedProjects;
       if (projs.isNotEmpty) {
         final targetId = (loaded.activeDocumentId != null &&

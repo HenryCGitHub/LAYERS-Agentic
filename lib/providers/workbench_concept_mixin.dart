@@ -181,7 +181,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 8-section Concept Blueprint.
-  /// In live mode, transitions immediately to the Concept Blueprint view and builds Sections `01`..`08` sequentially at LOW thinking.
+  /// In live mode, transitions immediately to the Concept Blueprint view and builds Sections `01`..`08` one at a time.
   Future<void> startConceptInterview([
     String sparkText = '',
     bool jumpToFullReview = true,
