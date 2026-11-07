@@ -469,6 +469,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         phase: widget.workbench.currentPhase,
       );
     }
+    final wasDone = node.isCompleted;
     final allChildrenDone =
         task.children.isNotEmpty && task.children.every((c) => c.completed);
     final markDone = !(task.completed || allChildrenDone);
@@ -476,30 +477,19 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     for (final c in task.children) {
       c.completed = markDone;
     }
+    final nowDone = node.isCompleted;
     _rebuild(() {
+      if (!wasDone && nowDone) {
+        _awaitingPlaytestVerification.add(node.id);
+      } else if (!nowDone) {
+        _awaitingPlaytestVerification.remove(node.id);
+      }
       final nextTaskIdx = node.checklist.indexWhere((t) => !t.completed);
       if (markDone && nextTaskIdx != -1) {
         _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
         _manualCheckpointFocusFeatureId = feat.id;
         _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
         _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
-      } else if (markDone) {
-        final activeRelVer = widget.workbench.activeReleaseVersionTag;
-        int nextCpIdx = states.indexWhere(
-          (s) => s.releaseVersion == activeRelVer && !s.isCompleted,
-        );
-        if (nextCpIdx == -1) {
-          nextCpIdx = states.indexWhere((s) => !s.isCompleted);
-        }
-        if (nextCpIdx != -1) {
-          _manualCheckpointFocusIndex = nextCpIdx;
-          _manualCheckpointFocusFeatureId = feat.id;
-          final nextCp = states[nextCpIdx];
-          _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
-          _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
-        } else {
-          _selectedTaskIndexByCheckpoint[node.id] = tIdx;
-        }
       } else {
         _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
         _manualCheckpointFocusFeatureId = feat.id;

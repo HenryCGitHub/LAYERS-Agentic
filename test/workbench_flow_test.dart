@@ -1553,17 +1553,19 @@ void main() {
         expect(find.text('Complete & Next →'), findsOneWidget);
 
         // Verify Editorial Runbook layout:
-        // 1. Every Task permanently displays its unboxed GOAL & DONE rows (no ✓ on DONE)
+        // 1. Only the focused Task (Task 0) displays its GOAL & DONE rows and its Steps
         expect(
           find.byKey(ValueKey('task_overview_goal_box_${cp0Id}_0')),
           findsOneWidget,
         );
         expect(
           find.byKey(ValueKey('task_overview_goal_box_${cp0Id}_1')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(find.text('DONE'), findsWidgets);
         expect(find.text('✓ DONE:'), findsNothing);
+        expect(find.text('Done'), findsWidgets);
+        expect(find.text('✓ Done & Next →'), findsNothing);
         // 2. Only the focused Task (Task 0) expands its Steps
         expect(
           find.byKey(ValueKey('task_sheet_step_row_${cp0Id}_0_0')),

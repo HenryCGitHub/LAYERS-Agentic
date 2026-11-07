@@ -2169,7 +2169,11 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
               child: _buildReleaseShippedBanner(rel),
             ),
-          ] else if (isDone && nextFeat != null) ...[
+          ] else if (isDone &&
+              nextFeat != null &&
+              !states.any(
+                (s) => _awaitingPlaytestVerification.contains(s.id),
+              )) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
               child: _buildNextFeatureAdvanceBanner(feat, nextFeat),

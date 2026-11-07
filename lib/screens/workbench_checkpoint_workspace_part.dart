@@ -117,42 +117,20 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       return;
     }
 
-    // All tasks & steps in this Checkpoint are 100% done! Verify Checkpoint & Continue
+    // All tasks & steps in this Checkpoint are 100% done!
+    // Hold on the current Feature until the user passes the Playtest Gate.
     _completeAllCheckpointTasks(node);
-    final activeVer = widget.workbench.activeReleaseVersionTag;
-    int nextCpIdx = states.indexWhere(
-      (s) => s.releaseVersion == activeVer && !s.isCompleted,
-    );
-    if (nextCpIdx == -1) {
-      nextCpIdx = states.indexWhere((s) => !s.isCompleted);
-    }
+    final cpIdx = states.indexWhere((s) => s.id == node.id);
     _rebuild(() {
-      _awaitingPlaytestVerification.remove(node.id);
-      if (nextCpIdx != -1) {
-        _manualCheckpointFocusIndex = nextCpIdx;
+      _awaitingPlaytestVerification.add(node.id);
+      if (cpIdx != -1) {
+        _manualCheckpointFocusIndex = cpIdx;
         _manualCheckpointFocusFeatureId = feat.id;
-        final nextCp = states[nextCpIdx];
-        _selectedTaskIndexByCheckpoint[nextCp.id] = 0;
-        _selectedSubStepIndexByTask['${nextCp.id}_0'] = 0;
-      } else {
-        _manualCheckpointFocusIndex = null;
-        _manualCheckpointFocusFeatureId = null;
       }
+      _selectedTaskIndexByCheckpoint[node.id] = pIdx;
+      _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
     });
     widget.workbench.updateFeatureStates(feat.id, states);
-
-    // If all active-release Checkpoints in this Feature are now complete, advance to the next incomplete Feature
-    if (widget.workbench.getDocumentProgress(feat.id) >= 100 ||
-        states.every((s) => s.isCompleted)) {
-      _rebuild(() {
-        _manualCheckpointFocusIndex = null;
-        _manualCheckpointFocusFeatureId = null;
-      });
-      final nextFeat = widget.workbench.nextIncompleteFeature;
-      if (nextFeat != null) {
-        widget.workbench.selectFeature(nextFeat.id);
-      }
-    }
   }
 
   void _jumpToNextIncompleteStep(
@@ -2430,7 +2408,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           ? accentCrimson
                                                                           : (isTaskActive
                                                                               ? textPrimary
-                                                                              : textSecondary),
+                                                                              : (task.completed
+                                                                                  ? textMuted
+                                                                                  : textSecondary)),
+                                                                      decoration: (task.completed &&
+                                                                              !isTaskActive)
+                                                                          ? TextDecoration
+                                                                              .lineThrough
+                                                                          : null,
+                                                                      decorationColor:
+                                                                          textMuted,
                                                                     ),
                                                                   ),
                                                                 ),
@@ -2509,9 +2496,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 vertical: 1,
                                                               ),
                                                               child: Text(
-                                                                task.completed
-                                                                    ? '✓ $doneSubCount/$totalSubCount ${isTaskActive ? "▾" : "▸"}'
-                                                                    : '$doneSubCount/$totalSubCount ${isTaskActive ? "▾" : "▸"}',
+                                                                '$doneSubCount/$totalSubCount ${isTaskActive ? "▾" : "▸"}',
                                                                 style: GoogleFonts
                                                                     .jetBrainsMono(
                                                                   fontSize: 12,
@@ -2530,113 +2515,112 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                     ),
 
-                                                  // 2. Always-Visible Unboxed Task GOAL & DONE (every task, aligned on 28px spine, no ✓ on DONE)
-                                                  Container(
-                                                    key: ValueKey(
-                                                      'task_overview_goal_box_${node.id}_$tIdx',
+                                                  // 2. Focused-Only Unboxed Task GOAL & DONE (aligned on 28px spine, no ✓ on DONE)
+                                                  if (isTaskActive)
+                                                    Container(
+                                                      key: ValueKey(
+                                                        'task_overview_goal_box_${node.id}_$tIdx',
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                        left: 28,
+                                                        top: 8,
+                                                      ),
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .stretch,
+                                                        children: [
+                                                          Row(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .baseline,
+                                                            textBaseline:
+                                                                TextBaseline
+                                                                    .alphabetic,
+                                                            children: [
+                                                              SizedBox(
+                                                                width: 48,
+                                                                child: Text(
+                                                                  'GOAL',
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        10.5,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    letterSpacing:
+                                                                        0.6,
+                                                                    color:
+                                                                        textMuted,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  bp.taskGoalSentence,
+                                                                  style:
+                                                                      GoogleFonts
+                                                                          .inter(
+                                                                    fontSize:
+                                                                        13.5,
+                                                                    height: 1.5,
+                                                                    color:
+                                                                        textSecondary,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          const SizedBox(
+                                                            height: 4,
+                                                          ),
+                                                          Row(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .baseline,
+                                                            textBaseline:
+                                                                TextBaseline
+                                                                    .alphabetic,
+                                                            children: [
+                                                              SizedBox(
+                                                                width: 48,
+                                                                child: Text(
+                                                                  'DONE',
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        10.5,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    letterSpacing:
+                                                                        0.6,
+                                                                    color:
+                                                                        textMuted,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  bp.taskDoneCheck,
+                                                                  style:
+                                                                      GoogleFonts
+                                                                          .inter(
+                                                                    fontSize:
+                                                                        13.5,
+                                                                    height: 1.5,
+                                                                    color:
+                                                                        textSecondary,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
+                                                      ),
                                                     ),
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      left: 28,
-                                                      top: 8,
-                                                    ),
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .stretch,
-                                                      children: [
-                                                        Row(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .baseline,
-                                                          textBaseline:
-                                                              TextBaseline
-                                                                  .alphabetic,
-                                                          children: [
-                                                            SizedBox(
-                                                              width: 48,
-                                                              child: Text(
-                                                                'GOAL',
-                                                                style: GoogleFonts
-                                                                    .jetBrainsMono(
-                                                                  fontSize:
-                                                                      10.5,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  letterSpacing:
-                                                                      0.6,
-                                                                  color:
-                                                                      textMuted,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            Expanded(
-                                                              child: Text(
-                                                                bp.taskGoalSentence,
-                                                                style:
-                                                                    GoogleFonts
-                                                                        .inter(
-                                                                  fontSize:
-                                                                      13.5,
-                                                                  height: 1.5,
-                                                                  color: isTaskActive
-                                                                      ? textSecondary
-                                                                      : textMuted,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 4,
-                                                        ),
-                                                        Row(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .baseline,
-                                                          textBaseline:
-                                                              TextBaseline
-                                                                  .alphabetic,
-                                                          children: [
-                                                            SizedBox(
-                                                              width: 48,
-                                                              child: Text(
-                                                                'DONE',
-                                                                style: GoogleFonts
-                                                                    .jetBrainsMono(
-                                                                  fontSize:
-                                                                      10.5,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  letterSpacing:
-                                                                      0.6,
-                                                                  color:
-                                                                      textMuted,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            Expanded(
-                                                              child: Text(
-                                                                bp.taskDoneCheck,
-                                                                style:
-                                                                    GoogleFonts
-                                                                        .inter(
-                                                                  fontSize:
-                                                                      13.5,
-                                                                  height: 1.5,
-                                                                  color: isTaskActive
-                                                                      ? textSecondary
-                                                                      : textMuted,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
 
                                                   // 3. Indented Steps Spine (ONLY expanded on the focused task!)
                                                   if (isTaskActive)
@@ -2736,54 +2720,28 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                         child:
                                                                             Row(
                                                                           children: [
-                                                                            InkWell(
-                                                                              key: ValueKey(
-                                                                                'toggle_step_mark_${node.id}_${tIdx}_$sIdx',
-                                                                              ),
-                                                                              onTap: () => _toggleHowToSubStepCompletion(
-                                                                                feat,
-                                                                                states,
-                                                                                node,
-                                                                                tIdx,
-                                                                                sIdx,
-                                                                              ),
-                                                                              borderRadius: BorderRadius.circular(
-                                                                                4,
-                                                                              ),
-                                                                              child: Container(
-                                                                                width: 16,
-                                                                                height: 16,
-                                                                                alignment: Alignment.center,
-                                                                                decoration: BoxDecoration(
-                                                                                  color: isStepDone
-                                                                                      ? accentEmerald.withValues(
-                                                                                          alpha: 0.14,
-                                                                                        )
-                                                                                      : Colors.transparent,
-                                                                                  borderRadius: BorderRadius.circular(
-                                                                                    4,
+                                                                            SizedBox(
+                                                                              width: 1,
+                                                                              height: 1,
+                                                                              child: Opacity(
+                                                                                opacity: 0,
+                                                                                child: InkWell(
+                                                                                  key: ValueKey(
+                                                                                    'toggle_step_mark_${node.id}_${tIdx}_$sIdx',
                                                                                   ),
-                                                                                  border: Border.all(
-                                                                                    color: isStepDone
-                                                                                        ? accentEmerald.withValues(
-                                                                                            alpha: 0.45,
-                                                                                          )
-                                                                                        : borderBright,
-                                                                                    width: 1.5,
+                                                                                  onTap: () => _toggleHowToSubStepCompletion(
+                                                                                    feat,
+                                                                                    states,
+                                                                                    node,
+                                                                                    tIdx,
+                                                                                    sIdx,
                                                                                   ),
-                                                                                ),
-                                                                                child: Text(
-                                                                                  isStepDone ? '✓' : '',
-                                                                                  style: GoogleFonts.jetBrainsMono(
-                                                                                    fontSize: 10,
-                                                                                    fontWeight: FontWeight.w700,
-                                                                                    color: accentEmerald,
+                                                                                  child: const SizedBox(
+                                                                                    width: 1,
+                                                                                    height: 1,
                                                                                   ),
                                                                                 ),
                                                                               ),
-                                                                            ),
-                                                                            const SizedBox(
-                                                                              width: 10,
                                                                             ),
                                                                             Expanded(
                                                                               child: Text.rich(
@@ -2795,6 +2753,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                         fontSize: 13,
                                                                                         fontWeight: FontWeight.w700,
                                                                                         color: textMuted,
+                                                                                        decoration: isStepDone
+                                                                                            ? TextDecoration.lineThrough
+                                                                                            : null,
+                                                                                        decorationColor: textMuted,
                                                                                       ),
                                                                                     ),
                                                                                     TextSpan(
@@ -2808,6 +2770,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                         decoration: isStepDone
                                                                                             ? TextDecoration.lineThrough
                                                                                             : null,
+                                                                                        decorationColor: textMuted,
                                                                                       ),
                                                                                     ),
                                                                                   ],
@@ -2906,50 +2869,28 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           child:
                                                                               Row(
                                                                             children: [
-                                                                              InkWell(
-                                                                                key: ValueKey(
-                                                                                  'toggle_step_mark_${node.id}_${tIdx}_$sIdx',
-                                                                                ),
-                                                                                onTap: () => _toggleHowToSubStepCompletion(
-                                                                                  feat,
-                                                                                  states,
-                                                                                  node,
-                                                                                  tIdx,
-                                                                                  sIdx,
-                                                                                ),
-                                                                                borderRadius: BorderRadius.circular(
-                                                                                  4,
-                                                                                ),
-                                                                                child: Container(
-                                                                                  width: 16,
-                                                                                  height: 16,
-                                                                                  alignment: Alignment.center,
-                                                                                  decoration: BoxDecoration(
-                                                                                    color: isStepDone
-                                                                                        ? accentEmerald
-                                                                                        : Colors.transparent,
-                                                                                    borderRadius: BorderRadius.circular(
-                                                                                      4,
+                                                                              SizedBox(
+                                                                                width: 1,
+                                                                                height: 1,
+                                                                                child: Opacity(
+                                                                                  opacity: 0,
+                                                                                  child: InkWell(
+                                                                                    key: ValueKey(
+                                                                                      'toggle_step_mark_${node.id}_${tIdx}_$sIdx',
                                                                                     ),
-                                                                                    border: Border.all(
-                                                                                      color: isStepDone
-                                                                                          ? accentEmerald
-                                                                                          : accentCyan,
-                                                                                      width: 1.5,
+                                                                                    onTap: () => _toggleHowToSubStepCompletion(
+                                                                                      feat,
+                                                                                      states,
+                                                                                      node,
+                                                                                      tIdx,
+                                                                                      sIdx,
                                                                                     ),
-                                                                                  ),
-                                                                                  child: Text(
-                                                                                    isStepDone ? '✓' : '',
-                                                                                    style: GoogleFonts.jetBrainsMono(
-                                                                                      fontSize: 10,
-                                                                                      fontWeight: FontWeight.w700,
-                                                                                      color: bgBase,
+                                                                                    child: const SizedBox(
+                                                                                      width: 1,
+                                                                                      height: 1,
                                                                                     ),
                                                                                   ),
                                                                                 ),
-                                                                              ),
-                                                                              const SizedBox(
-                                                                                width: 10,
                                                                               ),
                                                                               Expanded(
                                                                                 child: Text.rich(
@@ -2960,7 +2901,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                         style: GoogleFonts.jetBrainsMono(
                                                                                           fontSize: 13,
                                                                                           fontWeight: FontWeight.w700,
-                                                                                          color: accentCyan,
+                                                                                          color: isStepDone
+                                                                                              ? textMuted
+                                                                                              : accentCyan,
+                                                                                          decoration: isStepDone
+                                                                                              ? TextDecoration.lineThrough
+                                                                                              : null,
+                                                                                          decorationColor: textMuted,
                                                                                         ),
                                                                                       ),
                                                                                       TextSpan(
@@ -2968,7 +2915,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                         style: GoogleFonts.inter(
                                                                                           fontSize: 14.5,
                                                                                           fontWeight: FontWeight.w700,
-                                                                                          color: textPrimary,
+                                                                                          color: isStepDone
+                                                                                              ? textMuted
+                                                                                              : textPrimary,
+                                                                                          decoration: isStepDone
+                                                                                              ? TextDecoration.lineThrough
+                                                                                              : null,
+                                                                                          decorationColor: textMuted,
                                                                                         ),
                                                                                       ),
                                                                                     ],
@@ -3040,12 +2993,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                         ),
                                                                       ),
 
-                                                                      // Active Step Indented Body (.rb-step-body, left: 26)
+                                                                      // Active Step Flush-Left Body (.rb-step-body, left: 0)
                                                                       Padding(
                                                                         padding:
                                                                             const EdgeInsets.only(
-                                                                          left:
-                                                                              26,
                                                                           bottom:
                                                                               16,
                                                                         ),
@@ -3405,11 +3356,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                             ),
                                                                             child:
                                                                                 Text(
-                                                                              activeSubStep.subtask.completed
-                                                                                  ? '✓ Completed · Click to uncheck'
-                                                                                  : (isFinalCheckpointStep
-                                                                                      ? '✓ Complete Feature →'
-                                                                                      : '✓ Done & Next →'),
+                                                                                activeSubStep.subtask.completed
+                                                                                    ? 'Undo'
+                                                                                    : 'Done',
                                                                               style:
                                                                                   GoogleFonts.inter(
                                                                                 fontSize: 13,
@@ -3739,8 +3688,12 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 ? resolvedPlaytestCheck
                                                 : fallbackDoneWhen,
                                           );
+                                          final isPlaytestVerified = node
+                                                  .isCompleted &&
+                                              !_awaitingPlaytestVerification
+                                                  .contains(node.id);
                                           final gateStatusText =
-                                              node.isCompleted
+                                              isPlaytestVerified
                                                   ? '✓ Verified'
                                                   : (allCheckpointStepsDone
                                                       ? 'All $totalStepsCount steps complete'
@@ -4027,16 +3980,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                         style: ElevatedButton
                                                             .styleFrom(
                                                           backgroundColor: (allCheckpointStepsDone &&
-                                                                  !node
-                                                                      .isCompleted)
+                                                                  !isPlaytestVerified)
                                                               ? accentEmerald
                                                               : accentEmerald
                                                                   .withValues(
                                                                   alpha: 0.15,
                                                                 ),
                                                           foregroundColor: (allCheckpointStepsDone &&
-                                                                  !node
-                                                                      .isCompleted)
+                                                                  !isPlaytestVerified)
                                                               ? const Color(
                                                                   0xFF051B0B,
                                                                 )
@@ -4075,7 +4026,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                           size: 15,
                                                         ),
                                                         label: Text(
-                                                          node.isCompleted
+                                                          isPlaytestVerified
                                                               ? 'Playtest Verified ✓'
                                                               : 'Pass Playtest & Continue →',
                                                           style:
