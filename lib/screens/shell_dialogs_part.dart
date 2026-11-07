@@ -585,8 +585,9 @@ extension _ShellDialogsExt on WorkbenchShell {
                                       workbench.tokenInputCount,
                                     ),
                                     rawCount: workbench.tokenInputCount,
-                                    subtitle:
-                                        '\$0.75/1M · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedInputCostUsd)}',
+                                    subtitle: workbench.tokenCachedInputCount > 0
+                                        ? '\$0.75/1M (${workbench.tokenCachedInputCount} cached @ \$0.075) · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedInputCostUsd)}'
+                                        : '\$0.75/1M · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedInputCostUsd)}',
                                     textPrimary: textPrimary,
                                     textSecondary: textSecondary,
                                     textMuted: textMuted,
@@ -643,7 +644,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Gemini 3.8 Flash Pricing: Input \$0.75/1M · Output + Scratchpad \$3.75/1M (5x Input) · Billed Output (OUT + THINK): ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount + workbench.tokenThinkingCount)} · Total Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
+                              'Gemini 3.8 Flash Pricing: Input \$0.75/1M (Implicit Cache \$0.075/1M, 90% off) · Output + Scratchpad \$3.75/1M (5x Input) · Billed Output (OUT + THINK): ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount + workbench.tokenThinkingCount)} · Total Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -666,7 +667,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                                             bottom: 3,
                                           ),
                                           child: Text(
-                                            '• ${rec.label} [${rec.thinkingLevel}] — IN ${rec.inputTokens} · OUT ${rec.outputTokens} · THINK ${rec.thinkingTokens} · ${GeminiAgentClient.formatCostUsd(rec.estimatedCostUsd)}',
+                                            '• ${rec.label} [${rec.thinkingLevel}] — IN ${rec.inputTokens}${rec.cachedInputTokens > 0 ? ' (${rec.cachedInputTokens} cached)' : ''} · OUT ${rec.outputTokens} · THINK ${rec.thinkingTokens} · ${GeminiAgentClient.formatCostUsd(rec.estimatedCostUsd)}',
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 9.5,
                                               color: textMuted,

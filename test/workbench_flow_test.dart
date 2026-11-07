@@ -7123,20 +7123,24 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           GeminiAgentClient.formatCostUsd(provider.tokenEstimatedCostUsd),
           equals(r'$0.0348'),
         );
-        // Second call accumulates onto the session totals until Reset is clicked
+        // Second call accumulates onto the session totals and applies 90% Implicit Cache discount ($0.075/1M) on cachedContentTokenCount
         GeminiAgentClient.recordUsageFromResponseBody(
-          '{"usageMetadata":{"promptTokenCount":1000,"candidatesTokenCount":1000,"thoughtsTokenCount":1000}}',
+          '{"usageMetadata":{"promptTokenCount":5000,"cachedContentTokenCount":4000,"candidatesTokenCount":1000,"thoughtsTokenCount":1000}}',
           label: 'commit_spark_intake',
           thinkingLevel: 'LOW',
         );
-        expect(provider.tokenInputCount, equals(3400));
+        expect(provider.tokenInputCount, equals(7400));
+        expect(provider.tokenCachedInputCount, equals(4000));
         expect(provider.tokenOutputCount, equals(4600));
         expect(provider.tokenThinkingCount, equals(6200));
         expect(provider.tokenApiCallCount, equals(2));
         expect(provider.tokenCallHistory.length, equals(2));
-        expect(provider.tokenEstimatedCostUsd, closeTo(0.04305, 0.0001));
+        // Second call cost: 1000 uncached IN ($0.00075) + 4000 cached IN @ $0.075/1M ($0.0003) + 2000 OUT+THINK ($0.0075) = $0.00855
+        // Cumulative cost: $0.0348 + $0.00855 = $0.04335
+        expect(provider.tokenEstimatedCostUsd, closeTo(0.04335, 0.0001));
         provider.resetTokenUsage();
         expect(provider.tokenApiCallCount, equals(0));
+        expect(provider.tokenCachedInputCount, equals(0));
 
         // 11b. ProjectConceptAgent.buildSectionOptionsTool('coreLoop') has zero hardcoded beat counts
         final coreLoopToolDesc =

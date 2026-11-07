@@ -3,11 +3,12 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/text_style_guide.dart';
 
-/// Immutable record of a single Gemini API call's token breakdown (`IN · OUT · THINK`).
+/// Immutable record of a single Gemini API call's token breakdown (`IN · CACHED · OUT · THINK`).
 class GeminiTokenCallRecord {
   final String label;
   final String thinkingLevel;
   final int inputTokens;
+  final int cachedInputTokens;
   final int outputTokens;
   final int thinkingTokens;
   final DateTime timestamp;
@@ -16,6 +17,7 @@ class GeminiTokenCallRecord {
     required this.label,
     required this.thinkingLevel,
     required this.inputTokens,
+    this.cachedInputTokens = 0,
     required this.outputTokens,
     required this.thinkingTokens,
     required this.timestamp,
@@ -24,12 +26,19 @@ class GeminiTokenCallRecord {
   /// Total tokens across Input + Visible Output + Internal Scratchpad Thinking.
   int get totalTokens => inputTokens + outputTokens + thinkingTokens;
 
+  /// Uncached input tokens billed at standard `$0.75 / 1M`.
+  int get uncachedInputTokens =>
+      (inputTokens - cachedInputTokens).clamp(0, inputTokens);
+
   /// Google bills both `candidatesTokenCount` (`OUT`) and `thoughtsTokenCount` (`THINK`) at the Output rate.
   int get billedOutputTokens => outputTokens + thinkingTokens;
 
-  /// Estimated USD cost for this single API call on Gemini 3.8 Flash (`$0.75 / 1M` Input, `$3.75 / 1M` Output + Thinking).
+  /// Estimated USD cost for this single API call on Gemini 3.8 Flash (`$0.75 / 1M` uncached Input, `$0.075 / 1M` cached Input, `$3.75 / 1M` Output + Thinking).
   double get estimatedCostUsd =>
-      ((inputTokens / 1000000.0) * GeminiAgentClient.inputRatePerMillionUsd) +
+      ((uncachedInputTokens / 1000000.0) *
+          GeminiAgentClient.inputRatePerMillionUsd) +
+      ((cachedInputTokens.clamp(0, inputTokens) / 1000000.0) *
+          GeminiAgentClient.cachedInputRatePerMillionUsd) +
       ((billedOutputTokens / 1000000.0) *
           GeminiAgentClient.outputRatePerMillionUsd);
 
@@ -37,6 +46,7 @@ class GeminiTokenCallRecord {
         'label': label,
         'thinkingLevel': thinkingLevel,
         'inputTokens': inputTokens,
+        'cachedInputTokens': cachedInputTokens,
         'outputTokens': outputTokens,
         'thinkingTokens': thinkingTokens,
         'timestamp': timestamp.toIso8601String(),
@@ -45,8 +55,9 @@ class GeminiTokenCallRecord {
   factory GeminiTokenCallRecord.fromJson(Map<String, dynamic> json) {
     return GeminiTokenCallRecord(
       label: (json['label'] ?? 'gemini_call').toString(),
-      thinkingLevel: (json['thinkingLevel'] ?? 'HIGH').toString(),
+      thinkingLevel: (json['thinkingLevel'] ?? 'LOW').toString(),
       inputTokens: (json['inputTokens'] as num?)?.toInt() ?? 0,
+      cachedInputTokens: (json['cachedInputTokens'] as num?)?.toInt() ?? 0,
       outputTokens: (json['outputTokens'] as num?)?.toInt() ?? 0,
       thinkingTokens: (json['thinkingTokens'] as num?)?.toInt() ?? 0,
       timestamp: DateTime.tryParse((json['timestamp'] ?? '').toString()) ??
@@ -60,7 +71,7 @@ class GeminiTokenCallRecord {
 /// - Base64 build-time key decoding (`GEMINI_API_KEY_B64`) so GitHub Push Protection
 ///   never blocks public `gh-pages` deployments.
 /// - Runtime API key and Model override (`gemini-flash-latest` default).
-/// - Live Token Usage & Scratchpad Tracker (`IN` · `OUT` · `THINK`).
+/// - Live Token Usage & Scratchpad Tracker (`IN` · `OUT` · `THINK` + 90% Implicit Cache discount).
 class GeminiAgentClient {
   static const String _rawEnvKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String _b64EnvKey = String.fromEnvironment('GEMINI_API_KEY_B64');
@@ -81,9 +92,13 @@ class GeminiAgentClient {
 
   /// Official Gemini 3.8 Flash (`gemini-flash-latest`) Standard Paid Tier rates (USD per 1M tokens).
   static const double inputRatePerMillionUsd = 0.75;
+
+  /// Implicit Prompt-Prefix Cache rate on Gemini 3.8 Flash (`90%` discount off `$0.75 / 1M` = `$0.075 / 1M`).
+  static const double cachedInputRatePerMillionUsd = 0.075;
   static const double outputRatePerMillionUsd = 3.75;
 
   static int totalInputTokens = 0;
+  static int totalCachedInputTokens = 0;
   static int totalOutputTokens = 0;
   static int totalThinkingTokens = 0;
   static int totalApiCalls = 0;
@@ -91,9 +106,16 @@ class GeminiAgentClient {
       <GeminiTokenCallRecord>[];
   static void Function()? onUsageChanged;
 
-  /// Estimated USD cost of Input (`IN`) tokens for the latest API call (`$0.75 / 1M`).
-  static double get estimatedInputCostUsd =>
-      (totalInputTokens / 1000000.0) * inputRatePerMillionUsd;
+  /// Estimated USD cost of Input (`IN`) tokens (`$0.75 / 1M` uncached, `$0.075 / 1M` cached).
+  static double get estimatedInputCostUsd {
+    final safeCached = totalCachedInputTokens.clamp(0, totalInputTokens);
+    final safeUncached = (totalInputTokens - safeCached).clamp(
+      0,
+      totalInputTokens,
+    );
+    return ((safeUncached / 1000000.0) * inputRatePerMillionUsd) +
+        ((safeCached / 1000000.0) * cachedInputRatePerMillionUsd);
+  }
 
   /// Estimated USD cost of Visible Output (`OUT`) tokens for the latest API call (`$3.75 / 1M`).
   static double get estimatedOutputCostUsd =>
@@ -129,18 +151,21 @@ class GeminiAgentClient {
     return '$count';
   }
 
-  /// Accumulates a single API call's token usage (`IN`, `OUT`, `THINK`) and cost across the session until reset.
+  /// Accumulates a single API call's token usage (`IN`, `CACHED`, `OUT`, `THINK`) and cost across the session until reset.
   static void recordTokenUsage({
     required String label,
     required String thinkingLevel,
     required int inputTokens,
+    int cachedInputTokens = 0,
     required int outputTokens,
     required int thinkingTokens,
   }) {
     final safeIn = inputTokens < 0 ? 0 : inputTokens;
+    final safeCached = cachedInputTokens.clamp(0, safeIn);
     final safeOut = outputTokens < 0 ? 0 : outputTokens;
     final safeThink = thinkingTokens < 0 ? 0 : thinkingTokens;
     totalInputTokens += safeIn;
+    totalCachedInputTokens += safeCached;
     totalOutputTokens += safeOut;
     totalThinkingTokens += safeThink;
     totalApiCalls += 1;
@@ -150,6 +175,7 @@ class GeminiAgentClient {
         label: label,
         thinkingLevel: thinkingLevel.trim().toUpperCase(),
         inputTokens: safeIn,
+        cachedInputTokens: safeCached,
         outputTokens: safeOut,
         thinkingTokens: safeThink,
         timestamp: DateTime.now(),
@@ -162,7 +188,7 @@ class GeminiAgentClient {
     onUsageChanged?.call();
   }
 
-  /// Extracts `usageMetadata` (`promptTokenCount`, `candidatesTokenCount`, `thoughtsTokenCount`)
+  /// Extracts `usageMetadata` (`promptTokenCount`, `cachedContentTokenCount`, `candidatesTokenCount`, `thoughtsTokenCount`)
   /// from a raw Gemini HTTP response body and records it.
   static void recordUsageFromResponseBody(
     String responseBody, {
@@ -177,12 +203,15 @@ class GeminiAgentClient {
         if (usage is Map) {
           final inTok = (usage['promptTokenCount'] as num?)?.toInt() ??
               (fallbackPromptChars ~/ 4);
+          final cachedTok =
+              (usage['cachedContentTokenCount'] as num?)?.toInt() ?? 0;
           final outTok = (usage['candidatesTokenCount'] as num?)?.toInt() ?? 0;
           final thinkTok = (usage['thoughtsTokenCount'] as num?)?.toInt() ?? 0;
           recordTokenUsage(
             label: label,
             thinkingLevel: thinkingLevel,
             inputTokens: inTok,
+            cachedInputTokens: cachedTok,
             outputTokens: outTok,
             thinkingTokens: thinkTok,
           );
@@ -208,6 +237,8 @@ class GeminiAgentClient {
       if (raw == null || raw.trim().isEmpty) return;
       final map = jsonDecode(raw) as Map<String, dynamic>;
       totalInputTokens = (map['totalInputTokens'] as num?)?.toInt() ?? 0;
+      totalCachedInputTokens =
+          (map['totalCachedInputTokens'] as num?)?.toInt() ?? 0;
       totalOutputTokens = (map['totalOutputTokens'] as num?)?.toInt() ?? 0;
       totalThinkingTokens = (map['totalThinkingTokens'] as num?)?.toInt() ?? 0;
       totalApiCalls = (map['totalApiCalls'] as num?)?.toInt() ?? 0;
@@ -231,6 +262,7 @@ class GeminiAgentClient {
   /// Resets cumulative token counters and call history to zero.
   static void resetTokenUsage() {
     totalInputTokens = 0;
+    totalCachedInputTokens = 0;
     totalOutputTokens = 0;
     totalThinkingTokens = 0;
     totalApiCalls = 0;
@@ -252,6 +284,7 @@ class GeminiAgentClient {
         final prefs = await SharedPreferences.getInstance();
         final payload = jsonEncode({
           'totalInputTokens': totalInputTokens,
+          'totalCachedInputTokens': totalCachedInputTokens,
           'totalOutputTokens': totalOutputTokens,
           'totalThinkingTokens': totalThinkingTokens,
           'totalApiCalls': totalApiCalls,
@@ -428,6 +461,8 @@ class GeminiAgentClient {
             thinkingLevel:
                 normalizedThinking.isEmpty ? 'LOW' : normalizedThinking,
             inputTokens: (usage['promptTokenCount'] as num?)?.toInt() ?? 400,
+            cachedInputTokens:
+                (usage['cachedContentTokenCount'] as num?)?.toInt() ?? 0,
             outputTokens:
                 (usage['candidatesTokenCount'] as num?)?.toInt() ?? 600,
             thinkingTokens:

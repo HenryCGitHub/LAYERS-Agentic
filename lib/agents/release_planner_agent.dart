@@ -1393,7 +1393,7 @@ Call `commit_release_system_epics` with the structured system epics.
         ? 'gemini-flash-latest'
         : modelName;
     final prompt = '''
-You are the Systems Designer (`$effectiveModel`) planning the playable **Features (`1..M`)** inside **Epic E$epicNum · ${epicBlueprint.title}** for "${projectDoc.title}" ($versionTag).
+You are the Systems Designer (`$effectiveModel`) planning the playable **Features (`1..M`)** for "${projectDoc.title}" ($versionTag).
 Project Goal: "$projectGoal"
 Game Spec: $gameSpecText
 Tech Spec: $techSpecText
@@ -1402,27 +1402,26 @@ Trade-Offs: $tradeOffsText
 Core Loop Context: ${coreLoopItems.join(' -> ')}
 Out of Scope (DO NOT BUILD): ${projectExclusions.join(' | ')}
 
-All Release System Epics (Stay strictly inside E$epicNum's responsibility):
+All Release System Epics (1-Line Overview — stay strictly inside the Target Epic's responsibility):
 $allEpicsOverview
-${alreadyPlannedFeatures.isNotEmpty ? 'Already Planned in Earlier Epics (DO NOT DUPLICATE): ${alreadyPlannedFeatures.join(', ')}' : ''}
-
-TARGET EPIC TO BREAK DOWN INTO PLAYABLE FEATURES:
-- Epic E$epicNum: "${epicBlueprint.title}"
-- System Goal: "${epicBlueprint.goal}"
-- System Done When: "${epicBlueprint.doneWhen}"
 
 ${GeminiAgentClient.compactStyleRules}
-- DETERMINE THE PLAYABLE FEATURES NEEDED FOR E$epicNum:
-  * Break E$epicNum ("${epicBlueprint.title}") into the exact number of cohesive, singular-focused Playable Features (`1..M`) needed to build this system end-to-end.
-  * NEVER name a Feature identical to the Epic title ("${epicBlueprint.title}"). Each Feature must name a specific playable mechanic, tool, or interactive object inside E$epicNum (`2–3` plain game-dev words, e.g., `"Greybox Dome Floor"`, `"Player Walk & Aim"`, `"Laser Debris Cutter"`).
+- DETERMINE THE PLAYABLE FEATURES NEEDED FOR THE TARGET EPIC:
+  * Break the Target Epic into the exact number of cohesive, singular-focused Playable Features (`1..M`) needed to build this system end-to-end.
+  * NEVER name a Feature identical to the Epic title. Each Feature must name a specific playable mechanic, tool, or interactive object (`2–3` plain game-dev words, e.g., `"Greybox Dome Floor"`, `"Player Walk & Aim"`, `"Laser Debris Cutter"`).
   * Order Features by strict **Engineering Build Dependency**:
-    ${epicIndex == 0 ? '1. Feature #1 in E01 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE Player/Tool movement at Feature #2.' : '1. Place any target entity, container, or spawner BEFORE the tool, tether, projectile, or UI that acts on it.'}
+    1. In E01, Feature #1 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE Player/Tool movement at Feature #2; in E02+, place any target entity, container, or spawner BEFORE the tool, tether, projectile, or UI that acts on it.
     2. Place the base playable action BEFORE any cooldown, pressure lock, or boundary gate that restricts it.
 - MANDATORY TUNING & GUARDS ON EVERY FEATURE:
   * Include 2–3 concrete `"paramName: numericValue unit"` entries in `tuningParams` and 1–2 `[TAG]` guard rules in `edgeCases`.
   * Include foundation-first `tasks` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
 
-Call `commit_epic_features` with the ordered playable features.
+TARGET EPIC TO BREAK DOWN INTO PLAYABLE FEATURES:
+- Epic E$epicNum: "${epicBlueprint.title}"
+- System Goal: "${epicBlueprint.goal}"
+- System Done When: "${epicBlueprint.doneWhen}"
+${alreadyPlannedFeatures.isNotEmpty ? '- Already Planned in Earlier Epics (1-Line Titles — DO NOT DUPLICATE): ${alreadyPlannedFeatures.join(', ')}\n' : ''}
+Call `commit_epic_features` with the ordered playable features for Epic E$epicNum.
 ''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -1840,7 +1839,7 @@ Call `commit_progressive_release_focus` with Section 1 of the progressive releas
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: 'gemini-flash-latest',
-      thinkingLevel: 'LOW',
+      thinkingLevel: thinkingLevel,
       temperature: 0.35,
       functionDeclarations: const [commitProgressiveReleaseFocusTool],
     );
@@ -1989,6 +1988,7 @@ Call `commit_progressive_release_focus` with Section 1 of the progressive releas
     required String section1DoneWhen,
     required List<String> missingGaps,
     required List<String> alreadyPlannedChanges,
+    List<String> allEpicOneLineSummaries = const <String>[],
     String apiKey = '',
     String modelName = 'gemini-flash-latest',
     String thinkingLevel = 'LOW',
@@ -2039,31 +2039,30 @@ Call `commit_progressive_release_focus` with Section 1 of the progressive releas
 
     final phaseUpgradeDirective = releasePhase ==
             ProductionPhase.verticalSlice.name
-        ? 'Phase 3 · Vertical Slice Polish: Upgrade EVERY existing feature in Epic $epicCode with observable VFX/particles, SFX audio cues, camera shake/hit-stop, animation states, and HUD readability.'
+        ? 'Phase 3 · Vertical Slice Polish: Upgrade EVERY existing feature in the Target Epic with observable VFX/particles, SFX audio cues, camera shake/hit-stop, animation states, and HUD readability.'
         : (releasePhase == ProductionPhase.fullProduction.name
-            ? 'Phase 4 · Full Production Pass: Upgrade EVERY existing feature in Full Production Epic $epicCode to the Vertical Slice quality bar (full content depth + VFX/SFX/HUD feel polish in one pass), reusing the core scripts already built.'
+            ? 'Phase 4 · Full Production Pass: Upgrade EVERY existing feature in the Target Full Production Epic to the Vertical Slice quality bar (full content depth + VFX/SFX/HUD feel polish in one pass), reusing the core scripts already built.'
             : (releasePhase == ProductionPhase.postLaunch.name
-                ? 'Phase 5 · Post-Launch & Live Ops: Upgrade EVERY existing feature in Epic $epicCode with live balance tuning, [FIX] resolutions, and modular content depth.'
-                : 'Phase 2 · MVP Functional Depth: Upgrade EVERY existing v0.1 greybox feature in Epic $epicCode into a complete functional MVP mechanic.'));
+                ? 'Phase 5 · Post-Launch & Live Ops: Upgrade EVERY existing feature in the Target Epic with live balance tuning, [FIX] resolutions, and modular content depth.'
+                : 'Phase 2 · MVP Functional Depth: Upgrade EVERY existing v0.1 greybox feature in the Target Epic into a complete functional MVP mechanic.'));
 
     final prompt = '''
-You are the Systems Designer planning the **$versionTag (`$releasePhase`) COMPLETE EPIC UPGRADE** inside **Epic $epicCode · ${epicDoc.title}** for "${projectDoc.title}".
+You are the Systems Designer planning the **$versionTag (`$releasePhase`) COMPLETE EPIC UPGRADE** for "${projectDoc.title}".
 Section 1 Release Focus:
 - Release Goal: "$section1Goal"
 - Release Done When: "$section1DoneWhen"
 ${missingGaps.isNotEmpty ? '- Identified Gaps: ${missingGaps.join(" | ")}\n' : ''}- Game & Tech Spec: $gameSpecText | $techSpecText
 - Design Pillars & Trade-Offs: $pillarsText | $tradeOffsText
 - Out of Scope (DO NOT BUILD): ${projectExclusions.join(' | ')}
-${alreadyPlannedChanges.isNotEmpty ? '- Already Planned in Earlier Epics for $versionTag (DO NOT DUPLICATE): ${alreadyPlannedChanges.join(", ")}\n' : ''}
-Target Epic $epicCode ("${epicDoc.title}", id: "${epicDoc.id}"):
-${existingFeatLines.isNotEmpty ? existingFeatLines.join('\n') : '(No existing features)'}
-
-- PHASE DIRECTIVE: $phaseUpgradeDirective
+${allEpicOneLineSummaries.isNotEmpty ? '- All Release Epics (1-Line Titles Only — never duplicate sibling Epics):\n  ${allEpicOneLineSummaries.join("\n  ")}\n' : ''}- PHASE DIRECTIVE: $phaseUpgradeDirective
 ${GeminiAgentClient.compactStyleRules}
 - WHOLE-EPIC COMPLETION RULE (NO PARTIAL EPICS):
-  * Because **Epic $epicCode · ${epicDoc.title}** was chosen for $versionTag, you MUST return an `"upgrade"` entry for **EVERY** existing non-superseded feature listed above in Epic $epicCode (using its EXACT `"id"` and `"title"`), describing its $versionTag delta upgrade in `"goal"`, `"inScope"`, and `"tasks"`, so the **entire Epic $epicCode** is completed in $versionTag.
-  * You may also add a brand-new feature in Epic $epicCode (`"lifecycle": "new"`) if a missing mechanic is required to complete the Epic.
+  * You MUST return an `"upgrade"` entry for **EVERY** existing non-superseded feature listed below in the Target Epic (using its EXACT `"id"` and `"title"`), describing its $versionTag delta upgrade in `"goal"`, `"inScope"`, and `"tasks"`, so the **entire Target Epic** is completed in $versionTag.
+  * You may also add a brand-new feature in the Target Epic (`"lifecycle": "new"`) if a missing mechanic is required to complete the Epic.
   * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"`, 1–2 `[STATE GUARD]` rules in `"edgeCases"`, and foundation-first `"tasks"` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
+
+${alreadyPlannedChanges.isNotEmpty ? 'Already Planned in Earlier Epics for $versionTag (1-Line Titles — DO NOT DUPLICATE): ${alreadyPlannedChanges.join(", ")}\n' : ''}Target Epic $epicCode ("${epicDoc.title}", id: "${epicDoc.id}"):
+${existingFeatLines.isNotEmpty ? existingFeatLines.join('\n') : '(No existing features)'}
 
 Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features for Epic $epicCode.
 ''';
@@ -2072,7 +2071,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       prompt: prompt,
       apiKey: apiKey,
       preferredModel: 'gemini-flash-latest',
-      thinkingLevel: 'LOW',
+      thinkingLevel: thinkingLevel,
       temperature: 0.35,
       functionDeclarations: const [commitProgressiveEpicChangesTool],
     );

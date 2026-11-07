@@ -2674,6 +2674,10 @@ Concept Blueprint:
     }
 
     // Pass 2 (Epic-by-Epic): Synthesize Section 2 (`2. Epics & Features in v0.X`) one target Epic at a time
+    final allEpicOneLineSummaries = <String>[
+      for (int i = 0; i < existingBeats.length; i++)
+        'E${(i + 1).toString().padLeft(2, '0')} · ${existingBeats[i].title}',
+    ];
     final alreadyPlannedChanges = <String>[];
     for (final bIdx in targetEpicIndices) {
       if (isCancelled()) return null;
@@ -2705,9 +2709,10 @@ Concept Blueprint:
         section1DoneWhen: workingBp.doneWhen,
         missingGaps: workingBp.missingGaps,
         alreadyPlannedChanges: alreadyPlannedChanges,
+        allEpicOneLineSummaries: allEpicOneLineSummaries,
         apiKey: _apiKey,
         modelName: _conversationModel,
-        thinkingLevel: 'LOW',
+        thinkingLevel: _thinkingLevel,
       );
       if (isCancelled()) return null;
       if (updatedBeat != null) {
@@ -5368,26 +5373,12 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
 
     final parts = <String>[];
     if (assetTokens.isNotEmpty) {
-      parts.add('assets=[${assetTokens.take(5).join(', ')}]');
+      parts.add('assets=[${assetTokens.take(4).join(', ')}]');
     } else if (pathTokens.isNotEmpty) {
       parts.add('paths=[${pathTokens.take(2).join(', ')}]');
     }
-    if (includePlannedScopeFallback && hierarchyNodes.length > 1) {
-      final nodePreview = hierarchyNodes.take(4).toList();
-      parts.add(
-        'nodes=[${nodePreview.first} > ${nodePreview.skip(1).join(', ')}]',
-      );
-    }
-    if (includePlannedScopeFallback) {
-      final scopeItems = SectionTextUtils.resolveInScope(featDoc.sections)
-          .take(2)
-          .toList();
-      if (scopeItems.isNotEmpty) {
-        parts.add('scope=[${scopeItems.join(', ')}]');
-      }
-    }
     if (includeTuningVars && tuningTokens.isNotEmpty) {
-      parts.add('vars=[${tuningTokens.take(5).join(', ')}]');
+      parts.add('vars=[${tuningTokens.take(4).join(', ')}]');
     }
     final summaryTail =
         parts.isNotEmpty ? parts.join(' | ') : 'foundation initialized';
@@ -5656,26 +5647,15 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
 
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
-Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
-${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$phaseInstructionBlock
-$projectBuildStateContext
-${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
-${sameEpicSiblingBoundaryLines.isNotEmpty ? sameEpicSiblingBoundaryLines.join('\n') : ''}
-${coreSystemsReferenceLines.isNotEmpty ? 'CORE SYSTEMS REFERENCE (finished STABLE core scripts — plug into these, NEVER rebuild them):\n${coreSystemsReferenceLines.join('\n')}' : ''}
-Tasks:
-${taskSummaries.join('\n')}
-Active Tuning Parameters (MUST use exact variable names): ${cpNode.tuningParams.join(', ')}
-Active Guards (MUST enforce in code without raw [TAG] brackets in prose): ${cleanEdgeCases.join(', ')}
-${priorCheckpointSnapshot.isNotEmpty ? 'Previous Checkpoints Structural Snapshot (extend existing nodes & functions in-place):\n$priorCheckpointSnapshot' : ''}
-
-CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
-- ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
-- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF (ACROSS ALL ${cpNode.checklist.length} TASKS):
+${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}$phaseInstructionBlock
+${coreSystemsReferenceLines.isNotEmpty ? 'CORE SYSTEMS REFERENCE (finished STABLE core scripts — plug into these, NEVER rebuild them):\n${coreSystemsReferenceLines.join('\n')}\n' : ''}CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
+- ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for the Target Feature matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
+- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF (ACROSS ALL TASKS):
   * First Task (Task 1) builds the primary scene/node/actor/prefab hierarchy and collision foundation in the level.
-  * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) bind input/signals and wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
-  * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
+  * Middle Task(s) bind input/signals and wire the core mechanic velocity, interaction, or simulation math inside that same asset using the Active Tuning Parameters.
+  * Final Task stays on that same asset to add observable feedback cues and enforce the Active Guards so the Checkpoint Playtest Gate passes.
 
-For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
+For each task (taskIndex: 0..N), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
 1. "title": "3-4 Title-Case Imperative Runbook words (Verb + Object, e.g. 'Spawn 6 Pellet Raycasts', 'Add Hazard Detection Component'; do NOT include 'STEP X.Y' prefix)"
 2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path (telegraphic breadcrumb)
 3. "instruction": 1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value
@@ -5684,7 +5664,13 @@ For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequent
 6. "codeFormula": $codeFormulaModeGuide
 7. "verifyResult": Causal Trigger -> Result check formatted as "<Player Action> -> <Observable Screen Result>" (<= 14 words)
 
-Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each task.''';
+Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$projectBuildStateContext
+${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}\n' : ''}${sameEpicSiblingBoundaryLines.isNotEmpty ? '${sameEpicSiblingBoundaryLines.join('\n')}\n' : ''}Tasks:
+${taskSummaries.join('\n')}
+Active Tuning Parameters (MUST use exact variable names): ${cpNode.tuningParams.join(', ')}
+Active Guards (MUST enforce in code without raw [TAG] brackets in prose): ${cleanEdgeCases.join(', ')}
+${priorCheckpointSnapshot.isNotEmpty ? 'Previous Checkpoints Structural Snapshot (extend existing nodes & functions in-place):\n$priorCheckpointSnapshot\n' : ''}Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each task.''';
 
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,

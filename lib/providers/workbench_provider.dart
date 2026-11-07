@@ -216,10 +216,13 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Input (`promptTokenCount`) tokens recorded for the latest Gemini API call.
+  /// Input (`promptTokenCount`) tokens recorded across Gemini API calls.
   int get tokenInputCount => GeminiAgentClient.totalInputTokens;
 
-  /// Visible Output (`candidatesTokenCount`) tokens recorded for the latest Gemini API call.
+  /// Implicitly cached Input (`cachedContentTokenCount`) tokens billed at 90% off (`$0.075 / 1M`).
+  int get tokenCachedInputCount => GeminiAgentClient.totalCachedInputTokens;
+
+  /// Visible Output (`candidatesTokenCount`) tokens recorded across Gemini API calls.
   int get tokenOutputCount => GeminiAgentClient.totalOutputTokens;
 
   /// Internal Scratchpad / Thinking (`thoughtsTokenCount`) tokens recorded for the latest Gemini API call.
