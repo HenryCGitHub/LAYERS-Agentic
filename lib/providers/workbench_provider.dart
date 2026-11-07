@@ -216,19 +216,31 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  /// Cumulative Input (`promptTokenCount`) tokens recorded across Gemini API calls.
+  /// Input (`promptTokenCount`) tokens recorded for the latest Gemini API call.
   int get tokenInputCount => GeminiAgentClient.totalInputTokens;
 
-  /// Cumulative Visible Output (`candidatesTokenCount`) tokens recorded across Gemini API calls.
+  /// Visible Output (`candidatesTokenCount`) tokens recorded for the latest Gemini API call.
   int get tokenOutputCount => GeminiAgentClient.totalOutputTokens;
 
-  /// Cumulative Internal Scratchpad / Thinking (`thoughtsTokenCount`) tokens recorded across Gemini API calls.
+  /// Internal Scratchpad / Thinking (`thoughtsTokenCount`) tokens recorded for the latest Gemini API call.
   int get tokenThinkingCount => GeminiAgentClient.totalThinkingTokens;
 
-  /// Total Gemini API calls recorded in the active tracker session.
+  /// Total Gemini API calls recorded in the active tracker slot (`1` after a call, `0` when reset).
   int get tokenApiCallCount => GeminiAgentClient.totalApiCalls;
 
-  /// Estimated USD cost (`$0.30 / 1M` Input, `$2.50 / 1M` Output + Scratchpad Thinking).
+  /// Estimated USD cost of Input tokens on Gemini 3.8 Flash (`$0.75 / 1M`).
+  double get tokenEstimatedInputCostUsd =>
+      GeminiAgentClient.estimatedInputCostUsd;
+
+  /// Estimated USD cost of Visible Output tokens on Gemini 3.8 Flash (`$3.75 / 1M`).
+  double get tokenEstimatedOutputCostUsd =>
+      GeminiAgentClient.estimatedOutputCostUsd;
+
+  /// Estimated USD cost of Scratchpad Thinking tokens on Gemini 3.8 Flash (`$3.75 / 1M`).
+  double get tokenEstimatedThinkingCostUsd =>
+      GeminiAgentClient.estimatedThinkingCostUsd;
+
+  /// Estimated total USD cost on Gemini 3.8 Flash (`$0.75 / 1M` Input, `$3.75 / 1M` Output + Scratchpad Thinking).
   double get tokenEstimatedCostUsd => GeminiAgentClient.estimatedCostUsd;
 
   /// Recent per-call token breakdown history (`IN · OUT · THINK`).

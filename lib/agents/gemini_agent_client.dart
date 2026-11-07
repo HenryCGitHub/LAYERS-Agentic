@@ -27,6 +27,12 @@ class GeminiTokenCallRecord {
   /// Google bills both `candidatesTokenCount` (`OUT`) and `thoughtsTokenCount` (`THINK`) at the Output rate.
   int get billedOutputTokens => outputTokens + thinkingTokens;
 
+  /// Estimated USD cost for this single API call on Gemini 3.8 Flash (`$0.75 / 1M` Input, `$3.75 / 1M` Output + Thinking).
+  double get estimatedCostUsd =>
+      ((inputTokens / 1000000.0) * GeminiAgentClient.inputRatePerMillionUsd) +
+      ((billedOutputTokens / 1000000.0) *
+          GeminiAgentClient.outputRatePerMillionUsd);
+
   Map<String, dynamic> toJson() => {
         'label': label,
         'thinkingLevel': thinkingLevel,
@@ -69,9 +75,14 @@ class GeminiAgentClient {
 
   static bool _modelMetadataChecked = false;
   static int? _cachedModelOutputTokenLimit;
-  static bool _cachedSupportsThinkingLevel = false;
+  static bool _cachedSupportsThinkingLevel = true;
 
   static const String _prefsTokenUsageKey = 'layers_gemini_token_usage_v1';
+
+  /// Official Gemini 3.8 Flash (`gemini-flash-latest`) Standard Paid Tier rates (USD per 1M tokens).
+  static const double inputRatePerMillionUsd = 0.75;
+  static const double outputRatePerMillionUsd = 3.75;
+
   static int totalInputTokens = 0;
   static int totalOutputTokens = 0;
   static int totalThinkingTokens = 0;
@@ -80,12 +91,31 @@ class GeminiAgentClient {
       <GeminiTokenCallRecord>[];
   static void Function()? onUsageChanged;
 
-  /// Estimated USD cost on Gemini Flash pricing (`$0.30 / 1M` Input, `$2.50 / 1M` Output + Thinking).
-  static double get estimatedCostUsd {
-    final inCost = (totalInputTokens / 1000000.0) * 0.30;
-    final outAndThinkCost =
-        ((totalOutputTokens + totalThinkingTokens) / 1000000.0) * 2.50;
-    return inCost + outAndThinkCost;
+  /// Estimated USD cost of Input (`IN`) tokens for the latest API call (`$0.75 / 1M`).
+  static double get estimatedInputCostUsd =>
+      (totalInputTokens / 1000000.0) * inputRatePerMillionUsd;
+
+  /// Estimated USD cost of Visible Output (`OUT`) tokens for the latest API call (`$3.75 / 1M`).
+  static double get estimatedOutputCostUsd =>
+      (totalOutputTokens / 1000000.0) * outputRatePerMillionUsd;
+
+  /// Estimated USD cost of Internal Scratchpad (`THINK`) tokens for the latest API call (`$3.75 / 1M`).
+  static double get estimatedThinkingCostUsd =>
+      (totalThinkingTokens / 1000000.0) * outputRatePerMillionUsd;
+
+  /// Estimated total USD cost for the latest API call on Gemini 3.8 Flash (`$0.75 / 1M` Input, `$3.75 / 1M` Output + Thinking).
+  static double get estimatedCostUsd =>
+      estimatedInputCostUsd +
+      estimatedOutputCostUsd +
+      estimatedThinkingCostUsd;
+
+  /// Formats a USD cost value cleanly for UI pills and cards (e.g., `$0.0000`, `$0.0348`).
+  static String formatCostUsd(double cost) {
+    final safe = cost < 0 ? 0.0 : cost;
+    if (safe >= 1.0) {
+      return '\$${safe.toStringAsFixed(2)}';
+    }
+    return '\$${safe.toStringAsFixed(4)}';
   }
 
   /// Formats a token count compactly (e.g., `840`, `5.2k`, `1.4M`).
@@ -99,7 +129,7 @@ class GeminiAgentClient {
     return '$count';
   }
 
-  /// Records a single API call's token usage (`IN`, `OUT`, `THINK`) and notifies listeners.
+  /// Resets the tracker and records the single latest API call's token usage (`IN`, `OUT`, `THINK`) and cost.
   static void recordTokenUsage({
     required String label,
     required String thinkingLevel,
@@ -110,24 +140,22 @@ class GeminiAgentClient {
     final safeIn = inputTokens < 0 ? 0 : inputTokens;
     final safeOut = outputTokens < 0 ? 0 : outputTokens;
     final safeThink = thinkingTokens < 0 ? 0 : thinkingTokens;
-    totalInputTokens += safeIn;
-    totalOutputTokens += safeOut;
-    totalThinkingTokens += safeThink;
-    totalApiCalls += 1;
-    callHistory.insert(
-      0,
-      GeminiTokenCallRecord(
-        label: label,
-        thinkingLevel: thinkingLevel.trim().toUpperCase(),
-        inputTokens: safeIn,
-        outputTokens: safeOut,
-        thinkingTokens: safeThink,
-        timestamp: DateTime.now(),
-      ),
-    );
-    if (callHistory.length > 30) {
-      callHistory.removeRange(30, callHistory.length);
-    }
+    totalInputTokens = safeIn;
+    totalOutputTokens = safeOut;
+    totalThinkingTokens = safeThink;
+    totalApiCalls = 1;
+    callHistory
+      ..clear()
+      ..add(
+        GeminiTokenCallRecord(
+          label: label,
+          thinkingLevel: thinkingLevel.trim().toUpperCase(),
+          inputTokens: safeIn,
+          outputTokens: safeOut,
+          thinkingTokens: safeThink,
+          timestamp: DateTime.now(),
+        ),
+      );
     _persistTokenUsageAsync();
     onUsageChanged?.call();
   }
@@ -308,9 +336,9 @@ class GeminiAgentClient {
   }) {
     final upper = normalizedThinking.trim().toUpperCase();
     if (useThinkingLevelEnum) {
+      // Gemini 3.8 Flash supports LOW, MEDIUM, HIGH (MINIMAL returns an error on 3.8).
       final String level = switch (upper) {
-        'NONE' || 'MINIMAL' => upper,
-        'LOW' => 'LOW',
+        'NONE' || 'MINIMAL' || 'LOW' => 'LOW',
         'MEDIUM' => 'MEDIUM',
         _ => 'HIGH',
       };
@@ -389,6 +417,7 @@ class GeminiAgentClient {
         : 'json_response';
 
     if (testMockResponder != null) {
+      resetTokenUsage();
       final mockRes = await testMockResponder!(prompt, resolvedModel);
       if (mockRes != null) {
         final usage = mockRes['_usageMetadata'] ?? mockRes['usageMetadata'];
@@ -426,6 +455,9 @@ class GeminiAgentClient {
       lastErrorStatus = 'Missing API Key';
       return null;
     }
+
+    // Reset live token tracker at the start of every new API call.
+    resetTokenUsage();
 
     await _ensureModelCapabilitiesLoaded(resolvedModel, key);
 

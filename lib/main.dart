@@ -625,7 +625,7 @@ class WorkbenchShell extends StatelessWidget {
                       const SizedBox(width: 2),
                       Tooltip(
                         message:
-                            'Live Gemini Token Tracker (Calls: ${workbench.tokenApiCallCount} · Input: ${workbench.tokenInputCount} · Visible Output: ${workbench.tokenOutputCount} · Scratchpad Thinking [billed as Output]: ${workbench.tokenThinkingCount}) — Click for breakdown & reset',
+                            'Gemini 3.8 Flash Live Call Tracker (Auto-resets every API call) — Input: ${workbench.tokenInputCount} (\$0.75/1M) · Visible Output: ${workbench.tokenOutputCount} (\$3.75/1M) · Scratchpad Thinking [billed as Output]: ${workbench.tokenThinkingCount} (\$3.75/1M) · Est. Call Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
                         child: InkWell(
                           key: const ValueKey('global_token_usage_pill'),
                           onTap: () => _showAiSettingsDialog(context),
@@ -641,7 +641,7 @@ class WorkbenchShell extends StatelessWidget {
                               border: Border.all(color: borderColor),
                             ),
                             child: Text(
-                              '⚡ ${workbench.tokenApiCallCount} · IN ${GeminiAgentClient.formatTokenCount(workbench.tokenInputCount)} · OUT ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount)} · THINK ${GeminiAgentClient.formatTokenCount(workbench.tokenThinkingCount)}',
+                              '⚡ IN ${GeminiAgentClient.formatTokenCount(workbench.tokenInputCount)} · OUT ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount)} · THINK ${GeminiAgentClient.formatTokenCount(workbench.tokenThinkingCount)} · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w600,

@@ -585,7 +585,8 @@ extension _ShellDialogsExt on WorkbenchShell {
                                       workbench.tokenInputCount,
                                     ),
                                     rawCount: workbench.tokenInputCount,
-                                    subtitle: 'Prompt + Schema',
+                                    subtitle:
+                                        '\$0.75/1M · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedInputCostUsd)}',
                                     textPrimary: textPrimary,
                                     textSecondary: textSecondary,
                                     textMuted: textMuted,
@@ -599,7 +600,8 @@ extension _ShellDialogsExt on WorkbenchShell {
                                       workbench.tokenOutputCount,
                                     ),
                                     rawCount: workbench.tokenOutputCount,
-                                    subtitle: 'JSON Response',
+                                    subtitle:
+                                        '\$3.75/1M · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedOutputCostUsd)}',
                                     textPrimary: textPrimary,
                                     textSecondary: textSecondary,
                                     textMuted: textMuted,
@@ -613,7 +615,24 @@ extension _ShellDialogsExt on WorkbenchShell {
                                       workbench.tokenThinkingCount,
                                     ),
                                     rawCount: workbench.tokenThinkingCount,
-                                    subtitle: 'Billed as Output',
+                                    subtitle:
+                                        '\$3.75/1M · ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedThinkingCostUsd)}',
+                                    textPrimary: textPrimary,
+                                    textSecondary: textSecondary,
+                                    textMuted: textMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _buildTokenStatCell(
+                                    label: 'EST. CALL COST',
+                                    value: GeminiAgentClient.formatCostUsd(
+                                      workbench.tokenEstimatedCostUsd,
+                                    ),
+                                    rawCount: workbench.tokenInputCount +
+                                        workbench.tokenOutputCount +
+                                        workbench.tokenThinkingCount,
+                                    subtitle: 'Resets each API call',
                                     textPrimary: textPrimary,
                                     textSecondary: textSecondary,
                                     textMuted: textMuted,
@@ -623,7 +642,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Calls: ${workbench.tokenApiCallCount} · Billed Input: ${GeminiAgentClient.formatTokenCount(workbench.tokenInputCount)} · Billed Output (OUT + THINK): ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount + workbench.tokenThinkingCount)} · Est. Cost: \$${workbench.tokenEstimatedCostUsd.toStringAsFixed(4)}',
+                              'Gemini 3.8 Flash Pricing: Input \$0.75/1M · Output + Scratchpad \$3.75/1M (5x Input) · Billed Output (OUT + THINK): ${GeminiAgentClient.formatTokenCount(workbench.tokenOutputCount + workbench.tokenThinkingCount)} · Call Cost: ${GeminiAgentClient.formatCostUsd(workbench.tokenEstimatedCostUsd)}',
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -646,7 +665,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                                             bottom: 3,
                                           ),
                                           child: Text(
-                                            '• ${rec.label} [${rec.thinkingLevel}] — IN ${rec.inputTokens} · OUT ${rec.outputTokens} · THINK ${rec.thinkingTokens}',
+                                            '• ${rec.label} [${rec.thinkingLevel}] — IN ${rec.inputTokens} · OUT ${rec.outputTokens} · THINK ${rec.thinkingTokens} · ${GeminiAgentClient.formatCostUsd(rec.estimatedCostUsd)}',
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 9.5,
                                               color: textMuted,

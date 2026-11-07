@@ -7090,11 +7090,18 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('HIGH'),
         );
         expect(
+          GeminiAgentClient.buildNativeThinkingConfig(
+            normalizedThinking: 'MINIMAL',
+            useThinkingLevelEnum: true,
+          )['thinkingLevel'],
+          equals('LOW'),
+        );
+        expect(
           ProjectConceptAgent.conceptSectionBuildOrder.length,
           equals(8),
         );
 
-        // 11a-token. Live Token Usage & Scratchpad Tracker (IN · OUT · THINK)
+        // 11a-token. Live Token Usage & Scratchpad Tracker (IN · OUT · THINK · $Cost, resets per call)
         provider.resetTokenUsage();
         expect(provider.tokenInputCount, equals(0));
         expect(provider.tokenOutputCount, equals(0));
@@ -7110,7 +7117,24 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.tokenThinkingCount, equals(5200));
         expect(provider.tokenApiCallCount, equals(1));
         expect(provider.tokenCallHistory.first.billedOutputTokens, equals(8800));
-        expect(provider.tokenEstimatedCostUsd, greaterThan(0.02));
+        // Gemini 3.8 Flash: 2400 * $0.75/1M ($0.0018) + 8800 * $3.75/1M ($0.0330) = $0.0348
+        expect(provider.tokenEstimatedCostUsd, closeTo(0.0348, 0.0001));
+        expect(
+          GeminiAgentClient.formatCostUsd(provider.tokenEstimatedCostUsd),
+          equals(r'$0.0348'),
+        );
+        // Second call automatically resets/replaces previous call's counts instead of accumulating
+        GeminiAgentClient.recordUsageFromResponseBody(
+          '{"usageMetadata":{"promptTokenCount":1000,"candidatesTokenCount":1000,"thoughtsTokenCount":1000}}',
+          label: 'commit_spark_intake',
+          thinkingLevel: 'HIGH',
+        );
+        expect(provider.tokenInputCount, equals(1000));
+        expect(provider.tokenOutputCount, equals(1000));
+        expect(provider.tokenThinkingCount, equals(1000));
+        expect(provider.tokenApiCallCount, equals(1));
+        expect(provider.tokenCallHistory.length, equals(1));
+        expect(provider.tokenEstimatedCostUsd, closeTo(0.00825, 0.0001));
         provider.resetTokenUsage();
         expect(provider.tokenApiCallCount, equals(0));
 
