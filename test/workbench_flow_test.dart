@@ -1736,6 +1736,17 @@ void main() {
           find.byKey(const ValueKey('halfscreen_outliner_scrim')),
           findsNothing,
         );
+
+        // Verify Google Account & Cloud Sync Badge and Dialog
+        final cloudSyncBtn = find.byKey(const ValueKey('cloud_sync_auth_btn'));
+        expect(cloudSyncBtn, findsOneWidget);
+        await tester.tap(cloudSyncBtn);
+        await tester.pumpAndSettle();
+        expect(find.text('Firebase Cloud Sync & Local Vault'), findsOneWidget);
+        expect(find.byKey(const ValueKey('google_sign_in_modal_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('cloud_sync_now_btn')), findsOneWidget);
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
       },
     );
 

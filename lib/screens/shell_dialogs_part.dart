@@ -14,6 +14,7 @@ extension _ShellDialogsExt on WorkbenchShell {
 
     final collabEmailCtrl = TextEditingController();
     String selectedCollabRole = 'editor';
+    bool isSigningIn = false;
 
     showDialog<void>(
       context: context,
@@ -460,13 +461,34 @@ extension _ShellDialogsExt on WorkbenchShell {
                       foregroundColor: const Color(0xFF06281E),
                       elevation: 0,
                     ),
-                    onPressed: () async {
-                      await workbench.signInWithGoogle();
-                      setModalState(() {});
-                    },
-                    icon: const Icon(Icons.cloud_upload_rounded, size: 15),
+                    onPressed: isSigningIn
+                        ? null
+                        : () async {
+                            setModalState(() {
+                              isSigningIn = true;
+                            });
+                            try {
+                              await workbench.signInWithGoogle();
+                            } finally {
+                              setModalState(() {
+                                isSigningIn = false;
+                              });
+                            }
+                          },
+                    icon: isSigningIn
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF06281E),
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.cloud_upload_rounded, size: 15),
                     label: Text(
-                      'Sign in with Google',
+                      isSigningIn ? 'Signing in...' : 'Sign in with Google',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,

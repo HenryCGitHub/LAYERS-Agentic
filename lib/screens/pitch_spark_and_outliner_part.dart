@@ -122,64 +122,115 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (widget.workbench.savedProjects.isNotEmpty)
-                    PopupMenuButton<String>(
-                      key: const ValueKey('saved_projects_dropdown_btn'),
-                      tooltip: 'Saved Projects',
-                      color: bgSurface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: borderBright),
-                      ),
-                      onSelected: (projectId) {
-                        widget.workbench.switchProject(projectId);
-                      },
-                      itemBuilder: (ctx) => [
-                        for (final p in widget.workbench.savedProjects)
-                          PopupMenuItem<String>(
-                            key: ValueKey('spark_resume_project_${p.id}'),
-                            value: p.id,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    p.title,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Resume →',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11,
-                                    color: textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                      child: Padding(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Subtle Cloud Sync Indicator
+                      Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
-                          vertical: 4,
+                          vertical: 2.5,
                         ),
-                        child: Text(
-                          'Saved Projects ▾',
-                          style: GoogleFonts.inter(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? const Color(0xFF9CA3AF) : textSecondary,
+                        decoration: BoxDecoration(
+                          color: bgSurface,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: widget.workbench.isCloudSynced
+                                ? const Color(0xFF10B981).withValues(alpha: 0.25)
+                                : borderSubtle,
                           ),
                         ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: widget.workbench.isCloudSynced
+                                    ? const Color(0xFF10B981)
+                                    : textMuted,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              widget.workbench.isCloudSynced
+                                  ? 'Cloud Synced'
+                                  : 'Local Vault',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                                color: widget.workbench.isCloudSynced
+                                    ? const Color(0xFF10B981)
+                                    : textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                      if (widget.workbench.savedProjects.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        PopupMenuButton<String>(
+                          key: const ValueKey('saved_projects_dropdown_btn'),
+                          tooltip: 'Saved Projects',
+                          color: bgSurface,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: borderBright),
+                          ),
+                          onSelected: (projectId) {
+                            widget.workbench.switchProject(projectId);
+                          },
+                          itemBuilder: (ctx) => [
+                            for (final p in widget.workbench.savedProjects)
+                              PopupMenuItem<String>(
+                                key: ValueKey('spark_resume_project_${p.id}'),
+                                value: p.id,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        p.title,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Resume →',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        color: textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              'Saved Projects ▾',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? const Color(0xFF9CA3AF) : textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),

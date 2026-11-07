@@ -601,25 +601,112 @@ class WorkbenchShell extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                       ],
-                      Tooltip(
-                        message: workbench.isCloudSynced
-                            ? 'Synced to Firebase Cloud (${workbench.userEmail ?? "Signed In"})'
-                            : 'Project Vault & Google Cloud Sync',
-                        child: InkWell(
-                          key: const ValueKey('cloud_sync_auth_btn'),
-                          onTap: () => _showCloudSyncDialog(context),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            child: Icon(
-                              workbench.isCloudSynced
-                                  ? Icons.cloud_done_rounded
-                                  : Icons.cloud_upload_outlined,
-                              size: 14,
-                              color: workbench.isCloudSynced ? textPrimary : textMuted,
+                      // Google Account & Cloud Sync Badge
+                      Builder(
+                        builder: (ctx) {
+                          final isNarrow = MediaQuery.sizeOf(ctx).width < 1040;
+                          final isSynced = workbench.isCloudSynced;
+                          final email = workbench.userEmail ?? '';
+                          final initial = email.isNotEmpty ? email[0].toUpperCase() : 'G';
+                          final tooltipMsg = isSynced
+                              ? 'Signed in as $email · Synced to Firebase Cloud'
+                              : 'Project Vault & Google Cloud Sync · Sign in to sync projects';
+
+                          return Tooltip(
+                            message: tooltipMsg,
+                            child: InkWell(
+                              key: const ValueKey('cloud_sync_auth_btn'),
+                              onTap: () => _showCloudSyncDialog(context),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isNarrow ? 5 : 7,
+                                  vertical: 3.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: bgSurface,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isSynced
+                                        ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                                        : borderColor,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (isSynced) ...[
+                                      Container(
+                                        width: 14,
+                                        height: 14,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Color(0xFF10B981),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          initial,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF06281E),
+                                          ),
+                                        ),
+                                      ),
+                                      if (!isNarrow && email.isNotEmpty) ...[
+                                        const SizedBox(width: 5),
+                                        ConstrainedBox(
+                                          constraints: const BoxConstraints(maxWidth: 130),
+                                          child: Text(
+                                            email,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w500,
+                                              color: textPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.cloud_done_rounded,
+                                        size: 12,
+                                        color: Color(0xFF10B981),
+                                      ),
+                                    ] else ...[
+                                      Text(
+                                        'G',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                      if (!isNarrow) ...[
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          'Sign in',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.cloud_upload_outlined,
+                                        size: 12,
+                                        color: textMuted,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       ),
                       const SizedBox(width: 4),
                       Tooltip(
