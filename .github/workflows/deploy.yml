@@ -1,0 +1,89 @@
+name: Deploy LAYERS-Agentic to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Environment
+        run: |
+          flutter --version
+          dart --version
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Static Analysis (Quality Gate)
+        run: dart analyze
+
+      - name: Unit & Widget Tests (Quality Gate)
+        run: flutter test
+
+      - name: Compile Flutter Web
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          BUILD_ARGS=(
+            "web"
+            "--release"
+            "--base-href" "/LAYERS-Agentic/"
+            "--no-web-resources-cdn"
+            "--pwa-strategy=none"
+          )
+          if [ -n "$GEMINI_API_KEY" ]; then
+            B64_KEY=$(printf "%s" "$GEMINI_API_KEY" | base64 | tr -d '\n')
+            echo "Injecting GEMINI_API_KEY_B64 from secrets..."
+            BUILD_ARGS+=("--dart-define=GEMINI_API_KEY_B64=$B64_KEY")
+          fi
+          flutter build "${BUILD_ARGS[@]}"
+          touch build/web/.nojekyll
+
+      - name: Upload Pages Artifact
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+      - name: Update gh-pages Branch
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          keep_files: false
+
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
