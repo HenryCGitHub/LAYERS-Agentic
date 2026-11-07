@@ -463,7 +463,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                 ),
               ),
               child: Text(
-                '✓ Return to Workbench →',
+                'Workbench',
                 style: GoogleFonts.inter(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
