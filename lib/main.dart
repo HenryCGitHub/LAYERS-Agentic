@@ -648,42 +648,6 @@ class WorkbenchShell extends StatelessWidget {
                           key: ValueKey('global_export_agents_md_btn'),
                         ),
                         const SizedBox(width: 4),
-                        // Living GDD / TDD Button
-                        Tooltip(
-                          message: 'Living GDD & TDD — Auto-updating Game & Tech Design Documents (\$0 tokens)',
-                          child: InkWell(
-                            key: const ValueKey('toggle_living_docs_btn'),
-                            onTap: () => _showLivingDocsDialog(context),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.article_outlined,
-                                    size: 13,
-                                    color: textMuted,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    'Docs',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
                       ],
                       // Google Account & Cloud Sync Badge
                       Builder(

@@ -1750,41 +1750,13 @@ void main() {
         await tester.tap(find.text('Close'));
         await tester.pumpAndSettle();
 
-        // Verify Living GDD & TDD Dialog and 1-Click Concept Realignment
-        final docsBtn = find.byKey(const ValueKey('toggle_living_docs_btn'));
-        expect(docsBtn, findsOneWidget);
-        await tester.ensureVisible(docsBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(docsBtn);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('living_docs_dialog')), findsOneWidget);
-        expect(find.byKey(const ValueKey('living_docs_tab_gdd')), findsOneWidget);
-        expect(find.byKey(const ValueKey('living_docs_tab_tdd')), findsOneWidget);
-
-        // Switch to Living TDD Tab
-        await tester.tap(find.byKey(const ValueKey('living_docs_tab_tdd')));
-        await tester.pumpAndSettle();
-
-        // Trigger Concept Realignment
-        final initialTokens = provider.totalInputTokens + provider.totalOutputTokens;
-        final realignBtn = find.byKey(const ValueKey('realign_concept_blueprint_btn'));
-        expect(realignBtn, findsOneWidget);
-        await tester.tap(realignBtn);
-        await tester.pumpAndSettle();
-
-        // Verify zero tokens were consumed
-        final finalTokens = provider.totalInputTokens + provider.totalOutputTokens;
-        expect(finalTokens, equals(initialTokens));
-
-        // Verify living GDD and TDD strings contain valid Markdown
-        final gdd = provider.buildLivingGameDesignDocumentMarkdown();
-        final tdd = provider.buildLivingTechnicalDesignDocumentMarkdown();
-        expect(gdd.contains('Living Game Design Document'), isTrue);
-        expect(tdd.contains('Living Technical Design Document'), isTrue);
-
-        // Close Living Docs Dialog
-        await tester.tap(find.byIcon(Icons.close_rounded));
-        await tester.pumpAndSettle();
+        // Verify Project JSON Export and Import Roundtrip
+        final exportedJson = provider.exportProjectToJson();
+        expect(exportedJson.isNotEmpty, isTrue);
+        expect(exportedJson.contains('format'), isTrue);
+        final importedId = provider.importProjectFromJson(exportedJson);
+        expect(importedId != null, isTrue);
+        expect(provider.savedProjects.any((p) => p.id == importedId), isTrue);
 
         // Verify Playtest Bug button is visible on the active step action bar
         final playtestFeat = provider.selectedFeature!;
