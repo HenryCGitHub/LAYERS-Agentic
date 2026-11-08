@@ -179,6 +179,56 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
           ),
           if (isHud) ...[
             const SizedBox(width: 8),
+            Builder(
+              builder: (context) {
+                final feat = widget.workbench.selectedFeature;
+                final states = feat != null ? FeatureStateNode.getStatesForDocument(feat) : <FeatureStateNode>[];
+                final cpIdx = _manualCheckpointFocusIndex ??
+                    (states.isNotEmpty ? states.indexWhere((s) => !s.isCompleted) : -1);
+                final safeCpIdx = cpIdx >= 0 && cpIdx < states.length ? cpIdx : (states.isNotEmpty ? 0 : -1);
+                final cpNode = safeCpIdx >= 0 ? states[safeCpIdx] : null;
+
+                if (feat == null || cpNode == null) return const SizedBox.shrink();
+
+                return InkWell(
+                  key: const ValueKey('companion_hud_log_bug_btn'),
+                  onTap: () => _showPlaytestBugModal(
+                    context,
+                    feat: feat,
+                    states: states,
+                    checkpointIndex: safeCpIdx,
+                    node: cpNode,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFBBF24).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: const Color(0xFFFBBF24).withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('🐞', style: TextStyle(fontSize: 10)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Log Bug',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFFBBF24),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
             InkWell(
               key: const ValueKey('exit_companion_hud_btn'),
               onTap: () => widget.workbench.toggleCompanionHudMode(false),

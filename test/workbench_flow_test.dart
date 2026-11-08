@@ -1800,6 +1800,48 @@ void main() {
         // Close Living Docs Dialog
         await tester.tap(find.byIcon(Icons.close_rounded));
         await tester.pumpAndSettle();
+
+        // Verify Playtest Bug button is visible on the active step action bar
+        final activeFeat = provider.selectedFeature!;
+        final activeStates = FeatureStateNode.getStatesForDocument(activeFeat);
+        final cpNode = activeStates.first;
+        final stepBugBtn = find.byKey(ValueKey('feature_step_log_bug_btn_${cpNode.id}'));
+        expect(stepBugBtn, findsOneWidget);
+
+        // Tap the Step Bug button to open the Playtest Bug modal
+        await tester.tap(stepBugBtn);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('playtest_bug_modal_input')), findsOneWidget);
+        expect(find.byKey(const ValueKey('playtest_bug_modal_submit_btn')), findsOneWidget);
+
+        // Enter a bug description and submit
+        await tester.enterText(
+          find.byKey(const ValueKey('playtest_bug_modal_input')),
+          'Elevator drops player through floor collision',
+        );
+        await tester.tap(find.byKey(const ValueKey('playtest_bug_modal_submit_btn')));
+        await tester.pumpAndSettle();
+
+        // Verify [FIX] task is appended to checkpoint checklist
+        final updatedStates = FeatureStateNode.getStatesForDocument(activeFeat);
+        final updatedCp = updatedStates.first;
+        final hasFixTask = updatedCp.checklist.any((t) => t.text.contains('[FIX] Elevator drops player'));
+        expect(hasFixTask, isTrue);
+
+        // Verify [PLAYTEST GUARD] is added to edge cases
+        final hasPlaytestGuard = updatedCp.edgeCases.any((g) => g.contains('Elevator drops player'));
+        expect(hasPlaytestGuard, isTrue);
+
+        // Enter Companion HUD Mode and verify top bar Log Bug button is visible
+        provider.toggleCompanionHudMode(true);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('companion_hud_log_bug_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('exit_companion_hud_btn')), findsOneWidget);
+
+        // Exit Companion HUD Mode
+        await tester.tap(find.byKey(const ValueKey('exit_companion_hud_btn')));
+        await tester.pumpAndSettle();
+        expect(provider.isCompanionHudMode, isFalse);
       },
     );
 
