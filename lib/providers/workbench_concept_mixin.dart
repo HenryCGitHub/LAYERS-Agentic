@@ -1119,15 +1119,17 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       if (updatedDoneWhen.isNotEmpty) {
         draft.doneWhen = updatedDoneWhen;
       }
-      if (!draft.lastUpdatedFields.contains('scope')) {
-        draft.lastUpdatedFields.add('scope');
+      final updatedFields = List<String>.from(draft.lastUpdatedFields);
+      if (!updatedFields.contains('scope')) {
+        updatedFields.add('scope');
       }
-      if (!draft.lastUpdatedFields.contains('exclusions')) {
-        draft.lastUpdatedFields.add('exclusions');
+      if (!updatedFields.contains('exclusions')) {
+        updatedFields.add('exclusions');
       }
-      if (!draft.lastUpdatedFields.contains('doneWhen')) {
-        draft.lastUpdatedFields.add('doneWhen');
+      if (!updatedFields.contains('doneWhen')) {
+        updatedFields.add('doneWhen');
       }
+      draft.lastUpdatedFields = updatedFields;
     }
 
     // Synchronize to active project TierDocument

@@ -1244,61 +1244,64 @@ extension _ShellDialogsExt on WorkbenchShell {
                         color: bgSurface,
                         border: Border(bottom: BorderSide(color: borderSubtle)),
                       ),
-                      child: Row(
-                        children: [
-                          InkWell(
-                            key: const ValueKey('living_docs_tab_gdd'),
-                            onTap: () => setModalState(() => activeDocTab = 0),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: activeDocTab == 0 ? bgRecessed : Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: activeDocTab == 0 ? borderBright : Colors.transparent,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            InkWell(
+                              key: const ValueKey('living_docs_tab_gdd'),
+                              onTap: () => setModalState(() => activeDocTab = 0),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: activeDocTab == 0 ? bgRecessed : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: activeDocTab == 0 ? borderBright : Colors.transparent,
+                                  ),
                                 ),
-                              ),
-                              child: Text(
-                                'Living GDD (Game Design)',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: activeDocTab == 0 ? FontWeight.w700 : FontWeight.w500,
-                                  color: activeDocTab == 0 ? textPrimary : textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          InkWell(
-                            key: const ValueKey('living_docs_tab_tdd'),
-                            onTap: () => setModalState(() => activeDocTab = 1),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: activeDocTab == 1 ? bgRecessed : Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: activeDocTab == 1 ? borderBright : Colors.transparent,
-                                ),
-                              ),
-                              child: Text(
-                                'Living TDD (Technical Design & Tuning)',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: activeDocTab == 1 ? FontWeight.w700 : FontWeight.w500,
-                                  color: activeDocTab == 1 ? textPrimary : textSecondary,
+                                child: Text(
+                                  'Living GDD (Game Design)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: activeDocTab == 0 ? FontWeight.w700 : FontWeight.w500,
+                                    color: activeDocTab == 0 ? textPrimary : textSecondary,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '\$0.00 Token Cost · 100% Deterministic',
-                            style: GoogleFonts.jetBrainsMono(fontSize: 10, color: textMuted),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            InkWell(
+                              key: const ValueKey('living_docs_tab_tdd'),
+                              onTap: () => setModalState(() => activeDocTab = 1),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: activeDocTab == 1 ? bgRecessed : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: activeDocTab == 1 ? borderBright : Colors.transparent,
+                                  ),
+                                ),
+                                child: Text(
+                                  'Living TDD (Technical Design & Tuning)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: activeDocTab == 1 ? FontWeight.w700 : FontWeight.w500,
+                                    color: activeDocTab == 1 ? textPrimary : textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              '\$0.00 Token Cost · 100% Deterministic',
+                              style: GoogleFonts.jetBrainsMono(fontSize: 10, color: textMuted),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     // Document Content Body
