@@ -171,7 +171,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
           side: BorderSide(color: borderBright),
         ),
         title: Text(
-          '🐞 Log Playtest Issue',
+          'Log Playtest Issue',
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.w800,

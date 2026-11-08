@@ -1039,7 +1039,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                           vertical: 4,
                                                         ),
                                                         child: Text(
-                                                          '🐞 Flag Issue',
+                                                          'Flag Issue',
                                                           style: GoogleFonts
                                                               .jetBrainsMono(
                                                             fontSize: 10,

@@ -3261,146 +3261,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   ],
                                                                                 );
 
-                                                                                final stepToolsMenuBtn = PopupMenuButton<String>(
-                                                                                  key: ValueKey(
-                                                                                    'inline_step_tools_menu_btn_${node.id}',
-                                                                                  ),
-                                                                                  tooltip: 'Step Tools',
-                                                                                  color: bgSurface,
-                                                                                  shape: RoundedRectangleBorder(
-                                                                                    borderRadius: BorderRadius.circular(8),
-                                                                                    side: BorderSide(color: borderBright),
-                                                                                  ),
-                                                                                  onSelected: (action) {
-                                                                                    if (action == 'copy_and_advance') {
-                                                                                      final snippet = activeSubStep.codeFormula.trim().isNotEmpty
-                                                                                          ? activeSubStep.codeFormula.trim()
-                                                                                          : activeSubStep.instruction.trim();
-                                                                                      Clipboard.setData(
-                                                                                        ClipboardData(text: snippet),
-                                                                                      );
-                                                                                      if (!activeSubStep.subtask.completed) {
-                                                                                        _toggleHowToSubStepCompletion(
-                                                                                          feat,
-                                                                                          states,
-                                                                                          node,
-                                                                                          selectedTaskIdx,
-                                                                                          effectiveSubStepIdx,
-                                                                                        );
-                                                                                      }
-                                                                                      _advanceToNextStep(
-                                                                                        feat,
-                                                                                        states,
-                                                                                        node,
-                                                                                        selectedTaskIdx,
-                                                                                        effectiveSubStepIdx,
-                                                                                      );
-                                                                                    } else if (action == 'copy_all') {
-                                                                                      _copyAllTaskCode(selectedHowTo);
-                                                                                    } else if (action == 'tailor') {
-                                                                                      _promptTailorHowToDialog(
-                                                                                        feat,
-                                                                                        states,
-                                                                                        index,
-                                                                                        selectedTaskIdx,
-                                                                                      );
-                                                                                    } else if (action == 'sync_code') {
-                                                                                      _showSyncFeatureFromCodeDialog(
-                                                                                        feat,
-                                                                                        node,
-                                                                                      );
-                                                                                    } else if (action == 'regenerate_3area') {
-                                                                                      if (!widget.workbench.isSynthesizingFeatureSteps(feat.id)) {
-                                                                                        widget.workbench.synthesizeFeatureHowToStepsWithAi(
-                                                                                          feat.id,
-                                                                                          forceRefresh: true,
-                                                                                          unrealCppMode: _unrealCppMode,
-                                                                                        );
-                                                                                      }
-                                                                                    } else if (action == 'log_issue') {
-                                                                                      _showLogPlaytestIssueDialog(
-                                                                                        feat,
-                                                                                        states,
-                                                                                        index,
-                                                                                      );
-                                                                                    }
-                                                                                  },
-                                                                                  itemBuilder: (ctx) => [
-                                                                                    PopupMenuItem<String>(
-                                                                                      value: 'copy_and_advance',
-                                                                                      height: 34,
-                                                                                      child: Text(
-                                                                                        '⧉ Copy code & mark done',
-                                                                                        style: GoogleFonts.inter(
-                                                                                          fontSize: 12.5,
-                                                                                          color: textSecondary,
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                    PopupMenuItem<String>(
-                                                                                      value: 'tailor',
-                                                                                      height: 34,
-                                                                                      child: Text(
-                                                                                        '✦ Tailor step with AI',
-                                                                                        style: GoogleFonts.inter(
-                                                                                          fontSize: 12.5,
-                                                                                          color: textSecondary,
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                    PopupMenuItem<String>(
-                                                                                      value: 'sync_code',
-                                                                                      height: 34,
-                                                                                      child: Text(
-                                                                                        '⇄ Sync from engine code',
-                                                                                        style: GoogleFonts.inter(
-                                                                                          fontSize: 12.5,
-                                                                                          color: textSecondary,
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                    PopupMenuItem<String>(
-                                                                                      key: const ValueKey(
-                                                                                        'ai_adapt_three_area_btn',
-                                                                                      ),
-                                                                                      value: 'regenerate_3area',
-                                                                                      height: 34,
-                                                                                      child: Text(
-                                                                                        widget.workbench.isSynthesizingFeatureSteps(feat.id)
-                                                                                            ? '✦ Adapting 3-Area Steps...'
-                                                                                            : '✦ Regenerate 3-Area Steps',
-                                                                                        style: GoogleFonts.inter(
-                                                                                          fontSize: 12.5,
-                                                                                          color: textSecondary,
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                    PopupMenuItem<String>(
-                                                                                      value: 'log_issue',
-                                                                                      height: 34,
-                                                                                      child: Text(
-                                                                                        '⚑ Log playtest issue',
-                                                                                        style: GoogleFonts.inter(
-                                                                                          fontSize: 12.5,
-                                                                                          color: textSecondary,
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ],
-                                                                                  child: Padding(
-                                                                                    padding: const EdgeInsets.symmetric(
-                                                                                      horizontal: 4,
-                                                                                      vertical: 2,
-                                                                                    ),
-                                                                                    child: Text(
-                                                                                      'More ▾',
-                                                                                      style: GoogleFonts.inter(
-                                                                                        fontSize: 13.5,
-                                                                                        color: textMuted,
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                );
+
 
                                                                                 final doneBtn = InkWell(
                                                                                   key: ValueKey(
@@ -3478,7 +3339,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   ),
                                                                                 );
 
-                                                                                final logBugBtn = InkWell(
+                                                                                final issueBtn = InkWell(
                                                                                   key: ValueKey('feature_step_log_bug_btn_${node.id}'),
                                                                                   onTap: () => _showLogPlaytestIssueDialog(
                                                                                     feat,
@@ -3487,7 +3348,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   ),
                                                                                   borderRadius: BorderRadius.circular(6),
                                                                                   child: Container(
-                                                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                                                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
                                                                                     decoration: BoxDecoration(
                                                                                       color: const Color(0xFFFBBF24).withValues(alpha: 0.12),
                                                                                       borderRadius: BorderRadius.circular(6),
@@ -3495,20 +3356,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                         color: const Color(0xFFFBBF24).withValues(alpha: 0.35),
                                                                                       ),
                                                                                     ),
-                                                                                    child: Row(
-                                                                                      mainAxisSize: MainAxisSize.min,
-                                                                                      children: [
-                                                                                        const Text('🐞', style: TextStyle(fontSize: 13)),
-                                                                                        const SizedBox(width: 5),
-                                                                                        Text(
-                                                                                          'Bug',
-                                                                                          style: GoogleFonts.inter(
-                                                                                            fontSize: 13.5,
-                                                                                            fontWeight: FontWeight.w600,
-                                                                                            color: const Color(0xFFFBBF24),
-                                                                                          ),
-                                                                                        ),
-                                                                                      ],
+                                                                                    child: Text(
+                                                                                      'Issue',
+                                                                                      style: GoogleFonts.inter(
+                                                                                        fontSize: 13.5,
+                                                                                        fontWeight: FontWeight.w600,
+                                                                                        color: const Color(0xFFFBBF24),
+                                                                                      ),
                                                                                     ),
                                                                                   ),
                                                                                 );
@@ -3520,17 +3374,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                       verifyRow,
                                                                                       const SizedBox(height: 10),
                                                                                       Row(
-                                                                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                                                        mainAxisAlignment: MainAxisAlignment.end,
                                                                                         children: [
-                                                                                          stepToolsMenuBtn,
-                                                                                          Row(
-                                                                                            mainAxisSize: MainAxisSize.min,
-                                                                                            children: [
-                                                                                              logBugBtn,
-                                                                                              const SizedBox(width: 8),
-                                                                                              doneBtn,
-                                                                                            ],
-                                                                                          ),
+                                                                                          issueBtn,
+                                                                                          const SizedBox(width: 8),
+                                                                                          doneBtn,
                                                                                         ],
                                                                                       ),
                                                                                     ],
@@ -3542,9 +3390,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   children: [
                                                                                     Expanded(child: verifyRow),
                                                                                     const SizedBox(width: 12),
-                                                                                    stepToolsMenuBtn,
-                                                                                    const SizedBox(width: 8),
-                                                                                    logBugBtn,
+                                                                                    issueBtn,
                                                                                     const SizedBox(width: 8),
                                                                                     doneBtn,
                                                                                   ],
@@ -3619,7 +3465,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                 states,
                                                                                 index,
                                                                               ),
-                                                                              child: const Text('🐞 Log Issue'),
+                                                                              child: const Text('Log Issue'),
                                                                             ),
                                                                           ],
                                                                         ),
