@@ -3480,12 +3480,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
                                                                                 final logBugBtn = InkWell(
                                                                                   key: ValueKey('feature_step_log_bug_btn_${node.id}'),
-                                                                                  onTap: () => _showPlaytestBugModal(
-                                                                                    context,
-                                                                                    feat: feat,
-                                                                                    states: states,
-                                                                                    checkpointIndex: checkpointIndex,
-                                                                                    node: node,
+                                                                                  onTap: () => _showLogPlaytestIssueDialog(
+                                                                                    feat,
+                                                                                    states,
+                                                                                    checkpointIndex,
                                                                                   ),
                                                                                   borderRadius: BorderRadius.circular(6),
                                                                                   child: Container(

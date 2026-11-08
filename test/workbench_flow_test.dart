@@ -1811,15 +1811,15 @@ void main() {
         // Tap the Step Bug button to open the Playtest Bug modal
         await tester.tap(stepBugBtn);
         await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('playtest_bug_modal_input')), findsOneWidget);
-        expect(find.byKey(const ValueKey('playtest_bug_modal_submit_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('workbench_log_playtest_issue_input')), findsOneWidget);
+        expect(find.byKey(const ValueKey('confirm_workbench_log_playtest_issue_btn')), findsOneWidget);
 
         // Enter a bug description and submit
         await tester.enterText(
-          find.byKey(const ValueKey('playtest_bug_modal_input')),
+          find.byKey(const ValueKey('workbench_log_playtest_issue_input')),
           'Elevator drops player through floor collision',
         );
-        await tester.tap(find.byKey(const ValueKey('playtest_bug_modal_submit_btn')));
+        await tester.tap(find.byKey(const ValueKey('confirm_workbench_log_playtest_issue_btn')));
         await tester.pumpAndSettle();
 
         // Verify [FIX] task is appended to checkpoint checklist
