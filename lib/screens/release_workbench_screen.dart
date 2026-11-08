@@ -129,6 +129,207 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
   void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
 
+  void _submitInlinePlaytestBug(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    int checkpointIndex,
+    FeatureStateNode node,
+  ) {
+    final desc = _inlineBugInputCtrl.text.trim();
+    if (desc.isEmpty) return;
+    final newIdx = widget.workbench.logPlaytestIssueOnCheckpoint(
+      featureId: feat.id,
+      states: states,
+      checkpointIndex: checkpointIndex,
+      issueDescription: desc,
+    );
+    _rebuild(() {
+      _inlineBugDrawerNodeId = null;
+      _inlineBugInputCtrl.clear();
+      if (newIdx >= 0 && checkpointIndex < states.length) {
+        final cpNode = states[checkpointIndex];
+        _manualCheckpointFocusIndex = checkpointIndex;
+        _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
+        _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+      }
+    });
+  }
+
+  void _showPlaytestBugModal(
+    BuildContext context, {
+    required TierDocument feat,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required FeatureStateNode node,
+  }) {
+    _inlineBugInputCtrl.clear();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              backgroundColor: bgSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: borderBright),
+              ),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 540),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFBBF24).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: const Color(0xFFFBBF24).withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('🐞', style: TextStyle(fontSize: 13)),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'PLAYTEST DEFECT',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFFFBBF24),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${feat.title} · ${node.cleanStageTitle}',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => Navigator.of(dialogCtx).pop(),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(Icons.close_rounded, size: 18, color: textMuted),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'What went wrong in the game viewport or what feels off?',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Will append a 3-step [FIX] task with engine-aware reproduction, tuning clamp, and playtest guard directly into your runbook.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const ValueKey('playtest_bug_modal_input'),
+                        controller: _inlineBugInputCtrl,
+                        autofocus: true,
+                        maxLines: 3,
+                        style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Recoil impulse throws player outside boundary fence, or floor collision missing on landing...',
+                          hintStyle: GoogleFonts.inter(fontSize: 12.5, color: textMuted),
+                          filled: true,
+                          fillColor: bgRecessed,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: borderSubtle),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: const BorderSide(color: Color(0xFFFBBF24), width: 1.5),
+                          ),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                        onSubmitted: (val) {
+                          if (val.trim().isNotEmpty) {
+                            Navigator.of(dialogCtx).pop();
+                            _submitInlinePlaytestBug(feat, states, checkpointIndex, node);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onTap: () => Navigator.of(dialogCtx).pop(),
+                            child: Text(
+                              'Cancel',
+                              style: GoogleFonts.inter(fontSize: 12.5, color: textMuted),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            key: const ValueKey('playtest_bug_modal_submit_btn'),
+                            icon: const Icon(Icons.flash_on_rounded, size: 14, color: Color(0xFF1E1B18)),
+                            label: Text(
+                              'Inject [FIX] Task & Guard →',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1E1B18),
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFBBF24),
+                              foregroundColor: const Color(0xFF1E1B18),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                              elevation: 0,
+                            ),
+                            onPressed: () {
+                              if (_inlineBugInputCtrl.text.trim().isNotEmpty) {
+                                Navigator.of(dialogCtx).pop();
+                                _submitInlinePlaytestBug(feat, states, checkpointIndex, node);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Color get bgSurfaceHover =>
       isDark ? const Color(0xFF181D28) : const Color(0xFFF1F5F9);
 
