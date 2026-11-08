@@ -240,9 +240,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         ],
       );
     }
-    return _buildFeatureMainCanvas(
+    final featureCanvas = _buildFeatureMainCanvas(
       rel,
       isHalfScreenOverlayMode: isHalfScreenOverlayMode,
+    );
+    if (!isHalfScreenOverlayMode) return featureCanvas;
+    final featTitle = widget.workbench.selectedFeature?.title ?? 'Active Step Runbook';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHalfScreenDrawerTriggerBar(featTitle),
+        Expanded(child: featureCanvas),
+      ],
     );
   }
 
