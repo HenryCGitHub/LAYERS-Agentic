@@ -1757,21 +1757,21 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(hudBtn);
         await tester.pumpAndSettle();
-        expect(workbench.isCompanionHudMode, isTrue);
+        expect(provider.isCompanionHudMode, isTrue);
         expect(find.byKey(const ValueKey('exit_companion_hud_btn')), findsOneWidget);
 
         // Exit Companion HUD Mode
         await tester.tap(find.byKey(const ValueKey('exit_companion_hud_btn')));
         await tester.pumpAndSettle();
-        expect(workbench.isCompanionHudMode, isFalse);
+        expect(provider.isCompanionHudMode, isFalse);
 
         // Verify Project JSON Export and Import Roundtrip
-        final exportedJson = workbench.exportProjectToJson();
+        final exportedJson = provider.exportProjectToJson();
         expect(exportedJson.isNotEmpty, isTrue);
         expect(exportedJson.contains('format'), isTrue);
-        final importedId = workbench.importProjectFromJson(exportedJson);
+        final importedId = provider.importProjectFromJson(exportedJson);
         expect(importedId != null, isTrue);
-        expect(workbench.savedProjects.any((p) => p.id == importedId), isTrue);
+        expect(provider.savedProjects.any((p) => p.id == importedId), isTrue);
       },
     );
 

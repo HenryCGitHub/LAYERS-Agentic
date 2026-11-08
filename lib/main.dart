@@ -683,7 +683,7 @@ class WorkbenchShell extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
                                   color: workbench.isCompanionHudMode
-                                      ? borderBright
+                                      ? borderColor
                                       : Colors.transparent,
                                 ),
                               ),
