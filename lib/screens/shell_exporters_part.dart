@@ -237,6 +237,64 @@ extension _ShellExportersExt on WorkbenchShell {
     );
   }
 
+  Future<void> _exportLivingGddMarkdown(BuildContext context) async {
+    final gddMd = workbench.buildLivingGameDesignDocumentMarkdown();
+    await Clipboard.setData(ClipboardData(text: gddMd));
+    final downloaded = triggerMarkdownFileDownload(
+      filename: 'GDD.md',
+      content: gddMd,
+    );
+    if (!context.mounted) return;
+    final isDark = workbench.isDark;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.bgSurfaceFor(isDark),
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          downloaded
+              ? 'Downloaded GDD.md & copied Living GDD to clipboard ✓'
+              : 'Copied Living Game Design Document (GDD.md) to clipboard ✓',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimaryFor(isDark),
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _exportLivingTddMarkdown(BuildContext context) async {
+    final tddMd = workbench.buildLivingTechnicalDesignDocumentMarkdown();
+    await Clipboard.setData(ClipboardData(text: tddMd));
+    final downloaded = triggerMarkdownFileDownload(
+      filename: 'TDD.md',
+      content: tddMd,
+    );
+    if (!context.mounted) return;
+    final isDark = workbench.isDark;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.bgSurfaceFor(isDark),
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          downloaded
+              ? 'Downloaded TDD.md & copied Living TDD to clipboard ✓'
+              : 'Copied Living Technical Design Document (TDD.md) to clipboard ✓',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimaryFor(isDark),
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _showImportProjectJsonDialog(BuildContext context) async {
     final isDark = workbench.isDark;
     final bgSurface = AppTheme.bgSurfaceFor(isDark);

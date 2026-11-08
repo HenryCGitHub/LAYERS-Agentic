@@ -1027,4 +1027,302 @@ extension _ShellDialogsExt on WorkbenchShell {
     }
     return false;
   }
+
+  void _showLivingDocsDialog(BuildContext context) {
+    final isDark = workbench.isDark;
+    final bgSurface = AppTheme.bgSurfaceFor(isDark);
+    final bgRecessed = AppTheme.bgSurfaceRecessedFor(isDark);
+    final borderSubtle = AppTheme.borderSubtleFor(isDark);
+    final borderBright = AppTheme.borderBrightFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final accentEmerald = AppTheme.accentEmeraldFor(isDark);
+    final accentSky = const Color(0xFF38BDF8);
+
+    int activeDocTab = 0; // 0 = Living GDD, 1 = Living TDD
+
+    showDialog<void>(
+      context: context,
+      builder: (dCtx) {
+        return StatefulBuilder(
+          builder: (dCtx, setModalState) {
+            final ver = workbench.activeReleaseVersionTag;
+            final gddMd = workbench.buildLivingGameDesignDocumentMarkdown();
+            final tddMd = workbench.buildLivingTechnicalDesignDocumentMarkdown();
+
+            return Dialog(
+              key: const ValueKey('living_docs_dialog'),
+              backgroundColor: bgSurface,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: borderBright),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 880, maxHeight: 720),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header Bar
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: bgRecessed,
+                        border: Border(bottom: BorderSide(color: borderSubtle)),
+                      ),
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.article_outlined, size: 16, color: accentSky),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Living Project Documents',
+                                style: AppTheme.displayFont(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: textPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: accentEmerald.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: accentEmerald.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  ver,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentEmerald,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Actions: Realign, Export, Close
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                key: const ValueKey('realign_concept_blueprint_btn'),
+                                onTap: () {
+                                  final success = workbench.realignConceptToWorkbenchProgress();
+                                  setModalState(() {});
+                                  if (success && context.mounted) {
+                                    ScaffoldMessenger.of(context).clearSnackBars();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        backgroundColor: bgSurface,
+                                        behavior: SnackBarBehavior.floating,
+                                        content: Text(
+                                          'Realigned Concept Blueprint with Stage 2 reality ✓',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: accentEmerald,
+                                          ),
+                                        ),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: accentSky.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: accentSky.withValues(alpha: 0.35)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.sync_rounded, size: 12, color: accentSky),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        'Realign Blueprint',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: accentSky,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              PopupMenuButton<String>(
+                                tooltip: 'Export Living Document Markdown',
+                                color: bgSurface,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                  side: BorderSide(color: borderSubtle),
+                                ),
+                                onSelected: (val) {
+                                  if (val == 'gdd') {
+                                    _exportLivingGddMarkdown(context);
+                                  } else if (val == 'tdd') {
+                                    _exportLivingTddMarkdown(context);
+                                  }
+                                },
+                                itemBuilder: (ctx) => [
+                                  PopupMenuItem<String>(
+                                    key: const ValueKey('export_living_gdd_btn'),
+                                    value: 'gdd',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.download_rounded, size: 13, color: textSecondary),
+                                        const SizedBox(width: 8),
+                                        Text('Export GDD.md', style: GoogleFonts.inter(fontSize: 12, color: textPrimary)),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuItem<String>(
+                                    key: const ValueKey('export_living_tdd_btn'),
+                                    value: 'tdd',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.download_rounded, size: 13, color: textSecondary),
+                                        const SizedBox(width: 8),
+                                        Text('Export TDD.md', style: GoogleFonts.inter(fontSize: 12, color: textPrimary)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: bgSurface,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: borderSubtle),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Export ▾',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: () => Navigator.of(dCtx).pop(),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(Icons.close_rounded, size: 16, color: textMuted),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Tab Bar: Living GDD vs Living TDD
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: bgSurface,
+                        border: Border(bottom: BorderSide(color: borderSubtle)),
+                      ),
+                      child: Row(
+                        children: [
+                          InkWell(
+                            key: const ValueKey('living_docs_tab_gdd'),
+                            onTap: () => setModalState(() => activeDocTab = 0),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: activeDocTab == 0 ? bgRecessed : Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: activeDocTab == 0 ? borderBright : Colors.transparent,
+                                ),
+                              ),
+                              child: Text(
+                                'Living GDD (Game Design)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: activeDocTab == 0 ? FontWeight.w700 : FontWeight.w500,
+                                  color: activeDocTab == 0 ? textPrimary : textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            key: const ValueKey('living_docs_tab_tdd'),
+                            onTap: () => setModalState(() => activeDocTab = 1),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: activeDocTab == 1 ? bgRecessed : Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: activeDocTab == 1 ? borderBright : Colors.transparent,
+                                ),
+                              ),
+                              child: Text(
+                                'Living TDD (Technical Design & Tuning)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: activeDocTab == 1 ? FontWeight.w700 : FontWeight.w500,
+                                  color: activeDocTab == 1 ? textPrimary : textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '\$0.00 Token Cost · 100% Deterministic',
+                            style: GoogleFonts.jetBrainsMono(fontSize: 10, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Document Content Body
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: SelectableText(
+                          activeDocTab == 0 ? gddMd : tddMd,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11.5,
+                            height: 1.55,
+                            color: textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }
+
