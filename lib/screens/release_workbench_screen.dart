@@ -127,6 +127,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   @override
   bool get isDark => widget.workbench.isDark;
 
+  void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
+
   Color get bgSurfaceHover =>
       isDark ? const Color(0xFF181D28) : const Color(0xFFF1F5F9);
 
