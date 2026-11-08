@@ -120,22 +120,30 @@ Every non-trivial plan, PRD, or task proposal must follow the canonical LAYERS 3
 - Use `[skip ci]` in commit messages for documentation, rules, and non-deploy commits.
 
 ## 8. Adaptive Model & Thinking Routing Protocol (Session & Subagent Automation)
-The assistant automatically classifies every task across 3 complexity tiers to determine the optimal model and thinking budget:
+The assistant automatically classifies every task across 3 complexity tiers to determine the optimal model and thinking budget across **BOTH** the **Planning Phase** and the **Implementation Phase**:
 
-### 1. Classification Rubric
-- **The 3-System Rule**: If solving a task requires reasoning about $\ge 3$ interconnected systems, state providers, or multi-file contracts simultaneously, it automatically escalates to **Argon (Pro)**.
+### 1. Classification Rubric (Planning & Implementation)
+- **The 3-System Rule**: If solving or implementing a task requires reasoning about $\ge 3$ interconnected systems, state providers, or multi-file contracts simultaneously, it automatically routes to **Argon (Pro)** for both planning and implementation.
 - **The Low Thinking Sweet Spot**: 80% of harder coding tasks (multi-file refactors, release plans, test suites) are handled with **Argon `LOW` thinking** for 3–6s latency with zero drift.
+- **High Thinking Escalation**: Reserved for elusive root-cause debugging, flaky asynchronous race conditions, and complex state machine loops during either planning or implementation.
 - **User Override Authority**: Explicit user requests for a specific model or thinking level unconditionally override automated routing.
 
-### 2. Autonomous Tier Action Matrix
-1. **Tier 1 (Fast / Flash)**: Local UI edits, widget tests, git/bash commands, and direct file edits $\rightarrow$ Processed directly with **Gemini 3.8 Flash**.
-2. **Tier 2 (Architectural / Argon Low)**: Release planning, multi-file refactors, state architecture $\rightarrow$ Processed with **Gemini Argon (Pro)** using `LOW` thinking (via `pro` subagent or structured reasoning scratchpad).
-3. **Tier 3 (Deep Bug / Argon High)**: Asynchronous race conditions, flaky test root-cause debugging, ambiguous design $\rightarrow$ Processed with **Gemini Argon (Pro)** using `HIGH` thinking (via deep `pro` subagent).
+### 2. Autonomous Phase & Tier Action Matrix
+1. **Tier 1 (Fast Execution · Flash Low)**:
+   - *Planning*: Lightweight task breakdown or direct bug isolation.
+   - *Implementation*: Local UI styling, isolated widget tweaks, git/bash commands, straightforward unit tests $\rightarrow$ Executed with **Gemini 3.8 Flash · Thinking Low**.
+2. **Tier 2 (Architectural & Multi-System · Argon Pro Low)**:
+   - *Planning*: Release planning, cross-module architecture, state provider design $\rightarrow$ Planned with **Argon Pro · Thinking Low**.
+   - *Implementation*: Multi-file refactors touching $\ge 3$ files/providers, API contract shifts, complex schema migrations $\rightarrow$ Implemented with **Argon Pro · Thinking Low** (utilizing `pro` subagent or structured high-rigor tool execution) to eliminate regression risk.
+3. **Tier 3 (Deep Bug & Concurrency · Argon Pro High)**:
+   - *Planning*: Root-cause analysis of intermittent race conditions, deadlocks, or ambiguous protocol bugs $\rightarrow$ Diagnosed with **Argon Pro · Thinking High**.
+   - *Implementation*: Surgical fix implementation and concurrency regression testing $\rightarrow$ Implemented with **Argon Pro · Thinking High**.
 
 ### 3. Dynamic In-Flight Escalation
-If an initially light task reveals coupling across $\ge 3$ systems during research, automatically halt code modifications, escalate to Tier 2 (Argon Pro · Thinking Low), and notify the user in the plan before proposing changes.
+If an initially light implementation task reveals coupling across $\ge 3$ systems or encounters unexpected test failures during execution, automatically halt code modifications, escalate implementation to Tier 2 (Argon Pro · Thinking Low) or Tier 3 (Argon Pro · Thinking High), and notify the user with a rationale.
 
 ### 4. Transparency Badge
-Whenever an operation is escalated to Tier 2 or Tier 3, prefix the turn or plan summary with:
-`[Auto-Route: Argon Pro · Thinking Low]` or `[Auto-Route: Argon Pro · Thinking High]`.
+Whenever an operation is routed or escalated to Tier 2 or Tier 3 during either planning or implementation, prefix the turn or plan summary with:
+`[Auto-Route: Argon Pro · Thinking Low (Planning)]` / `[Auto-Route: Argon Pro · Thinking Low (Implementation)]` or `[Auto-Route: Argon Pro · Thinking High (Planning/Implementation)]`.
+
 
