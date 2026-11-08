@@ -573,12 +573,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Text(
-                                            '⚙ $primaryTuningLabel',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 13.5,
-                                              fontWeight: FontWeight.w600,
-                                              color: const Color(0xFFD2A8FF),
+                                          Flexible(
+                                            child: Text(
+                                              '⚙ $primaryTuningLabel',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: const Color(0xFFD2A8FF),
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 5),
