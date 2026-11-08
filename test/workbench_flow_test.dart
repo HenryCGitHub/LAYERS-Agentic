@@ -1802,13 +1802,15 @@ void main() {
         await tester.pumpAndSettle();
 
         // Verify Playtest Bug button is visible on the active step action bar
-        final activeFeat = provider.selectedFeature!;
-        final activeStates = FeatureStateNode.getStatesForDocument(activeFeat);
-        final cpNode = activeStates.first;
+        final playtestFeat = provider.selectedFeature!;
+        final playtestStates = FeatureStateNode.getStatesForDocument(playtestFeat);
+        final cpNode = playtestStates.first;
         final stepBugBtn = find.byKey(ValueKey('feature_step_log_bug_btn_${cpNode.id}'));
         expect(stepBugBtn, findsOneWidget);
 
         // Tap the Step Bug button to open the Playtest Bug modal
+        await tester.ensureVisible(stepBugBtn);
+        await tester.pumpAndSettle();
         await tester.tap(stepBugBtn);
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('workbench_log_playtest_issue_input')), findsOneWidget);
@@ -1823,7 +1825,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Verify [FIX] task is appended to checkpoint checklist
-        final updatedStates = FeatureStateNode.getStatesForDocument(activeFeat);
+        final updatedStates = FeatureStateNode.getStatesForDocument(playtestFeat);
         final updatedCp = updatedStates.first;
         final hasFixTask = updatedCp.checklist.any((t) => t.text.contains('[FIX] Elevator drops player'));
         expect(hasFixTask, isTrue);

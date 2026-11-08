@@ -129,6 +129,33 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
 
   void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
 
+  void _submitInlinePlaytestBug(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    int checkpointIndex,
+    FeatureStateNode node, [
+    String? customDesc,
+  ]) {
+    final desc = (customDesc ?? _inlineBugInputCtrl.text).trim();
+    if (desc.isEmpty) return;
+    final newIdx = widget.workbench.logPlaytestIssueOnCheckpoint(
+      featureId: feat.id,
+      states: states,
+      checkpointIndex: checkpointIndex,
+      issueDescription: desc,
+    );
+    _rebuild(() {
+      _inlineBugDrawerNodeId = null;
+      _inlineBugInputCtrl.clear();
+      if (newIdx >= 0 && checkpointIndex < states.length) {
+        final cpNode = states[checkpointIndex];
+        _manualCheckpointFocusIndex = checkpointIndex;
+        _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
+        _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+      }
+    });
+  }
+
   Future<void> _showLogPlaytestIssueDialog(
     TierDocument feat,
     List<FeatureStateNode> states,

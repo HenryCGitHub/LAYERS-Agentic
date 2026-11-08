@@ -3483,7 +3483,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   onTap: () => _showLogPlaytestIssueDialog(
                                                                                     feat,
                                                                                     states,
-                                                                                    checkpointIndex,
+                                                                                    index,
                                                                                   ),
                                                                                   borderRadius: BorderRadius.circular(6),
                                                                                   child: Container(
