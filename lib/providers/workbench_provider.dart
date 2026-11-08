@@ -161,6 +161,26 @@ class WorkbenchProvider extends ChangeNotifier {
   bool _focusMode = true;
   bool get focusMode => _focusMode;
 
+  bool _isCompanionHudMode = false;
+  bool get isCompanionHudMode => _isCompanionHudMode;
+
+  Timer? _autoSyncDebounceTimer;
+
+  /// Toggles the distraction-free Companion HUD mode (docked sidecar next to Godot/Unity).
+  void toggleCompanionHudMode([bool? force]) {
+    _isCompanionHudMode = force ?? !_isCompanionHudMode;
+    notifyListeners();
+  }
+
+  /// Triggers a debounced background sync to Cloud Firestore (2.5s after last modification).
+  void scheduleDebouncedAutoSync() {
+    _autoSyncDebounceTimer?.cancel();
+    if (!isUserLoggedIn) return;
+    _autoSyncDebounceTimer = Timer(const Duration(milliseconds: 2500), () async {
+      await syncNowWithCloud();
+    });
+  }
+
   /// Filter for the compact Release Dropdown in Stage 3:
   /// - 'active': Active Milestone
   /// - 'all': All Live Game Features

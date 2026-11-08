@@ -1749,6 +1749,29 @@ void main() {
         expect(find.byKey(const ValueKey('cloud_sync_now_btn')), findsOneWidget);
         await tester.tap(find.text('Close'));
         await tester.pumpAndSettle();
+
+        // Verify Companion HUD Mode Toggle
+        final hudBtn = find.byKey(const ValueKey('toggle_companion_hud_btn'));
+        expect(hudBtn, findsOneWidget);
+        await tester.ensureVisible(hudBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(hudBtn);
+        await tester.pumpAndSettle();
+        expect(workbench.isCompanionHudMode, isTrue);
+        expect(find.byKey(const ValueKey('exit_companion_hud_btn')), findsOneWidget);
+
+        // Exit Companion HUD Mode
+        await tester.tap(find.byKey(const ValueKey('exit_companion_hud_btn')));
+        await tester.pumpAndSettle();
+        expect(workbench.isCompanionHudMode, isFalse);
+
+        // Verify Project JSON Export and Import Roundtrip
+        final exportedJson = workbench.exportProjectToJson();
+        expect(exportedJson.isNotEmpty, isTrue);
+        expect(exportedJson.contains('format'), isTrue);
+        final importedId = workbench.importProjectFromJson(exportedJson);
+        expect(importedId != null, isTrue);
+        expect(workbench.savedProjects.any((p) => p.id == importedId), isTrue);
       },
     );
 

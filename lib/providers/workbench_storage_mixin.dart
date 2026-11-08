@@ -923,6 +923,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _firestoreService.saveDocument(uid: user.uid, doc: doc).whenComplete(() {
           _pendingCloudWriteDocIds.remove(doc.id);
         });
+        scheduleDebouncedAutoSync();
       }
     }
 

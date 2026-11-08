@@ -133,6 +133,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       isDark ? const Color(0xFF181D28) : const Color(0xFFF1F5F9);
 
   Widget _buildHalfScreenDrawerTriggerBar(String viewLabel) {
+    final isHud = widget.workbench.isCompanionHudMode;
     return Container(
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -165,14 +166,41 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            viewLabel,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: textMuted,
+          Expanded(
+            child: Text(
+              isHud ? '◨ Companion HUD · $viewLabel' : viewLabel,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: isHud ? FontWeight.w700 : FontWeight.w500,
+                color: isHud ? textPrimary : textMuted,
+              ),
             ),
           ),
+          if (isHud) ...[
+            const SizedBox(width: 8),
+            InkWell(
+              key: const ValueKey('exit_companion_hud_btn'),
+              onTap: () => widget.workbench.toggleCompanionHudMode(false),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: borderBright),
+                ),
+                child: Text(
+                  '✕ Exit HUD',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -221,6 +249,23 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   @override
   Widget build(BuildContext context) {
     final rel = widget.workbench.activeRelease;
+
+    // Companion HUD Mode: Full focus on active Step Runbook (centered 440px cockpit)
+    if (widget.workbench.isCompanionHudMode) {
+      return Container(
+        color: bgBase,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: _buildActiveMainCanvas(
+              context,
+              rel,
+              isHalfScreenOverlayMode: true,
+            ),
+          ),
+        ),
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {

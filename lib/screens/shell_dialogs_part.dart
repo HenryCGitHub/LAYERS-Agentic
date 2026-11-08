@@ -174,24 +174,49 @@ extension _ShellDialogsExt on WorkbenchShell {
                               color: textMuted,
                             ),
                           ),
-                          InkWell(
-                            key: const ValueKey('vault_new_project_btn'),
-                            onTap: () {
-                              workbench.createNewProject();
-                              Navigator.of(ctx).pop();
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              child: Text(
-                                '+ New Project',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: textSecondary,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                key: const ValueKey('vault_import_project_btn'),
+                                onTap: () {
+                                  Navigator.of(ctx).pop();
+                                  _showImportProjectJsonDialog(context);
+                                },
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Text(
+                                    'Import .json',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textSecondary,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                key: const ValueKey('vault_new_project_btn'),
+                                onTap: () {
+                                  workbench.createNewProject();
+                                  Navigator.of(ctx).pop();
+                                },
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Text(
+                                    '+ New Project',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

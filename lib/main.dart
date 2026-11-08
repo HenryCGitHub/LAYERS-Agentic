@@ -112,10 +112,27 @@ class WorkbenchShell extends StatelessWidget {
         : null;
     final savedProjects = workbench.savedProjects;
 
-    return Scaffold(
-      backgroundColor: AppTheme.bgCanvasFor(isDark),
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(50),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.keyH) {
+          final focused = FocusManager.instance.primaryFocus;
+          final isTyping = focused != null &&
+              (focused.context?.widget is EditableText ||
+                  focused.context?.findAncestorWidgetOfExactType<EditableText>() !=
+                      null);
+          if (!isTyping) {
+            workbench.toggleCompanionHudMode();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.bgCanvasFor(isDark),
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
@@ -533,6 +550,10 @@ class WorkbenchShell extends StatelessWidget {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
                               _exportActiveReleaseAgentsMd(context);
+                            } else if (val == 'json_export') {
+                              _exportActiveProjectJson(context);
+                            } else if (val == 'json_import') {
+                              _showImportProjectJsonDialog(context);
                             }
                           },
                           itemBuilder: (ctx) => [
@@ -580,6 +601,50 @@ class WorkbenchShell extends StatelessWidget {
                                 ],
                               ),
                             ),
+                            PopupMenuItem<String>(
+                              value: 'json_export',
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.download_rounded,
+                                    size: 13,
+                                    color: textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Export Project Vault (.layers.json)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'json_import',
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.file_upload_outlined,
+                                    size: 13,
+                                    color: textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Import Project Backup (.layers.json)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -598,6 +663,57 @@ class WorkbenchShell extends StatelessWidget {
                         ),
                         const SizedBox.shrink(
                           key: ValueKey('global_export_agents_md_btn'),
+                        ),
+                        const SizedBox(width: 4),
+                        // Companion HUD Toggle Button
+                        Tooltip(
+                          message: workbench.isCompanionHudMode
+                              ? 'Exit Companion HUD (H)'
+                              : 'Companion HUD Mode — Dock alongside Godot / Unity (H)',
+                          child: InkWell(
+                            key: const ValueKey('toggle_companion_hud_btn'),
+                            onTap: () => workbench.toggleCompanionHudMode(),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: workbench.isCompanionHudMode
+                                    ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: workbench.isCompanionHudMode
+                                      ? borderBright
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.dock_rounded,
+                                    size: 13,
+                                    color: workbench.isCompanionHudMode
+                                        ? textPrimary
+                                        : textMuted,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    'HUD',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10.5,
+                                      fontWeight: workbench.isCompanionHudMode
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: workbench.isCompanionHudMode
+                                          ? textPrimary
+                                          : textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 4),
                       ],
@@ -874,7 +990,8 @@ class WorkbenchShell extends StatelessWidget {
           Expanded(child: _buildActiveStageBody()),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildStagePill({
