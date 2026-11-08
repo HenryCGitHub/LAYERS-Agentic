@@ -1037,7 +1037,7 @@ extension _ShellDialogsExt on WorkbenchShell {
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
-    final accentEmerald = AppTheme.accentEmeraldFor(isDark);
+    final accentEmerald = const Color(0xFF10B981);
     final accentSky = const Color(0xFF38BDF8);
 
     int activeDocTab = 0; // 0 = Living GDD, 1 = Living TDD

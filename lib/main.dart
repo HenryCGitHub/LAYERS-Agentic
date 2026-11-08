@@ -718,7 +718,7 @@ class WorkbenchShell extends StatelessWidget {
                         const SizedBox(width: 4),
                         // Living GDD / TDD Button
                         Tooltip(
-                          message: 'Living GDD & TDD — Auto-updating Game & Tech Design Documents ($0 tokens)',
+                          message: 'Living GDD & TDD — Auto-updating Game & Tech Design Documents (\$0 tokens)',
                           child: InkWell(
                             key: const ValueKey('toggle_living_docs_btn'),
                             onTap: () => _showLivingDocsDialog(context),
