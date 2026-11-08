@@ -1750,21 +1750,6 @@ void main() {
         await tester.tap(find.text('Close'));
         await tester.pumpAndSettle();
 
-        // Verify Companion HUD Mode Toggle
-        final hudBtn = find.byKey(const ValueKey('toggle_companion_hud_btn'));
-        expect(hudBtn, findsOneWidget);
-        await tester.ensureVisible(hudBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(hudBtn);
-        await tester.pumpAndSettle();
-        expect(provider.isCompanionHudMode, isTrue);
-        expect(find.byKey(const ValueKey('exit_companion_hud_btn')), findsOneWidget);
-
-        // Exit Companion HUD Mode
-        await tester.tap(find.byKey(const ValueKey('exit_companion_hud_btn')));
-        await tester.pumpAndSettle();
-        expect(provider.isCompanionHudMode, isFalse);
-
         // Verify Living GDD & TDD Dialog and 1-Click Concept Realignment
         final docsBtn = find.byKey(const ValueKey('toggle_living_docs_btn'));
         expect(docsBtn, findsOneWidget);
@@ -1833,17 +1818,6 @@ void main() {
         // Verify [PLAYTEST GUARD] is added to edge cases
         final hasPlaytestGuard = updatedCp.edgeCases.any((g) => g.contains('Elevator drops player'));
         expect(hasPlaytestGuard, isTrue);
-
-        // Enter Companion HUD Mode and verify top bar Log Bug button is visible
-        provider.toggleCompanionHudMode(true);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('companion_hud_log_bug_btn')), findsOneWidget);
-        expect(find.byKey(const ValueKey('exit_companion_hud_btn')), findsOneWidget);
-
-        // Exit Companion HUD Mode
-        await tester.tap(find.byKey(const ValueKey('exit_companion_hud_btn')));
-        await tester.pumpAndSettle();
-        expect(provider.isCompanionHudMode, isFalse);
       },
     );
 

@@ -161,16 +161,7 @@ class WorkbenchProvider extends ChangeNotifier {
   bool _focusMode = true;
   bool get focusMode => _focusMode;
 
-  bool _isCompanionHudMode = false;
-  bool get isCompanionHudMode => _isCompanionHudMode;
-
   Timer? _autoSyncDebounceTimer;
-
-  /// Toggles the distraction-free Companion HUD mode (docked sidecar next to Godot/Unity).
-  void toggleCompanionHudMode([bool? force]) {
-    _isCompanionHudMode = force ?? !_isCompanionHudMode;
-    notifyListeners();
-  }
 
   /// Triggers a debounced background sync to Cloud Firestore (2.5s after last modification).
   void scheduleDebouncedAutoSync() {

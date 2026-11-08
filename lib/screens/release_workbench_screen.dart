@@ -261,7 +261,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       isDark ? const Color(0xFF181D28) : const Color(0xFFF1F5F9);
 
   Widget _buildHalfScreenDrawerTriggerBar(String viewLabel) {
-    final isHud = widget.workbench.isCompanionHudMode;
     return Container(
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -296,87 +295,15 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              isHud ? '◨ Companion HUD · $viewLabel' : viewLabel,
+              viewLabel,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
                 fontSize: 12,
-                fontWeight: isHud ? FontWeight.w700 : FontWeight.w500,
-                color: isHud ? textPrimary : textMuted,
+                fontWeight: FontWeight.w500,
+                color: textMuted,
               ),
             ),
           ),
-          if (isHud) ...[
-            const SizedBox(width: 8),
-            Builder(
-              builder: (context) {
-                final feat = widget.workbench.selectedFeature;
-                final states = feat != null ? FeatureStateNode.getStatesForDocument(feat) : <FeatureStateNode>[];
-                final cpIdx = _manualCheckpointFocusIndex ??
-                    (states.isNotEmpty ? states.indexWhere((s) => !s.isCompleted) : -1);
-                final safeCpIdx = cpIdx >= 0 && cpIdx < states.length ? cpIdx : (states.isNotEmpty ? 0 : -1);
-                final cpNode = safeCpIdx >= 0 ? states[safeCpIdx] : null;
-
-                if (feat == null || cpNode == null) return const SizedBox.shrink();
-
-                return InkWell(
-                  key: const ValueKey('companion_hud_log_bug_btn'),
-                  onTap: () => _showLogPlaytestIssueDialog(
-                    feat,
-                    states,
-                    safeCpIdx,
-                  ),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFBBF24).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFFFBBF24).withValues(alpha: 0.45),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('🐞', style: TextStyle(fontSize: 10)),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Log Bug',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFFFBBF24),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            InkWell(
-              key: const ValueKey('exit_companion_hud_btn'),
-              onTap: () => widget.workbench.toggleCompanionHudMode(false),
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: borderBright),
-                ),
-                child: Text(
-                  '✕ Exit HUD',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
-                  ),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -434,23 +361,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   @override
   Widget build(BuildContext context) {
     final rel = widget.workbench.activeRelease;
-
-    // Companion HUD Mode: Full focus on active Step Runbook (centered 440px cockpit)
-    if (widget.workbench.isCompanionHudMode) {
-      return Container(
-        color: bgBase,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: _buildActiveMainCanvas(
-              context,
-              rel,
-              isHalfScreenOverlayMode: true,
-            ),
-          ),
-        ),
-      );
-    }
 
     return LayoutBuilder(
       builder: (context, constraints) {

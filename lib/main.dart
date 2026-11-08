@@ -112,25 +112,8 @@ class WorkbenchShell extends StatelessWidget {
         : null;
     final savedProjects = workbench.savedProjects;
 
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.keyH) {
-          final focused = FocusManager.instance.primaryFocus;
-          final isTyping = focused != null &&
-              (focused.context?.widget is EditableText ||
-                  focused.context?.findAncestorWidgetOfExactType<EditableText>() !=
-                      null);
-          if (!isTyping) {
-            workbench.toggleCompanionHudMode();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Scaffold(
-        backgroundColor: AppTheme.bgCanvasFor(isDark),
+    return Scaffold(
+      backgroundColor: AppTheme.bgCanvasFor(isDark),
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(50),
         child: Container(
@@ -665,57 +648,6 @@ class WorkbenchShell extends StatelessWidget {
                           key: ValueKey('global_export_agents_md_btn'),
                         ),
                         const SizedBox(width: 4),
-                        // Companion HUD Toggle Button
-                        Tooltip(
-                          message: workbench.isCompanionHudMode
-                              ? 'Exit Companion HUD (H)'
-                              : 'Companion HUD Mode — Dock alongside Godot / Unity (H)',
-                          child: InkWell(
-                            key: const ValueKey('toggle_companion_hud_btn'),
-                            onTap: () => workbench.toggleCompanionHudMode(),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: workbench.isCompanionHudMode
-                                    ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0))
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: workbench.isCompanionHudMode
-                                      ? borderColor
-                                      : Colors.transparent,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.dock_rounded,
-                                    size: 13,
-                                    color: workbench.isCompanionHudMode
-                                        ? textPrimary
-                                        : textMuted,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    'HUD',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10.5,
-                                      fontWeight: workbench.isCompanionHudMode
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: workbench.isCompanionHudMode
-                                          ? textPrimary
-                                          : textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
                         // Living GDD / TDD Button
                         Tooltip(
                           message: 'Living GDD & TDD — Auto-updating Game & Tech Design Documents (\$0 tokens)',
@@ -1026,8 +958,7 @@ class WorkbenchShell extends StatelessWidget {
           Expanded(child: _buildActiveStageBody()),
         ],
       ),
-    ),
-  );
+    );
   }
 
   Widget _buildStagePill({
