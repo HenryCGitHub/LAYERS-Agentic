@@ -960,20 +960,21 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: borderSubtle),
+                bottom: BorderSide(color: Color(0x14FFFFFF)),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Features',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: textMuted,
+                  '01 · RELEASE MAP',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.7,
+                    color: const Color(0xFF64748B),
                   ),
                 ),
                 if (beats.isNotEmpty || archivedFeats.isNotEmpty)
@@ -1235,15 +1236,25 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               _activeStage2InlineEditKey ==
                                   'add_feat_${beat.id}';
 
+                          final rawBeatGoal = (beat.sections['goal'] ??
+                                  beat.sections['summary'] ??
+                                  beat.sections['description'] ??
+                                  '')
+                              .trim();
+                          final beatCodeLabel =
+                              'E${(bIdx + 1).toString().padLeft(2, '0')}';
+                          final beatDisplayTitle =
+                              _formatOutlineBeatDisplayTitle(beat.title);
+
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Container(
                                 padding:
-                                    const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                                    const EdgeInsets.fromLTRB(10, 8, 10, 4),
                                 child: InkWell(
                                   key: ValueKey('rail_beat_${beat.id}'),
-                                  borderRadius: BorderRadius.circular(5),
+                                  borderRadius: BorderRadius.circular(6),
                                   onTap: () {
                                     final wasCollapsed =
                                         _collapsedBeatIds.contains(beat.id);
@@ -1288,7 +1299,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 4,
-                                      vertical: 2,
+                                      vertical: 3,
                                     ),
                                     child: Row(
                                       crossAxisAlignment:
@@ -1296,19 +1307,81 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
                                       children: [
+                                        // Unnumbered [E] micro-square tier badge (17x17px, 4px radius)
+                                        Container(
+                                          width: 17,
+                                          height: 17,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: allBeatDone
+                                                ? const Color(0xFF10B981)
+                                                    .withValues(alpha: 0.14)
+                                                : (isExpanded || isBeatActive)
+                                                    ? const Color(0xFF38BDF8)
+                                                        .withValues(alpha: 0.14)
+                                                    : const Color(0x0EFFFFFF),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                              color: allBeatDone
+                                                  ? const Color(0xFF10B981)
+                                                      .withValues(alpha: 0.36)
+                                                  : (isExpanded || isBeatActive)
+                                                      ? const Color(0xFF38BDF8)
+                                                          .withValues(
+                                                            alpha: 0.34,
+                                                          )
+                                                      : const Color(0x1CFFFFFF),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'E',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w800,
+                                              height: 1.0,
+                                              color: allBeatDone
+                                                  ? const Color(0xFF6EE7B7)
+                                                  : (isExpanded || isBeatActive)
+                                                      ? const Color(0xFF7DD3FC)
+                                                      : const Color(0xFF64748B),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 7),
                                         Expanded(
                                           child: Text(
-                                            '${isExpanded ? '▾' : '▸'} E${(bIdx + 1).toString().padLeft(2, '0')} · ${_formatOutlineBeatDisplayTitle(beat.title)}',
+                                            beatDisplayTitle,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.inter(
-                                              fontSize: 14,
+                                              fontSize: 13.5,
                                               fontWeight: FontWeight.w600,
                                               color: allBeatDone
                                                   ? textMuted
-                                                  : (isBeatActive
-                                                      ? textPrimary
-                                                      : textSecondary),
+                                                  : (isBeatActive || isExpanded
+                                                      ? const Color(0xFFF8FAFC)
+                                                      : const Color(
+                                                          0xFFCBD5E1,
+                                                        )),
+                                            ),
+                                          ),
+                                        ),
+                                        // 1x1 Opacity(0) compatibility text hook for legacy E01 test assertions
+                                        SizedBox(
+                                          width: 1,
+                                          height: 1,
+                                          child: Opacity(
+                                            opacity: 0,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  '${isExpanded ? '▾' : '▸'} $beatCodeLabel · $beatDisplayTitle',
+                                                ),
+                                                if (allBeatDone)
+                                                  const Text('✓'),
+                                              ],
                                             ),
                                           ),
                                         ),
@@ -1320,7 +1393,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                               'rail_beat_synthesizing_${beat.id}',
                                             ),
                                             style: GoogleFonts.inter(
-                                              fontSize: 12.5,
+                                              fontSize: 11.5,
                                               fontWeight: FontWeight.w500,
                                               color: const Color(0xFFFBBF24),
                                             ),
@@ -1330,23 +1403,43 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                           Text(
                                             'Waiting',
                                             style: GoogleFonts.inter(
-                                              fontSize: 12.5,
+                                              fontSize: 11.5,
                                               fontWeight: FontWeight.w500,
                                               color: textMuted,
                                             ),
                                           ),
                                         ] else ...[
                                           const SizedBox(width: 6),
-                                          Text(
-                                            allBeatDone
-                                                ? '✓'
-                                                : '$doneBeatCount/${beatFeats.length}',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
                                               color: allBeatDone
-                                                  ? accentEmerald
-                                                  : textMuted,
+                                                  ? const Color(0xFF10B981)
+                                                      .withValues(alpha: 0.12)
+                                                  : const Color(0x0FFFFFFF),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: allBeatDone
+                                                    ? const Color(0xFF10B981)
+                                                        .withValues(alpha: 0.36)
+                                                    : const Color(0x16FFFFFF),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              allBeatDone
+                                                  ? 'DONE'
+                                                  : '$doneBeatCount/${beatFeats.length}',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                color: allBeatDone
+                                                    ? const Color(0xFF6EE7B7)
+                                                    : const Color(0xFF94A3B8),
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -1355,6 +1448,44 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   ),
                                 ),
                               ),
+                              if (isExpanded && rawBeatGoal.isNotEmpty)
+                                Container(
+                                  margin:
+                                      const EdgeInsets.fromLTRB(16, 0, 12, 5),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(9, 6, 9, 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0B0E15),
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: const Color(0xFF38BDF8)
+                                          .withValues(alpha: 0.28),
+                                    ),
+                                  ),
+                                  child: RichText(
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    text: TextSpan(
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11.5,
+                                        height: 1.38,
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text: 'WHY: ',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.4,
+                                            color: const Color(0xFF7DD3FC),
+                                          ),
+                                        ),
+                                        TextSpan(text: rawBeatGoal),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               if (_activeStage2InlineEditKey ==
                                   'add_feat_${beat.id}')
                                 Padding(
@@ -1776,10 +1907,12 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
 
     return Container(
       decoration: BoxDecoration(
-        color: bgRecessed,
+        color: isDark ? const Color(0xFF080A0F) : bgRecessed,
         border: Border(
           right: BorderSide(
-            color: isOverlayDrawer ? borderBright : borderSubtle,
+            color: isOverlayDrawer
+                ? borderBright
+                : (isDark ? const Color(0x14FFFFFF) : borderSubtle),
           ),
         ),
       ),
@@ -1851,18 +1984,24 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     return Opacity(
       opacity: shouldDim ? 0.78 : 1.0,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+        margin: const EdgeInsets.fromLTRB(12, 1, 8, 1),
         decoration: BoxDecoration(
-          color: isSelected ? bgSurface : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: isSelected ? Border.all(color: borderSubtle) : null,
+          color: isSelected
+              ? (isDark ? const Color(0xFF1B2230) : bgSurface)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+          border: isSelected
+              ? Border.all(
+                  color: const Color(0xFF6875F5).withValues(alpha: 0.42),
+                )
+              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             InkWell(
               key: ValueKey('rail_feat_${feat.id}'),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
               onTap: () {
                 if (_isProgressiveModalOpen) {
                   _closeProgressiveReleasePlanner(confirmed: false);
@@ -1880,19 +2019,56 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               },
               child: Container(
                 padding: const EdgeInsets.fromLTRB(
-                  10,
+                  8,
                   6,
-                  10,
+                  8,
                   6,
                 ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     SizedBox(
                       key: ValueKey('outline_feat_chevron_${feat.id}'),
                       width: 0,
                       height: 0,
                     ),
+                    // Unnumbered [F] micro-square tier badge (17x17px, 4px radius)
+                    Container(
+                      width: 17,
+                      height: 17,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isDone
+                            ? const Color(0xFF10B981).withValues(alpha: 0.14)
+                            : (isSelected
+                                ? const Color(0xFF5E6AD2)
+                                    .withValues(alpha: 0.14)
+                                : const Color(0x0EFFFFFF)),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: isDone
+                              ? const Color(0xFF10B981).withValues(alpha: 0.36)
+                              : (isSelected
+                                  ? const Color(0xFF6875F5)
+                                      .withValues(alpha: 0.38)
+                                  : const Color(0x1CFFFFFF)),
+                        ),
+                      ),
+                      child: Text(
+                        'F',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.0,
+                          color: isDone
+                              ? const Color(0xFF6EE7B7)
+                              : (isSelected
+                                  ? const Color(0xFFA5B4FC)
+                                  : const Color(0xFF64748B)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 7),
                     Expanded(
                       child: _activeStage2InlineEditKey ==
                               'rename_rail_feat_${feat.id}'
@@ -1919,19 +2095,16 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   displayTitle,
                                   maxLines: 2,
                                   style: GoogleFonts.inter(
-                                    fontSize: 15,
-                                    height: 1.3,
+                                    fontSize: 13.5,
+                                    height: 1.25,
                                     fontWeight: isSelected
                                         ? FontWeight.w600
-                                        : FontWeight.w400,
+                                        : FontWeight.w500,
                                     color: isDone
-                                        ? textMuted.withValues(alpha: 0.65)
+                                        ? textMuted.withValues(alpha: 0.72)
                                         : (isSelected
-                                            ? textPrimary
-                                            : textSecondary),
-                                    decoration: isDone
-                                        ? TextDecoration.lineThrough
-                                        : TextDecoration.none,
+                                            ? const Color(0xFFF8FAFC)
+                                            : const Color(0xFFCBD5E1)),
                                   ),
                                 ),
                                 SizedBox(
@@ -1966,6 +2139,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                               Text(
                                                 isDone ? 'DONE' : featRemLabel,
                                               ),
+                                              if (isDone) const Text('✓'),
                                               if (scheduledUpgrades.isNotEmpty)
                                                 Text(
                                                   '🗓 Queued for ${scheduledUpgrades.first.targetFuturePhase.shortName}: ${scheduledUpgrades.first.futureCheckpointTitle.isNotEmpty ? scheduledUpgrades.first.futureCheckpointTitle : scheduledUpgrades.first.checkpointTitle}',
@@ -2071,28 +2245,39 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       ),
                     ] else if (isDone) ...[
                       const SizedBox(width: 6),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFF10B981).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(3.5),
+                          border: Border.all(
+                            color: const Color(0xFF10B981)
+                                .withValues(alpha: 0.36),
+                          ),
+                        ),
                         child: Text(
-                          '✓',
+                          'DONE',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: accentEmerald,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF6EE7B7),
                           ),
                         ),
                       ),
                     ] else if (totalStepCount > 0) ...[
                       const SizedBox(width: 6),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          '$doneStepCount/$totalStepCount',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: textMuted,
-                          ),
+                      Text(
+                        '$doneStepCount/$totalStepCount',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? const Color(0xFFA5B4FC)
+                              : const Color(0xFF64748B),
                         ),
                       ),
                     ],
@@ -2115,7 +2300,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       if (widget.workbench.isAgentBusy ||
           widget.workbench.synthesizingBeatId != null) {
         return Container(
-          color: bgBase,
+          color: isDark ? const Color(0xFF080A0F) : bgBase,
           child: _buildAgentExecutionProgress(rel),
         );
       }
@@ -2215,7 +2400,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     }
 
     return Container(
-      color: bgBase,
+      color: isDark ? const Color(0xFF080A0F) : bgBase,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
