@@ -497,8 +497,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  /// Resolves engine-native asset metadata, parent/root class, folder path, 1–2 sentence setup guide,
-  /// and level hookup for Design C (Single Calm Card) across Unreal 5 BP, Unreal 5 C++, Unity C#, and Godot 4.
+  /// Resolves engine-native asset metadata, parent/root class, folder path, listed-out setup steps,
+  /// and listed-out level/scene setup steps for Design C (Single Calm Card) across Unreal 5 BP, Unreal 5 C++, Unity C#, and Godot 4.
   ({
     String archetype,
     bool is2D,
@@ -510,8 +510,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     String parentClassLabel,
     String folderPath,
     bool isNewAssetOnTask,
-    String setupGuideText,
-    String? levelHookupText,
+    List<({String label, String detail})> setupSteps,
+    String levelHookupTitle,
+    List<String> levelHookupSteps,
   }) _resolveFeatureAssetSpec({
     required TierDocument feat,
     required int checkpointIndex,
@@ -666,115 +667,335 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       }
     }
 
-    String setupGuideText;
+    final setupSteps = <({String label, String detail})>[];
     final customInstruction = activeSubStep.instruction.trim();
     if (isNewAssetOnTask) {
       if (archetype == 'character') {
         if (isUnrealBp) {
-          setupGuideText =
-              'Right-click in $folderPath → Blueprint Class → choose Character and name it $assetName. Keep the inherited CapsuleComponent & CharacterMovement, then click + Add to attach FirstPersonCamera (Camera).';
+          setupSteps.addAll([
+            (
+              label: 'Create Asset',
+              detail:
+                  'Right-click in $folderPath → Blueprint Class → Choose Character → Name $assetName',
+            ),
+            (
+              label: 'Inherited Components',
+              detail:
+                  'Open $assetName → Keep inherited CapsuleComponent (Root) & CharacterMovement',
+            ),
+            (
+              label: 'Add Component',
+              detail:
+                  'In Components panel, click + Add → Attach FirstPersonCamera (Camera) under CapsuleComponent',
+            ),
+          ]);
         } else if (isUnrealCpp) {
-          setupGuideText =
-              'Go to Tools → New C++ Class → choose Character and name it PlayerCharacter in $folderPath. Initialize FirstPersonCamera with CreateDefaultSubobject<UCameraComponent> attached to GetCapsuleComponent().';
+          setupSteps.addAll([
+            (
+              label: 'Create Class',
+              detail:
+                  'Tools → New C++ Class → Choose Character (ACharacter) → Name PlayerCharacter in $folderPath',
+            ),
+            (
+              label: 'Declare Pointer',
+              detail:
+                  'In PlayerCharacter.h, add UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> FirstPersonCamera;',
+            ),
+            (
+              label: 'Attach Subobject',
+              detail:
+                  'In constructor, call CreateDefaultSubobject<UCameraComponent> and attach to GetCapsuleComponent()',
+            ),
+          ]);
         } else if (isUnity) {
-          setupGuideText =
-              'In Hierarchy, right-click → Create Empty named PlayerCharacter and drag it into $folderPath. Click Add Component to attach ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController'} and PlayerController.cs.';
+          setupSteps.addAll([
+            (
+              label: 'Create Prefab',
+              detail:
+                  'In Hierarchy, right-click → Create Empty named PlayerCharacter → Drag into $folderPath',
+            ),
+            (
+              label: 'Add Components',
+              detail:
+                  'In Inspector, click Add Component → Attach ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController'} and PlayerController.cs',
+            ),
+            (
+              label: 'Add Camera Child',
+              detail:
+                  'Right-click PlayerCharacter → Camera → Name FirstPersonCamera at Pos (0, 0.64, 0)',
+            ),
+          ]);
         } else {
           final bodyNode = is2D ? 'CharacterBody2D' : 'CharacterBody3D';
           final colNode = is2D ? 'CollisionShape2D' : 'CollisionShape3D';
           final camNode = is2D ? 'Camera2D' : 'Camera3D';
-          setupGuideText =
-              'In the Scene dock, click + Other Node → choose $bodyNode, save as $folderPath$assetName, attach player_character.gd, and click + to add child $colNode and $camNode nodes.';
+          setupSteps.addAll([
+            (
+              label: 'Create Scene',
+              detail:
+                  'In Scene Dock, click + Other Node → Choose $bodyNode → Save as $folderPath$assetName',
+            ),
+            (
+              label: 'Attach Script',
+              detail:
+                  'Click 📜 Attach Script on root node → Save as player_character.gd',
+            ),
+            (
+              label: 'Add Child Nodes',
+              detail:
+                  'Click + on root → Add $colNode (CapsuleShape) and $camNode',
+            ),
+          ]);
         }
       } else if (archetype == 'ui') {
         if (isUnrealBp) {
-          setupGuideText =
-              'Right-click in $folderPath → User Interface → Widget Blueprint → choose User Widget and name it $assetName. Add a Canvas Panel and ${activeTargetComp.componentKey} in the Palette.';
+          setupSteps.addAll([
+            (
+              label: 'Create Widget',
+              detail:
+                  'Right-click in $folderPath → User Interface → Widget Blueprint → User Widget → Name $assetName',
+            ),
+            (
+              label: 'Add Root Panel',
+              detail:
+                  'Open $assetName Designer → Drag a Canvas Panel onto the root hierarchy',
+            ),
+            (
+              label: 'Add UI Control',
+              detail:
+                  'From Palette, drag ${activeTargetComp.componentKey} under Canvas Panel',
+            ),
+          ]);
         } else if (isUnrealCpp) {
-          setupGuideText =
-              'Create C++ class $assetName inheriting from UUserWidget in $folderPath and bind ${activeTargetComp.componentKey} with meta = (BindWidget).';
+          setupSteps.addAll([
+            (
+              label: 'Create Class',
+              detail:
+                  'Tools → New C++ Class → Choose UserWidget (UUserWidget) → Name $assetName in $folderPath',
+            ),
+            (
+              label: 'Bind Widget',
+              detail:
+                  'Declare ${activeTargetComp.componentKey} with UPROPERTY(meta = (BindWidget))',
+            ),
+            (
+              label: 'Override Init',
+              detail:
+                  'Override NativeConstruct() in .cpp to initialize widget state',
+            ),
+          ]);
         } else if (isUnity) {
-          setupGuideText =
-              'In Hierarchy, right-click → UI → Canvas named $pascalName, drag into $folderPath, and attach ${pascalName}UI.cs.';
+          setupSteps.addAll([
+            (
+              label: 'Create Canvas',
+              detail:
+                  'In Hierarchy, right-click → UI → Canvas named $pascalName → Drag into $folderPath',
+            ),
+            (
+              label: 'Attach Script',
+              detail:
+                  'In Inspector, click Add Component → Attach ${pascalName}UI.cs',
+            ),
+            (
+              label: 'Add UI Element',
+              detail:
+                  'Right-click Canvas → UI → Add ${activeTargetComp.componentKey}',
+            ),
+          ]);
         } else {
-          setupGuideText =
-              'In the Scene dock, create a new User Interface (Control) scene, save as $folderPath$assetName, and attach ${snakeName}_hud.gd.';
+          setupSteps.addAll([
+            (
+              label: 'Create UI Scene',
+              detail:
+                  'In Scene Dock, click User Interface (Control) → Save as $folderPath$assetName',
+            ),
+            (
+              label: 'Attach Script',
+              detail:
+                  'Click 📜 Attach Script on root → Save as ${snakeName}_hud.gd',
+            ),
+            (
+              label: 'Add Child Control',
+              detail:
+                  'Click + on root → Add ${activeTargetComp.displayLabel}',
+            ),
+          ]);
         }
       } else {
         if (isUnrealBp) {
-          setupGuideText =
-              'Right-click in $folderPath → Blueprint Class → choose Actor and name it $assetName. Click + Add in the Components panel to attach ${activeTargetComp.displayLabel}.';
+          setupSteps.addAll([
+            (
+              label: 'Create Asset',
+              detail:
+                  'Right-click in $folderPath → Blueprint Class → Choose Actor → Name $assetName',
+            ),
+            (
+              label: 'Add Component',
+              detail:
+                  'Open $assetName → In Components panel, click + Add → Attach ${activeTargetComp.displayLabel}',
+            ),
+            (
+              label: 'Configure Defaults',
+              detail:
+                  'Select ${activeTargetComp.componentKey} → Apply Details values (02) and Event Graph (03)',
+            ),
+          ]);
         } else if (isUnrealCpp) {
-          setupGuideText =
-              'Go to Tools → New C++ Class → choose Actor and name it $pascalName in $folderPath. Initialize ${activeTargetComp.componentKey} in the constructor.';
+          setupSteps.addAll([
+            (
+              label: 'Create Class',
+              detail:
+                  'Tools → New C++ Class → Choose Actor (AActor) → Name $pascalName in $folderPath',
+            ),
+            (
+              label: 'Declare Subobject',
+              detail:
+                  'In $pascalName.h, declare UPROPERTY(VisibleAnywhere) ${activeTargetComp.componentKey}',
+            ),
+            (
+              label: 'Initialize in Ctor',
+              detail:
+                  'In $pascalName.cpp constructor, call CreateDefaultSubobject for ${activeTargetComp.componentKey}',
+            ),
+          ]);
         } else if (isUnity) {
-          setupGuideText =
-              'In Hierarchy, right-click → Create Empty named $pascalName, drag into $folderPath to create $assetName, and click Add Component to attach ${activeTargetComp.displayLabel}.';
+          setupSteps.addAll([
+            (
+              label: 'Create Prefab',
+              detail:
+                  'In Hierarchy, right-click → Create Empty named $pascalName → Drag into $folderPath as $assetName',
+            ),
+            (
+              label: 'Add Component',
+              detail:
+                  'In Inspector, click Add Component → Attach ${activeTargetComp.displayLabel}',
+            ),
+            (
+              label: 'Attach Controller',
+              detail:
+                  'Click Add Component → Attach ${pascalName}Controller.cs',
+            ),
+          ]);
         } else {
           final rootNode = is2D ? 'Node2D' : 'Node3D';
-          setupGuideText =
-              'In the Scene dock, create a new $rootNode scene saved as $folderPath$assetName, attach $snakeName.gd, and click + to add child node ${activeTargetComp.displayLabel}.';
+          setupSteps.addAll([
+            (
+              label: 'Create Scene',
+              detail:
+                  'In Scene Dock, create $rootNode scene → Save as $folderPath$assetName',
+            ),
+            (
+              label: 'Attach Script',
+              detail:
+                  'Click 📜 Attach Script on root → Save as $snakeName.gd',
+            ),
+            (
+              label: 'Add Child Node',
+              detail:
+                  'Click + on root → Add ${activeTargetComp.displayLabel}',
+            ),
+          ]);
         }
       }
-      if (customInstruction.isNotEmpty &&
-          !setupGuideText
-              .toLowerCase()
-              .contains(customInstruction.toLowerCase())) {
-        setupGuideText = '$setupGuideText $customInstruction';
-      }
     } else {
-      if (customInstruction.isNotEmpty) {
-        setupGuideText =
-            'Open $assetName in $folderPath and select ${activeTargetComp.displayLabel}. $customInstruction';
-      } else {
-        setupGuideText =
-            'Open $assetName in $folderPath and select ${activeTargetComp.displayLabel} to configure the parameters below.';
-      }
+      final cleanAction = customInstruction
+          .replaceAll(
+            RegExp(
+              r'\s+in\s+(?:BP_|WBP_|A|U)?[A-Za-z0-9_.]+\.?\s*$',
+              caseSensitive: false,
+            ),
+            '',
+          )
+          .trim();
+      setupSteps.addAll([
+        (
+          label: 'Open Asset',
+          detail: 'Double-click $folderPath$assetName',
+        ),
+        (
+          label: 'Select Component',
+          detail:
+              'Click ${activeTargetComp.displayLabel} in the ${isUnrealBp ? 'Components panel' : (isUnrealCpp ? 'Class subobject list' : (isUnity ? 'Hierarchy / Inspector' : 'Scene Dock'))}',
+        ),
+        (
+          label: 'Configure Task',
+          detail: cleanAction.isNotEmpty
+              ? cleanAction
+              : 'Apply the ${sec2Title.toLowerCase()} in 02 and logic in 03',
+        ),
+      ]);
     }
 
-    String? levelHookupText;
+    final levelHookupTitle = isUnreal
+        ? '🗺 LEVEL SETUP'
+        : (isUnity ? '🗺 SCENE SETUP' : '🗺 MAIN SCENE SETUP');
+    final levelHookupSteps = <String>[];
     if (selectedTaskIdx == 0 && checkpointIndex == 0) {
       if (archetype == 'character') {
         if (isUnrealBp) {
-          levelHookupText =
-              'In World Settings → GameMode Override, set Default Pawn Class = $assetName and place a PlayerStart on the level floor.';
+          levelHookupSteps.addAll([
+            'World Settings → GameMode Override → Set Default Pawn Class = $assetName',
+            'Place Actors → Drag a PlayerStart onto the level floor (Z = 90)',
+          ]);
         } else if (isUnrealCpp) {
-          levelHookupText =
-              'In your AGameModeBase constructor, set DefaultPawnClass = $assetName::StaticClass(); and place a PlayerStart in the level.';
+          levelHookupSteps.addAll([
+            'GameMode Constructor → Set DefaultPawnClass = $assetName::StaticClass();',
+            'Level Viewport → Place a PlayerStart actor on the floor (Z = 90)',
+          ]);
         } else if (isUnity) {
-          levelHookupText =
-              'Drag $assetName from $folderPath into the active Scene Hierarchy at Position (0, 1, 0).';
+          levelHookupSteps.addAll([
+            'Project Window → Drag $assetName from $folderPath into the active Scene Hierarchy',
+            'Inspector → Transform → Set Position = (0, 1, 0) above the floor collider',
+          ]);
         } else {
-          levelHookupText =
-              'Open your main level scene, click the Instantiate Child Scene (🔗) icon in the Scene dock, and select $assetName.';
+          levelHookupSteps.addAll([
+            'Main Level Scene → Click Instantiate Child Scene (🔗) in Scene Dock → Select $assetName',
+            'Inspector → Transform → Set Position = (0, 1, 0) above the floor collision',
+          ]);
         }
       } else if (archetype == 'ui') {
         if (isUnrealBp) {
-          levelHookupText =
-              'In BP_PlayerCharacter Event BeginPlay, call Create Widget (Class: $assetName) → Add to Viewport.';
+          levelHookupSteps.addAll([
+            'Open BP_PlayerCharacter → Event BeginPlay → Call Create Widget (Class: $assetName)',
+            'Wire Return Value → Add to Viewport',
+          ]);
         } else if (isUnrealCpp) {
-          levelHookupText =
-              'In BeginPlay(), call CreateWidget<UUserWidget>(GetWorld(), ${assetName}Class)->AddToViewport().';
+          levelHookupSteps.addAll([
+            'In BeginPlay(), call CreateWidget<UUserWidget>(GetWorld(), ${assetName}Class)',
+            'Call ->AddToViewport() on the created widget instance',
+          ]);
         } else if (isUnity) {
-          levelHookupText =
-              'Drag $assetName into the active Scene Hierarchy and verify an EventSystem object is present.';
+          levelHookupSteps.addAll([
+            'Project Window → Drag $assetName from $folderPath into the active Scene Hierarchy',
+            'Hierarchy Window → Verify an EventSystem object is present in the scene',
+          ]);
         } else {
-          levelHookupText =
-              'In your main level scene, click Instantiate Child Scene (🔗) to add $assetName under a CanvasLayer node.';
+          levelHookupSteps.addAll([
+            'Main Level Scene → Add a CanvasLayer node if not already present',
+            'Click Instantiate Child Scene (🔗) under CanvasLayer → Select $assetName',
+          ]);
         }
       } else {
         if (isUnrealBp) {
-          levelHookupText =
-              'Drag $assetName from $folderPath in the Content Browser into the Level Viewport at (0, 0, 0).';
+          levelHookupSteps.addAll([
+            'Content Browser ($folderPath) → Drag $assetName into the Level Viewport',
+            'Details Panel → Transform → Set Location = (0, 0, 0)',
+          ]);
         } else if (isUnrealCpp) {
-          levelHookupText =
-              'Place an instance of $assetName in the Level Viewport at (0, 0, 0).';
+          levelHookupSteps.addAll([
+            'Place Actors / Outliner → Place an instance of $assetName in the Level Viewport',
+            'Details Panel → Transform → Set Location = (0, 0, 0)',
+          ]);
         } else if (isUnity) {
-          levelHookupText =
-              'Drag $assetName from $folderPath into the active Scene Hierarchy at (0, 0, 0).';
+          levelHookupSteps.addAll([
+            'Project Window ($folderPath) → Drag $assetName into the active Scene Hierarchy',
+            'Inspector → Transform → Set Position = (0, 0, 0)',
+          ]);
         } else {
-          levelHookupText =
-              'Open your main level scene, click Instantiate Child Scene (🔗) in the Scene dock, and select $assetName.';
+          levelHookupSteps.addAll([
+            'Main Level Scene → Click Instantiate Child Scene (🔗) in Scene Dock → Select $assetName',
+            'Inspector → Transform → Set Position = (0, 0, 0)',
+          ]);
         }
       }
     }
@@ -790,9 +1011,72 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       parentClassLabel: parentClassLabel,
       folderPath: folderPath,
       isNewAssetOnTask: isNewAssetOnTask,
-      setupGuideText: setupGuideText,
-      levelHookupText: levelHookupText,
+      setupSteps: setupSteps,
+      levelHookupTitle: levelHookupTitle,
+      levelHookupSteps: levelHookupSteps,
     );
+  }
+
+  /// Extracts up to 2 short, scannable bullet items for a left-column `02 BUILD TASKS` card
+  /// so the card lists concrete items instead of a truncated prose sentence.
+  List<String> _extractTaskCardBullets(
+    TaskHowToBlueprint bp,
+    String groupTitle,
+  ) {
+    final bullets = <String>[];
+    final lowerTitle = groupTitle.trim().toLowerCase();
+
+    // 1. Prefer distinct sub-step titles if the task has multiple sub-steps
+    for (final s in bp.subSteps) {
+      final clean = s.shortTitle.trim();
+      if (clean.isNotEmpty &&
+          clean.toLowerCase() != lowerTitle &&
+          !bullets.any((b) => b.toLowerCase() == clean.toLowerCase())) {
+        bullets.add(clean);
+        if (bullets.length >= 2) return bullets;
+      }
+    }
+
+    // 2. Otherwise split the task goal sentence into 2 concise clause bullets (stripping prose verbs & trailing asset suffix)
+    final strippedGoal = bp.taskGoalSentence
+        .replaceAll(
+          RegExp(
+            r'^(?:configure|implement|create|add|build|wire|setup|set up|bind|establish|define|update)\s+(?:the\s+)?',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(
+          RegExp(
+            r'\s+in\s+(?:BP_|WBP_|A|U)?[A-Za-z0-9_.]+\.?\s*$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'\.\s*$'), '')
+        .trim();
+
+    if (strippedGoal.isNotEmpty) {
+      final rawParts = strippedGoal
+          .split(RegExp(r',\s*(?:and\s+)?|\s+and\s+'))
+          .map((p) => p.trim())
+          .where((p) => p.isNotEmpty)
+          .toList();
+      for (final part in rawParts) {
+        final capitalized =
+            part[0].toUpperCase() + (part.length > 1 ? part.substring(1) : '');
+        if (capitalized.toLowerCase() != lowerTitle &&
+            !bullets.any((b) => b.toLowerCase() == capitalized.toLowerCase())) {
+          bullets.add(capitalized);
+          if (bullets.length >= 2) break;
+        }
+      }
+    }
+
+    if (bullets.isEmpty && bp.subSteps.isNotEmpty) {
+      bullets.add(bp.subSteps.first.shortTitle);
+    }
+    return bullets;
   }
 
   /// Infers the specific owning component name for a Details/Inspector property row so
@@ -3188,18 +3472,45 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                   ),
                                                                                 ],
                                                                               ),
-                                                                              const SizedBox(height: 4),
+                                                                              const SizedBox(height: 5),
                                                                               Padding(
                                                                                 padding: const EdgeInsets.only(left: 24),
-                                                                                child: Text(
-                                                                                  bp.taskGoalSentence,
-                                                                                  maxLines: 1,
-                                                                                  overflow: TextOverflow.ellipsis,
-                                                                                  style: GoogleFonts.inter(
-                                                                                    fontSize: 11,
-                                                                                    height: 1.35,
-                                                                                    color: const Color(0xFF94A3B8),
-                                                                                  ),
+                                                                                child: Column(
+                                                                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                                                                  children: [
+                                                                                    for (final bulletText in _extractTaskCardBullets(bp, groupTitle))
+                                                                                      Padding(
+                                                                                        padding: const EdgeInsets.only(bottom: 3),
+                                                                                        child: Row(
+                                                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                          children: [
+                                                                                            Text(
+                                                                                              '• ',
+                                                                                              style: GoogleFonts.jetBrainsMono(
+                                                                                                fontSize: 11,
+                                                                                                fontWeight: FontWeight.w700,
+                                                                                                height: 1.35,
+                                                                                                color: isTaskActive
+                                                                                                    ? const Color(0xFF38BDF8)
+                                                                                                    : const Color(0xFF64748B),
+                                                                                              ),
+                                                                                            ),
+                                                                                            Expanded(
+                                                                                              child: Text(
+                                                                                                bulletText,
+                                                                                                maxLines: 1,
+                                                                                                overflow: TextOverflow.ellipsis,
+                                                                                                style: GoogleFonts.inter(
+                                                                                                  fontSize: 11.5,
+                                                                                                  height: 1.35,
+                                                                                                  color: const Color(0xFF94A3B8),
+                                                                                                ),
+                                                                                              ),
+                                                                                            ),
+                                                                                          ],
+                                                                                        ),
+                                                                                      ),
+                                                                                  ],
                                                                                 ),
                                                                               ),
                                                                               const SizedBox(height: 5),
@@ -3294,6 +3605,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                           Text('${sIdx + 1}. ${bp.subSteps[sIdx].shortTitle} ${bp.subSteps[sIdx].etaLabel}'),
                                                                                           Text(bp.subSteps[sIdx].subtask.completed ? '✓ ' : (isTaskActive && sIdx == effectiveSubStepIdx ? '▶ ' : '○ ')),
                                                                                         ],
+                                                                                        Text(bp.taskGoalSentence),
                                                                                       ],
                                                                                     ),
                                                                                   ),

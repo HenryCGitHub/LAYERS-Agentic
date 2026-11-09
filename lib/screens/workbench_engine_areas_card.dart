@@ -681,19 +681,90 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               ),
               const SizedBox(height: 12),
 
-              // Natural 1–2 Sentence Setup Guide (14.5px · 1.62 line height)
-              Text.rich(
-                _buildSemanticStepSpan(
-                  text: assetSpec.setupGuideText,
-                  baseStyle: GoogleFonts.inter(
-                    fontSize: 14.5,
-                    height: 1.62,
-                    color: const Color(0xFFCBD5E1),
-                  ),
-                  tuningItems: tuningItems,
-                  edgeItems: edgeItems,
-                  isCodeBlock: false,
-                ),
+              // Listed-Out Action Steps (1 · 2 · 3 — 1 action per line)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (int stIdx = 0;
+                      stIdx < assetSpec.setupSteps.length;
+                      stIdx++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: stIdx == assetSpec.setupSteps.length - 1 ? 0 : 8,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 13,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0E121A),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: const Color(0x14FFFFFF),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF38BDF8)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: const Color(0xFF38BDF8)
+                                      .withValues(alpha: 0.28),
+                                ),
+                              ),
+                              child: Text(
+                                '${stIdx + 1}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF7DD3FC),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text:
+                                          '${assetSpec.setupSteps[stIdx].label}: ',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.48,
+                                        color: const Color(0xFFF8FAFC),
+                                      ),
+                                    ),
+                                    _buildSemanticStepSpan(
+                                      text: assetSpec.setupSteps[stIdx].detail,
+                                      baseStyle: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        height: 1.48,
+                                        color: const Color(0xFFCBD5E1),
+                                      ),
+                                      tuningItems: tuningItems,
+                                      edgeItems: edgeItems,
+                                      isCodeBlock: false,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 14),
 
@@ -1336,18 +1407,30 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           final inspSummary = inspRows
                               .map((r) => '- ${r.key}: ${r.value}')
                               .join('\n');
+                          final setupSummary = [
+                            for (int i = 0;
+                                i < assetSpec.setupSteps.length;
+                                i++)
+                              '${i + 1}. ${assetSpec.setupSteps[i].label}: ${assetSpec.setupSteps[i].detail}',
+                          ].join('\n');
+                          final levelSummary = [
+                            for (int i = 0;
+                                i < assetSpec.levelHookupSteps.length;
+                                i++)
+                              '${i + 1}. ${assetSpec.levelHookupSteps[i]}',
+                          ].join('\n');
                           final promptText = [
                             'Task T${selectedTaskIdx + 1}: ${selectedHowTo.shortTaskTitle} (${feat.title})',
                             'Asset: ${assetSpec.assetName} (${assetSpec.parentClassLabel}) in ${assetSpec.folderPath}',
-                            'Setup Guide: ${assetSpec.setupGuideText}',
+                            'Setup Steps:\n$setupSummary',
                             'Target Component: ${activeTargetComp.displayLabel}',
                             if (inspSummary.isNotEmpty)
                               'Inspector Properties:\n$inspSummary',
                             if (primaryGuardLabel.isNotEmpty)
                               'Guardrail: $primaryGuardLabel',
                             'Script ($effectiveHeaderPath):\n${activeSubStep.codeFormula.trim()}',
-                            if (assetSpec.levelHookupText != null)
-                              'Level Setup: ${assetSpec.levelHookupText}',
+                            if (levelSummary.isNotEmpty)
+                              '${assetSpec.levelHookupTitle}:\n$levelSummary',
                             'Verify in Engine: ${selectedHowTo.taskDoneCheck}',
                           ].join('\n\n');
                           Clipboard.setData(
@@ -1485,43 +1568,73 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ),
                 ),
 
-              // Level / Scene Hookup Callout Bar (on T1)
-              if (assetSpec.levelHookupText != null) ...[
+              // Listed-Out Level / Scene Hookup Box (on T1)
+              if (assetSpec.levelHookupSteps.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                    horizontal: 16,
+                    vertical: 12,
                   ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF10B981).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(7),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: const Color(0xFF10B981).withValues(alpha: 0.26),
                     ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        '🗺 LEVEL SETUP  ',
+                        assetSpec.levelHookupTitle,
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
-                          height: 1.5,
                           color: const Color(0xFF6EE7B7),
                         ),
                       ),
-                      Expanded(
-                        child: Text(
-                          assetSpec.levelHookupText!,
-                          style: GoogleFonts.inter(
-                            fontSize: 13.5,
-                            height: 1.45,
-                            color: const Color(0xFFD1FAE5),
+                      const SizedBox(height: 8),
+                      for (int lvIdx = 0;
+                          lvIdx < assetSpec.levelHookupSteps.length;
+                          lvIdx++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom:
+                                lvIdx == assetSpec.levelHookupSteps.length - 1
+                                    ? 0
+                                    : 6,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${lvIdx + 1}. ',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.48,
+                                  color: const Color(0xFF6EE7B7),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text.rich(
+                                  _buildSemanticStepSpan(
+                                    text: assetSpec.levelHookupSteps[lvIdx],
+                                    baseStyle: GoogleFonts.inter(
+                                      fontSize: 13.5,
+                                      height: 1.48,
+                                      color: const Color(0xFFD1FAE5),
+                                    ),
+                                    tuningItems: tuningItems,
+                                    edgeItems: edgeItems,
+                                    isCodeBlock: false,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
