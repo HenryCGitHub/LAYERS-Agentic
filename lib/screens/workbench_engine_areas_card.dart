@@ -852,17 +852,19 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 engineLabel: selectedHowTo.engineLabel,
                 is2D: assetSpec.is2D,
               );
-              final estRowWidth = (resolvedProp.propertyLabel.length * 7.4) +
-                  (row.value.length * 7.8) +
-                  88.0;
+              final double titleWidth =
+                  (resolvedProp.propertyLabel.length * 7.4) + 48.0;
+              final double valuePillWidth = (row.value.length * 7.6) + 74.0;
+              final double estRowWidth =
+                  titleWidth > valuePillWidth ? titleWidth : valuePillWidth;
               if (estRowWidth > longestContentWidth) {
                 longestContentWidth = estRowWidth;
               }
             }
             final double maxAllowedColWidth =
-                (splitConstraints.maxWidth * 0.40).clamp(250.0, 350.0);
+                (splitConstraints.maxWidth * 0.38).clamp(230.0, 320.0);
             final double sec2DynamicWidth =
-                longestContentWidth.clamp(250.0, maxAllowedColWidth);
+                longestContentWidth.clamp(230.0, maxAllowedColWidth);
 
             final Widget section02Widget = Container(
               key: ValueKey('area2_selected_component_header_${node.id}'),
@@ -1052,101 +1054,86 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           child: Padding(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 11,
-                                              vertical: 7,
+                                              vertical: 8,
                                             ),
-                                            child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.spaceBetween,
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                Flexible(
-                                                  fit: FlexFit.tight,
-                                                  child: Text(
-                                                    resolvedProp.propertyLabel,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 12.8,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: const Color(
-                                                        0xFFCBD5E1,
-                                                      ),
+                                                Text(
+                                                  resolvedProp.propertyLabel,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: const Color(
+                                                      0xFFCBD5E1,
                                                     ),
                                                   ),
                                                 ),
-                                                const SizedBox(width: 8),
-                                                ConstrainedBox(
-                                                  constraints: BoxConstraints(
-                                                    maxWidth: isTwoCol
-                                                        ? sec2DynamicWidth * 0.58
-                                                        : splitConstraints
-                                                                .maxWidth *
-                                                            0.55,
+                                                const SizedBox(height: 5),
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 9,
+                                                    vertical: 3.5,
                                                   ),
-                                                  child: Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 9,
-                                                      vertical: 3.5,
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFF090C12,
                                                     ),
-                                                    decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      5,
+                                                    ),
+                                                    border: Border.all(
                                                       color: const Color(
-                                                        0xFF090C12,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        5,
-                                                      ),
-                                                      border: Border.all(
-                                                        color: const Color(
-                                                          0x24FFFFFF,
-                                                        ),
+                                                        0x24FFFFFF,
                                                       ),
                                                     ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        Flexible(
-                                                          child: Text.rich(
-                                                            _buildSemanticStepSpan(
-                                                              text: inspRows[
-                                                                      rIdx]
-                                                                  .value,
-                                                              baseStyle: GoogleFonts
-                                                                  .jetBrainsMono(
-                                                                fontSize: 12.2,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                color:
-                                                                    const Color(
-                                                                  0xFFF59E0B,
-                                                                ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Flexible(
+                                                        child: Text.rich(
+                                                          _buildSemanticStepSpan(
+                                                            text: inspRows[rIdx]
+                                                                .value,
+                                                            baseStyle: GoogleFonts
+                                                                .jetBrainsMono(
+                                                              fontSize: 12.2,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              color:
+                                                                  const Color(
+                                                                0xFFF59E0B,
                                                               ),
-                                                              tuningItems:
-                                                                  tuningItems,
-                                                              edgeItems:
-                                                                  edgeItems,
-                                                              isCodeBlock: true,
                                                             ),
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
+                                                            tuningItems:
+                                                                tuningItems,
+                                                            edgeItems:
+                                                                edgeItems,
+                                                            isCodeBlock: true,
                                                           ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
                                                         ),
-                                                        const SizedBox(width: 5),
-                                                        const Icon(
-                                                          Icons.edit_outlined,
-                                                          size: 10.5,
-                                                          color: Color(
-                                                            0xFF64748B,
-                                                          ),
+                                                      ),
+                                                      const SizedBox(width: 5),
+                                                      const Icon(
+                                                        Icons.edit_outlined,
+                                                        size: 10.5,
+                                                        color: Color(
+                                                          0xFF64748B,
                                                         ),
-                                                      ],
-                                                    ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                               ],
