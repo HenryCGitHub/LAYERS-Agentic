@@ -497,8 +497,374 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     );
   }
 
+  /// Resolves engine-native asset metadata, parent/root class, folder path, 1–2 sentence setup guide,
+  /// and level hookup for Design C (Single Calm Card) across Unreal 5 BP, Unreal 5 C++, Unity C#, and Godot 4.
+  ({
+    String archetype,
+    bool is2D,
+    String sec1Title,
+    String sec2Title,
+    String sec3Title,
+    String assetIcon,
+    String assetName,
+    String parentClassLabel,
+    String folderPath,
+    bool isNewAssetOnTask,
+    String setupGuideText,
+    String? levelHookupText,
+  }) _resolveFeatureAssetSpec({
+    required TierDocument feat,
+    required int checkpointIndex,
+    required int selectedTaskIdx,
+    required TaskHowToBlueprint selectedHowTo,
+    required TaskHowToSubStep activeSubStep,
+    required bool unrealCppMode,
+    required ({String icon, String componentKey, String displayLabel})
+        activeTargetComp,
+  }) {
+    final engineLabel = selectedHowTo.engineLabel;
+    final isUnreal = engineLabel.contains('UNREAL');
+    final isUnrealBp = isUnreal && !unrealCppMode;
+    final isUnrealCpp = isUnreal && unrealCppMode;
+    final isUnity = engineLabel.contains('UNITY');
+
+    final draft = widget.workbench.conceptDraft;
+    final specCombined = [
+      ...(draft?.gameSpec ?? const <String>[]),
+      ...(draft?.techSpec ?? const <String>[]),
+      draft?.goal ?? '',
+    ].join(' ').toLowerCase();
+    final is2D = specCombined.contains('2d') ||
+        specCombined.contains('pixel') ||
+        specCombined.contains('sprite') ||
+        specCombined.contains('side-scroller');
+
+    final lowerTitle = feat.title.toLowerCase();
+    final String archetype;
+    if (RegExp(
+      r'\b(?:hud|ui|widget|hotbar|menu|crosshair|selector|health\s*bar|inventory\s*bar|radar|minimap)\b',
+    ).hasMatch(lowerTitle)) {
+      archetype = 'ui';
+    } else if (RegExp(
+      r'\b(?:player|character|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
+    ).hasMatch(lowerTitle)) {
+      archetype = 'character';
+    } else {
+      archetype = 'actor';
+    }
+
+    final derivedNames = TaskHowToBlueprint.deriveConcreteAssetName(feat.title);
+    final pascalName = derivedNames.pascalName.isNotEmpty
+        ? derivedNames.pascalName
+        : 'GameplayFeature';
+    final snakeName = derivedNames.snakeName.isNotEmpty
+        ? derivedNames.snakeName
+        : 'gameplay_feature';
+
+    // Check if an earlier feature in the release already created the shared Character asset
+    final allReleaseFeats = <TierDocument>[
+      for (final b in widget.workbench.activeReleaseBeats)
+        ...widget.workbench.featuresForBeat(b.id),
+    ];
+    final featIdx = allReleaseFeats.indexWhere((f) => f.id == feat.id);
+    bool isFirstOfArchetype = true;
+    if (archetype == 'character' && featIdx > 0) {
+      for (int i = 0; i < featIdx; i++) {
+        final prevLower = allReleaseFeats[i].title.toLowerCase();
+        if (RegExp(
+          r'\b(?:player|character|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
+        ).hasMatch(prevLower)) {
+          isFirstOfArchetype = false;
+          break;
+        }
+      }
+    }
+    final isNewAssetOnTask =
+        selectedTaskIdx == 0 && checkpointIndex == 0 && isFirstOfArchetype;
+
+    final sec1Title = isUnrealBp
+        ? 'Blueprint & Components'
+        : (isUnrealCpp
+            ? 'C++ Class & Subobjects (.h)'
+            : (isUnity
+                ? 'Prefab & Components (Hierarchy)'
+                : 'Scene & Nodes (.tscn)'));
+    final sec2Title = isUnrealBp
+        ? 'Details Panel Values'
+        : (isUnrealCpp
+            ? 'UPROPERTY & Default Values'
+            : (isUnity ? 'Inspector Window Values' : 'Inspector Dock Values'));
+    final sec3Title = isUnrealBp
+        ? 'Event Graph & Level Setup'
+        : (isUnrealCpp
+            ? 'C++ Implementation (.cpp) & Level Setup'
+            : (isUnity
+                ? 'C# MonoBehaviour (.cs) & Scene Setup'
+                : 'GDScript (.gd) & Main Scene Setup'));
+
+    final assetIcon = isUnrealBp
+        ? '📘'
+        : (isUnrealCpp ? '⚡' : (isUnity ? '📦' : '🎬'));
+
+    String assetName;
+    String parentClassLabel;
+    String folderPath;
+    if (archetype == 'character') {
+      if (isUnrealBp) {
+        assetName = 'BP_PlayerCharacter';
+        parentClassLabel = 'Parent Class: Character (ACharacter)';
+        folderPath = '/Game/Characters/';
+      } else if (isUnrealCpp) {
+        assetName = 'APlayerCharacter';
+        parentClassLabel = 'Base Class: ACharacter';
+        folderPath = 'Source/Characters/';
+      } else if (isUnity) {
+        assetName = 'PlayerCharacter.prefab';
+        parentClassLabel = 'Root: GameObject + PlayerController.cs';
+        folderPath = 'Assets/Prefabs/Characters/';
+      } else {
+        assetName = 'player_character.tscn';
+        parentClassLabel =
+            is2D ? 'Root Node: CharacterBody2D' : 'Root Node: CharacterBody3D';
+        folderPath = 'res://scenes/characters/';
+      }
+    } else if (archetype == 'ui') {
+      if (isUnrealBp) {
+        assetName = 'WBP_$pascalName';
+        parentClassLabel = 'Parent Class: UserWidget (UUserWidget)';
+        folderPath = '/Game/UI/';
+      } else if (isUnrealCpp) {
+        assetName = 'U${pascalName}Widget';
+        parentClassLabel = 'Base Class: UUserWidget';
+        folderPath = 'Source/UI/';
+      } else if (isUnity) {
+        assetName = '${pascalName}Canvas.prefab';
+        parentClassLabel = 'Root: Canvas + ${pascalName}UI.cs';
+        folderPath = 'Assets/Prefabs/UI/';
+      } else {
+        assetName = '${snakeName}_hud.tscn';
+        parentClassLabel = 'Root Node: Control (CanvasLayer)';
+        folderPath = 'res://scenes/ui/';
+      }
+    } else {
+      if (isUnrealBp) {
+        assetName = 'BP_$pascalName';
+        parentClassLabel = 'Parent Class: Actor (AActor)';
+        folderPath = '/Game/Gameplay/';
+      } else if (isUnrealCpp) {
+        assetName = 'A$pascalName';
+        parentClassLabel = 'Base Class: AActor';
+        folderPath = 'Source/Gameplay/';
+      } else if (isUnity) {
+        assetName = '$pascalName.prefab';
+        parentClassLabel = 'Root: GameObject + ${pascalName}Controller.cs';
+        folderPath = 'Assets/Prefabs/Gameplay/';
+      } else {
+        assetName = '$snakeName.tscn';
+        parentClassLabel = is2D ? 'Root Node: Node2D' : 'Root Node: Node3D';
+        folderPath = 'res://scenes/gameplay/';
+      }
+    }
+
+    String setupGuideText;
+    final customInstruction = activeSubStep.instruction.trim();
+    if (isNewAssetOnTask) {
+      if (archetype == 'character') {
+        if (isUnrealBp) {
+          setupGuideText =
+              'Right-click in $folderPath → Blueprint Class → choose Character and name it $assetName. Keep the inherited CapsuleComponent & CharacterMovement, then click + Add to attach FirstPersonCamera (Camera).';
+        } else if (isUnrealCpp) {
+          setupGuideText =
+              'Go to Tools → New C++ Class → choose Character and name it PlayerCharacter in $folderPath. Initialize FirstPersonCamera with CreateDefaultSubobject<UCameraComponent> attached to GetCapsuleComponent().';
+        } else if (isUnity) {
+          setupGuideText =
+              'In Hierarchy, right-click → Create Empty named PlayerCharacter and drag it into $folderPath. Click Add Component to attach ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController'} and PlayerController.cs.';
+        } else {
+          final bodyNode = is2D ? 'CharacterBody2D' : 'CharacterBody3D';
+          final colNode = is2D ? 'CollisionShape2D' : 'CollisionShape3D';
+          final camNode = is2D ? 'Camera2D' : 'Camera3D';
+          setupGuideText =
+              'In the Scene dock, click + Other Node → choose $bodyNode, save as $folderPath$assetName, attach player_character.gd, and click + to add child $colNode and $camNode nodes.';
+        }
+      } else if (archetype == 'ui') {
+        if (isUnrealBp) {
+          setupGuideText =
+              'Right-click in $folderPath → User Interface → Widget Blueprint → choose User Widget and name it $assetName. Add a Canvas Panel and ${activeTargetComp.componentKey} in the Palette.';
+        } else if (isUnrealCpp) {
+          setupGuideText =
+              'Create C++ class $assetName inheriting from UUserWidget in $folderPath and bind ${activeTargetComp.componentKey} with meta = (BindWidget).';
+        } else if (isUnity) {
+          setupGuideText =
+              'In Hierarchy, right-click → UI → Canvas named $pascalName, drag into $folderPath, and attach ${pascalName}UI.cs.';
+        } else {
+          setupGuideText =
+              'In the Scene dock, create a new User Interface (Control) scene, save as $folderPath$assetName, and attach ${snakeName}_hud.gd.';
+        }
+      } else {
+        if (isUnrealBp) {
+          setupGuideText =
+              'Right-click in $folderPath → Blueprint Class → choose Actor and name it $assetName. Click + Add in the Components panel to attach ${activeTargetComp.displayLabel}.';
+        } else if (isUnrealCpp) {
+          setupGuideText =
+              'Go to Tools → New C++ Class → choose Actor and name it $pascalName in $folderPath. Initialize ${activeTargetComp.componentKey} in the constructor.';
+        } else if (isUnity) {
+          setupGuideText =
+              'In Hierarchy, right-click → Create Empty named $pascalName, drag into $folderPath to create $assetName, and click Add Component to attach ${activeTargetComp.displayLabel}.';
+        } else {
+          final rootNode = is2D ? 'Node2D' : 'Node3D';
+          setupGuideText =
+              'In the Scene dock, create a new $rootNode scene saved as $folderPath$assetName, attach $snakeName.gd, and click + to add child node ${activeTargetComp.displayLabel}.';
+        }
+      }
+      if (customInstruction.isNotEmpty &&
+          !setupGuideText
+              .toLowerCase()
+              .contains(customInstruction.toLowerCase())) {
+        setupGuideText = '$setupGuideText $customInstruction';
+      }
+    } else {
+      if (customInstruction.isNotEmpty) {
+        setupGuideText =
+            'Open $assetName in $folderPath and select ${activeTargetComp.displayLabel}. $customInstruction';
+      } else {
+        setupGuideText =
+            'Open $assetName in $folderPath and select ${activeTargetComp.displayLabel} to configure the parameters below.';
+      }
+    }
+
+    String? levelHookupText;
+    if (selectedTaskIdx == 0 && checkpointIndex == 0) {
+      if (archetype == 'character') {
+        if (isUnrealBp) {
+          levelHookupText =
+              'In World Settings → GameMode Override, set Default Pawn Class = $assetName and place a PlayerStart on the level floor.';
+        } else if (isUnrealCpp) {
+          levelHookupText =
+              'In your AGameModeBase constructor, set DefaultPawnClass = $assetName::StaticClass(); and place a PlayerStart in the level.';
+        } else if (isUnity) {
+          levelHookupText =
+              'Drag $assetName from $folderPath into the active Scene Hierarchy at Position (0, 1, 0).';
+        } else {
+          levelHookupText =
+              'Open your main level scene, click the Instantiate Child Scene (🔗) icon in the Scene dock, and select $assetName.';
+        }
+      } else if (archetype == 'ui') {
+        if (isUnrealBp) {
+          levelHookupText =
+              'In BP_PlayerCharacter Event BeginPlay, call Create Widget (Class: $assetName) → Add to Viewport.';
+        } else if (isUnrealCpp) {
+          levelHookupText =
+              'In BeginPlay(), call CreateWidget<UUserWidget>(GetWorld(), ${assetName}Class)->AddToViewport().';
+        } else if (isUnity) {
+          levelHookupText =
+              'Drag $assetName into the active Scene Hierarchy and verify an EventSystem object is present.';
+        } else {
+          levelHookupText =
+              'In your main level scene, click Instantiate Child Scene (🔗) to add $assetName under a CanvasLayer node.';
+        }
+      } else {
+        if (isUnrealBp) {
+          levelHookupText =
+              'Drag $assetName from $folderPath in the Content Browser into the Level Viewport at (0, 0, 0).';
+        } else if (isUnrealCpp) {
+          levelHookupText =
+              'Place an instance of $assetName in the Level Viewport at (0, 0, 0).';
+        } else if (isUnity) {
+          levelHookupText =
+              'Drag $assetName from $folderPath into the active Scene Hierarchy at (0, 0, 0).';
+        } else {
+          levelHookupText =
+              'Open your main level scene, click Instantiate Child Scene (🔗) in the Scene dock, and select $assetName.';
+        }
+      }
+    }
+
+    return (
+      archetype: archetype,
+      is2D: is2D,
+      sec1Title: sec1Title,
+      sec2Title: sec2Title,
+      sec3Title: sec3Title,
+      assetIcon: assetIcon,
+      assetName: assetName,
+      parentClassLabel: parentClassLabel,
+      folderPath: folderPath,
+      isNewAssetOnTask: isNewAssetOnTask,
+      setupGuideText: setupGuideText,
+      levelHookupText: levelHookupText,
+    );
+  }
+
+  /// Infers the specific owning component name for a Details/Inspector property row so
+  /// Capsule, Camera, and Movement properties are never misattributed to a single component.
+  ({String componentLabel, String propertyLabel})
+      _inferOwningComponentForProperty({
+    required String rawKey,
+    required String defaultComponentKey,
+    required String engineLabel,
+    required bool is2D,
+  }) {
+    final isUnreal = engineLabel.contains('UNREAL');
+    final isUnity = engineLabel.contains('UNITY');
+    for (final sep in const ['→', '›', '·']) {
+      final idx = rawKey.indexOf(sep);
+      if (idx > 0 && idx < rawKey.length - 1) {
+        final left = rawKey.substring(0, idx).trim();
+        final right = rawKey.substring(idx + 1).trim();
+        if (left.toLowerCase() != 'tuning' &&
+            left.toLowerCase() != 'inspector') {
+          return (componentLabel: left, propertyLabel: right);
+        }
+        return (componentLabel: defaultComponentKey, propertyLabel: right);
+      }
+    }
+
+    final lower = rawKey.toLowerCase();
+    if (lower.contains('capsule') ||
+        lower.contains('radius') ||
+        lower.contains('halfheight')) {
+      return (
+        componentLabel: isUnreal
+            ? 'CapsuleComponent'
+            : (isUnity
+                ? (is2D ? 'CapsuleCollider2D' : 'CharacterController')
+                : (is2D ? 'CollisionShape2D' : 'CollisionShape3D')),
+        propertyLabel: rawKey,
+      );
+    }
+    if (lower.contains('camera') ||
+        lower.contains('fov') ||
+        lower.contains('pitch') ||
+        lower.contains('eye') ||
+        lower.contains('fade') ||
+        lower.contains('springarm')) {
+      return (
+        componentLabel: isUnreal
+            ? 'FirstPersonCamera'
+            : (isUnity ? 'MainCamera' : (is2D ? 'Camera2D' : 'Camera3D')),
+        propertyLabel: rawKey,
+      );
+    }
+    if (lower.contains('walkspeed') ||
+        lower.contains('maxwalk') ||
+        lower.contains('jumpz') ||
+        lower.contains('aircontrol') ||
+        lower.contains('braking') ||
+        lower.contains('groundfriction') ||
+        lower.contains('maxacceleration') ||
+        lower.contains('gravity')) {
+      return (
+        componentLabel: isUnreal
+            ? 'CharacterMovement'
+            : (isUnity ? 'PlayerController.cs' : 'CharacterBody'),
+        propertyLabel: rawKey,
+      );
+    }
+    return (componentLabel: defaultComponentKey, propertyLabel: rawKey);
+  }
+
   /// Groups all `[T]` Tasks in the checkpoint by their target scene component so shared components
-  /// appear once in `01 Scene hierarchy` with `[T1]`, `[T2] [T3]` badges.
+  /// appear once in Section `01` with `[T1]`, `[T2] [T3]` badges.
   List<
       ({
         String icon,
@@ -537,273 +903,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       }
     }
     return grouped;
-  }
-
-  /// Builds the interactive persistent `01 Scene hierarchy` card for Zone 3.
-  Widget _buildEngineHierarchyTreeCard({
-    required TierDocument feat,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-    required FeatureStateNode node,
-    required List<TaskHowToBlueprint> howToBlueprints,
-    required int selectedTaskIdx,
-    required TaskHowToBlueprint bp,
-    required TaskHowToSubStep activeSubStep,
-    required TaskHowToBlueprint selectedHowTo,
-    required bool unrealCppMode,
-    required bool isDark,
-    required Color textPrimary,
-    required Color textSecondary,
-    required Color textMuted,
-    required Color borderSubtle,
-    required Color accentEmerald,
-  }) {
-    final engineLabel = selectedHowTo.engineLabel;
-    final isUnreal = engineLabel.contains('UNREAL');
-    final isUnity = engineLabel.contains('UNITY');
-
-    String dockTitle;
-    if (isUnreal) {
-      dockTitle =
-          unrealCppMode ? 'CLASS ARCHITECTURE (.H)' : 'COMPONENTS & BLUEPRINT';
-    } else if (isUnity) {
-      dockTitle = 'HIERARCHY & GAMEOBJECTS';
-    } else {
-      dockTitle = 'SCENE DOCK (.TSCN)';
-    }
-
-    final String rootLabel;
-    if (isUnreal) {
-      rootLabel = unrealCppMode
-          ? '⚡ class APlayerCharacter : public ACharacter'
-          : '🧩 [Root] BP_PlayerCharacter (CapsuleComponent)';
-    } else if (isUnity) {
-      rootLabel = '📁 PlayerRoot (GameObject)';
-    } else {
-      rootLabel = '📁 PlayerRoot (CharacterBody)';
-    }
-
-    final components = _buildPersistentSceneTreeComponents(
-      howToBlueprints,
-      unrealCppMode: unrealCppMode,
-    );
-
-    final rawHierarchy = activeSubStep.area1Hierarchy?.trim() ?? '';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0E15),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0x12FFFFFF)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  dockTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(3.5),
-                  border: Border.all(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.34),
-                  ),
-                ),
-                child: Text(
-                  selectedHowTo.engineLabel == 'UNREAL 5'
-                      ? (unrealCppMode ? 'UNREAL 5 C++' : 'UNREAL 5 BLUEPRINT')
-                      : selectedHowTo.engineLabel,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF7DD3FC),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              rootLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 12,
-                height: 1.4,
-                fontWeight: FontWeight.w600,
-                color: textPrimary,
-              ),
-            ),
-          ),
-          for (int cIdx = 0; cIdx < components.length; cIdx++)
-            Builder(
-              builder: (context) {
-                final comp = components[cIdx];
-                final isSelectedNode =
-                    comp.taskIndices.contains(selectedTaskIdx);
-                final isLast = cIdx == components.length - 1;
-                final branchChar = isLast ? '└─' : '├─';
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: InkWell(
-                    key: ValueKey(
-                      'scene_tree_node_${node.id}_${comp.componentKey}',
-                    ),
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () {
-                      final targetTaskIdx = comp.taskIndices.firstWhere(
-                        (idx) =>
-                            idx < node.checklist.length &&
-                            !node.checklist[idx].completed,
-                        orElse: () => comp.taskIndices.first,
-                      );
-                      _rebuild(() {
-                        _manualCheckpointFocusIndex = checkpointIndex;
-                        _manualCheckpointFocusFeatureId = feat.id;
-                        _selectedTaskIndexByCheckpoint[node.id] = targetTaskIdx;
-                        _selectedSubStepIndexByTask[
-                            '${node.id}_$targetTaskIdx'] = 0;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelectedNode
-                            ? const Color(0xFF38BDF8).withValues(alpha: 0.13)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border(
-                          left: BorderSide(
-                            color: isSelectedNode
-                                ? const Color(0xFF38BDF8)
-                                : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '$branchChar ${comp.icon} ${comp.displayLabel}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
-                                height: 1.35,
-                                fontWeight: isSelectedNode
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: isSelectedNode
-                                    ? const Color(0xFF7DD3FC)
-                                    : textSecondary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          for (final tIdx in comp.taskIndices)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4),
-                              child: InkWell(
-                                key: ValueKey(
-                                  'scene_tree_task_pill_${node.id}_$tIdx',
-                                ),
-                                onTap: () {
-                                  _rebuild(() {
-                                    _manualCheckpointFocusIndex =
-                                        checkpointIndex;
-                                    _manualCheckpointFocusFeatureId = feat.id;
-                                    _selectedTaskIndexByCheckpoint[node.id] =
-                                        tIdx;
-                                    _selectedSubStepIndexByTask[
-                                        '${node.id}_$tIdx'] = 0;
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(3),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 1.5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: tIdx == selectedTaskIdx
-                                        ? const Color(0xFFF59E0B)
-                                            .withValues(alpha: 0.22)
-                                        : const Color(0x14FFFFFF),
-                                    borderRadius: BorderRadius.circular(3),
-                                    border: Border.all(
-                                      color: tIdx == selectedTaskIdx
-                                          ? const Color(0xFFF59E0B)
-                                              .withValues(alpha: 0.55)
-                                          : const Color(0x22FFFFFF),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    'T${tIdx + 1}',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: tIdx == selectedTaskIdx
-                                          ? const Color(0xFFFCD34D)
-                                          : const Color(0xFF94A3B8),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (isSelectedNode) ...[
-                            const SizedBox(width: 6),
-                            Text(
-                              '← SELECTED',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF38BDF8),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          if (rawHierarchy.isNotEmpty)
-            SizedBox(
-              width: 1,
-              height: 1,
-              child: Opacity(
-                opacity: 0,
-                child: Text(rawHierarchy),
-              ),
-            ),
-        ],
-      ),
-    );
   }
 
   Widget _buildCheckpointCard(
@@ -4180,52 +4279,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                     ),
 
-                                                  // 3. Active Task Action Banner
-                                                  Container(
-                                                    padding: const EdgeInsets
-                                                        .fromLTRB(
-                                                      16,
-                                                      11,
-                                                      16,
-                                                      11,
-                                                    ),
-                                                    decoration:
-                                                        const BoxDecoration(
-                                                      color: Color(0xFF121620),
-                                                      border: Border(
-                                                        bottom: BorderSide(
-                                                          color:
-                                                              Color(0x14FFFFFF),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    child: Text.rich(
-                                                      _buildSemanticStepSpan(
-                                                        text: activeSubStep
-                                                                .instruction
-                                                                .trim()
-                                                                .isNotEmpty
-                                                            ? activeSubStep
-                                                                .instruction
-                                                            : activeBp
-                                                                .taskGoalSentence,
-                                                        baseStyle:
-                                                            GoogleFonts.inter(
-                                                          fontSize: 13.5,
-                                                          height: 1.48,
-                                                          color: const Color(
-                                                            0xFFF8FAFC,
-                                                          ),
-                                                        ),
-                                                        tuningItems:
-                                                            tuningItems,
-                                                        edgeItems: edgeItems,
-                                                        isCodeBlock: false,
-                                                      ),
-                                                    ),
-                                                  ),
-
-                                                  // 4. Upper 50/50 Split Bay (01 Scene hierarchy + 02 Component-Owned Inspector details) & Lower Script Bay (03 Script implementation)
+                                                  // 3. Single Calm Card Body (01 Blueprint/Scene & Components -> 02 Details/Inspector Values -> 03 Script & Level Setup)
                                                   _buildEngineStepAreasBox(
                                                     feat: feat,
                                                     states: states,

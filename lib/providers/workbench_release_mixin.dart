@@ -5469,8 +5469,29 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
       ];
       final featOrderIdx =
           allReleaseFeatures.indexWhere((f) => f.id == featureId);
+      String classifyAssetArchetype(String title) {
+        final lower = title.toLowerCase();
+        if (RegExp(
+          r'\b(?:hud|ui|widget|hotbar|menu|crosshair|selector|health\s*bar|inventory\s*bar|radar|minimap)\b',
+        ).hasMatch(lower)) {
+          return 'ui';
+        }
+        if (RegExp(
+          r'\b(?:player|character|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
+        ).hasMatch(lower)) {
+          return 'character';
+        }
+        return 'actor';
+      }
+
+      final currentArchetype = classifyAssetArchetype(feat.title);
+      final hasPrecedingSameArchetype = featOrderIdx > 0 &&
+          allReleaseFeatures
+              .take(featOrderIdx)
+              .any((f) => classifyAssetArchetype(f.title) == currentArchetype);
       final isGreenfieldFirstFeature =
-          (featOrderIdx <= 0) && effectiveCpIndex == 0;
+          (featOrderIdx <= 0 || !hasPrecedingSameArchetype) &&
+              effectiveCpIndex == 0;
       final precedingFeatureTitles = featOrderIdx > 0
           ? allReleaseFeatures
               .take(featOrderIdx)
@@ -5486,7 +5507,7 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               ? 'PlayerController.cs / MonoBehaviour Prefab and Rigidbody/Collider'
               : 'player.tscn / CharacterBody + GDScript and Project Input Map');
       final projectBuildStateContext = isGreenfieldFirstFeature
-          ? 'Project Build State: FEATURE #1 OF THE ENTIRE PROJECT (Greenfield). Create the foundational scene/character/arena asset ($engineAssetHint) and place it in the active level before wiring input and physics.'
+          ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Asset Setup). On Task 1, explicitly instruct how to create the new ${currentArchetype == 'character' ? 'Character Blueprint / Prefab / Scene' : (currentArchetype == 'ui' ? 'UI Widget / Canvas / Control Scene' : 'Actor Blueprint / Prefab / Scene')} ($engineAssetHint), specify its exact Parent Class / Root Node and folder path, and explain how to place or spawn it in the active level.'
           : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
 
       // Build Epic-Scoped Cumulative Project Ledger:
