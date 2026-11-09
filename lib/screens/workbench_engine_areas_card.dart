@@ -844,7 +844,22 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             final bool isTwoCol = splitConstraints.maxWidth >= 640;
 
             double longestContentWidth =
-                (activeTargetComp.displayLabel.length * 7.2) + 56.0;
+                (assetSpec.sec2Title.length * 7.8) + 74.0;
+
+            final compHeaderWidth =
+                (activeTargetComp.displayLabel.length * 7.8) + 76.0;
+            if (compHeaderWidth > longestContentWidth) {
+              longestContentWidth = compHeaderWidth;
+            }
+
+            if (taskScopedTuningDisplay.isNotEmpty) {
+              final tuningWidth =
+                  (taskScopedTuningDisplay.length * 7.8) + 84.0;
+              if (tuningWidth > longestContentWidth) {
+                longestContentWidth = tuningWidth;
+              }
+            }
+
             for (final row in inspRows) {
               final resolvedProp = _inferOwningComponentForProperty(
                 rawKey: row.key,
@@ -852,19 +867,23 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 engineLabel: selectedHowTo.engineLabel,
                 is2D: assetSpec.is2D,
               );
-              final double titleWidth =
-                  (resolvedProp.propertyLabel.length * 7.4) + 48.0;
-              final double valuePillWidth = (row.value.length * 7.6) + 74.0;
-              final double estRowWidth =
-                  titleWidth > valuePillWidth ? titleWidth : valuePillWidth;
-              if (estRowWidth > longestContentWidth) {
-                longestContentWidth = estRowWidth;
+              final double titleRequiredWidth =
+                  (resolvedProp.propertyLabel.length * 7.8) + 66.0;
+              final double valueRequiredWidth =
+                  (row.value.length * 7.8) + 98.0;
+              // Always fit the bigger of the title or the value
+              final double rowRequiredWidth =
+                  titleRequiredWidth > valueRequiredWidth
+                      ? titleRequiredWidth
+                      : valueRequiredWidth;
+              if (rowRequiredWidth > longestContentWidth) {
+                longestContentWidth = rowRequiredWidth;
               }
             }
             final double maxAllowedColWidth =
-                (splitConstraints.maxWidth * 0.38).clamp(230.0, 320.0);
+                (splitConstraints.maxWidth * 0.48).clamp(250.0, 460.0);
             final double sec2DynamicWidth =
-                longestContentWidth.clamp(230.0, maxAllowedColWidth);
+                longestContentWidth.clamp(250.0, maxAllowedColWidth);
 
             final Widget section02Widget = Container(
               key: ValueKey('area2_selected_component_header_${node.id}'),
@@ -910,8 +929,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       Expanded(
                         child: Text(
                           assetSpec.sec2Title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             fontSize: 13.5,
                             fontWeight: FontWeight.w700,
@@ -956,8 +973,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                 Flexible(
                                   child: Text(
                                     '▾ ${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
@@ -1062,9 +1077,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               children: [
                                                 Text(
                                                   resolvedProp.propertyLabel,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
                                                   style: GoogleFonts.inter(
                                                     fontSize: 12.5,
                                                     fontWeight: FontWeight.w500,
@@ -1120,9 +1132,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                                 edgeItems,
                                                             isCodeBlock: true,
                                                           ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
                                                         ),
                                                       ),
                                                       const SizedBox(width: 5),
@@ -1182,8 +1191,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                               Flexible(
                                 child: Text(
                                   '⚙ $taskScopedTuningDisplay',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
