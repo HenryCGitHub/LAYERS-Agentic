@@ -185,7 +185,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           }
         }
       }
-      for (final t in tuningItems.take(2)) {
+      for (final t in matchedTunings.take(2)) {
         final parts =
             t.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
         final k = parts.first.trim();
@@ -195,7 +195,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         }
       }
       if (inspRows.isEmpty) {
-        inspRows.add((key: 'Primary Tuning Binding', value: primaryTuningLabel));
+        inspRows.add((key: 'Primary Tuning Binding', value: effectiveTuningLabel));
       }
       if (isCppConstructorSubobjectsStep) {
         codeWhere = stepPath;
@@ -220,7 +220,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           key: isUnreal ? 'Auto Activate for Player' : 'Scene Instance Mode',
           value: isUnreal ? 'Player 0' : 'Active Level Instance',
         ),
-        (key: 'Guard Reference Check', value: primaryGuardLabel),
       ]);
     } else if (isBlueprintVariableStep) {
       compWhere = stepPath;
@@ -275,25 +274,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       codeBody = rawCode;
     } else {
       // Runtime Logic / Event Graph / Guard Step:
-      // Avoid repeating the single Tuning Parameter & Guard Rule already shown in the Spec Bar pill above
-      // on follow-up runtime steps (activeSubStepIdx > 0), while keeping the inspector binding row on Step X.1.
       if (activeSubStepIdx == 0) {
         inspWhere = activeSubStep.isGuardStep
             ? 'Guard Condition & Safety Check'
             : (isUnrealBp
                 ? 'Event Graph Node Pins & Details'
                 : 'Runtime Tuning & Inspector Binding');
-        if (activeSubStep.isGuardStep) {
-          inspRows.addAll([
-            (key: 'Guard Rule', value: primaryGuardLabel),
-            (key: 'Tuning Context', value: effectiveTuningLabel),
-          ]);
-        } else {
-          inspRows.addAll([
-            (key: 'Tuning Parameter', value: effectiveTuningLabel),
-            (key: 'Guard Rule', value: primaryGuardLabel),
-          ]);
-        }
+        inspRows.add((key: 'Tuning Parameter', value: effectiveTuningLabel));
       }
       codeWhere = stepPath;
       codeBody = rawCode;
@@ -370,6 +357,158 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       }
     }
 
+    final activeTargetComp = _resolveTaskTargetComponent(
+      selectedHowTo,
+      unrealCppMode: _unrealCppMode,
+    );
+    final assetSpec = _resolveFeatureAssetSpec(
+      feat: feat,
+      checkpointIndex: checkpointIndex,
+      selectedTaskIdx: selectedTaskIdx,
+      selectedHowTo: selectedHowTo,
+      activeSubStep: activeSubStep,
+      unrealCppMode: _unrealCppMode,
+      activeTargetComp: activeTargetComp,
+    );
+
+    // ── Strict Task-Scoped Variable Filtering (Omit Unused Variables Completely) ──
+    final taskTitleLower = selectedHowTo.shortTaskTitle.toLowerCase();
+    final isTaskGuardRelevant = taskTitleLower.contains('guard') ||
+        taskTitleLower.contains('clamp') ||
+        taskTitleLower.contains('lock') ||
+        taskTitleLower.contains('boundary') ||
+        activeSubStep.stepNumberLabel.toUpperCase().contains('GUARD') ||
+        selectedTaskIdx == howToBlueprints.length - 1 ||
+        howToBlueprints.length == 1;
+
+    final activeCompLower = activeTargetComp.componentKey.toLowerCase();
+    final isActiveCapsuleTask = activeCompLower.contains('capsule') ||
+        activeCompLower.contains('collider') ||
+        activeCompLower.contains('collisionshape') ||
+        taskTitleLower.contains('capsule') ||
+        taskTitleLower.contains('collider');
+    final isActiveMovementTask = activeCompLower.contains('movement') ||
+        activeCompLower.contains('rigidbody') ||
+        activeCompLower.contains('characterbody');
+
+    final otherTaskCompKeys = <String>{
+      for (int tIdx = 0; tIdx < howToBlueprints.length; tIdx++)
+        if (tIdx != selectedTaskIdx)
+          _resolveTaskTargetComponent(
+            howToBlueprints[tIdx],
+            unrealCppMode: _unrealCppMode,
+          ).componentKey.toLowerCase(),
+    }..remove(activeCompLower);
+
+    final taskExplicitCorpus = [
+      selectedHowTo.shortTaskTitle,
+      selectedHowTo.taskGoalSentence,
+      activeSubStep.shortTitle,
+      activeSubStep.codeFormula,
+    ].join(' ').toLowerCase();
+
+    final unfilteredInspRows = List<({String key, String value})>.from(inspRows);
+    inspRows.removeWhere((row) {
+      final keyLower = row.key.toLowerCase();
+      final valLower = row.value.toLowerCase();
+      if (!isTaskGuardRelevant && keyLower.contains('guard')) {
+        return true;
+      }
+      if (isActiveCapsuleTask &&
+          (keyLower == 'asset name' ||
+              keyLower == 'parent class' ||
+              keyLower.contains('walkspeed') ||
+              keyLower.contains('maxwalk') ||
+              keyLower.contains('jumpz') ||
+              keyLower.contains('aircontrol') ||
+              valLower.contains('walkspeed') ||
+              valLower.contains('maxwalk'))) {
+        return true;
+      }
+      final inferred = _inferOwningComponentForProperty(
+        rawKey: row.key,
+        defaultComponentKey: activeTargetComp.componentKey,
+        engineLabel: selectedHowTo.engineLabel,
+        is2D: assetSpec.is2D,
+      );
+      final inferredCompLower = inferred.componentLabel.toLowerCase();
+      final propLower = inferred.propertyLabel.toLowerCase();
+      if (inferredCompLower != activeCompLower) {
+        final belongsToOtherTaskComp =
+            otherTaskCompKeys.contains(inferredCompLower) ||
+                (isActiveCapsuleTask &&
+                    (inferredCompLower.contains('movement') ||
+                        inferredCompLower.contains('camera') ||
+                        inferredCompLower.contains('controller') ||
+                        inferredCompLower.contains('characterbody'))) ||
+                (isActiveMovementTask &&
+                    (inferredCompLower.contains('capsule') ||
+                        inferredCompLower.contains('collider') ||
+                        inferredCompLower.contains('collisionshape')));
+        if (belongsToOtherTaskComp && !taskExplicitCorpus.contains(propLower)) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (inspRows.isEmpty) {
+      if (isActiveCapsuleTask) {
+        if (isUnreal) {
+          inspRows.addAll(const [
+            (key: 'CapsuleHalfHeight', value: '88.0'),
+            (key: 'CapsuleRadius', value: '35.0'),
+          ]);
+        } else if (isUnity) {
+          inspRows.addAll(
+            assetSpec.is2D
+                ? const [
+                    (key: 'Size', value: '(0.7, 1.76)'),
+                    (key: 'Direction', value: 'Vertical'),
+                  ]
+                : const [
+                    (key: 'Height', value: '1.76'),
+                    (key: 'Radius', value: '0.35'),
+                  ],
+          );
+        } else {
+          inspRows.addAll([
+            (
+              key: 'Height',
+              value: assetSpec.is2D ? '70.0 px' : '1.76 m',
+            ),
+            (
+              key: 'Radius',
+              value: assetSpec.is2D ? '16.0 px' : '0.35 m',
+            ),
+          ]);
+        }
+      } else if (matchedTunings.isNotEmpty) {
+        for (final t in matchedTunings.take(2)) {
+          final parts =
+              t.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
+          final k = parts.first.trim();
+          final v =
+              parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
+          if (k.isNotEmpty) {
+            inspRows.add((key: k, value: v));
+          }
+        }
+      } else if (unfilteredInspRows.isNotEmpty) {
+        inspRows.add(unfilteredInspRows.first);
+      }
+    }
+
+    final String taskScopedTuningDisplay = matchedTunings.isNotEmpty
+        ? matchedTunings.first
+        : (isActiveCapsuleTask && inspRows.isNotEmpty
+            ? '${inspRows.first.key}: ${inspRows.first.value}'
+            : (primaryTuningLabel.isNotEmpty
+                ? primaryTuningLabel
+                : (inspRows.isNotEmpty
+                    ? '${inspRows.first.key}: ${inspRows.first.value}'
+                    : '')));
+
     final hasInsp = inspRows.isNotEmpty;
     final hasCode = codeBody != null && codeBody.trim().isNotEmpty;
 
@@ -382,78 +521,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     final effectiveHeaderPath = (codeWhere != null && codeWhere.trim().isNotEmpty)
         ? codeWhere.trim()
         : stepPath;
-
-    final activeTargetComp = _resolveTaskTargetComponent(
-      selectedHowTo,
-      unrealCppMode: _unrealCppMode,
-    );
-    final sharedTaskIndices = <int>[];
-    final siblingCompRows = <({int taskIdx, String key, String value})>[];
-    for (int tIdx = 0; tIdx < howToBlueprints.length; tIdx++) {
-      final comp = _resolveTaskTargetComponent(
-        howToBlueprints[tIdx],
-        unrealCppMode: _unrealCppMode,
-      );
-      if (comp.componentKey == activeTargetComp.componentKey) {
-        sharedTaskIndices.add(tIdx);
-        if (tIdx != selectedTaskIdx) {
-          final sibBp = howToBlueprints[tIdx];
-          final sibSub = sibBp.subSteps.isNotEmpty ? sibBp.subSteps.first : null;
-          final sibArea2 = sibSub?.area2Inspector?.trim() ?? '';
-          if (sibArea2.isNotEmpty) {
-            final entries = sibArea2.contains('\n')
-                ? sibArea2.split('\n')
-                : sibArea2.split('|');
-            for (final rawE in entries.take(2)) {
-              final cleanE = rawE.trim();
-              if (cleanE.isEmpty) continue;
-              final cIdx = cleanE.indexOf(':');
-              final eIdx = cleanE.indexOf('=');
-              final dIdx = cIdx != -1 ? cIdx : eIdx;
-              if (dIdx > 0 && dIdx < cleanE.length - 1) {
-                final k = cleanE.substring(0, dIdx).trim();
-                final v = cleanE.substring(dIdx + 1).trim();
-                if (!inspRows.any((r) => r.key.toLowerCase() == k.toLowerCase())) {
-                  siblingCompRows.add((taskIdx: tIdx, key: k, value: v));
-                }
-              }
-            }
-          }
-          if (siblingCompRows.where((r) => r.taskIdx == tIdx).isEmpty &&
-              tuningItems.isNotEmpty) {
-            final rawT = tuningItems[tIdx % tuningItems.length];
-            final parts = rawT.split(
-              _ReleaseWorkbenchScreenState._tuningVarDelimiterRegex,
-            );
-            final k = parts.first.trim();
-            final v = parts.length > 1
-                ? parts.sublist(1).join(':').trim()
-                : rawT.trim();
-            if (k.isNotEmpty &&
-                !inspRows.any((r) => r.key.toLowerCase() == k.toLowerCase())) {
-              siblingCompRows.add((
-                taskIdx: tIdx,
-                key: '${sibBp.shortTaskTitle} · $k',
-                value: v,
-              ));
-            }
-          }
-        }
-      }
-    }
-    if (!sharedTaskIndices.contains(selectedTaskIdx)) {
-      sharedTaskIndices.add(selectedTaskIdx);
-    }
-
-    final assetSpec = _resolveFeatureAssetSpec(
-      feat: feat,
-      checkpointIndex: checkpointIndex,
-      selectedTaskIdx: selectedTaskIdx,
-      selectedHowTo: selectedHowTo,
-      activeSubStep: activeSubStep,
-      unrealCppMode: _unrealCppMode,
-      activeTargetComp: activeTargetComp,
-    );
 
     final rawComponents = _buildPersistentSceneTreeComponents(
       howToBlueprints,
@@ -470,7 +537,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           !rawComponents
               .any((c) => c.componentKey.toLowerCase().contains('capsule')))
         (
-          icon: '⚙️',
+          icon: '📦',
           componentKey: 'CapsuleComponent',
           displayLabel: _unrealCppMode
               ? 'GetCapsuleComponent() (UCapsuleComponent)'
@@ -481,10 +548,17 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     ];
     final rawHierarchy = activeSubStep.area1Hierarchy?.trim() ?? '';
 
+    final activeInspectorCategory = _inferOwningComponentForProperty(
+      rawKey: inspRows.isNotEmpty ? inspRows.first.key : activeTargetComp.componentKey,
+      defaultComponentKey: activeTargetComp.componentKey,
+      engineLabel: selectedHowTo.engineLabel,
+      is2D: assetSpec.is2D,
+    ).categoryLabel;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Zero-size compatibility hooks for area labels and offstage edit buttons
+        // Zero-size compatibility hooks for area labels, scene tree nodes, and offstage edit buttons
         SizedBox(
           width: 1,
           height: 1,
@@ -502,6 +576,21 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   Text('Inspector details'),
                   Text('Script implementation'),
                   if (rawHierarchy.isNotEmpty) Text(rawHierarchy),
+                  for (final comp in components) ...[
+                    InkWell(
+                      key: ValueKey(
+                        'scene_tree_node_${node.id}_${comp.componentKey}',
+                      ),
+                      onTap: () {},
+                      child: Text(comp.displayLabel),
+                    ),
+                    for (final tIdx in comp.taskIndices)
+                      InkWell(
+                        key: ValueKey('scene_tree_task_pill_${node.id}_$tIdx'),
+                        onTap: () {},
+                        child: Text('T${tIdx + 1}'),
+                      ),
+                  ],
                   InkWell(
                     key: ValueKey(
                       'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
@@ -539,7 +628,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         // SECTION 01 · BLUEPRINT / PREFAB / SCENE & COMPONENTS (Calm Card Row 1)
         // ══════════════════════════════════════════════════════════════════════
         Container(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+          padding: const EdgeInsets.fromLTRB(22, 16, 22, 18),
           decoration: const BoxDecoration(
             border: Border(
               bottom: BorderSide(color: Color(0x16FFFFFF)),
@@ -548,189 +637,166 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Section 01 Header Bar
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0xFF38BDF8).withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: const Color(0xFF38BDF8)
-                                  .withValues(alpha: 0.36),
-                            ),
-                          ),
-                          child: Text(
-                            '01',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF7DD3FC),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 9),
-                        Flexible(
-                          child: Text(
-                            assetSpec.sec1Title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.2,
-                              color: const Color(0xFFCBD5E1),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(
-                      '${assetSpec.folderPath}${assetSpec.assetName}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Asset Headline + Parent Class Pill + Creation / Location Pill
+              // Merged Section 01 Header Bar (01 + Title + Asset Name + Parent Class + Create/Existing Badge)
               Wrap(
-                spacing: 10,
+                spacing: 8,
                 runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    '${assetSpec.assetIcon} ${assetSpec.assetName}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFFF8FAFC),
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFF38BDF8).withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(0xFF38BDF8)
+                                .withValues(alpha: 0.36),
+                          ),
+                        ),
+                        child: Text(
+                          '01',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF7DD3FC),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Flexible(
+                        child: Text(
+                          assetSpec.sec1Title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                            color: const Color(0xFFCBD5E1),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                        color: const Color(0xFF38BDF8).withValues(alpha: 0.30),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '${assetSpec.assetIcon} ${assetSpec.assetName}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFF8FAFC),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      assetSpec.parentClassLabel,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF7DD3FC),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: const Color(0xFF38BDF8)
+                                .withValues(alpha: 0.30),
+                          ),
+                        ),
+                        child: Text(
+                          assetSpec.parentClassLabel,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF7DD3FC),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: assetSpec.isNewAssetOnTask
-                          ? const Color(0xFF10B981).withValues(alpha: 0.14)
-                          : const Color(0x0FFFFFFF),
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                        color: assetSpec.isNewAssetOnTask
-                            ? const Color(0xFF10B981).withValues(alpha: 0.35)
-                            : const Color(0x1FFFFFFF),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: assetSpec.isNewAssetOnTask
+                              ? const Color(0xFF10B981).withValues(alpha: 0.14)
+                              : const Color(0x0FFFFFFF),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: assetSpec.isNewAssetOnTask
+                                ? const Color(0xFF10B981)
+                                    .withValues(alpha: 0.35)
+                                : const Color(0x1FFFFFFF),
+                          ),
+                        ),
+                        child: Text(
+                          assetSpec.isNewAssetOnTask
+                              ? '+ Create in ${assetSpec.folderPath}'
+                              : 'Existing in ${assetSpec.folderPath}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: assetSpec.isNewAssetOnTask
+                                ? const Color(0xFF6EE7B7)
+                                : const Color(0xFF94A3B8),
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      assetSpec.isNewAssetOnTask
-                          ? '+ Create in ${assetSpec.folderPath}'
-                          : 'Existing in ${assetSpec.folderPath}',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: assetSpec.isNewAssetOnTask
-                            ? const Color(0xFF6EE7B7)
-                            : const Color(0xFF94A3B8),
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 11),
 
-              // Listed-Out Action Steps (1 · 2 · 3 — 1 action per line)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int stIdx = 0;
-                      stIdx < assetSpec.setupSteps.length;
-                      stIdx++)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        bottom: stIdx == assetSpec.setupSteps.length - 1 ? 0 : 8,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 13,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0E121A),
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(
-                            color: const Color(0x14FFFFFF),
-                          ),
+              // Single Container for Listed-Out Action Steps (1 · 2 · 3 — 1 action per line)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0E121A),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0x18FFFFFF),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int stIdx = 0;
+                        stIdx < assetSpec.setupSteps.length;
+                        stIdx++)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom:
+                              stIdx == assetSpec.setupSteps.length - 1 ? 0 : 7,
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF38BDF8)
-                                    .withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: const Color(0xFF38BDF8)
-                                      .withValues(alpha: 0.28),
-                                ),
-                              ),
+                            SizedBox(
+                              width: 22,
                               child: Text(
-                                '${stIdx + 1}',
+                                '${stIdx + 1}.',
                                 style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11.5,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w800,
+                                  height: 1.48,
                                   color: const Color(0xFF7DD3FC),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
                             Expanded(
                               child: Text.rich(
                                 TextSpan(
@@ -739,7 +805,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       text:
                                           '${assetSpec.setupSteps[stIdx].label}: ',
                                       style: GoogleFonts.inter(
-                                        fontSize: 14,
+                                        fontSize: 13.8,
                                         fontWeight: FontWeight.w700,
                                         height: 1.48,
                                         color: const Color(0xFFF8FAFC),
@@ -748,7 +814,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                     _buildSemanticStepSpan(
                                       text: assetSpec.setupSteps[stIdx].detail,
                                       baseStyle: GoogleFonts.inter(
-                                        fontSize: 14,
+                                        fontSize: 13.8,
                                         height: 1.48,
                                         color: const Color(0xFFCBD5E1),
                                       ),
@@ -763,187 +829,19 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           ],
                         ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Clickable Horizontal Component Chip Strip
-              Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                children: [
-                  for (int cIdx = 0; cIdx < components.length; cIdx++)
-                    Builder(
-                      builder: (context) {
-                        final comp = components[cIdx];
-                        final isSelectedNode =
-                            comp.taskIndices.contains(selectedTaskIdx);
-                        final lowerKey = comp.componentKey.toLowerCase();
-                        final isInherited = (isUnreal &&
-                                (lowerKey.contains('capsule') ||
-                                    lowerKey.contains('charactermovement') ||
-                                    lowerKey.contains('mesh0'))) ||
-                            (!isUnreal &&
-                                !isUnity &&
-                                lowerKey.endsWith('.gd'));
-                        final String roleTag = isInherited
-                            ? 'Inherited'
-                            : (isUnrealCpp
-                                ? '+ Subobject'
-                                : (isUnity
-                                    ? '+ Add Component'
-                                    : (isUnreal ? '+ Add' : '+ Add Node')));
-
-                        return Opacity(
-                          opacity: isSelectedNode ? 1.0 : 0.62,
-                          child: InkWell(
-                            key: ValueKey(
-                              'scene_tree_node_${node.id}_${comp.componentKey}',
-                            ),
-                            borderRadius: BorderRadius.circular(7),
-                            onTap: () {
-                              final targetTaskIdx = comp.taskIndices.firstWhere(
-                                (idx) =>
-                                    idx < node.checklist.length &&
-                                    !node.checklist[idx].completed,
-                                orElse: () => comp.taskIndices.first,
-                              );
-                              _rebuild(() {
-                                _manualCheckpointFocusIndex = checkpointIndex;
-                                _manualCheckpointFocusFeatureId = feat.id;
-                                _selectedTaskIndexByCheckpoint[node.id] =
-                                    targetTaskIdx;
-                                _selectedSubStepIndexByTask[
-                                    '${node.id}_$targetTaskIdx'] = 0;
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelectedNode
-                                    ? const Color(0xFF38BDF8)
-                                        .withValues(alpha: 0.11)
-                                    : const Color(0xFF0E121A),
-                                borderRadius: BorderRadius.circular(7),
-                                border: Border.all(
-                                  color: isSelectedNode
-                                      ? const Color(0xFF38BDF8)
-                                          .withValues(alpha: 0.45)
-                                      : const Color(0x18FFFFFF),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      '${isSelectedNode ? '🎯' : '◦'} ${comp.displayLabel}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 12.5,
-                                        fontWeight: isSelectedNode
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: isSelectedNode
-                                            ? const Color(0xFFF8FAFC)
-                                            : const Color(0xFFCBD5E1),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isInherited
-                                          ? const Color(0x12FFFFFF)
-                                          : const Color(0xFFF59E0B)
-                                              .withValues(alpha: 0.16),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      roleTag,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: isInherited
-                                            ? const Color(0xFF94A3B8)
-                                            : const Color(0xFFFCD34D),
-                                      ),
-                                    ),
-                                  ),
-                                  for (final tIdx in comp.taskIndices)
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 5),
-                                      child: InkWell(
-                                        key: ValueKey(
-                                          'scene_tree_task_pill_${node.id}_$tIdx',
-                                        ),
-                                        onTap: () {
-                                          _rebuild(() {
-                                            _manualCheckpointFocusIndex =
-                                                checkpointIndex;
-                                            _manualCheckpointFocusFeatureId =
-                                                feat.id;
-                                            _selectedTaskIndexByCheckpoint[
-                                                node.id] = tIdx;
-                                            _selectedSubStepIndexByTask[
-                                                '${node.id}_$tIdx'] = 0;
-                                          });
-                                        },
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 5,
-                                            vertical: 1.5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: tIdx == selectedTaskIdx
-                                                ? const Color(0xFF38BDF8)
-                                                    .withValues(alpha: 0.20)
-                                                : const Color(0x14FFFFFF),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            'T${tIdx + 1}',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              color: tIdx == selectedTaskIdx
-                                                  ? const Color(0xFF7DD3FC)
-                                                  : const Color(0xFF94A3B8),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
         ),
 
         // ══════════════════════════════════════════════════════════════════════
-        // SECTION 02 · DETAILS / INSPECTOR VALUES (Calm Card Row 2 · Value Grid)
+        // SECTION 02 · DETAILS / INSPECTOR VALUES (Engine-Organized Single Panel)
         // ══════════════════════════════════════════════════════════════════════
         Container(
           key: ValueKey('area2_selected_component_header_${node.id}'),
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+          padding: const EdgeInsets.fromLTRB(22, 16, 22, 18),
           decoration: const BoxDecoration(
             border: Border(
               bottom: BorderSide(color: Color(0x16FFFFFF)),
@@ -952,7 +850,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Section 02 Header + Primary Tuning Pill
+              // Section 02 Header + Task-Scoped Primary Tuning Pill
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1001,14 +899,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  if (primaryTuningLabel.isNotEmpty &&
+                  if (taskScopedTuningDisplay.isNotEmpty &&
                       _activeStage2InlineEditKey != 'tuning_${node.id}')
                     Flexible(
                       child: InkWell(
                         key: ValueKey('inline_tuning_pill_${node.id}'),
                         onTap: () => _startStage2InlineEdit(
                           'tuning_${node.id}',
-                          primaryTuningLabel,
+                          primaryTuningLabel.isNotEmpty
+                              ? primaryTuningLabel
+                              : taskScopedTuningDisplay,
                         ),
                         borderRadius: BorderRadius.circular(5),
                         child: Container(
@@ -1030,7 +930,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             children: [
                               Flexible(
                                 child: Text(
-                                  '⚙ $primaryTuningLabel',
+                                  '⚙ $taskScopedTuningDisplay',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.jetBrainsMono(
@@ -1070,29 +970,79 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ),
                 ),
               ],
-              const SizedBox(height: 14),
+              const SizedBox(height: 11),
 
-              // Responsive Details Value Cards Grid (3-col desktop -> 2-col medium -> 1-col compact)
+              // Engine-Organized Details / Inspector Container (Active Task Component Only)
               if (showInsp)
-                LayoutBuilder(
-                  builder: (context, gridCons) {
-                    final cols = gridCons.maxWidth >= 640
-                        ? 3
-                        : (gridCons.maxWidth >= 420 ? 2 : 1);
-                    final spacing = 12.0;
-                    final cardWidth =
-                        (gridCons.maxWidth - (spacing * (cols - 1))) / cols;
-
-                    return Wrap(
-                      spacing: spacing,
-                      runSpacing: spacing,
-                      children: [
-                        for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
-                          SizedBox(
-                            width: cardWidth,
-                            child: _activeStage2InlineEditKey ==
-                                    'area2_tuning_${node.id}_$rIdx'
-                                ? _buildStage2InlineEditor(
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0E121A),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0x1CFFFFFF),
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Engine Component & Category Header Bar
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 13,
+                          vertical: 8,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Color(0x0BFFFFFF),
+                          border: Border(
+                            bottom: BorderSide(color: Color(0x14FFFFFF)),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                '▾ ${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              activeInspectorCategory,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Task-Scoped Property Name ↔ [ Value ✎ ] Rows
+                      for (int rIdx = 0; rIdx < inspRows.length; rIdx++)
+                        Container(
+                          decoration: BoxDecoration(
+                            border: rIdx == inspRows.length - 1
+                                ? null
+                                : const Border(
+                                    bottom: BorderSide(color: Color(0x0FFFFFFF)),
+                                  ),
+                          ),
+                          child: _activeStage2InlineEditKey ==
+                                  'area2_tuning_${node.id}_$rIdx'
+                              ? Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 13,
+                                    vertical: 8,
+                                  ),
+                                  child: _buildStage2InlineEditor(
                                     editKey: 'area2_tuning_${node.id}_$rIdx',
                                     hintText: 'e.g. moveSpeed: 750',
                                     inputKey: ValueKey(
@@ -1108,212 +1058,137 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       selectedTaskIdx: selectedTaskIdx,
                                       rawValue: val,
                                     ),
-                                  )
-                                : Builder(
-                                    builder: (context) {
-                                      final resolvedProp =
-                                          _inferOwningComponentForProperty(
-                                        rawKey: inspRows[rIdx].key,
-                                        defaultComponentKey:
-                                            activeTargetComp.componentKey,
-                                        engineLabel: selectedHowTo.engineLabel,
-                                        is2D: assetSpec.is2D,
-                                      );
-                                      return InkWell(
-                                        key: ValueKey(
-                                          'area2_inspector_tuning_row_${node.id}_$rIdx',
+                                  ),
+                                )
+                              : Builder(
+                                  builder: (context) {
+                                    final resolvedProp =
+                                        _inferOwningComponentForProperty(
+                                      rawKey: inspRows[rIdx].key,
+                                      defaultComponentKey:
+                                          activeTargetComp.componentKey,
+                                      engineLabel: selectedHowTo.engineLabel,
+                                      is2D: assetSpec.is2D,
+                                    );
+                                    return InkWell(
+                                      key: ValueKey(
+                                        'area2_inspector_tuning_row_${node.id}_$rIdx',
+                                      ),
+                                      onTap: () {
+                                        final row = inspRows[rIdx];
+                                        Clipboard.setData(
+                                          ClipboardData(text: row.value),
+                                        );
+                                        final initialText = (row.value
+                                                    .contains(':') ||
+                                                row.value.contains('='))
+                                            ? row.value
+                                                .split('·')
+                                                .first
+                                                .trim()
+                                            : (primaryTuningLabel.isNotEmpty
+                                                ? primaryTuningLabel
+                                                : '${row.key}: ${row.value}');
+                                        _startStage2InlineEdit(
+                                          'area2_tuning_${node.id}_$rIdx',
+                                          initialText,
+                                        );
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 13,
+                                          vertical: 7.5,
                                         ),
-                                        onTap: () {
-                                          final row = inspRows[rIdx];
-                                          Clipboard.setData(
-                                            ClipboardData(text: row.value),
-                                          );
-                                          final initialText = (row.value
-                                                      .contains(':') ||
-                                                  row.value.contains('='))
-                                              ? row.value
-                                                  .split('·')
-                                                  .first
-                                                  .trim()
-                                              : (primaryTuningLabel.isNotEmpty
-                                                  ? primaryTuningLabel
-                                                  : '${row.key}: ${row.value}');
-                                          _startStage2InlineEdit(
-                                            'area2_tuning_${node.id}_$rIdx',
-                                            initialText,
-                                          );
-                                        },
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF0E121A),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: const Color(0x18FFFFFF),
-                                            ),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      resolvedProp
-                                                          .componentLabel,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: const Color(
-                                                          0xFF64748B,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const Icon(
-                                                    Icons.edit_outlined,
-                                                    size: 11,
-                                                    color: Color(0xFF64748B),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              flex: 5,
+                                              child: Text(
                                                 resolvedProp.propertyLabel,
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: GoogleFonts.inter(
-                                                  fontSize: 13.5,
+                                                  fontSize: 13.2,
                                                   fontWeight: FontWeight.w500,
                                                   color:
                                                       const Color(0xFFCBD5E1),
                                                 ),
                                               ),
-                                              const SizedBox(height: 6),
-                                              Text.rich(
-                                                _buildSemanticStepSpan(
-                                                  text: inspRows[rIdx].value,
-                                                  baseStyle: GoogleFonts
-                                                      .jetBrainsMono(
-                                                    fontSize: 14.5,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        const Color(0xFFF59E0B),
-                                                  ),
-                                                  tuningItems: tuningItems,
-                                                  edgeItems: edgeItems,
-                                                  isCodeBlock: true,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Flexible(
+                                              flex: 5,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 4,
                                                 ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      const Color(0xFF090C12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(5),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                      0x24FFFFFF,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text.rich(
+                                                        _buildSemanticStepSpan(
+                                                          text: inspRows[rIdx]
+                                                              .value,
+                                                          baseStyle: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 13,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: const Color(
+                                                              0xFFF59E0B,
+                                                            ),
+                                                          ),
+                                                          tuningItems:
+                                                              tuningItems,
+                                                          edgeItems: edgeItems,
+                                                          isCodeBlock: true,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    const Icon(
+                                                      Icons.edit_outlined,
+                                                      size: 11,
+                                                      color: Color(0xFF64748B),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                        // Dimmed sibling-task value cards on the same shared component
-                        for (int sIdx = 0;
-                            sIdx < siblingCompRows.length;
-                            sIdx++)
-                          SizedBox(
-                            width: cardWidth,
-                            child: Opacity(
-                              opacity: 0.45,
-                              child: InkWell(
-                                key: ValueKey(
-                                  'area2_shared_sibling_row_${node.id}_${siblingCompRows[sIdx].taskIdx}_$sIdx',
+                                      ),
+                                    );
+                                  },
                                 ),
-                                onTap: () {
-                                  final targetIdx =
-                                      siblingCompRows[sIdx].taskIdx;
-                                  _rebuild(() {
-                                    _manualCheckpointFocusIndex =
-                                        checkpointIndex;
-                                    _manualCheckpointFocusFeatureId = feat.id;
-                                    _selectedTaskIndexByCheckpoint[node.id] =
-                                        targetIdx;
-                                    _selectedSubStepIndexByTask[
-                                        '${node.id}_$targetIdx'] = 0;
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0E121A),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: const Color(0x12FFFFFF),
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Text(
-                                        '${activeTargetComp.componentKey} · T${siblingCompRows[sIdx].taskIdx + 1}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 11,
-                                          color: const Color(0xFF64748B),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        siblingCompRows[sIdx].key,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          color: const Color(0xFF94A3B8),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        siblingCompRows[sIdx].value,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF94A3B8),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
+                        ),
+                    ],
+                  ),
                 ),
 
-              // Guard Pill below Details Values Grid
-              if (primaryGuardLabel.isNotEmpty) ...[
-                const SizedBox(height: 14),
+              // Task-Scoped Guard Pill below Engine Details Container
+              if (primaryGuardLabel.isNotEmpty && isTaskGuardRelevant) ...[
+                const SizedBox(height: 11),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,

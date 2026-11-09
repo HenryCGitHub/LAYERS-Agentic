@@ -312,11 +312,62 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       caseSensitive: false,
     );
 
-    // 1. Check if any subStep has an explicit area1Hierarchy child component noun
+    final draft = widget.workbench.conceptDraft;
+    final specCombined = [
+      ...(draft?.gameSpec ?? const <String>[]),
+      ...(draft?.techSpec ?? const <String>[]),
+      draft?.goal ?? '',
+    ].join(' ').toLowerCase();
+    final is2D = specCombined.contains('2d') ||
+        specCombined.contains('pixel') ||
+        specCombined.contains('sprite') ||
+        specCombined.contains('side-scroller');
+
+    // 0. Check task title first so Capsule / Collider foundation tasks never fall through to child Movement components
+    final titleLower = bp.shortTaskTitle.toLowerCase();
+    if (titleLower.contains('capsule') ||
+        titleLower.contains('collider') ||
+        titleLower.contains('collision hull') ||
+        titleLower.contains('collision shape')) {
+      if (isUnreal) {
+        return (
+          icon: '📦',
+          componentKey: 'CapsuleComponent',
+          displayLabel: unrealCppMode
+              ? 'CapsuleComponent (UCapsuleComponent)'
+              : 'CapsuleComponent (CollisionCylinder)',
+        );
+      } else if (isUnity) {
+        return (
+          icon: '📦',
+          componentKey: is2D ? 'CapsuleCollider2D' : 'CharacterController',
+          displayLabel: is2D
+              ? 'CapsuleCollider2D (2D Physics)'
+              : 'CharacterController (Capsule Collider)',
+        );
+      } else {
+        return (
+          icon: '📦',
+          componentKey: is2D ? 'CollisionShape2D' : 'CollisionShape3D',
+          displayLabel: is2D
+              ? 'CollisionShape2D (CapsuleShape2D)'
+              : 'CollisionShape3D (CapsuleShape3D)',
+        );
+      }
+    }
+
+    // 1. Check if any subStep has an explicit area1Hierarchy child component noun (prioritizing ← SELECTED / [ACTIVE])
     for (final step in bp.subSteps) {
       final rawH = step.area1Hierarchy?.trim() ?? '';
       if (rawH.isNotEmpty) {
-        for (final rawLine in rawH.split('\n').reversed) {
+        final lines = rawH.split('\n');
+        final orderedLines = <String>[
+          ...lines.where(
+            (l) => l.contains('← SELECTED') || l.contains('[ACTIVE]'),
+          ),
+          ...lines.reversed,
+        ];
+        for (final rawLine in orderedLines) {
           final clean = rawLine
               .replaceAll(RegExp(r'^[├└│─\s•\-🎯📦⚙️📷🦴🧩📁⚡]+'), '')
               .replaceAll('[ACTIVE]', '')
@@ -333,6 +384,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             final icon = lower.contains('camera')
                 ? '📷'
                 : (lower.contains('box') ||
+                        lower.contains('capsule') ||
                         lower.contains('trigger') ||
                         lower.contains('collision') ||
                         lower.contains('area') ||
@@ -668,7 +720,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     }
 
     final setupSteps = <({String label, String detail})>[];
-    final customInstruction = activeSubStep.instruction.trim();
     if (isNewAssetOnTask) {
       if (archetype == 'character') {
         if (isUnrealBp) {
@@ -679,12 +730,12 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   'Right-click in $folderPath → Blueprint Class → Choose Character → Name $assetName',
             ),
             (
-              label: 'Inherited Components',
+              label: 'Select Capsule',
               detail:
-                  'Open $assetName → Keep inherited CapsuleComponent (Root) & CharacterMovement',
+                  'Open $assetName → Select inherited CapsuleComponent (Root) in Components',
             ),
             (
-              label: 'Add Component',
+              label: 'Add Camera',
               detail:
                   'In Components panel, click + Add → Attach FirstPersonCamera (Camera) under CapsuleComponent',
             ),
@@ -697,14 +748,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   'Tools → New C++ Class → Choose Character (ACharacter) → Name PlayerCharacter in $folderPath',
             ),
             (
-              label: 'Declare Pointer',
+              label: 'Configure Capsule',
               detail:
-                  'In PlayerCharacter.h, add UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> FirstPersonCamera;',
+                  'In constructor, call GetCapsuleComponent()->InitCapsuleSize(35.f, 88.f)',
             ),
             (
-              label: 'Attach Subobject',
+              label: 'Attach Camera',
               detail:
-                  'In constructor, call CreateDefaultSubobject<UCameraComponent> and attach to GetCapsuleComponent()',
+                  'Call CreateDefaultSubobject<UCameraComponent> and attach to GetCapsuleComponent()',
             ),
           ]);
         } else if (isUnity) {
@@ -715,7 +766,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   'In Hierarchy, right-click → Create Empty named PlayerCharacter → Drag into $folderPath',
             ),
             (
-              label: 'Add Components',
+              label: 'Add Collider',
               detail:
                   'In Inspector, click Add Component → Attach ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController'} and PlayerController.cs',
             ),
@@ -741,7 +792,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   'Click 📜 Attach Script on root node → Save as player_character.gd',
             ),
             (
-              label: 'Add Child Nodes',
+              label: 'Add Capsule & Camera',
               detail:
                   'Click + on root → Add $colNode (CapsuleShape) and $camNode',
             ),
@@ -898,15 +949,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         }
       }
     } else {
-      final cleanAction = customInstruction
-          .replaceAll(
-            RegExp(
-              r'\s+in\s+(?:BP_|WBP_|A|U)?[A-Za-z0-9_.]+\.?\s*$',
-              caseSensitive: false,
-            ),
-            '',
-          )
-          .trim();
       setupSteps.addAll([
         (
           label: 'Open Asset',
@@ -916,12 +958,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           label: 'Select Component',
           detail:
               'Click ${activeTargetComp.displayLabel} in the ${isUnrealBp ? 'Components panel' : (isUnrealCpp ? 'Class subobject list' : (isUnity ? 'Hierarchy / Inspector' : 'Scene Dock'))}',
-        ),
-        (
-          label: 'Configure Task',
-          detail: cleanAction.isNotEmpty
-              ? cleanAction
-              : 'Apply the ${sec2Title.toLowerCase()} in 02 and logic in 03',
         ),
       ]);
     }
@@ -1079,9 +1115,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     return bullets;
   }
 
-  /// Infers the specific owning component name for a Details/Inspector property row so
-  /// Capsule, Camera, and Movement properties are never misattributed to a single component.
-  ({String componentLabel, String propertyLabel})
+  /// Infers the specific owning component name and engine Details/Inspector category for a property row
+  /// so Capsule, Camera, and Movement properties are never misattributed to a single component.
+  ({String componentLabel, String categoryLabel, String propertyLabel})
       _inferOwningComponentForProperty({
     required String rawKey,
     required String defaultComponentKey,
@@ -1090,6 +1126,36 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
   }) {
     final isUnreal = engineLabel.contains('UNREAL');
     final isUnity = engineLabel.contains('UNITY');
+    String defaultCatFor(String comp) {
+      final lc = comp.toLowerCase();
+      if (lc.contains('capsule') ||
+          lc.contains('collider') ||
+          lc.contains('collisionshape')) {
+        return isUnreal
+            ? 'Category: Shape'
+            : (isUnity
+                ? 'Collider Bounds'
+                : 'Shape: ${is2D ? 'CapsuleShape2D' : 'CapsuleShape3D'}');
+      }
+      if (lc.contains('camera') || lc.contains('springarm')) {
+        return isUnreal
+            ? 'Category: Camera Settings'
+            : (isUnity ? 'Camera Projection' : 'Node: Camera Transform');
+      }
+      if (lc.contains('movement') ||
+          lc.contains('rigidbody') ||
+          lc.contains('characterbody')) {
+        return isUnreal
+            ? 'Category: Character Movement'
+            : (isUnity
+                ? '[SerializeField] Tuning'
+                : 'Script Variables (@export)');
+      }
+      return isUnreal
+          ? 'Category: Details'
+          : (isUnity ? 'Component Settings' : 'Inspector Properties');
+    }
+
     for (final sep in const ['→', '›', '·']) {
       final idx = rawKey.indexOf(sep);
       if (idx > 0 && idx < rawKey.length - 1) {
@@ -1097,22 +1163,33 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         final right = rawKey.substring(idx + 1).trim();
         if (left.toLowerCase() != 'tuning' &&
             left.toLowerCase() != 'inspector') {
-          return (componentLabel: left, propertyLabel: right);
+          return (
+            componentLabel: left,
+            categoryLabel: defaultCatFor(left),
+            propertyLabel: right,
+          );
         }
-        return (componentLabel: defaultComponentKey, propertyLabel: right);
+        return (
+          componentLabel: defaultComponentKey,
+          categoryLabel: defaultCatFor(defaultComponentKey),
+          propertyLabel: right,
+        );
       }
     }
 
     final lower = rawKey.toLowerCase();
     if (lower.contains('capsule') ||
         lower.contains('radius') ||
-        lower.contains('halfheight')) {
+        lower.contains('halfheight') ||
+        lower == 'height') {
+      final comp = isUnreal
+          ? 'CapsuleComponent'
+          : (isUnity
+              ? (is2D ? 'CapsuleCollider2D' : 'CharacterController')
+              : (is2D ? 'CollisionShape2D' : 'CollisionShape3D'));
       return (
-        componentLabel: isUnreal
-            ? 'CapsuleComponent'
-            : (isUnity
-                ? (is2D ? 'CapsuleCollider2D' : 'CharacterController')
-                : (is2D ? 'CollisionShape2D' : 'CollisionShape3D')),
+        componentLabel: comp,
+        categoryLabel: defaultCatFor(comp),
         propertyLabel: rawKey,
       );
     }
@@ -1122,10 +1199,12 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         lower.contains('eye') ||
         lower.contains('fade') ||
         lower.contains('springarm')) {
+      final comp = isUnreal
+          ? 'FirstPersonCamera'
+          : (isUnity ? 'MainCamera' : (is2D ? 'Camera2D' : 'Camera3D'));
       return (
-        componentLabel: isUnreal
-            ? 'FirstPersonCamera'
-            : (isUnity ? 'MainCamera' : (is2D ? 'Camera2D' : 'Camera3D')),
+        componentLabel: comp,
+        categoryLabel: defaultCatFor(comp),
         propertyLabel: rawKey,
       );
     }
@@ -1137,14 +1216,20 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         lower.contains('groundfriction') ||
         lower.contains('maxacceleration') ||
         lower.contains('gravity')) {
+      final comp = isUnreal
+          ? 'CharacterMovement'
+          : (isUnity ? 'PlayerController.cs' : 'CharacterBody');
       return (
-        componentLabel: isUnreal
-            ? 'CharacterMovement'
-            : (isUnity ? 'PlayerController.cs' : 'CharacterBody'),
+        componentLabel: comp,
+        categoryLabel: defaultCatFor(comp),
         propertyLabel: rawKey,
       );
     }
-    return (componentLabel: defaultComponentKey, propertyLabel: rawKey);
+    return (
+      componentLabel: defaultComponentKey,
+      categoryLabel: defaultCatFor(defaultComponentKey),
+      propertyLabel: rawKey,
+    );
   }
 
   /// Groups all `[T]` Tasks in the checkpoint by their target scene component so shared components

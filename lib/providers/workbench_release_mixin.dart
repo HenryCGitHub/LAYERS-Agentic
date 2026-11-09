@@ -5696,7 +5696,7 @@ For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequent
 2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path (telegraphic breadcrumb)
 3. "instruction": 1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value
 4. "area1Hierarchy": Optional Scene/Component hierarchy tree using ├─ / └─ when the step adds or modifies nodes/components (or "" if pure code step)
-5. "area2Inspector": Inspector/Details bindings formatted as "Property: Value | Property2: Value2" using the exact tuning parameter names
+5. "area2Inspector": Inspector/Details bindings formatted as "Property: Value | Property2: Value2" listing ONLY the 1-3 properties modified in THIS specific task's component (never dump CharacterMovement properties onto a Capsule/Collider task)
 6. "codeFormula": $codeFormulaModeGuide
 7. "verifyResult": Causal Trigger -> Result check formatted as "<Player Action> -> <Observable Screen Result>" (<= 14 words)
 
