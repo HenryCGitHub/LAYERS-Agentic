@@ -6567,6 +6567,81 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(dynamicToolTasks[3], equals('Docking Clamp Release (1h)'));
         expect(dynamicToolTasks[4], equals('Snap Threshold & Sparks (1h)'));
 
+        // Verify domain-neutral stage_1..3 role ordering & automatic legacy template suffix stripping
+        final stageOrderedTasks =
+            ReleasePlannerAgent.extractCheckpointTasksFromMap({
+          'tasks': [
+            {
+              'role': 'stage_3_state_and_playtest_verify',
+              'title': 'Steps Past Outpost Cue & Boundary Clamp (1h)',
+            },
+            {
+              'role': 'stage_2_mechanic_logic',
+              'title': 'Steps Past Outpost Action & Math (1h)',
+            },
+            {
+              'role': 'stage_1_scene_or_data_foundation',
+              'title': 'Steps Past Outpost Body & Collision (2h)',
+            },
+          ],
+        });
+        expect(stageOrderedTasks.length, equals(3));
+        expect(stageOrderedTasks[0], equals('Steps Past Outpost Scene Nodes (2h)'));
+        expect(stageOrderedTasks[1], equals('Steps Past Outpost State Logic (1h)'));
+        expect(stageOrderedTasks[2], equals('Steps Past Outpost Feedback & Guard (1h)'));
+        for (final t in stageOrderedTasks) {
+          expect(LayersTextStyleGuide.isLegacyTemplateTaskTitle(t), isFalse);
+        }
+
+        // Verify decomposeBeatIntoDynamicFeatures generates mechanic-specific tasks without hardcoded template suffixes
+        const beatDesc =
+            'Player steps past outpost gates onto highway as HUD tracks active haul weight -> navigates hazard choke -> risking complete cargo.';
+        final decomposedFeatures =
+            ReleasePlannerAgent.decomposeBeatIntoDynamicFeatures(
+          beatNumber: 1,
+          beatIndex: 0,
+          beatTitle: 'Route Departure & Transit',
+          rawBeatLine: 'Route Departure & Transit: $beatDesc',
+          rawDescPart: beatDesc,
+          versionTag: 'v0.1',
+        );
+        expect(decomposedFeatures, isNotEmpty);
+        for (final df in decomposedFeatures) {
+          for (final taskStr in df.checkpoints.first.tasks) {
+            expect(
+              taskStr.contains('Body & Collision'),
+              isFalse,
+              reason: 'Task "$taskStr" must not use hardcoded Body & Collision template',
+            );
+            expect(
+              taskStr.contains('Prop & Collision'),
+              isFalse,
+              reason: 'Task "$taskStr" must not use hardcoded Prop & Collision template',
+            );
+            expect(
+              taskStr.contains('Action & Math'),
+              isFalse,
+              reason: 'Task "$taskStr" must not use hardcoded Action & Math template',
+            );
+            expect(
+              taskStr.contains('Cue & Boundary Clamp'),
+              isFalse,
+              reason: 'Task "$taskStr" must not use hardcoded Cue & Boundary Clamp template',
+            );
+          }
+        }
+
+        // Verify GeminiAgentClient.unwrapDirectJsonPayload unwraps tool-named wrapper maps
+        final wrappedPayload = <String, dynamic>{
+          'commit_epic_features': <String, dynamic>{
+            'features': <Map<String, dynamic>>[
+              <String, dynamic>{'title': 'Highway Sprint'},
+            ],
+          },
+        };
+        final unwrapped = GeminiAgentClient.unwrapDirectJsonPayload(wrappedPayload);
+        expect(unwrapped['features'], isList);
+
         // Verify Stage 1 Section-Scoped Tools isolate each stepper section (01..08) and prevent cross-section bleed
         final tradeOffTool = ProjectConceptAgent.buildFocusedConceptSectionTool(
           '[Section 05 Trade-Offs]',

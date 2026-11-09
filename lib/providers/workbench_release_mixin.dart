@@ -4366,7 +4366,7 @@ Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
 Break this task down into the exact number of checkable How-To Sub-Steps (Step $taskNum.1 through Step $taskNum.N — e.g., 3 steps for a simple hook/guard task or up to 6 steps for a multi-part mechanic) specifically using the developer's node/script names from "$cleanContext".
-Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
+Call `commit_tailored_task_substeps` with the tailored sub-steps.
 ''';
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
@@ -4722,6 +4722,10 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
             'required': ['taskIndex', 'subSteps'],
             'properties': {
               'taskIndex': {'type': 'INTEGER'},
+              'taskTitle': {
+                'type': 'STRING',
+                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
+              },
               'subSteps': {
                 'type': 'ARRAY',
                 'items': {
@@ -4948,6 +4952,8 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         },
         'tasks': {
           'type': 'ARRAY',
+          'description':
+              'Sequential tasks ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
           'items': {
             'type': 'OBJECT',
             'required': ['role', 'title'],
@@ -4955,9 +4961,9 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               'role': {
                 'type': 'STRING',
                 'enum': [
-                  'entity_and_collision_foundation',
-                  'core_action_and_math',
-                  'feedback_and_boundary_guard',
+                  'stage_1_scene_or_data_foundation',
+                  'stage_2_mechanic_logic',
+                  'stage_3_state_and_playtest_verify',
                 ],
               },
               'title': {
@@ -5068,7 +5074,7 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         'tasks': {
           'type': 'ARRAY',
           'description':
-              'Sequential tasks ordered from entity_and_collision_foundation -> core_action_and_math (1..N) -> feedback_and_boundary_guard.',
+              'Sequential tasks ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
           'items': {
             'type': 'OBJECT',
             'required': ['role', 'title'],
@@ -5076,9 +5082,9 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               'role': {
                 'type': 'STRING',
                 'enum': [
-                  'entity_and_collision_foundation',
-                  'core_action_and_math',
-                  'feedback_and_boundary_guard',
+                  'stage_1_scene_or_data_foundation',
+                  'stage_2_mechanic_logic',
+                  'stage_3_state_and_playtest_verify',
                 ],
               },
               'title': {
@@ -5116,7 +5122,7 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
         'futureTasks': {
           'type': 'ARRAY',
           'description':
-              'Future-phase upgrade tasks ordered from entity_and_collision_foundation -> core_action_and_math (1..N) -> feedback_and_boundary_guard.',
+              'Future-phase upgrade tasks ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
           'items': {
             'type': 'OBJECT',
             'required': ['role', 'title'],
@@ -5124,9 +5130,9 @@ Call `commit_tailored_task_sub_steps` with the tailored sub-steps.
               'role': {
                 'type': 'STRING',
                 'enum': [
-                  'entity_and_collision_foundation',
-                  'core_action_and_math',
-                  'feedback_and_boundary_guard',
+                  'stage_1_scene_or_data_foundation',
+                  'stage_2_mechanic_logic',
+                  'stage_3_state_and_playtest_verify',
                 ],
               },
               'title': {
@@ -5691,7 +5697,7 @@ CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
   * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) bind input/signals and wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
   * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
 
-For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
+For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI widget, data resource, or gameplay calculation for this task—never use generic phrases like "Body & Collision", "Action & Math", or "Cue & Boundary Clamp") and return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
 1. "title": "3-4 Title-Case Imperative Runbook words (Verb + Object, e.g. 'Spawn 6 Pellet Raycasts', 'Add Hazard Detection Component'; do NOT include 'STEP X.Y' prefix)"
 2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path (telegraphic breadcrumb)
 3. "instruction": 1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value
@@ -5700,7 +5706,7 @@ For each task (taskIndex: 0..${cpNode.checklist.length - 1}), return the sequent
 6. "codeFormula": $codeFormulaModeGuide
 7. "verifyResult": Causal Trigger -> Result check formatted as "<Player Action> -> <Observable Screen Result>" (<= 14 words)
 
-Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each task.''';
+Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each task.''';
 
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
@@ -5747,6 +5753,29 @@ Call `commit_feature_how_to_steps` with the sequential 3-Area sub-steps for each
                 : (isOneBasedTaskIndexing ? rawIdx - 1 : rawIdx));
         if (tIdx < 0 || tIdx >= cpNode.checklist.length) continue;
         final parentTask = cpNode.checklist[tIdx];
+        if (LayersTextStyleGuide.isLegacyTemplateTaskTitle(parentTask.text)) {
+          final aiTaskTitle = LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
+            (rawTask['taskTitle'] ?? '').toString().trim(),
+          );
+          final durMatch = RegExp(r'\(\d+h\)\s*$').firstMatch(parentTask.text);
+          final durSuffix =
+              durMatch != null ? ' ${durMatch.group(0)!.trim()}' : '';
+          final withoutDur = durMatch != null
+              ? parentTask.text.substring(0, durMatch.start).trim()
+              : parentTask.text.trim();
+          final dashIdx = withoutDur.indexOf(' — ');
+          final existingGoalPart =
+              dashIdx > 0 ? withoutDur.substring(dashIdx) : '';
+          final cleanNewHead = aiTaskTitle.isNotEmpty
+              ? aiTaskTitle
+              : LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
+                  dashIdx > 0
+                      ? withoutDur.substring(0, dashIdx).trim()
+                      : withoutDur,
+                );
+          parentTask.text = '$cleanNewHead$existingGoalPart$durSuffix';
+          mutated = true;
+        }
         final taskNum = tIdx + 1;
         final rawSubs = rawTask['subSteps'];
         if (rawSubs is! List || rawSubs.isEmpty) continue;
@@ -7638,7 +7667,7 @@ You are the Principal Game Producer & Lead Systems Architect ($engineLabel) for 
 Triage this developer feature request captured in the Feature Inbox across 3 dimensions:
 1. WHEN (Release Timing): Does it belong in the CURRENT release ($activeVer · ${_currentPhase.label}), should it be SPLIT (lean 4h core slice in $activeVer now + deeper upgrade scheduled for a future ProductionPhase), or should it be SCHEDULED entirely for a future ProductionPhase (mvp, verticalSlice, fullProduction, postLaunch)?
 2. WHERE (Single Live Tree Placement): Which existing Epic (or new Epic) owns it, and should it be a standalone NEW feature ("newFeatureInEpic") or an UPGRADE checkpoint on an existing Feature ("upgradeExistingFeature")?
-3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, Foundation-First Build Tasks (entity_and_collision_foundation -> core_action_and_math -> feedback_and_boundary_guard), Tuning Params, and [STATE GUARD] rules.
+3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, Foundation-First Build Tasks (stage_1_scene_or_data_foundation -> stage_2_mechanic_logic -> stage_3_state_and_playtest_verify), Tuning Params, and [STATE GUARD] rules.
 
 Developer Request: "${item.rawIdea}"
 Active Release: $activeVer (${_currentPhase.label})

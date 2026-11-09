@@ -16,7 +16,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 - Feature Goals & In-Scope (Changelog +Delta): Direct 5-10 word summary of concrete mechanics/deltas (e.g. "+6-pellet cone spread, +knockback impulse" for upgrades; "Magnetic ore shard spawn on enemy kill" for new features). NEVER start feature goals with "Build a playable..." or "Upgrade <Feature> into/with..." and NEVER copy-paste raw user instructions verbatim.
 - Done When, Playtest Gates & Verify (Causal Trigger -> Result): "[Player Action] -> [Observable Screen Result]" (<= 14 words, e.g. "Press Fire within 4m of target -> 6 pellets fan out + push enemy back 2.5m"). NEVER use FPS/60fps targets.
 - Concept Spec Cells (02 Game Spec & 03 Tech Spec): Strictly 2-4 Title-Case words naming the concrete setup (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub", "Unreal Engine 5", "PC Desktop"). NEVER write narrative sentences, explanatory preambles ("with...", "featuring..."), or punctuation.
-- Parent Task Group Titles & Goals (tasks[]): tasks[].title = strictly 2-4 Title-Case words naming 1-2 concrete components (e.g. "Shard Physics Hull", "Radial Scatter Impulse", "Floor Clink & Settle"; NO verbs, NO 3-item lists, NO "(2h)" tags); tasks[].goal = 1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").
+- Parent Task Group Titles & Goals (tasks[]): tasks[].title = strictly 2-4 Title-Case words naming the specific scene node, UI widget, data resource, or gameplay calculation for that task (e.g. "Shard Physics Hull", "Merchant Trade Panel", "Backpack Weight Counter", "Hitscan Recoil Ray"; NO verbs, NO 3-item lists, NO "(2h)" tags, and NEVER use generic template suffixes like "Body & Collision", "Prop & Collision", "Action & Math", "Cue & Clamp", or "Cue & Boundary Clamp"); tasks[].goal = 1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").
 - Sub-Step Titles & Instructions (Imperative Runbook): subSteps[].title = 3-4 Title-Case "Verb + Object" words (e.g. "Spawn 6 Pellet Raycasts", NO "STEP X.Y" prefix); instruction = 1 imperative sentence (<= 18 words) starting with a command verb + exact node/script and tuning value.''';
 
   // ── Stage 1: Concept Blueprint Schema Descriptions ────────────────────────
@@ -164,7 +164,31 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
       '2-3 telegraphic 2-4 word changelog deltas without articles a/an/the (prefix upgrades with "+", e.g. "+6-pellet cone spread", "+knockback impulse").';
 
   static const String taskGroupTitleSchemaDesc =
-      'Strictly 2-4 Title-Case words naming 1-2 concrete components (e.g. "Shard Physics Hull", "Radial Scatter Impulse", "Floor Clink & Settle"). NO verbs (Setup/Code/Create/Trigger/Implement), NO 3-item lists, NO "while/when" clauses, NO "(2h)" duration tags.';
+      'Strictly 2-4 Title-Case words naming the specific scene node, UI widget, data resource, or gameplay calculation for this task (e.g. "Shard Physics Hull", "Merchant Trade Panel", "Backpack Weight Counter", "Hitscan Recoil Ray"). NO verbs (Setup/Code/Create/Trigger/Implement), NO 3-item lists, NO "while/when" clauses, NO "(2h)" duration tags, and NEVER use generic template suffixes ("Body & Collision", "Prop & Collision", "Action & Math", "Cue & Clamp", "Cue & Boundary Clamp").';
+
+  static final RegExp _legacyTemplateSuffixRegex = RegExp(
+    r'\b(?:Body\s*&\s*Collision|Prop\s*&\s*Collision|Action\s*&\s*Math|Cue\s*&\s*Boundary\s*Clamp|Cue\s*&\s*Clamp)\b',
+    caseSensitive: false,
+  );
+
+  /// Returns true if [rawTitle] contains one of the legacy generic 3-task template suffixes.
+  static bool isLegacyTemplateTaskTitle(String rawTitle) {
+    final head = rawTitle.split(' — ').first.trim();
+    return _legacyTemplateSuffixRegex.hasMatch(head);
+  }
+
+  /// Replaces any legacy generic template suffix (`Body & Collision`, `Prop & Collision`,
+  /// `Action & Math`, `Cue & Boundary Clamp`, `Cue & Clamp`) with a clean component/logic/state noun.
+  static String stripLegacyTemplateTaskSuffix(String rawTitle) {
+    var s = rawTitle.trim();
+    s = s.replaceAllMapped(_legacyTemplateSuffixRegex, (m) {
+      final lower = (m.group(0) ?? '').toLowerCase();
+      if (lower.contains('collision')) return 'Scene Nodes';
+      if (lower.contains('math')) return 'State Logic';
+      return 'Feedback & Guard';
+    });
+    return s.replaceAll(_whitespaceRegex, ' ').trim();
+  }
 
   static const String taskGroupGoalSchemaDesc =
       '1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").';
@@ -217,6 +241,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
     if (dashIdx > 0) {
       t = t.substring(0, dashIdx).trim();
     }
+    t = stripLegacyTemplateTaskSuffix(t);
 
     String? badgePrefix;
     if (t.startsWith('[FIX]')) {

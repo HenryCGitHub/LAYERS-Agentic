@@ -22,7 +22,7 @@ class GeminiAgentClient {
 
   static bool _modelMetadataChecked = false;
   static int? _cachedModelOutputTokenLimit;
-  static bool _cachedSupportsThinkingLevel = false;
+  static bool _cachedSupportsThinkingLevel = true;
 
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (sourced from `LayersTextStyleGuide`).
   static const String compactStyleRules =
@@ -114,7 +114,8 @@ class GeminiAgentClient {
             (meta['displayName'] ?? '').toString().toLowerCase();
         final description =
             (meta['description'] ?? '').toString().toLowerCase();
-        if (version.startsWith('3') ||
+        if (meta['thinking'] == true ||
+            version.startsWith('3') ||
             version.startsWith('4') ||
             displayName.contains(' 3') ||
             displayName.contains(' 4') ||
@@ -205,7 +206,8 @@ class GeminiAgentClient {
           final rawText = part['text']?.toString() ?? '';
           final cleaned = _extractJsonObject(rawText);
           if (cleaned.isNotEmpty) {
-            return jsonDecode(cleaned) as Map<String, dynamic>;
+            final decoded = jsonDecode(cleaned) as Map<String, dynamic>;
+            return unwrapDirectJsonPayload(decoded);
           }
         }
       }
@@ -213,6 +215,37 @@ class GeminiAgentClient {
       return null;
     }
     return null;
+  }
+
+  /// Unwraps a direct JSON-mode object if the model wrapped the payload inside a single
+  /// top-level tool name or `args`/`parameters`/`arguments` wrapper map.
+  static Map<String, dynamic> unwrapDirectJsonPayload(
+    Map<String, dynamic> decoded,
+  ) {
+    var current = decoded;
+    for (int depth = 0; depth < 2; depth++) {
+      if (current.length == 1) {
+        final key = current.keys.first;
+        final val = current.values.first;
+        if (val is Map &&
+            (key.startsWith('commit_') ||
+                key.startsWith('update_') ||
+                key.startsWith('propose_') ||
+                key.startsWith('mutate_') ||
+                key == 'args' ||
+                key == 'parameters' ||
+                key == 'arguments')) {
+          current = Map<String, dynamic>.from(val);
+          continue;
+        }
+      } else if (current['args'] is Map &&
+          (current['name'] is String || current['tool'] is String)) {
+        current = Map<String, dynamic>.from(current['args'] as Map);
+        continue;
+      }
+      break;
+    }
+    return current;
   }
 
   static Future<Map<String, dynamic>?> generateJson({
@@ -339,11 +372,18 @@ class GeminiAgentClient {
       // retry once in direct JSON mode (`responseMimeType: 'application/json'`) with LOW thinking budget.
       if (hasTools) {
         try {
+          final rawToolParams = functionDeclarations.first['parameters'];
+          final effectiveFallbackSchema = responseSchema ??
+              (rawToolParams is Map
+                  ? Map<String, dynamic>.from(rawToolParams)
+                  : null);
           final fallbackGenConfig = <String, dynamic>{
             'temperature': temperature,
             if (_cachedModelOutputTokenLimit != null)
               'maxOutputTokens': _cachedModelOutputTokenLimit,
             'responseMimeType': 'application/json',
+            if (effectiveFallbackSchema != null)
+              'responseSchema': effectiveFallbackSchema,
             'thinkingConfig': buildNativeThinkingConfig(
               normalizedThinking: 'LOW',
               useThinkingLevelEnum: _cachedSupportsThinkingLevel,

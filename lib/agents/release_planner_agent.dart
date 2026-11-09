@@ -39,8 +39,8 @@ class ReleasePlannerAgent {
   }
 
   /// Extracts a dynamic list of checkpoint task strings from either a unified `{role, title}`
-  /// tool-call `tasks` array or a plain string `tasks` array, ordering tasks by role
-  /// (`entity_and_collision_foundation` -> `1..N core_action_and_math` -> `feedback_and_boundary_guard`).
+  /// tool-call `tasks` array or a plain string `tasks` array, ordering tasks by build stage
+  /// (`stage_1_scene_or_data_foundation` -> `1..N stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`).
   static List<String> extractCheckpointTasksFromMap(Map cMap) {
     final rawTasks = cMap['tasks'];
     if (rawTasks is List && rawTasks.isNotEmpty) {
@@ -50,10 +50,12 @@ class ReleasePlannerAgent {
       final plainStrings = <String>[];
       for (final item in rawTasks) {
         if (item is Map) {
-          final title =
+          final rawTitle =
               (item['title'] ?? item['task'] ?? item['text'] ?? '')
                   .toString()
                   .trim();
+          final title =
+              LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(rawTitle);
           if (title.isEmpty || title == '...') continue;
           final goal =
               (item['goal'] ?? item['scope'] ?? '').toString().trim();
@@ -64,17 +66,23 @@ class ReleasePlannerAgent {
               ? '$title — $goal'
               : title;
           final role = (item['role'] ?? '').toString().trim().toLowerCase();
-          if (role.contains('foundation') || role.contains('entity')) {
+          if (role.contains('stage_1') ||
+              role.contains('foundation') ||
+              role.contains('entity')) {
             foundations.add(combined);
-          } else if (role.contains('guard') ||
+          } else if (role.contains('stage_3') ||
+              role.contains('guard') ||
               role.contains('feedback') ||
-              role.contains('boundary')) {
+              role.contains('boundary') ||
+              role.contains('verify')) {
             guards.add(combined);
           } else {
             actions.add(combined);
           }
         } else {
-          final str = item.toString().trim();
+          final str = LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
+            item.toString().trim(),
+          );
           if (str.isNotEmpty && str != '...') {
             plainStrings.add(str);
           }
@@ -103,8 +111,8 @@ class ReleasePlannerAgent {
 
   /// Native Gemini Tool Declaration for `planRelease` (`commit_release_plan`).
   /// Enforces 100% dynamic counts for Epics (`beats`), Features (`features`), and Checkpoint Tasks (`tasks`),
-  /// while enforcing Foundation-First task role progression (`entity_and_collision_foundation` ->
-  /// `1..N core_action_and_math` -> `feedback_and_boundary_guard`) at the schema level.
+  /// while enforcing Foundation-First task build-stage progression (`stage_1_scene_or_data_foundation` ->
+  /// `1..N stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) at the schema level.
   static const Map<String, dynamic> commitReleasePlanTool = {
     'name': 'commit_release_plan',
     'description':
@@ -231,7 +239,7 @@ class ReleasePlannerAgent {
                           'tasks': {
                             'type': 'ARRAY',
                             'description':
-                                'Dynamic list of sequential tasks required to build and verify this checkpoint on one shared asset. Start with entity_and_collision_foundation, include as many core_action_and_math tasks as the mechanic requires, and finish with feedback_and_boundary_guard.',
+                                'Dynamic list of sequential tasks required to build and verify this checkpoint on one shared asset. Start with stage_1_scene_or_data_foundation, include as many stage_2_mechanic_logic tasks as the mechanic requires, and finish with stage_3_state_and_playtest_verify.',
                             'items': {
                               'type': 'OBJECT',
                               'required': ['role', 'title'],
@@ -239,9 +247,9 @@ class ReleasePlannerAgent {
                                 'role': {
                                   'type': 'STRING',
                                   'enum': [
-                                    'entity_and_collision_foundation',
-                                    'core_action_and_math',
-                                    'feedback_and_boundary_guard',
+                                    'stage_1_scene_or_data_foundation',
+                                    'stage_2_mechanic_logic',
+                                    'stage_3_state_and_playtest_verify',
                                   ],
                                 },
                                 'title': {
@@ -390,6 +398,8 @@ class ReleasePlannerAgent {
               },
               'tasks': {
                 'type': 'ARRAY',
+                'description':
+                    'Dynamic list of sequential tasks required to build and verify this feature on one shared asset. Start with stage_1_scene_or_data_foundation, include as many stage_2_mechanic_logic tasks as the mechanic requires, and finish with stage_3_state_and_playtest_verify.',
                 'items': {
                   'type': 'OBJECT',
                   'required': ['role', 'title'],
@@ -397,9 +407,9 @@ class ReleasePlannerAgent {
                     'role': {
                       'type': 'STRING',
                       'enum': [
-                        'entity_and_collision_foundation',
-                        'core_action_and_math',
-                        'feedback_and_boundary_guard',
+                        'stage_1_scene_or_data_foundation',
+                        'stage_2_mechanic_logic',
+                        'stage_3_state_and_playtest_verify',
                       ],
                     },
                     'title': {
@@ -563,6 +573,8 @@ class ReleasePlannerAgent {
               },
               'tasks': {
                 'type': 'ARRAY',
+                'description':
+                    'Dynamic list of sequential tasks required to build and verify this feature on one shared asset. Start with stage_1_scene_or_data_foundation, include as many stage_2_mechanic_logic tasks as the mechanic requires, and finish with stage_3_state_and_playtest_verify.',
                 'items': {
                   'type': 'OBJECT',
                   'required': ['role', 'title'],
@@ -570,9 +582,9 @@ class ReleasePlannerAgent {
                     'role': {
                       'type': 'STRING',
                       'enum': [
-                        'entity_and_collision_foundation',
-                        'core_action_and_math',
-                        'feedback_and_boundary_guard',
+                        'stage_1_scene_or_data_foundation',
+                        'stage_2_mechanic_logic',
+                        'stage_3_state_and_playtest_verify',
                       ],
                     },
                     'title': {
@@ -681,7 +693,7 @@ class ReleasePlannerAgent {
                           'tasks': {
                             'type': 'ARRAY',
                             'description':
-                                'Dynamic list of sequential tasks for this checkpoint ordered from entity_and_collision_foundation -> core_action_and_math (1..N) -> feedback_and_boundary_guard.',
+                                'Dynamic list of sequential tasks for this checkpoint ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
                             'items': {
                               'type': 'OBJECT',
                               'required': ['role', 'title'],
@@ -689,9 +701,9 @@ class ReleasePlannerAgent {
                                 'role': {
                                   'type': 'STRING',
                                   'enum': [
-                                    'entity_and_collision_foundation',
-                                    'core_action_and_math',
-                                    'feedback_and_boundary_guard',
+                                    'stage_1_scene_or_data_foundation',
+                                    'stage_2_mechanic_logic',
+                                    'stage_3_state_and_playtest_verify',
                                   ],
                                 },
                                 'title': {
@@ -1099,10 +1111,10 @@ $progressiveDiagnosticInstructions
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
 - MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"moveSpeed: 6.0 m/s"`, `"dashCooldown: 0.8 s"`, `"pickupRadius: 1.5 m"`). NEVER return an empty `"tuningParams": []` array on any feature.
-- DYNAMIC, CONCRETE TASKS ON ONE SHARED ASSET (NO REPETITIVE "SETUP / LOGIC / GUARD" SUFFIXES): Give each Feature checkpoint the exact number of concrete, mechanic-specific tasks (`2–4` words + duration tag) that its complexity genuinely requires—without mechanically ending every task in the words `"Setup"`, `"Logic"`, or `"Guard"`:
-  * `entity_and_collision_foundation` (First Task): Create or place the specific playable Character, Greybox Room, Emitter, or Interactive Prop and its collision/ports in the level (e.g., `"Capsule Body & Camera (2h)"`, `"Arena Floor & Walls (2h)"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in the foundation task's title.
-  * `core_action_and_math` (`1..N` Middle Tasks): Wire the specific interaction, movement, or simulation behaviors onto that same shared asset (use 1 task for a simple action or multiple `core_action_and_math` tasks for a multi-step mechanic, e.g., `"WASD Velocity & Look (2h)"`, `"Burst Impulse & Trail (2h)"`).
-  * `feedback_and_boundary_guard` (Final Task): Hook the visible/audible cue and physical clamp/limit onto that asset (e.g., `"Wall Slide & Pitch Clamp (1h)"`, `"Cooldown Lock & Flash (1h)"`).
+- DYNAMIC, CONCRETE TASKS ON ONE SHARED ASSET (NO TEMPLATE SUFFIXES LIKE "BODY & COLLISION", "ACTION & MATH", OR "CUE & BOUNDARY CLAMP"): Give each Feature checkpoint the exact number of concrete, mechanic-specific tasks (`2–4` words) that its complexity genuinely requires—naming the specific scene node, UI widget, data resource, or gameplay calculation for that feature (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, or `"Cue & Boundary Clamp"`):
+  * `stage_1_scene_or_data_foundation` (First Task): Create or place the specific Scene Node, UI Panel, Data Resource, Character, or Interactive Prop for this feature (e.g., `"Capsule Body & Camera"`, `"Merchant Trade Panel"`, `"Cargo Grid Slots"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in the foundation task's title.
+  * `stage_2_mechanic_logic` (`1..N` Middle Tasks): Wire the specific interaction, state transition, movement, or transaction logic onto that same shared asset (e.g., `"WASD Velocity & Look"`, `"Buy & Sell Price Delta"`, `"Slot Drag & Drop"`).
+  * `stage_3_state_and_playtest_verify` (Final Task): Hook the observable screen feedback and state guard onto that asset (e.g., `"Wall Slide & Pitch Clamp"`, `"Zero-Balance Purchase Lock"`, `"Overweight Warning Flash"`).
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
 - THINKING VERIFICATION BEFORE EMITTING JSON:
   1. 100% Concept Coverage: Verify every action in `01 Goal`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When` has a dedicated Feature while honoring `07 Out of Scope`.
@@ -1607,9 +1619,9 @@ ${GeminiAgentClient.compactStyleRules}
   * Order Features by strict **Engineering Build Dependency**:
     ${epicIndex == 0 ? '1. Feature #1 in E01 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE Player/Tool movement at Feature #2.' : '1. Place any target entity, container, or spawner BEFORE the tool, tether, projectile, or UI that acts on it.'}
     2. Place the base playable action BEFORE any cooldown, pressure lock, or boundary gate that restricts it.
-- MANDATORY TUNING & GUARDS ON EVERY FEATURE:
+- MANDATORY TUNING, GUARDS & MECHANIC-SPECIFIC TASKS ON EVERY FEATURE:
   * Include 2–3 concrete `"paramName: numericValue unit"` entries in `tuningParams` and 1–2 `[TAG]` guard rules in `edgeCases`.
-  * Include foundation-first `tasks` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
+  * Include foundation-first `tasks` (`stage_1_scene_or_data_foundation` -> `stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) whose `title` names the specific scene node, UI widget, data resource, or gameplay calculation for that feature (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, or `"Cue & Boundary Clamp"`).
 
 Call `commit_epic_features` with the ordered playable features.
 ''';
@@ -1690,11 +1702,13 @@ Call `commit_epic_features` with the ordered playable features.
         final tasks = normalizeFoundationFirstTasks(
           rawTaskList.isNotEmpty
               ? rawTaskList
-              : <String>[
-                  '$cleanTitle Body & Collision (2h)',
-                  '$cleanTitle Action & Math (1h)',
-                  '$cleanTitle Cue & Clamp (1h)',
-                ],
+              : buildDynamicFallbackTasksForFeature(
+                  featureTitle: cleanTitle,
+                  featureGoal: fGoal,
+                  tuningParams: tuning,
+                  edgeCases: guards,
+                  isFirstFeatureOfRelease: epicIndex == 0 && fIdx == 0,
+                ),
           featureTitle: cleanTitle,
           beatTitle: epicBlueprint.title,
           isFirstFeatureOfRelease: epicIndex == 0 && fIdx == 0,
@@ -2252,7 +2266,7 @@ ${GeminiAgentClient.compactStyleRules}
 - WHOLE-EPIC COMPLETION RULE (NO PARTIAL EPICS):
   * Because **Epic $epicCode · ${epicDoc.title}** was chosen for $versionTag, you MUST return an `"upgrade"` entry for **EVERY** existing non-superseded feature listed above in Epic $epicCode (using its EXACT `"id"` and `"title"`), describing its $versionTag delta upgrade in `"goal"`, `"inScope"`, and `"tasks"`, so the **entire Epic $epicCode** is completed in $versionTag.
   * You may also add a brand-new feature in Epic $epicCode (`"lifecycle": "new"`) if a missing mechanic is required to complete the Epic.
-  * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"`, 1–2 `[STATE GUARD]` rules in `"edgeCases"`, and foundation-first `"tasks"` (`entity_and_collision_foundation` -> `core_action_and_math` -> `feedback_and_boundary_guard`).
+  * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"`, 1–2 `[STATE GUARD]` rules in `"edgeCases"`, and foundation-first `"tasks"` (`stage_1_scene_or_data_foundation` -> `stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) whose `title` names the specific scene node, UI widget, data resource, or gameplay calculation (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, or `"Cue & Boundary Clamp"`).
 
 Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features for Epic $epicCode.
 ''';
@@ -3157,13 +3171,13 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
         '[STATE GUARD] Prevent duplicate trigger while $fTitle is active',
       ];
       final tasks = normalizeFoundationFirstTasks(
-        [
-          (beatIndex == 0 && cIdx == 0)
-              ? '$fTitle Body & Collision (2h)'
-              : '$fTitle Prop & Collision (2h)',
-          '$fTitle Action & Math (1h)',
-          '$fTitle Cue & Boundary Clamp (1h)',
-        ],
+        buildDynamicFallbackTasksForFeature(
+          featureTitle: fTitle,
+          featureGoal: fGoal,
+          tuningParams: tuning,
+          edgeCases: guards,
+          isFirstFeatureOfRelease: beatIndex == 0 && cIdx == 0,
+        ),
         featureTitle: fTitle,
         beatTitle: beatTitle,
         isFirstFeatureOfRelease: beatIndex == 0 && cIdx == 0,
@@ -3200,6 +3214,80 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       );
     }
     return features;
+  }
+
+  /// Derives 3 mechanic-specific fallback tasks directly from a feature's own title, goal,
+  /// tuning parameter names, and state guard rules (zero hardcoded archetype templates or
+  /// generic `Body & Collision` / `Action & Math` / `Cue & Boundary Clamp` suffixes).
+  static List<String> buildDynamicFallbackTasksForFeature({
+    required String featureTitle,
+    required String featureGoal,
+    required List<String> tuningParams,
+    required List<String> edgeCases,
+    bool isFirstFeatureOfRelease = false,
+  }) {
+    final cleanTitle = featureTitle.trim().isEmpty
+        ? 'Core Mechanic'
+        : featureTitle.trim();
+
+    String humanizeIdentifier(String rawId) {
+      final splitCamel = rawId
+          .replaceAllMapped(
+            RegExp(r'([a-z0-9])([A-Z])'),
+            (m) => '${m.group(1)} ${m.group(2)}',
+          )
+          .replaceAll('_', ' ')
+          .trim();
+      final words = splitCamel
+          .split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty)
+          .map((w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+          .toList();
+      if (words.length > 2) {
+        return words.sublist(words.length - 2).join(' ');
+      }
+      return words.join(' ');
+    }
+
+    final paramLabels = <String>[];
+    for (final p in tuningParams.take(2)) {
+      final key = p.split(':').first.split('=').first.trim();
+      if (key.isEmpty) continue;
+      final label = humanizeIdentifier(key);
+      if (label.isNotEmpty && !paramLabels.contains(label)) {
+        paramLabels.add(label);
+      }
+    }
+
+    final String task1Title = '$cleanTitle Scene & Nodes';
+    final String task1Goal =
+        'Configure the $cleanTitle scene hierarchy, root node, and attached script in the greybox level.';
+
+    final String task2Title = paramLabels.length >= 2
+        ? '${paramLabels[0]} & ${paramLabels[1]}'
+        : (paramLabels.length == 1
+            ? '$cleanTitle ${paramLabels[0]}'
+            : '$cleanTitle State Logic');
+    final String paramSummary = tuningParams.isNotEmpty
+        ? tuningParams.take(2).join(', ')
+        : cleanTitle;
+    final String task2Goal =
+        'Wire the $cleanTitle state transitions and exported tuning updates ($paramSummary) in script.';
+
+    final String rawGuard = edgeCases.isNotEmpty
+        ? edgeCases.first
+            .replaceFirst(RegExp(r'^\[[^\]]+\]\s*'), '')
+            .trim()
+        : 'Prevent invalid state transition while $cleanTitle is active';
+    final String task3Title = '$cleanTitle State & Feedback';
+    final String task3Goal =
+        'Enforce the state guard ($rawGuard) and update the on-screen feedback indicator.';
+
+    return <String>[
+      '$task1Title — $task1Goal (2h)',
+      '$task2Title — $task2Goal (1h)',
+      '$task3Title — $task3Goal (1h)',
+    ];
   }
 
   /// Builds an immediate, deterministic `v0.1` `ReleaseBlueprint` directly from the approved
