@@ -4261,7 +4261,33 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals(initialTaskCount + 1),
         );
 
-        // ── 5. Audit Item 4: Interactive Click-to-Tune Row Inside Area 2 Inspector ──
+        // ── 5. Audit Item 4: Dynamic Compact 2-Column Layout (Section 02 + Section 03) & Click-to-Tune Row ──
+        final area2Header = find.byKey(
+          ValueKey('area2_selected_component_header_${node.id}'),
+        );
+        final area3Panel = find.byKey(
+          ValueKey('area3_script_setup_panel_${node.id}'),
+        );
+        expect(area2Header, findsOneWidget);
+        expect(area3Panel, findsOneWidget);
+        final sec2Rect = tester.getRect(area2Header);
+        final sec3Rect = tester.getRect(area3Panel);
+        expect(
+          sec2Rect.top,
+          closeTo(sec3Rect.top, 1.0),
+          reason: 'Section 02 and Section 03 must sit side-by-side in a 2-column Row on desktop viewports.',
+        );
+        expect(
+          sec2Rect.width,
+          inInclusiveRange(250.0, 350.0),
+          reason: 'Section 02 must use a compact content-hugging dynamic width (250px–350px).',
+        );
+        expect(
+          sec3Rect.width,
+          greaterThan(sec2Rect.width),
+          reason: 'Section 03 (Script & Main Scene Setup) must expand to take the majority of the horizontal width.',
+        );
+
         final area2Row0 = find.byKey(
           ValueKey('area2_inspector_tuning_row_${node.id}_0'),
         );
