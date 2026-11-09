@@ -289,7 +289,7 @@ class ReleasePlannerAgent {
   static const Map<String, dynamic> commitReleaseSystemEpicsTool = {
     'name': 'commit_release_system_epics',
     'description':
-        'Commits the ordered System Epics (E01..EN) representing the major gameplay systems, mechanics, and engineering bodies of work required to make the Concept Blueprint Core Loop work (never word-for-word loop beat copies).',
+        'Commits the ordered System Epics (E01..EN) representing the consolidated gameplay systems, mechanics, and engineering bodies of work required to make the Concept Blueprint Core Loop work (many-to-many system consolidation: group Loop Beats that share an underlying engine system into a single System Epic; Epic count is unrelated to Loop Beat count).',
     'parameters': {
       'type': 'OBJECT',
       'required': ['releaseTitle', 'goal', 'doneWhen', 'epics'],
@@ -917,7 +917,7 @@ class ReleasePlannerAgent {
           '- PHASE 4 FULL PRODUCTION PASS: Upgrade 1–2 Full Production Epics (Beats tagged [FULL PRODUCTION EPIC]) to the Vertical Slice quality bar with `"lifecycle": "upgrade"` checkpoints (content depth + feel polish in one pass). Core Concept Epics stay `"stable"` (omit them from JSON).';
     } else {
       phaseInstruction =
-          '- PHASE 1 PLAYABLE PROTOTYPE (`v0.1` GREYBOX CORE LOOP): Organize `beats` into the exact number of Epics required to build ${releaseDoc.title} end-to-end across the Concept Blueprint (`01 Goal` through `08 Done When`), breaking each Epic into as many singular-focused greybox Features as its mechanics genuinely require.';
+          '- PHASE 1 PLAYABLE PROTOTYPE (`v0.1` GREYBOX CORE LOOP): Organize `beats` into consolidated System Epics (many-to-many with `06 Core Loop` beats — group chronological loop beats that share an underlying engine system such as merchant barter + gear resupply or route departure + hazard transit into 1 cohesive System Epic), breaking each Epic into as many singular-focused greybox Features as its mechanics genuinely require.';
     }
 
     final targetPhase = switch (releasePhase) {
@@ -1216,14 +1216,15 @@ $numberedCoreLoopSummary
 - 08 Done When: "$projectDoneWhen"
 
 ${GeminiAgentClient.compactStyleRules}
-- EPICS ARE SYSTEMS / MECHANICS / BIG BODIES OF WORK (NEVER COPY LOOP BEATS WORD-FOR-WORD):
-  * `06 Core Loop` describes chronological player actions, whereas Workbench Epics (`E01`..`EN`) MUST be the **underlying gameplay systems, mechanics, and bodies of engineering work** needed to make that loop work in the engine!
+- EPICS ARE SYSTEMS / MECHANICS / BIG BODIES OF WORK (MANY-TO-MANY WITH LOOP BEATS — EPIC COUNT != BEAT COUNT):
+  * `06 Core Loop` describes chronological player actions (`Step 01 -> Step 02 -> ...`), whereas Workbench Epics (`E01`..`EN`) MUST be the **underlying gameplay systems, mechanics, and bodies of engineering work** needed to make that loop work in the engine!
+  * **MANY-TO-MANY SYSTEM CONSOLIDATION**: Multiple chronological Loop Beats that share an underlying engine system (e.g., *Route Departure* + *Transit Risk* -> `"Highway Route & Transit"`; *Settlement Barter* + *Gear Resupply* -> `"Settlement Merchant & Resupply"`) MUST be grouped into a single cohesive System Epic! Cross-cutting systems used across multiple beats (e.g. `"Cargo Loot & Inventory"`, `"Player Locomotion"`) are each 1 System Epic.
+  * When `06 Core Loop` has 5+ chronological beats, consolidate them into `3–5` cohesive System Epics (never a 1:1 translation of Loop Beat count).
   * NEVER copy the `06 Core Loop` step headers (${loopBeatTitlesLower.map((t) => '"$t"').join(', ')}) word-for-word as Epic titles.
   * Instead, name the concrete engineering/gameplay systems (`2–4` plain game-dev words each, e.g., `"Arena Grid & Traversal"`, `"Hydroponic Pipe Network"`, `"Crop Growth & Harvest"`, `"Cargo Market & Upgrades"`) ordered by engineering build dependency:
     1. `E01` MUST be the Greybox Space/Level/Grid & Primary Player/Tool Control system so the player can move and interact in the world first.
     2. Middle Epics (`E02`..`E_{N-1}`) cover the core simulation, target/hazard entities, resource processing, or combat mechanics needed to drive the loop.
     3. Final Epic (`EN`) covers the loop payoff, economy/upgrade terminal, and next-cycle reset so the loop connects end-to-end.
-- ZERO ARTIFICIAL COUNT LIMITS: Create the exact number of System Epics (`epics`) that "${projectDoc.title}" genuinely needs to accomplish the full `06 Core Loop` and `08 Done When`.
 
 Call `commit_release_system_epics` with the structured system epics.
 ''';
@@ -1239,17 +1240,12 @@ Call `commit_release_system_epics` with the structured system epics.
     final rawEpics = json?['epics'] ?? json?['beats'];
     if (rawEpics is! List || rawEpics.isEmpty) return null;
 
-    final beats = <ProposedBeatBlueprint>[];
+    var beats = <ProposedBeatBlueprint>[];
     for (int i = 0; i < rawEpics.length; i++) {
       final item = rawEpics[i];
       if (item is! Map) continue;
-      var rawTitle = (item['title'] ?? '').toString().trim();
+      final rawTitle = (item['title'] ?? '').toString().trim();
       if (rawTitle.isEmpty) continue;
-      if (loopBeatTitlesLower.contains(rawTitle.toLowerCase())) {
-        rawTitle = i == 0
-            ? '$rawTitle & Control'
-            : '$rawTitle Mechanics';
-      }
       final bTitle = MechanicArchetypeProfile.concreteBeatDisplayTitle(
         rawTitle,
         beatIndex: i,
@@ -1271,6 +1267,9 @@ Call `commit_release_system_epics` with the structured system epics.
       );
     }
     if (beats.isEmpty) return null;
+    if (coreLoopItems.length >= 5 && beats.length >= coreLoopItems.length) {
+      beats = consolidateSystemEpicsFromLoopBeats(beats);
+    }
 
     return ReleaseBlueprint(
       releaseDocId: releaseDoc.id,
@@ -1286,6 +1285,249 @@ Call `commit_release_system_epics` with the structured system epics.
       lastAgentReply:
           'Architected ${beats.length} System Epics for ${projectDoc.title}.',
     );
+  }
+
+  static const List<Set<String>> _kSystemDomainKeywordBuckets = <Set<String>>[
+    // 0: World, Route, Traversal & Environmental Hazards
+    <String>{
+      'route',
+      'departure',
+      'transit',
+      'highway',
+      'arena',
+      'entry',
+      'traversal',
+      'movement',
+      'locomotion',
+      'parkour',
+      'grapple',
+      'skiff',
+      'vehicle',
+      'drift',
+      'hazard',
+      'choke',
+      'evasion',
+      'dodge',
+      'obstacle',
+      'storm',
+      'navigation',
+    },
+    // 1: Combat, Ambush, Targets & Active Encounters
+    <String>{
+      'combat',
+      'ambush',
+      'hostile',
+      'scavenger',
+      'scavengers',
+      'enemy',
+      'enemies',
+      'wave',
+      'waves',
+      'turret',
+      'shotgun',
+      'weapon',
+      'fire',
+      'shoot',
+      'hitscan',
+      'target',
+      'targets',
+      'attack',
+      'counter',
+      'strike',
+      'reload',
+      'phase',
+      'sunset',
+      'night',
+      'spawn',
+      'brew',
+      'oven',
+      'cauldron',
+    },
+    // 2: Resource, Cargo, Loot, Crops & Inventory
+    <String>{
+      'cargo',
+      'retrieval',
+      'crate',
+      'crates',
+      'loot',
+      'scrap',
+      'pickup',
+      'drop',
+      'dropped',
+      'haul',
+      'weight',
+      'backpack',
+      'inventory',
+      'crop',
+      'planting',
+      'harvest',
+      'seed',
+      'seeds',
+      'soil',
+      'plot',
+      'herb',
+      'salvage',
+      'tow',
+      'shard',
+      'shards',
+    },
+    // 3: Settlement, Merchant, Economy, Upgrades & Loop Reset
+    <String>{
+      'settlement',
+      'barter',
+      'merchant',
+      'merchants',
+      'shop',
+      'sell',
+      'selling',
+      'buy',
+      'currency',
+      'resupply',
+      'gear',
+      'surplus',
+      'medkit',
+      'medkits',
+      'upgrade',
+      'upgrades',
+      'mod',
+      'choice',
+      'reward',
+      'dock',
+      'barge',
+      'reset',
+      'resolution',
+      'staging',
+      'loadout',
+      'prep',
+      'unlock',
+    },
+  ];
+
+  static String _mergeConsolidatedSystemEpicTitle(
+    String primaryTitle,
+    String secondaryTitle,
+  ) {
+    final pWords = primaryTitle
+        .replaceAll(RegExp(r'\s+&\s+'), ' ')
+        .split(_whitespaceRegex)
+        .where((w) => w.isNotEmpty)
+        .toList();
+    final pLower = pWords.map((w) => w.toLowerCase()).toSet();
+    final sWords = secondaryTitle
+        .replaceAll(RegExp(r'\s+&\s+'), ' ')
+        .split(_whitespaceRegex)
+        .where((w) => w.isNotEmpty && !pLower.contains(w.toLowerCase()))
+        .toList();
+    if (sWords.isEmpty) return primaryTitle;
+    final head = pWords.take(2).join(' ');
+    final tail = sWords.first;
+    return '$head & $tail';
+  }
+
+  /// Consolidates a list of 1:1 Loop-Beat Epics (`beats.length >= 5`) into `3–4` cohesive
+  /// System Epics grouped by shared engineering domain (`Traversal & Hazards`, `Combat & Action`,
+  /// `Cargo/Resource & Inventory`, `Merchant/Economy & Reset`).
+  static List<ProposedBeatBlueprint> consolidateSystemEpicsFromLoopBeats(
+    List<ProposedBeatBlueprint> rawBeats,
+  ) {
+    if (rawBeats.length < 5) return rawBeats;
+    final bucketLists = List<List<ProposedBeatBlueprint>>.generate(
+      4,
+      (_) => <ProposedBeatBlueprint>[],
+    );
+
+    for (int i = 0; i < rawBeats.length; i++) {
+      final b = rawBeats[i];
+      final words = '${b.title} ${b.goal}'
+          .toLowerCase()
+          .replaceAll(_nonAlphaNumSpaceRegex, ' ')
+          .split(_whitespaceRegex)
+          .where((w) => w.length >= 3)
+          .toSet();
+      int bestBucket = -1;
+      int bestScore = 0;
+      for (int k = 0; k < _kSystemDomainKeywordBuckets.length; k++) {
+        final score = words.intersection(_kSystemDomainKeywordBuckets[k]).length;
+        if (score > bestScore) {
+          bestScore = score;
+          bestBucket = k;
+        }
+      }
+      if (bestBucket < 0) {
+        if (i == 0) {
+          bestBucket = 0;
+        } else if (i == rawBeats.length - 1) {
+          bestBucket = 3;
+        } else {
+          bestBucket = (i % 2 == 1) ? 1 : 2;
+        }
+      }
+      bucketLists[bestBucket].add(b);
+    }
+
+    final nonEmptyBuckets =
+        bucketLists.where((list) => list.isNotEmpty).toList();
+    if (nonEmptyBuckets.length < 3) {
+      // Ensure at least 3 distinct System Epics by only merging the trailing pair
+      final fallback = List<ProposedBeatBlueprint>.from(
+        rawBeats.take(rawBeats.length - 2),
+      );
+      final bLast2 = rawBeats[rawBeats.length - 2];
+      final bLast1 = rawBeats.last;
+      fallback.add(
+        ProposedBeatBlueprint(
+          id: 'beat_${fallback.length + 1}',
+          title: _mergeConsolidatedSystemEpicTitle(bLast2.title, bLast1.title),
+          goal: '${bLast2.goal} ${bLast1.goal}'.trim(),
+          doneWhen: bLast1.doneWhen,
+          features: <ProposedFeatureBlueprint>[
+            ...bLast2.features,
+            ...bLast1.features,
+          ],
+        ),
+      );
+      return fallback;
+    }
+
+    final consolidated = <ProposedBeatBlueprint>[];
+    for (int bIdx = 0; bIdx < nonEmptyBuckets.length; bIdx++) {
+      final group = nonEmptyBuckets[bIdx];
+      final first = group.first;
+      var mergedTitle = first.title;
+      final mergedGoals = <String>[first.goal.trim()];
+      final mergedFeatures = <ProposedFeatureBlueprint>[...first.features];
+      for (final extra in group.skip(1)) {
+        mergedTitle = _mergeConsolidatedSystemEpicTitle(
+          mergedTitle,
+          extra.title,
+        );
+        if (extra.goal.trim().isNotEmpty &&
+            !mergedGoals.contains(extra.goal.trim())) {
+          mergedGoals.add(extra.goal.trim());
+        }
+        for (final ef in extra.features) {
+          if (!mergedFeatures.any(
+            (mf) => mf.title.toLowerCase() == ef.title.toLowerCase(),
+          )) {
+            mergedFeatures.add(ef);
+          }
+        }
+      }
+      final epicNum = bIdx + 1;
+      for (int fIdx = 0; fIdx < mergedFeatures.length; fIdx++) {
+        mergedFeatures[fIdx].id = 'feat_${epicNum}_${fIdx + 1}';
+      }
+      consolidated.add(
+        ProposedBeatBlueprint(
+          id: 'beat_$epicNum',
+          title: mergedTitle,
+          goal: mergedGoals.join(' '),
+          doneWhen: group.last.doneWhen,
+          features: mergedFeatures,
+        ),
+      );
+    }
+    return consolidated;
   }
 
   /// Phase 2 of Section-by-Section Workbench Build:
@@ -3023,6 +3265,13 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       );
     }
 
+    if (prototypePart != '1' && beats.length >= 5) {
+      final consolidated = consolidateSystemEpicsFromLoopBeats(beats);
+      beats
+        ..clear()
+        ..addAll(consolidated);
+    }
+
     final projGoal = SectionTextUtils.resolveGoal(projectDoc.sections);
     final projDone = SectionTextUtils.resolveDoneWhen(projectDoc.sections);
     return ReleaseBlueprint(
@@ -3271,7 +3520,8 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       } else if (prototypePart != '1' &&
           allCoreLoopItems.isNotEmpty &&
           parsed.beats.length < allCoreLoopItems.length) {
-        // Ensure v0.1 covers every Stage 1 Core Loop Beat so trailing beats are never dropped
+        // Ensure v0.1 covers every Stage 1 Core Loop Beat across System Epics (title, goal, doneWhen, or features)
+        // without inflating consolidated System Epics back to a 1:1 loop-beat count when already covered.
         Set<String> extractKeywords(String text) => text
             .toLowerCase()
             .replaceAll(_nonAlphaNumSpaceRegex, ' ')
@@ -3279,22 +3529,58 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
             .where((w) => w.length >= 4)
             .toSet();
         final fullBeats = List<ProposedBeatBlueprint>.from(parsed.beats);
+        final priorLoopTitleKeywords = <String>{};
         for (int cIdx = 0; cIdx < allCoreLoopItems.length; cIdx++) {
           final rawCore = allCoreLoopItems[cIdx].trim();
-          final colonIdx = rawCore.indexOf(':');
+          int splitIdx = rawCore.indexOf(':');
+          final dashIdx = rawCore.indexOf('—');
+          if (splitIdx <= 0 || (dashIdx > 0 && dashIdx < splitIdx)) {
+            splitIdx = dashIdx;
+          }
           final rawTitlePart =
-              colonIdx > 0 ? rawCore.substring(0, colonIdx).trim() : rawCore;
-          final rawDescPart = colonIdx > 0 && colonIdx + 1 < rawCore.length
-              ? rawCore.substring(colonIdx + 1).trim()
+              splitIdx > 0 ? rawCore.substring(0, splitIdx).trim() : rawCore;
+          final rawDescPart = splitIdx > 0 && splitIdx + 1 < rawCore.length
+              ? rawCore.substring(splitIdx + 1).trim()
               : rawCore;
           final coreKeywords = extractKeywords(rawTitlePart);
+          final distinguishingKeywords =
+              coreKeywords.difference(priorLoopTitleKeywords);
+          priorLoopTitleKeywords.addAll(coreKeywords);
+
           final alreadyCovered = fullBeats.any((b) {
             final bLower = b.title.toLowerCase();
             final cLower = rawTitlePart.toLowerCase();
             if (bLower.contains(cLower) || cLower.contains(bLower)) return true;
             final bKw = extractKeywords(b.title);
-            return coreKeywords.isNotEmpty &&
-                bKw.intersection(coreKeywords).isNotEmpty;
+            if (coreKeywords.isNotEmpty &&
+                bKw.intersection(coreKeywords).isNotEmpty) {
+              return true;
+            }
+            // Check if a consolidated System Epic covers this Loop Beat in its goal, doneWhen, or child features
+            final epicCorpusText = <String>[
+              b.title,
+              b.goal,
+              b.doneWhen,
+              for (final f in b.features) ...<String>[
+                f.title,
+                f.goal,
+                ...f.inScope,
+              ],
+            ].join(' ');
+            final corpusLower = epicCorpusText.toLowerCase();
+            if (cLower.isNotEmpty && corpusLower.contains(cLower)) {
+              return true;
+            }
+            final corpusKw = extractKeywords(epicCorpusText);
+            final matchedCore = corpusKw.intersection(coreKeywords);
+            final minRequired = coreKeywords.length >= 2 ? 2 : 1;
+            if (matchedCore.length >= minRequired) {
+              if (distinguishingKeywords.isEmpty ||
+                  matchedCore.intersection(distinguishingKeywords).isNotEmpty) {
+                return true;
+              }
+            }
+            return false;
           });
           if (!alreadyCovered) {
             final nextBeatNum = fullBeats.length + 1;
@@ -4447,9 +4733,21 @@ class ReleaseExecutorAgent {
     final outScopeItems =
         blueprint.effectiveOutOfScope.map((o) => '• $o').join('\n');
 
+    final parentProjDoc =
+        parentProjId != null ? existingDocuments[parentProjId] : null;
+    final projCoreLoopCount = parentProjDoc != null
+        ? SectionTextUtils.resolveInScope(parentProjDoc.sections).length
+        : 0;
     releaseDoc.title = blueprint.releaseTitle;
     releaseDoc.sections['releaseScope'] = blueprint.preset.name;
     releaseDoc.sections['versionTag'] = versionTag;
+    if (blueprint.beats.length >= 2 &&
+        projCoreLoopCount > 0 &&
+        blueprint.beats.length < projCoreLoopCount) {
+      releaseDoc.sections['systemEpicsConsolidated'] = 'true';
+    } else {
+      releaseDoc.sections.remove('systemEpicsConsolidated');
+    }
     releaseDoc.sections['release_blueprint_json'] =
         jsonEncode(blueprint.toJson());
     releaseDoc.estimatedDuration = '${blueprint.totalIncludedHours}h';
@@ -4509,6 +4807,7 @@ class ReleaseExecutorAgent {
     releaseDoc.title = blueprint.releaseTitle;
     releaseDoc.sections['releaseScope'] = blueprint.preset.name;
     releaseDoc.sections['versionTag'] = versionTag;
+    releaseDoc.sections['systemEpicsConsolidated'] = 'true';
     releaseDoc.sections['release_blueprint_json'] =
         jsonEncode(blueprint.toJson());
     releaseDoc.estimatedDuration = '${blueprint.totalIncludedHours}h';

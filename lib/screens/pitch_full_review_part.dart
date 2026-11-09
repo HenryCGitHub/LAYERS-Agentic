@@ -55,6 +55,10 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
     required int index,
     VoidCallback? onTap,
   }) {
+    final builtEpicCount = widget.workbench.activeReleaseBeats.length;
+    final subtitleText = builtEpicCount > 0
+        ? '$builtEpicCount Epics · ${draft.coreLoopBeats.length} Loop Beats · ${draft.gameSpec.length} Specs · Click to rename target ✎'
+        : '${draft.coreLoopBeats.length} Loop Beats · ${draft.gameSpec.length} Specs · Click to rename target ✎';
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -78,7 +82,7 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
               ),
               const SizedBox(height: 4),
               Text(
-                '${draft.coreLoopBeats.length} Epics · ${draft.gameSpec.length} Specs · Click to rename target ✎',
+                subtitleText,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(

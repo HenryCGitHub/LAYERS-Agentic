@@ -8609,5 +8609,299 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.totalInputTokens, equals(0));
       },
     );
+
+    testWidgets(
+      'Core Loop Beats (06 · Core Loop) are decoupled from System Epics (E01..EN) in Stage 1 UI, Consolidation, Reconciliation, and Live Sync',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1080);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wastelandCoreLoopBeats = <String>[
+          'Route Departure — Player steps past outpost gates onto highway as HUD tracks active haul weight.',
+          'Hostile Ambush — Scavengers open fire from roadside cover while player returns hitscan shots to neutralize threats.',
+          'Cargo Retrieval — Player sifts fallen scavenger crates to pack sellable scrap into backpack inventory.',
+          'Transit Risk — Player navigates hazard choke points, risking complete cargo drop on lethal damage.',
+          'Settlement Barter — Player enters destination gates, selling recovered trade goods to merchants for currency.',
+          'Gear Resupply — Player purchases surplus ammunition and medkits before plotting the next overland route.',
+        ];
+
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains(
+            'creating a Stage 1 Concept Blueprint for this spark idea:',
+          )) {
+            return {
+              'title': 'Wasteland Peddler',
+              'goal':
+                  'Wasteland Haul Loop — Pack scrap cargo, survive highway ambushes, and barter at settlement gates.',
+              'gameSpec': [
+                '3D First-Person',
+                'WASD + Mouse Aim',
+                'Singleplayer',
+                'Highway Corridor',
+              ],
+              'techSpec': [
+                'Godot 4 (3D)',
+                'PC Desktop',
+                '3D Low-Poly Meshes',
+                'Offline Local Save',
+              ],
+              'designPillars': [
+                'Every Pound Matters — Heavy cargo directly slows movement speed.',
+                'Lethal Highway Choke Points — Ambushes demand quick cover.',
+              ],
+              'tradeOffs': [
+                'Readable Weight Tiers over complex inventory tetris',
+                'Hitscan Scavenger Duels over realistic bullet drop',
+              ],
+              'coreLoopBeats': wastelandCoreLoopBeats,
+              'exclusions': [
+                'No drivable vehicles or caravan pack beasts',
+                'No open-world free-roam map or procedural route generation',
+              ],
+              'doneWhen':
+                  'Eliminate highway scavengers, pack dropped cargo, and sell haul to settlement merchant without dying.',
+              'releaseTrainTitles': [
+                'v0.1: Wasteland Peddler - Prototype',
+              ],
+            };
+          }
+
+          if (prompt.contains('planning Release:')) {
+            // Return 4 consolidated System Epics covering all 6 Core Loop Beats (many-to-many)
+            return {
+              'goal':
+                  'Wasteland Haul Loop — Build the 4 core systems for highway transit, ambush combat, cargo haul, and settlement barter.',
+              'doneWhen':
+                  'Eliminate highway scavengers, pack dropped cargo, and sell haul to settlement merchant without dying.',
+              'explicitExclusions': [
+                'No drivable vehicles or caravan pack beasts',
+              ],
+              'beats': [
+                {
+                  'id': 'beat_1',
+                  'title': 'Highway Route & Transit',
+                  'goal':
+                      'Step past outpost gates onto highway route departure and navigate transit risk hazard choke points.',
+                  'doneWhen':
+                      'Player departs outpost -> navigates highway hazard choke points.',
+                  'features': [
+                    {
+                      'id': 'feat_1_1',
+                      'title': 'Highway Hazard Corridor',
+                      'lifecycle': 'new',
+                      'included': true,
+                      'estimatedHours': 3,
+                      'goal':
+                          'Route departure gate and transit risk hazard choke points.',
+                      'inScope': ['Outpost departure gate', 'Hazard choke point'],
+                      'doneWhen':
+                          'Step past gate -> traverse highway hazard zone.',
+                      'tuningParams': ['moveSpeed: 6.0 m/s'],
+                      'edgeCases': [
+                        '[LETHAL DROP GUARD] Drop cargo on lethal hazard damage',
+                      ],
+                      'checkpoints': [
+                        {
+                          'title': 'Highway Corridor & Hazards',
+                          'playtestCriteria':
+                              'Depart outpost -> cross hazard choke point.',
+                          'tasks': [
+                            'Outpost Gate & Highway Setup (1.5h)',
+                            'Transit Hazard Choke Point (1.5h)',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  'id': 'beat_2',
+                  'title': 'Scavenger Ambush Combat',
+                  'goal':
+                      'Survive hostile ambush as scavengers open fire from cover and player returns hitscan shots.',
+                  'doneWhen':
+                      'Fire hitscan rifle -> neutralize roadside ambush scavengers.',
+                  'features': [
+                    {
+                      'id': 'feat_2_1',
+                      'title': 'Hitscan Scavenger Duel',
+                      'lifecycle': 'new',
+                      'included': true,
+                      'estimatedHours': 3,
+                      'goal':
+                          'Hostile ambush scavenger cover fire and player hitscan shots.',
+                      'inScope': ['Hitscan raycast', 'Scavenger ambush AI'],
+                      'doneWhen':
+                          'Shoot scavenger -> scavenger drops cargo crate.',
+                      'tuningParams': ['rifleDamage: 25.0 hp'],
+                      'edgeCases': [
+                        '[DEAD TARGET GUARD] Ignore hitscan on defeated scavenger',
+                      ],
+                      'checkpoints': [
+                        {
+                          'title': 'Hitscan Ambush Combat',
+                          'playtestCriteria':
+                              'Fire hitscan shots -> defeat ambush scavenger.',
+                          'tasks': [
+                            'Hitscan Weapon Raycast (1.5h)',
+                            'Roadside Scavenger Ambush (1.5h)',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  'id': 'beat_3',
+                  'title': 'Cargo Loot & Inventory',
+                  'goal':
+                      'Cargo retrieval from fallen scavenger crates to pack sellable scrap into backpack inventory with haul weight.',
+                  'doneWhen':
+                      'Interact with crate -> pack scrap into weighted backpack.',
+                  'features': [
+                    {
+                      'id': 'feat_3_1',
+                      'title': 'Crate Scrap & Weight HUD',
+                      'lifecycle': 'new',
+                      'included': true,
+                      'estimatedHours': 3,
+                      'goal':
+                          'Cargo retrieval from scavenger crates and HUD haul weight tracking.',
+                      'inScope': ['Crate loot pickup', 'Haul weight HUD'],
+                      'doneWhen':
+                          'Pack scrap from crate -> HUD updates haul weight.',
+                      'tuningParams': ['maxCarryWeight: 50.0 kg'],
+                      'edgeCases': [
+                        '[OVERWEIGHT GUARD] Cap sprint when haul exceeds maxCarryWeight',
+                      ],
+                      'checkpoints': [
+                        {
+                          'title': 'Cargo Retrieval & Weight',
+                          'playtestCriteria':
+                              'Loot fallen crate -> backpack weight updates.',
+                          'tasks': [
+                            'Scavenger Crate Loot Pickup (1.5h)',
+                            'Backpack Haul Weight HUD (1.5h)',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  'id': 'beat_4',
+                  'title': 'Settlement Merchant & Resupply',
+                  'goal':
+                      'Settlement barter selling recovered trade goods to merchants for currency and gear resupply purchasing surplus ammo and medkits.',
+                  'doneWhen':
+                      'Sell cargo to merchant -> buy surplus ammo and medkits.',
+                  'features': [
+                    {
+                      'id': 'feat_4_1',
+                      'title': 'Merchant Barter & Resupply Counter',
+                      'lifecycle': 'new',
+                      'included': true,
+                      'estimatedHours': 3,
+                      'goal':
+                          'Settlement barter for currency and gear resupply for ammo and medkits.',
+                      'inScope': ['Merchant sell counter', 'Gear resupply shop'],
+                      'doneWhen':
+                          'Sell scrap for currency -> purchase ammo and medkits.',
+                      'tuningParams': ['ammoPackCost: 15 caps'],
+                      'edgeCases': [
+                        '[INSUFFICIENT FUNDS GUARD] Block gear resupply when currency is low',
+                      ],
+                      'checkpoints': [
+                        {
+                          'title': 'Settlement Barter & Gear Resupply',
+                          'playtestCriteria':
+                              'Sell scrap -> purchase surplus ammo and medkits.',
+                          'tasks': [
+                            'Settlement Merchant Barter Counter (1.5h)',
+                            'Surplus Ammo & Medkit Resupply (1.5h)',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+
+          return _mockGeminiResponder(prompt, model);
+        };
+
+        final provider = WorkbenchProvider();
+        await provider.startConceptInterview(
+          'Wasteland Peddler: haul cargo along a dangerous highway and barter at settlements',
+          true,
+        );
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        // 1. Before v0.1 is built, Card 09 · RELEASE TARGET must show "6 Loop Beats · 4 Specs" (NEVER "6 Epics")
+        expect(
+          find.text(
+            '6 Loop Beats · 4 Specs · Click to rename target ✎',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            '6 Epics · 4 Specs · Click to rename target ✎',
+          ),
+          findsNothing,
+        );
+
+        // 2. Verify deterministic system consolidation also groups 6 1:1 loop-beat Epics into 4 System Epics
+        final rawSixBeats = <ProposedBeatBlueprint>[
+          for (int i = 0; i < wastelandCoreLoopBeats.length; i++)
+            ProposedBeatBlueprint(
+              id: 'beat_${i + 1}',
+              title: wastelandCoreLoopBeats[i].split('—').first.trim(),
+              goal: wastelandCoreLoopBeats[i].split('—').last.trim(),
+              doneWhen: 'Verified.',
+              features: const [],
+            ),
+        ];
+        final consolidated =
+            ReleasePlannerAgent.consolidateSystemEpicsFromLoopBeats(rawSixBeats);
+        expect(consolidated.length, equals(4));
+
+        // 3. Build v0.1 and verify reconcileReleaseBlueprintWithPhaseRules keeps the 4 consolidated System Epics (does NOT pad to 6)
+        await tester.runAsync(() => provider.approveConceptAndBuildRelease());
+        await tester.pump();
+
+        expect(provider.conceptDraft!.coreLoopBeats.length, equals(6));
+        expect(provider.activeReleaseBeats.length, equals(4));
+
+        // 4. Verify live Stage 1 -> Stage 2 sync preserves the 4 consolidated System Epics (many-to-1 coverage)
+        provider.updateConceptDraft((draft) {
+          draft.coreLoopBeats[5] =
+              'Gear Resupply — Player purchases surplus shotgun shells and medkits before plotting the next overland route.';
+        });
+        expect(provider.activeReleaseBeats.length, equals(4));
+        expect(
+          provider.activeReleaseBeats.last.title,
+          equals('Settlement Merchant & Resupply'),
+        );
+
+        // 5. Switch back to Stage 1 Concept Blueprint and verify Card 09 shows "4 Epics · 6 Loop Beats · 4 Specs"
+        provider.setStage(WorkbenchStage.projectPitch);
+        await tester.pump();
+        expect(
+          find.text(
+            '4 Epics · 6 Loop Beats · 4 Specs · Click to rename target ✎',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }

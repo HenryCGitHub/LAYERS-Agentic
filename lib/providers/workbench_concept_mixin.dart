@@ -744,6 +744,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         _parseStage1CoreLoopBeat(draft.coreLoopBeats[i], i),
     ];
 
+    final isConsolidatedSystemRelease =
+        rel.sections['systemEpicsConsolidated'] == 'true';
     final stage1KeywordSets = [
       for (final sBeat in parsedStage1Beats)
         _extractBeatKeywords('${sBeat.title} ${sBeat.description}'),
@@ -751,7 +753,16 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final existingBeatKeywordSets = {
       for (final candidate in existingBeats)
         candidate.id: _extractBeatKeywords(
-          '${candidate.title} ${candidate.sections['scope'] ?? ''}',
+          <String>[
+            candidate.title,
+            candidate.sections['scope'] ?? '',
+            if (isConsolidatedSystemRelease)
+              for (final fid in candidate.childrenIds)
+                if (documents[fid] != null) ...<String>[
+                  documents[fid]!.title,
+                  documents[fid]!.sections['scope'] ?? '',
+                ],
+          ].join(' '),
         ),
     };
 
@@ -794,6 +805,37 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
     }
 
+    // Pass 1b (Many-to-1 System Epic Coverage):
+    // Multiple chronological Loop Beats can belong to the same consolidated System Epic
+    // (e.g., "Settlement Barter" + "Gear Resupply" -> "Settlement Merchant & Resupply").
+    if (isConsolidatedSystemRelease) {
+      for (int i = 0; i < parsedStage1Beats.length; i++) {
+        if (matchedBeatForStage1Idx.containsKey(i)) continue;
+        final sBeat = parsedStage1Beats[i];
+        final sTitleKeywords = _extractBeatKeywords(sBeat.title);
+        final sKeywords = stage1KeywordSets[i];
+        TierDocument? bestSharedSystemEpic;
+        double bestSharedScore = 0.0;
+
+        for (final candidate in existingBeats) {
+          final candKeywords =
+              existingBeatKeywordSets[candidate.id] ?? const <String>{};
+          final titleOverlap = _keywordSetOverlap(sTitleKeywords, candKeywords);
+          final fullOverlap = _keywordSetOverlap(sKeywords, candKeywords);
+          final score = titleOverlap > fullOverlap ? titleOverlap : fullOverlap;
+          if (score >= 0.34 && score > bestSharedScore) {
+            bestSharedScore = score;
+            bestSharedSystemEpic = candidate;
+          }
+        }
+
+        if (bestSharedSystemEpic != null) {
+          matchedBeatForStage1Idx[i] = bestSharedSystemEpic;
+          claimedBeatIds.add(bestSharedSystemEpic.id);
+        }
+      }
+    }
+
     // Pass 2: Guarded Positional Rename Match (Edge Case 3 protection)
     // Only allow positional fallback (`index == index`) when either:
     // - Total count is unchanged AND only 1 single beat in the list was edited in-place, OR
@@ -823,6 +865,13 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
     }
 
+    final mappedStage1IndicesByBeatId = <String, List<int>>{};
+    matchedBeatForStage1Idx.forEach((stage1Idx, beatDoc) {
+      mappedStage1IndicesByBeatId
+          .putIfAbsent(beatDoc.id, () => <int>[])
+          .add(stage1Idx);
+    });
+
     // Pass 3: Reconstruct `rel.childrenIds` in Stage 1 order, updating matched Epics in-place,
     // creating playable Epics/Features for newly added beats, and archiving removed Epics.
     final activeVer = activeReleaseVersionTag;
@@ -836,11 +885,21 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       final existingBeat = matchedBeatForStage1Idx[i];
 
       if (existingBeat != null) {
+        if (newReleaseBeatIds.contains(existingBeat.id)) {
+          // Co-covered by a shared System Epic that is already in `newReleaseBeatIds`.
+          continue;
+        }
+        final mappedCount =
+            mappedStage1IndicesByBeatId[existingBeat.id]?.length ?? 1;
+        final preserveSystemEpicIdentity =
+            mappedCount > 1 || rel.sections['systemEpicsConsolidated'] == 'true';
         final oldTitle = existingBeat.title;
-        existingBeat.title = sBeat.title;
-        existingBeat.sections['scope'] =
-            'Goal: Build and playtest ${sBeat.description}\n\nIn Scope:\n• ${sBeat.title}: ${sBeat.description}\n\nDone When: Playtester can trigger and complete ${sBeat.title} in the test scene.';
-        _persistDocument(existingBeat);
+        if (!preserveSystemEpicIdentity) {
+          existingBeat.title = sBeat.title;
+          existingBeat.sections['scope'] =
+              'Goal: Build and playtest ${sBeat.description}\n\nIn Scope:\n• ${sBeat.title}: ${sBeat.description}\n\nDone When: Playtester can trigger and complete ${sBeat.title} in the test scene.';
+          _persistDocument(existingBeat);
+        }
         newReleaseBeatIds.add(existingBeat.id);
 
         if (bp != null) {
@@ -853,8 +912,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
               )
               .firstOrNull;
           if (matchingBpBeat != null) {
-            matchingBpBeat.title = sBeat.title;
-            matchingBpBeat.goal = sBeat.description;
+            if (!preserveSystemEpicIdentity) {
+              matchingBpBeat.title = sBeat.title;
+              matchingBpBeat.goal = sBeat.description;
+            }
             newBlueprintBeats.add(matchingBpBeat);
           }
         }
