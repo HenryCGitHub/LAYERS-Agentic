@@ -2403,7 +2403,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               tIdx++)
                             Builder(
                               builder: (context) {
-                                final cpNode = activeCp!;
+                                final cpNode = activeCp;
                                 final bp = howToBlueprints[tIdx];
                                 final task = cpNode.checklist[tIdx];
                                 final isFixTask =
