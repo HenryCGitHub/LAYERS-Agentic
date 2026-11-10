@@ -193,135 +193,234 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
   static const String taskGroupGoalSchemaDesc =
       '1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").';
 
-  static final RegExp _leadingTaskVerbRegex = RegExp(
-    r'^(?:configure|setup|set\s+up|create|build|implement|add|write|code|bind|wire|define|establish|calculate|apply|trigger|spawn|attach|initialize|declare|enable|clamp|verify|test|update|upgrade|connect|hook\s+up|register|assign|expose|tune|polish|integrate|handle|enforce)\s+(?:the\s+|a\s+|an\s+)?',
+  static final RegExp _anyDurationTagRe =
+      RegExp(r'\s*\(([\d\.]+\s*[hm])\)', caseSensitive: false);
+  static final RegExp _trailingForBeatSuffixRegex =
+      RegExp(r'\s+for\s+[A-Z][\w\s&\-\/]*$');
+  static final RegExp _leadingVerbPrefixRegex = RegExp(
+    r'^(?:Create|Implement|Build|Configure|Set\s+up|Setup|Code|Write|Add|Hook\s+up|Hook|Wire|Subscribe|Enforce|Spawn|Apply|Bind|Trigger|Update|Extend|Upgrade|Define|Declare|Attach|Connect|Handle|Polish)\s+(?:(?:a|an|the)\s+)?',
     caseSensitive: false,
   );
-  static final RegExp _trailingTaskClauseRegex = RegExp(
-    r'\s+(?:while|when|after|before|during|upon|on\s+[a-z0-9_]+\s+(?:event|death|hit|kill|trigger|overlap|collision|enter|exit)|for\s+(?:the\s+|a\s+)?[a-z0-9_\s]+|in\s+(?:the\s+|a\s+)?(?:greybox|arena|scene|level|chamber|inspector|viewport).*|so\s+that.*|to\s+(?:prevent|ensure|allow|enable|support|clamp|block).*)$',
+  static final RegExp _inlineAmpersandVerbRegex = RegExp(
+    r'(&|,)\s*(?:and\s+)?(?:create|implement|build|configure|set\s+up|setup|code|write|add|hook\s+up|hook|wire|subscribe|enforce|spawn|apply|bind|trigger|update|extend|upgrade|define|declare|attach|connect|handle|polish)\s+(?:(?:a|an|the)\s+)?',
     caseSensitive: false,
   );
-  static final RegExp _taskListSplitRegex = RegExp(
-    r'\s*(?:,\s*(?:and\s+|&\s*)?|\s+&\s+|\s+and\s+)\s*',
+  static final RegExp _trailingSubordinateClauseRegex = RegExp(
+    r'\s+(?:while|when|during|so\s+that|in\s+order\s+to)\s+.*$',
+    caseSensitive: false,
+  );
+  static final RegExp _leadingArticlePrefixRegex = RegExp(
+    r'^(?:a|an|the)\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _inlineArticlesRegex = RegExp(
+    r'\b(?:a|an|the)\s+',
     caseSensitive: false,
   );
   static final RegExp _whitespaceRegex = RegExp(r'\s+');
-  static const Set<String> _taskFillerWords = <String>{
-    'the',
-    'a',
-    'an',
-    'with',
-    'using',
-    'into',
-    'onto',
-    'from',
-    'low-poly',
-    'low',
-    'poly',
-    'custom',
-    'basic',
-    'simple',
-    'initial',
-    'core',
-    'proper',
-    'clean',
-    'playable',
-    'functional',
-    'dynamic',
-    'stylized',
+  static final RegExp _cutPrefixRegex = RegExp(
+    r'^\[cut\]\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _noPrefixRegex = RegExp(
+    r'^no\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _leadingBulletRegex = RegExp(r'^[•\-\*\s]+');
+  static final RegExp _tradeOffVerbPrefixRegex = RegExp(
+    r'^(?:prioritize|favor|choose)\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _exclusionCutVerbPrefixRegex = RegExp(
+    r'^(?:cut|defer|exclude|skip)\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _exclusionProtoSuffixRegex = RegExp(
+    r'\s+(?:in|for|during)\s+(?:the\s+)?(?:v0\.1\s+)?prototype$',
+    caseSensitive: false,
+  );
+  static final RegExp _exclusionV01SuffixRegex = RegExp(
+    r'\s+in\s+v0\.1$',
+    caseSensitive: false,
+  );
+
+  static const Set<String> _kAcronymWords = <String>{
+    '2D',
+    '3D',
+    'UI',
+    'HUD',
+    'VFX',
+    'SFX',
+    'NPC',
+    'AI',
+    'WASD',
+    'C++',
+    'FPS',
+    'IK',
+    'UV',
+    'LOD',
+    'PBR',
+    'GI',
   };
 
   /// Deterministically condenses a legacy verbose task title (when no `" — "` separator is present)
   /// into a clean `2–4` word Title-Case micro-label (Style 5) so `01 STEPS` and the Step Picker
   /// dropdown never overflow or wrap across 3 lines.
-  static String formatConciseTaskTitle(String rawTitle) {
-    var t = rawTitle.trim();
-    if (t.isEmpty) return t;
-    final dashIdx = t.indexOf(' — ');
+  static String formatConciseTaskTitle(String rawCleanTitle) {
+    var text = rawCleanTitle.replaceAll(_anyDurationTagRe, '').trim();
+    if (text.isEmpty) return text;
+    final dashIdx = text.indexOf(' — ');
     if (dashIdx > 0) {
-      t = t.substring(0, dashIdx).trim();
+      text = text.substring(0, dashIdx).trim();
     }
-    t = stripLegacyTemplateTaskSuffix(t);
+    text = stripLegacyTemplateTaskSuffix(text);
 
     String? badgePrefix;
-    if (t.startsWith('[FIX]')) {
+    if (text.startsWith('[FIX]')) {
       badgePrefix = '[FIX] ';
-      t = t.substring(5).trim();
-    } else if (t.startsWith('[POLISH]')) {
+      text = text.substring(5).trim();
+    } else if (text.startsWith('[POLISH]')) {
       badgePrefix = '[POLISH] ';
-      t = t.substring(8).trim();
+      text = text.substring(8).trim();
     }
 
-    final initialWords =
-        t.split(_whitespaceRegex).where((w) => w.isNotEmpty).toList();
-    if (initialWords.length <= 4 &&
-        !_leadingTaskVerbRegex.hasMatch(t) &&
-        !t.contains(',')) {
-      return badgePrefix != null ? '$badgePrefix$t' : t;
+    String withBadge(String val) =>
+        badgePrefix != null ? '$badgePrefix$val' : val;
+
+    final lower = text.toLowerCase();
+    if (lower.startsWith('create actor/node structure') ||
+        lower.startsWith('create actor / node structure')) {
+      return withBadge('Actor & Base Properties');
+    }
+    if (lower.startsWith('implement core state transitions')) {
+      return withBadge('State Logic & Player Input');
+    }
+    if (lower.startsWith('hook visual/audio feedback cues') ||
+        lower.startsWith('hook up visual/audio feedback cues')) {
+      return withBadge('Feedback Cues & State Guard');
+    }
+    if (lower.startsWith('create camera rig and hud')) {
+      return withBadge('Camera Rig & HUD Container');
+    }
+    if (lower.startsWith('implement camera follow smoothing')) {
+      return withBadge('Follow Smoothing & Bound Clamp');
+    }
+    if (lower.startsWith('wire active state readout')) {
+      return withBadge('State Readout & Viewport Test');
     }
 
-    t = t.replaceFirst(_leadingTaskVerbRegex, '').trim();
-    t = t.replaceFirst(_trailingTaskClauseRegex, '').trim();
-
-    final clauses = t
-        .split(_taskListSplitRegex)
-        .map((c) => c.replaceFirst(_leadingTaskVerbRegex, '').trim())
-        .where((c) => c.isNotEmpty)
-        .toList();
-
-    List<String> cleanClauseWords(String clause) {
-      final rawWords = clause
-          .replaceAll(RegExp(r'[^\w\s\-/]'), '')
-          .split(_whitespaceRegex)
-          .where((w) => w.isNotEmpty)
+    // Strip redundant trailing " for <Beat/Feature Name>" and subordinate clauses ("while ...", "when ...")
+    text = text
+        .replaceFirst(_trailingForBeatSuffixRegex, '')
+        .replaceFirst(_trailingSubordinateClauseRegex, '');
+    text = text
+        .replaceFirst(_leadingVerbPrefixRegex, '')
+        .replaceFirst(_leadingArticlePrefixRegex, '')
+        .replaceAllMapped(
+          _inlineAmpersandVerbRegex,
+          (m) => '${m.group(1)} ',
+        )
+        .replaceAll(_inlineArticlesRegex, '')
+        .replaceAll(' and ', ' & ')
+        .trim();
+    if (text.contains(',') || text.length > 40) {
+      final rawClauses = text
+          .split(RegExp(r'\s*(?:,|&)\s*'))
+          .map((c) => c.trim())
+          .where((c) => c.isNotEmpty)
+          .take(2)
           .toList();
-      final filtered = rawWords
-          .where((w) => !_taskFillerWords.contains(w.toLowerCase()))
-          .toList();
-      final source = filtered.isNotEmpty ? filtered : rawWords;
-      if (source.length <= 2) return source;
-      return source.sublist(source.length - 2);
-    }
-
-    String titleCaseWord(String w) {
-      if (w.isEmpty) return w;
-      if (w.toUpperCase() == w && w.length >= 2) return w;
-      return '${w[0].toUpperCase()}${w.substring(1)}';
-    }
-
-    String result;
-    if (clauses.length >= 2) {
-      final firstPart = cleanClauseWords(clauses.first).map(titleCaseWord).join(' ');
-      final secondPart = cleanClauseWords(clauses[1]).map(titleCaseWord).join(' ');
-      if (firstPart.isNotEmpty &&
-          secondPart.isNotEmpty &&
-          firstPart.toLowerCase() != secondPart.toLowerCase()) {
-        final combinedWords = '$firstPart & $secondPart'.split(_whitespaceRegex);
-        if (combinedWords.length <= 5) {
-          result = '$firstPart & $secondPart';
-        } else {
-          final shortFirst = titleCaseWord(cleanClauseWords(clauses.first).last);
-          final shortSecond = titleCaseWord(cleanClauseWords(clauses[1]).last);
-          result = '$shortFirst & $shortSecond';
+      if (rawClauses.isNotEmpty) {
+        final condensedClauses = <String>[];
+        for (final clause in rawClauses) {
+          final strippedClause = clause
+              .replaceFirst(_leadingVerbPrefixRegex, '')
+              .replaceFirst(_leadingArticlePrefixRegex, '')
+              .trim();
+          final rawWords = strippedClause
+              .split(_whitespaceRegex)
+              .where((w) => w.isNotEmpty && w.toLowerCase() != 'response')
+              .toList();
+          // Check if duplicate trailing word exists (e.g. "Ghost trail particle trail" -> "Ghost trail")
+          final seenLower = <String>{};
+          final hasDuplicateWord =
+              rawWords.any((w) => !seenLower.add(w.toLowerCase()));
+          final List<String> coreWords;
+          if (rawWords.length <= 2) {
+            coreWords = rawWords;
+          } else if (hasDuplicateWord) {
+            final deduped = <String>[];
+            final seen = <String>{};
+            for (final w in rawWords) {
+              if (seen.add(w.toLowerCase())) {
+                deduped.add(w);
+              }
+            }
+            coreWords = deduped.take(2).toList();
+          } else {
+            coreWords = rawWords.sublist(rawWords.length - 2);
+          }
+          if (coreWords.isNotEmpty) {
+            final titleCased = coreWords
+                .map((w) {
+                  final upper = w.toUpperCase();
+                  if (_kAcronymWords.contains(upper)) return upper;
+                  return w.length == 1
+                      ? upper
+                      : w[0].toUpperCase() + w.substring(1);
+                })
+                .join(' ');
+            condensedClauses.add(titleCased);
+          }
         }
-      } else {
-        result = firstPart.isNotEmpty ? firstPart : secondPart;
+        if (condensedClauses.isNotEmpty) {
+          return withBadge(condensedClauses.join(' & '));
+        }
       }
-    } else {
-      final words = (clauses.isNotEmpty ? clauses.first : t)
-          .replaceAll(RegExp(r'[^\w\s\-/&]'), '')
-          .split(_whitespaceRegex)
-          .where((w) => w.isNotEmpty && !_taskFillerWords.contains(w.toLowerCase()))
-          .toList();
-      final capped = words.length > 4 ? words.take(4).toList() : words;
-      result = capped.map(titleCaseWord).join(' ');
     }
+    if (text.isNotEmpty) {
+      text = text[0].toUpperCase() + text.substring(1);
+    }
+    return text.isEmpty ? rawCleanTitle : withBadge(text);
+  }
 
-    if (result.isEmpty) {
-      final fallback = initialWords.take(4).map(titleCaseWord).join(' ');
-      return badgePrefix != null ? '$badgePrefix$fallback' : fallback;
+  /// Strips leading `"Prioritize / Favor / Choose"` and trailing periods from a stored Trade-Off rule.
+  static String compactStoredTradeOff(String raw) {
+    var clean = raw.trim();
+    if (clean.endsWith('.')) {
+      clean = clean.substring(0, clean.length - 1).trim();
     }
-    return badgePrefix != null ? '$badgePrefix$result' : result;
+    return clean.replaceFirst(_tradeOffVerbPrefixRegex, '');
+  }
+
+  /// Strips leading `"Cut / Defer / Exclude / Skip"` (replacing with `"No "`) and trailing `"in v0.1 prototype"`
+  /// from a stored Out-of-Scope exclusion item.
+  static String compactStoredExclusion(String raw) {
+    var clean = raw.trim();
+    if (clean.endsWith('.')) {
+      clean = clean.substring(0, clean.length - 1).trim();
+    }
+    final colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < 32) {
+      clean = clean.substring(colonIdx + 1).trim();
+    }
+    return clean
+        .replaceFirst(_exclusionCutVerbPrefixRegex, 'No ')
+        .replaceAll(_exclusionProtoSuffixRegex, '')
+        .replaceAll(_exclusionV01SuffixRegex, '')
+        .trim();
+  }
+
+  /// Strips leading `[CUT]`, `No `, and bullet characters from an exclusion string.
+  static String stripExclusionPrefixes(
+    String raw, {
+    bool stripNoPrefix = true,
+  }) {
+    var text = raw.replaceFirst(_cutPrefixRegex, '');
+    if (stripNoPrefix) {
+      text = text.replaceFirst(_noPrefixRegex, '');
+    }
+    return text.replaceFirst(_leadingBulletRegex, '').trim();
   }
 
   static const String tuningParamSchemaDesc =

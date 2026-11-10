@@ -1176,11 +1176,12 @@ $cleanSpark
 $promptLead
 
 ${GeminiAgentClient.compactStyleRules}
+- Draft the 4 cells of `gameSpec` (`cameraView`, `controls`, `playerMode`, `arenaStructure`) and `techSpec` (`engine`, `platform`, `assetPipeline`, `saveMode`) strictly as 2–4 Title-Case words each. In `techSpec`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
+- Draft `designPillars` naming the core player feelings and emotional experiences the game must create (never features or genres), and `tradeOffs` as practical `priorityX` over `overAlternativeY` engineering and design boundaries.
 - Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:
   1. Beat 1 MUST be the immediate in-game player control & primary action (e.g. Walking & Tank Inspection, Grapple/Dash Traversal, Vehicle Handling, or Grid Placement—never a pre-match menu).
   2. Middle Beats cover the core simulation/action and reactive challenge in the exact chronological sequence the player experiences them.
   3. Final Beats cover Harvesting/Reward collection, Selling/Upgrading equipment, and starting the next cycle/run so the loop never dead-ends.
-- In `techSpec`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
 
 Call `commit_concept_blueprint` with the structured blueprint.
 ''';
@@ -1217,7 +1218,9 @@ Call `commit_concept_blueprint` with the structured blueprint.
       title: resolvedTitle,
       sparkIdea: cleanSpark,
       questions: const <AgentQuestion>[],
-      goal: json['goal']?.toString().trim() ?? '',
+      goal: ProjectConceptBlueprint.sanitizeGoalText(
+        json['goal']?.toString().trim() ?? '',
+      ),
       gameSpec: parsedGameSpec,
       techSpec: parsedTechSpec,
       designPillars: parsePillarsList(json['designPillars']),
@@ -1457,35 +1460,6 @@ Call `$activeToolName` with the delta update.
           'Draft `doneWhen` as a concise 1-sentence observable playtest completion condition covering the Core Loop without FPS targets.',
     ),
   ];
-
-  /// Builds a single Stage 1 Concept Blueprint section (`0` = `01 Goal` .. `7` = `08 Done When`)
-  /// in place on [draft] using its dedicated single-section tool schema.
-  static Future<bool> generateSingleConceptSection({
-    required ProjectConceptBlueprint draft,
-    required int sectionIndex,
-    String apiKey = '',
-    String modelName = 'gemini-flash-latest',
-    String thinkingLevel = 'LOW',
-  }) async {
-    if (sectionIndex < 0 || sectionIndex >= conceptSectionBuildOrder.length) {
-      return false;
-    }
-    final spec = conceptSectionBuildOrder[sectionIndex];
-    final ok = await sendConceptChatTurn(
-      draft,
-      '${spec.tag} ${spec.directive}',
-      apiKey: apiKey,
-      conversationModel: modelName,
-      planningModel: modelName,
-      thinkingLevel: thinkingLevel,
-    );
-    if (ok && sectionIndex == 0 && draft.title.trim().isNotEmpty) {
-      draft.releaseTrainTitles = <String>[
-        'v0.1: ${draft.title.trim()} - Prototype',
-      ];
-    }
-    return ok;
-  }
 
   /// Ranks a Core Loop Beat so pre-match Staging/Loadout menus (`3`) and end-of-run Reset/Summary (`4`)
   /// are never placed ahead of active in-game gameplay beats (`0`), while preserving the exact

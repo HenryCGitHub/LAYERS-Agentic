@@ -231,18 +231,12 @@ class WorkbenchProvider extends ChangeNotifier {
       _synthesizingProgressiveBeatId == beatId;
   bool isQueuedProgressiveBeat(String beatId) =>
       _queuedProgressiveBeatIds.contains(beatId);
-  ReleaseBlueprint? _prewarmedProgressiveBlueprint;
-  String? _prewarmedProgressiveSignature;
   List<String> get pendingFeatureStepQueue =>
       List.unmodifiable(_pendingFeatureStepQueue);
-  final bool _isPrewarmingReleaseBlueprint = false;
 
   String? _cachedInboxProjectId;
   int? _cachedInboxRawHash;
   List<FeatureInboxItem> _cachedInboxItems = const [];
-  bool get isPrewarmingReleaseBlueprint => _isPrewarmingReleaseBlueprint;
-  String? _prewarmedConceptSignature;
-  Future<void>? _inFlightPrewarmFuture;
 
   ProductionPhase _currentPhase = ProductionPhase.prototype;
   ProductionPhase get currentPhase => _currentPhase;

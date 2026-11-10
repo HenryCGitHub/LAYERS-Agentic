@@ -181,11 +181,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 8-section Concept Blueprint.
-  /// In live mode, transitions immediately to the Concept Blueprint view and builds Sections `01`..`08` one at a time.
+  /// In live mode, transitions immediately to the Concept Blueprint view (`0ms` skeleton) and synthesizes Sections `01`..`08` in a single pass.
   Future<void> startConceptInterview([
     String sparkText = '',
     bool jumpToFullReview = true,
-    bool prewarmRelease = false,
   ]) async {
     final cleanText = sparkText.trim();
     final effectiveSpark = cleanText.isNotEmpty
@@ -199,13 +198,14 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
 
     try {
+      ProjectConceptBlueprint? liveDraft;
       if (GeminiAgentClient.testMockResponder == null) {
         if (!GeminiAgentClient.hasKey(_apiKey)) {
           _setOfflineState();
           return;
         }
         final initialTitle = _deriveInitialWorkingTitle(effectiveSpark);
-        final liveDraft = ProjectConceptBlueprint(
+        liveDraft = ProjectConceptBlueprint(
           title: initialTitle,
           sparkIdea: effectiveSpark,
           questions: const <AgentQuestion>[],
@@ -223,44 +223,13 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           lastUpdatedFields: const <String>[],
         );
         _conceptDraft = liveDraft;
+        _activeConceptSectionBuildIndex = 0;
         _offlineErrorMessage = null;
         if (jumpToFullReview) {
           _jumpToFullReviewPending = true;
         }
         _commitConceptToVault(liveDraft, syncBuiltWorkbench: false);
         notifyListeners();
-
-        for (int secIdx = 0;
-            secIdx < ProjectConceptAgent.conceptSectionBuildOrder.length;
-            secIdx++) {
-          if (_conceptDraft != liveDraft) break;
-          _activeConceptSectionBuildIndex = secIdx;
-          final secLabel =
-              ProjectConceptAgent.conceptSectionBuildOrder[secIdx].label;
-          _agentProgressStep = 'Drafting $secLabel ($_conversationModel)...';
-          notifyListeners();
-
-          final ok = await ProjectConceptAgent.generateSingleConceptSection(
-            draft: liveDraft,
-            sectionIndex: secIdx,
-            apiKey: _apiKey,
-            modelName: _conversationModel,
-            thinkingLevel: _thinkingLevel,
-          );
-          if (_conceptDraft != liveDraft) break;
-          if (!ok && secIdx == 0) {
-            _conceptDraft = null;
-            _setOfflineState();
-            return;
-          }
-          _commitConceptToVault(liveDraft, syncBuiltWorkbench: false);
-          notifyListeners();
-        }
-        if (_conceptDraft == liveDraft) {
-          liveDraft.isInterviewComplete = true;
-          _commitConceptToVault(liveDraft);
-        }
-        return;
       }
 
       final draft = await ProjectConceptAgent.startConceptInterview(
@@ -269,14 +238,20 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         modelName: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
+      if (liveDraft != null && _conceptDraft != liveDraft) {
+        return;
+      }
       if (draft != null) {
         _conceptDraft = draft;
         _offlineErrorMessage = null;
-        if (jumpToFullReview) {
+        if (jumpToFullReview && liveDraft == null) {
           _jumpToFullReviewPending = true;
         }
         _commitConceptToVault(_conceptDraft!);
       } else {
+        if (liveDraft != null) {
+          _conceptDraft = null;
+        }
         _setOfflineState();
       }
     } finally {
@@ -291,7 +266,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   /// (if not yet drafted) and immediately builds the v0.1 Release Workbench in a single pass.
   Future<void> expressBuildReleaseFromSpark([String sparkText = '']) async {
     if (_conceptDraft == null || sparkText.trim().isNotEmpty) {
-      await startConceptInterview(sparkText, true, false);
+      await startConceptInterview(sparkText, true);
     }
     if (_conceptDraft != null) {
       await approveConceptAndBuildRelease();
@@ -346,43 +321,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  static String _compactStoredTradeOff(String raw) {
-    var clean = raw.trim();
-    if (clean.endsWith('.')) clean = clean.substring(0, clean.length - 1).trim();
-    clean = clean.replaceFirst(
-      RegExp(r'^(?:prioritize|favor|choose)\s+', caseSensitive: false),
-      '',
-    );
-    return clean;
-  }
-
-  static String _compactStoredExclusion(String raw) {
-    var clean = raw.trim();
-    if (clean.endsWith('.')) clean = clean.substring(0, clean.length - 1).trim();
-    final colonIdx = clean.indexOf(':');
-    if (colonIdx > 0 && colonIdx < 32) {
-      clean = clean.substring(colonIdx + 1).trim();
-    }
-    clean = clean
-        .replaceFirst(
-          RegExp(r'^(?:cut|defer|exclude|skip)\s+', caseSensitive: false),
-          'No ',
-        )
-        .replaceAll(
-          RegExp(
-            r'\s+(?:in|for|during)\s+(?:the\s+)?(?:v0\.1\s+)?prototype$',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceAll(
-          RegExp(r'\s+in\s+v0\.1$', caseSensitive: false),
-          '',
-        )
-        .trim();
-    return clean;
-  }
-
   void _commitConceptToVault(
     ProjectConceptBlueprint draft, {
     bool syncBuiltWorkbench = true,
@@ -405,10 +343,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     projDoc.sections['design_pillars'] =
         draft.designPillars.map((p) => '• $p').join('\n');
     projDoc.sections['trade_offs'] = draft.tradeOffs
-        .map((t) => '• ${_compactStoredTradeOff(t)}')
+        .map((t) => '• ${LayersTextStyleGuide.compactStoredTradeOff(t)}')
         .join('\n');
     projDoc.sections['exclusions'] = draft.exclusions
-        .map((e) => '• ${_compactStoredExclusion(e)}')
+        .map((e) => '• ${LayersTextStyleGuide.compactStoredExclusion(e)}')
         .join('\n');
     projDoc.sections['done_when'] = draft.doneWhen;
 

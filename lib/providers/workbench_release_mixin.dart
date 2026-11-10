@@ -136,36 +136,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     await approveConceptAndBuildRelease(releaseId: releaseId);
   }
 
-  String _computeConceptSignature(ProjectConceptBlueprint? draft) {
-    if (draft == null) return '';
-    return [
-      draft.title.trim(),
-      draft.goal.trim(),
-      draft.gameSpec.join('|'),
-      draft.techSpec.join('|'),
-      draft.designPillars.join('|'),
-      draft.tradeOffs.join('|'),
-      draft.coreLoopBeats.join('|'),
-      draft.exclusions.join('|'),
-      draft.doneWhen.trim(),
-    ].join('::');
-  }
-
-  /// True when the `v0.1` Release Blueprint is already pre-warmed for the current Concept Blueprint.
-  bool get hasPrewarmedReleaseBlueprint {
-    final sig = _computeConceptSignature(_conceptDraft);
-    return sig.isNotEmpty &&
-        _releaseBlueprint != null &&
-        _prewarmedConceptSignature == sig;
-  }
-
-  /// On-demand synthesis only: background pre-warming of `v0.1` is disabled to prevent speculative token spend.
-  Future<void> prewarmInitialReleasePlanIfNeeded() async {
-    return;
-  }
-
   /// 2-Stage Flow (`1. Concept` -> `2. Workbench`): Transitions immediately to `2. Workbench`,
-  /// synthesizes the Release Blueprint (or reuses the pre-warmed blueprint), and executes it into the active Workbench.
+  /// synthesizes the Release Blueprint, and executes it into the active Workbench.
   Future<void> approveConceptAndBuildRelease({String? releaseId}) async {
     if (_conceptDraft != null) {
       _commitConceptToVault(_conceptDraft!, syncBuiltWorkbench: false);
@@ -179,31 +151,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       return;
     }
 
-    if (releaseId == null && _inFlightPrewarmFuture != null) {
-      _isAgentBusy = true;
-      _agentProgressStep =
-          'Finishing v0.1 Release Architecture ($_conversationModel)...';
-      notifyListeners();
-      try {
-        await _inFlightPrewarmFuture;
-      } finally {
-        _isAgentBusy = false;
-        _agentProgressStep = null;
-      }
-    }
-
-    final currentSig = _computeConceptSignature(_conceptDraft);
-    final hasFreshPrewarmedBp = releaseId == null &&
-        _releaseBlueprint != null &&
-        _prewarmedConceptSignature == currentSig &&
-        GeminiAgentClient.testMockResponder == null;
-
-    if (!hasFreshPrewarmedBp) {
-      await openReleasePlanGate(
-        releaseId: releaseId,
-        transitionToGateStage: false,
-      );
-    }
+    await openReleasePlanGate(
+      releaseId: releaseId,
+      transitionToGateStage: false,
+    );
     if (_releaseBlueprint != null) {
       await approveAndExecuteReleasePlan();
     } else if (activeReleaseBeats.isEmpty) {
@@ -479,15 +430,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     r'v0\.(\d+)',
     caseSensitive: false,
   );
-  static final RegExp _cutPrefixRegex = RegExp(
-    r'^\[cut\]\s*',
-    caseSensitive: false,
-  );
   static final RegExp _noPrefixRegex = RegExp(
     r'^no\s+',
     caseSensitive: false,
   );
-  static final RegExp _leadingBulletRegex = RegExp(r'^[•\-\*\s]+');
   static final RegExp _tuningVarDelimiterRegex = RegExp(r'[:=]');
   static final RegExp _leadingBracketTagsRegex =
       RegExp(r'^\s*(?:\[[^\]]+\]\s*)+');
@@ -521,13 +467,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   static String _stripExclusionPrefixes(
     String raw, {
     bool stripNoPrefix = true,
-  }) {
-    var text = raw.replaceFirst(_cutPrefixRegex, '');
-    if (stripNoPrefix) {
-      text = text.replaceFirst(_noPrefixRegex, '');
-    }
-    return text.replaceFirst(_leadingBulletRegex, '').trim();
-  }
+  }) =>
+      LayersTextStyleGuide.stripExclusionPrefixes(
+        raw,
+        stripNoPrefix: stripNoPrefix,
+      );
 
   void _updateSerializedReleaseBlueprintMetadata(
     TierDocument doc, {
@@ -2357,45 +2301,6 @@ Concept Blueprint:
       }
     }
 
-    // Fast Path 1: Reuse background pre-warmed Progressive Release Blueprint (`0ms` instant open!)
-    if (!isFirstPrototypeRelease &&
-        existingBeats.isNotEmpty &&
-        GeminiAgentClient.testMockResponder == null) {
-      final currentPrewarmSig = _computeProgressivePrewarmSignature(
-        targetRelId: targetRelId,
-        phaseOverride: _currentPhase,
-      );
-      if (_prewarmedProgressiveBlueprint != null &&
-          _prewarmedProgressiveSignature == currentPrewarmSig) {
-        final rawJson =
-            jsonDecode(jsonEncode(_prewarmedProgressiveBlueprint!.toJson()))
-                as Map<String, dynamic>;
-        rawJson['releaseDocId'] = relDoc.id;
-        rawJson['releaseVersionTag'] = verTag;
-        final clonedPrewarmed = ReleaseBlueprint.fromJson(rawJson);
-        clonedPrewarmed.releaseVersionTag = verTag;
-        if (clonedPrewarmed.releaseTitle.isNotEmpty) {
-          relDoc.title = clonedPrewarmed.releaseTitle;
-        }
-        _injectDueScheduledInboxItemsIntoBlueprint(
-          clonedPrewarmed,
-          _currentPhase,
-        );
-        relDoc.sections.remove('used_baseline_fallback');
-        relDoc.sections['release_blueprint_json'] =
-            jsonEncode(clonedPrewarmed.toJson());
-        _persistDocument(relDoc);
-        _releaseBlueprint = clonedPrewarmed;
-        _offlineErrorMessage = null;
-        if (transitionToGateStage) {
-          _currentStage = WorkbenchStage.releaseWorkbench;
-        }
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        return;
-      }
-    }
-
     _releaseBlueprint = null;
     _isAgentBusy = true;
     final displayPlanModel = _planningModel;
@@ -2552,36 +2457,6 @@ Concept Blueprint:
         notifyListeners();
       }
     }
-  }
-
-  String _computeProgressivePrewarmSignature({
-    String? targetRelId,
-    ProductionPhase? phaseOverride,
-  }) {
-    final proj = activeProject;
-    if (proj == null) return '';
-    final phase = phaseOverride ?? inferNextProgressivePhase();
-    final completedIds = <String>[
-      for (final r in projectReleases)
-        if (r.id != targetRelId && r.childrenIds.isNotEmpty)
-          '${r.id}:${r.title}:${getDocumentProgress(r.id)}',
-    ];
-    final inboxSig = proj.sections['feature_inbox_json']?.hashCode ?? 0;
-    final exSig = (proj.sections['exclusions'] ?? '').hashCode;
-    return '${proj.id}::${phase.name}::${completedIds.join("|")}::$inboxSig::$exSig';
-  }
-
-  /// True when the next Progressive Release Blueprint (`v0.2+`) is already pre-warmed in memory.
-  bool get hasPrewarmedProgressiveBlueprint {
-    final sig = _computeProgressivePrewarmSignature();
-    return sig.isNotEmpty &&
-        _prewarmedProgressiveBlueprint != null &&
-        _prewarmedProgressiveSignature == sig;
-  }
-
-  /// On-demand synthesis only: background pre-warming of `v0.2+` is disabled to prevent speculative token spend.
-  Future<void> prewarmProgressiveNextReleaseIfNeeded() async {
-    return;
   }
 
   /// Section-by-Section Progressive Release Orchestrator (`Step 0: 0ms Live-Tree Skeleton & Deterministic Section 1` ->
@@ -5740,14 +5615,9 @@ CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
   * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) bind input/signals and wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
   * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
 
-For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI widget, data resource, or gameplay calculation for this task—never use generic phrases like "Body & Collision", "Action & Math", or "Cue & Boundary Clamp") and return the sequential sub-steps needed to implement and verify that task (zero artificial step count limits—use the exact number of steps the task genuinely requires) covering the 3 Engine Areas (1. Hierarchy/Components, 2. Inspector/Details Bindings, 3. Attached Script/Graph Code) and using the project's exact variable names:
-1. "title": "3-4 Title-Case Imperative Runbook words (Verb + Object, e.g. 'Spawn 6 Pellet Raycasts', 'Add Hazard Detection Component'; do NOT include 'STEP X.Y' prefix)"
-2. "stepPath": Exact $targetEngineMode editor panel/menu/inspector/script path (telegraphic breadcrumb)
-3. "instruction": 1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value
-4. "area1Hierarchy": Optional Scene/Component hierarchy tree using ├─ / └─ when the step adds or modifies nodes/components (or "" if pure code step)
-5. "area2Inspector": Inspector/Details bindings formatted as "Property: Value | Property2: Value2" listing ONLY the 1-3 properties modified in THIS specific task's component (never dump CharacterMovement properties onto a Capsule/Collider task)
-6. "codeFormula": $codeFormulaModeGuide
-7. "verifyResult": Causal Trigger -> Result check formatted as "<Player Action> -> <Observable Screen Result>" (<= 14 words)
+For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI widget, data resource, or gameplay calculation—never generic phrases like "Body & Collision", "Action & Math", or "Cue & Boundary Clamp") and return the sequential 3-Area sub-steps needed to implement and verify that task (zero artificial step count limits):
+- In `area2Inspector`, list ONLY the 1-3 properties modified in THIS specific task's component (never dump CharacterMovement properties onto a Capsule/Collider task).
+- In `codeFormula`, emit $codeFormulaModeGuide.
 
 Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each task.''';
 

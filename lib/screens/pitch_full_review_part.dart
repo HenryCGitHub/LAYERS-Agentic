@@ -318,9 +318,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
 
   // ── Card 09: Final Blueprint Verification (Selective Color on Primary CTA) ─
   Widget _buildBentoLaunchpadCard(ProjectConceptBlueprint draft) {
-    final isPrewarming = widget.workbench.isPrewarmingReleaseBlueprint;
-    final isPrewarmed = widget.workbench.hasPrewarmedReleaseBlueprint;
-
     return Container(
       key: const ValueKey('bento_card_launchpad_09'),
       padding: EdgeInsets.symmetric(
@@ -372,16 +369,6 @@ extension _PitchFullReviewExt on _ProjectPitchScreenState {
                     ],
                   ),
                 ),
-                if (isPrewarming || isPrewarmed)
-                  Text(
-                    isPrewarmed ? '● v0.1 Ready' : '⟳ Drafting v0.1...',
-                    key: const ValueKey('blueprint_prewarm_status_badge'),
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isPrewarmed ? _gsT3Label : _gsT4Muted,
-                    ),
-                  ),
               ],
             ),
           ),

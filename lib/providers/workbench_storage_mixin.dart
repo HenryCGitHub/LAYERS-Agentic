@@ -216,7 +216,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _currentPhase = ProductionPhase.prototype;
     _lastReleaseRetrospective = null;
     _releaseViewFilter = 'active';
-    _prewarmedConceptSignature = null;
     _initialProgressiveTrack0BlueprintJson = null;
     _cachedInboxRawHash = null;
     _executionLog.clear();
@@ -707,7 +706,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
     _lastReleaseRetrospective = null;
     _releaseViewFilter = 'active';
-    _prewarmedConceptSignature = null;
     _initialProgressiveTrack0BlueprintJson = null;
     _cachedInboxRawHash = null;
     _executionLog.clear();

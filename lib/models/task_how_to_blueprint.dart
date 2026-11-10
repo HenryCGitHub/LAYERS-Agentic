@@ -1,3 +1,4 @@
+import '../constants/text_style_guide.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
@@ -82,26 +83,8 @@ class TaskHowToBlueprint {
   static final RegExp _bracketTagCaptureRegex = RegExp(r'^\[([^\]]+)\]');
   static final RegExp _stepHeaderPrefixRegex =
       RegExp(r'^STEP\s+\d+\.\d+\s*·\s*', caseSensitive: false);
-  static final RegExp _trailingForBeatSuffixRegex =
-      RegExp(r'\s+for\s+[A-Z][\w\s&\-\/]*$');
-  static final RegExp _leadingVerbPrefixRegex = RegExp(
-    r'^(?:Create|Implement|Build|Configure|Set\s+up|Setup|Code|Write|Add|Hook\s+up|Hook|Wire|Subscribe|Enforce|Spawn|Apply|Bind|Trigger|Update|Extend|Upgrade|Define|Declare|Attach|Connect|Handle|Polish)\s+(?:(?:a|an|the)\s+)?',
-    caseSensitive: false,
-  );
-  static final RegExp _inlineAmpersandVerbRegex = RegExp(
-    r'(&|,)\s*(?:and\s+)?(?:create|implement|build|configure|set\s+up|setup|code|write|add|hook\s+up|hook|wire|subscribe|enforce|spawn|apply|bind|trigger|update|extend|upgrade|define|declare|attach|connect|handle|polish)\s+(?:(?:a|an|the)\s+)?',
-    caseSensitive: false,
-  );
-  static final RegExp _trailingSubordinateClauseRegex = RegExp(
-    r'\s+(?:while|when|during|so\s+that|in\s+order\s+to)\s+.*$',
-    caseSensitive: false,
-  );
   static final RegExp _progressiveGoalPreambleRegex = RegExp(
     r'^(?:Goal:\s*)?(?:Upgrade|Polish|Extend|Scale|Tune)\s+[\w\s\-&/]{1,36}?(?:\s+from\s+v\d+\.\d+(?:\s+greybox)?)?\s+(?:(?:into|to)\s+(?:(?:a|an|the|full|complete)\s+)?[\w\s\-]{1,28}?\s+with\s+|with\s+)',
-    caseSensitive: false,
-  );
-  static final RegExp _leadingArticlePrefixRegex = RegExp(
-    r'^(?:a|an|the)\s+',
     caseSensitive: false,
   );
   static final RegExp _inlineArticlesRegex = RegExp(
@@ -283,107 +266,8 @@ class TaskHowToBlueprint {
     return 'Complete all ${subSteps.length} steps in $shortTaskTitle → behavior responds cleanly in Play mode.';
   }
 
-  static String formatConciseTaskTitle(String rawCleanTitle) {
-    var text = rawCleanTitle.replaceAll(_anyDurationTagRe, '').trim();
-    final dashIdx = text.indexOf(' — ');
-    if (dashIdx > 0) {
-      text = text.substring(0, dashIdx).trim();
-    }
-    final lower = text.toLowerCase();
-    if (lower.startsWith('create actor/node structure') ||
-        lower.startsWith('create actor / node structure')) {
-      return 'Actor & Base Properties';
-    }
-    if (lower.startsWith('implement core state transitions')) {
-      return 'State Logic & Player Input';
-    }
-    if (lower.startsWith('hook visual/audio feedback cues') ||
-        lower.startsWith('hook up visual/audio feedback cues')) {
-      return 'Feedback Cues & State Guard';
-    }
-    if (lower.startsWith('create camera rig and hud')) {
-      return 'Camera Rig & HUD Container';
-    }
-    if (lower.startsWith('implement camera follow smoothing')) {
-      return 'Follow Smoothing & Bound Clamp';
-    }
-    if (lower.startsWith('wire active state readout')) {
-      return 'State Readout & Viewport Test';
-    }
-    // Strip redundant trailing " for <Beat/Feature Name>" and subordinate clauses ("while ...", "when ...")
-    text = text
-        .replaceFirst(_trailingForBeatSuffixRegex, '')
-        .replaceFirst(_trailingSubordinateClauseRegex, '');
-    text = text
-        .replaceFirst(_leadingVerbPrefixRegex, '')
-        .replaceFirst(_leadingArticlePrefixRegex, '')
-        .replaceAllMapped(
-          _inlineAmpersandVerbRegex,
-          (m) => '${m.group(1)} ',
-        )
-        .replaceAll(_inlineArticlesRegex, '')
-        .replaceAll(' and ', ' & ')
-        .trim();
-    if (text.contains(',') || text.length > 40) {
-      final rawClauses = text
-          .split(RegExp(r'\s*(?:,|&)\s*'))
-          .map((c) => c.trim())
-          .where((c) => c.isNotEmpty)
-          .take(2)
-          .toList();
-      if (rawClauses.isNotEmpty) {
-        final condensedClauses = <String>[];
-        for (final clause in rawClauses) {
-          final strippedClause = clause
-              .replaceFirst(_leadingVerbPrefixRegex, '')
-              .replaceFirst(_leadingArticlePrefixRegex, '')
-              .trim();
-          final rawWords = strippedClause
-              .split(_whitespaceRegex)
-              .where((w) => w.isNotEmpty && w.toLowerCase() != 'response')
-              .toList();
-          // Check if duplicate trailing word exists (e.g. "Ghost trail particle trail" -> "Ghost trail")
-          final seenLower = <String>{};
-          final hasDuplicateWord =
-              rawWords.any((w) => !seenLower.add(w.toLowerCase()));
-          final List<String> coreWords;
-          if (rawWords.length <= 2) {
-            coreWords = rawWords;
-          } else if (hasDuplicateWord) {
-            final deduped = <String>[];
-            final seen = <String>{};
-            for (final w in rawWords) {
-              if (seen.add(w.toLowerCase())) {
-                deduped.add(w);
-              }
-            }
-            coreWords = deduped.take(2).toList();
-          } else {
-            coreWords = rawWords.sublist(rawWords.length - 2);
-          }
-          if (coreWords.isNotEmpty) {
-            final titleCased = coreWords
-                .map((w) {
-                  final upper = w.toUpperCase();
-                  if (_kAcronymWords.contains(upper)) return upper;
-                  return w.length == 1
-                      ? upper
-                      : w[0].toUpperCase() + w.substring(1);
-                })
-                .join(' ');
-            condensedClauses.add(titleCased);
-          }
-        }
-        if (condensedClauses.isNotEmpty) {
-          return condensedClauses.join(' & ');
-        }
-      }
-    }
-    if (text.isNotEmpty) {
-      text = text[0].toUpperCase() + text.substring(1);
-    }
-    return text.isEmpty ? rawCleanTitle : text;
-  }
+  static String formatConciseTaskTitle(String rawCleanTitle) =>
+      LayersTextStyleGuide.formatConciseTaskTitle(rawCleanTitle);
 
   static const Set<String> _kAcronymWords = <String>{
     '2D',

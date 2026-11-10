@@ -1,0 +1,55 @@
+name: Deploy Flutter Web to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run static analysis
+        run: dart analyze
+
+      - name: Run unit & widget tests
+        run: flutter test
+
+      - name: Build Flutter Web (Release)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          DART_DEFINES=""
+          if [ -n "$GEMINI_API_KEY" ]; then
+            GEMINI_API_KEY_B64=$(printf '%s' "$GEMINI_API_KEY" | base64 | tr -d '\n\r ')
+            DART_DEFINES="--dart-define=GEMINI_API_KEY_B64=$GEMINI_API_KEY_B64"
+            echo "Injecting base64-encoded GEMINI_API_KEY_B64 into web build."
+          else
+            echo "No GEMINI_API_KEY secret set; building without baked key (users can enter key in AI Settings)."
+          fi
+          flutter build web --release --base-href "/LAYERS-Agentic/" $DART_DEFINES
+          touch build/web/.nojekyll
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          force_orphan: true
+          commit_message: "Deploy LAYERS Web App (${{ github.sha }})"
