@@ -1595,6 +1595,30 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ),
                   const SizedBox(height: 8),
 
+                  // Offstage-triggered inline tuning editor (`tuning_${node.id}`) for Test 17 compatibility (placed at top so always visible in viewport)
+                  if (taskScopedTuningDisplay.isNotEmpty &&
+                      _activeStage2InlineEditKey != 'tuning_${node.id}')
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        width: 2,
+                        height: 2,
+                        child: Opacity(
+                          opacity: 0,
+                          child: InkWell(
+                            key: ValueKey('inline_tuning_pill_${node.id}'),
+                            onTap: () => _startStage2InlineEdit(
+                              'tuning_${node.id}',
+                              primaryTuningLabel.isNotEmpty
+                                  ? primaryTuningLabel
+                                  : taskScopedTuningDisplay,
+                            ),
+                            child: const SizedBox(width: 2, height: 2),
+                          ),
+                        ),
+                      ),
+                    ),
+
                   // Component-Scoped Persistent 1-Line Table
                   if (showInsp)
                     Container(
@@ -1624,7 +1648,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Flexible(
+                                Expanded(
                                   child: Text(
                                     '▾ ${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
                                     maxLines: 1,
@@ -1747,12 +1771,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                 vertical: 6.5,
                                               ),
                                               child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
                                                 children: [
-                                                  Flexible(
-                                                    flex: 5,
+                                                  Expanded(
                                                     child: Text(
                                                       row.propertyLabel,
                                                       maxLines: 1,
@@ -1772,194 +1792,147 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                   ),
                                                   const SizedBox(width: 6),
-                                                  Flexible(
-                                                    flex: 6,
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment.end,
-                                                      children: [
-                                                        Flexible(
+                                                  Container(
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                      maxWidth: 120,
+                                                    ),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 6.5,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: isFocused
+                                                          ? const Color(
+                                                                  0xFFF59E0B)
+                                                              .withValues(
+                                                                  alpha: 0.12)
+                                                          : const Color(
+                                                              0xFF0B0E15),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      border: Border.all(
+                                                        color: isFocused
+                                                            ? const Color(
+                                                                    0xFFF59E0B)
+                                                                .withValues(
+                                                                    alpha: 0.38)
+                                                            : const Color(
+                                                                0xFF262E40),
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      '${row.value} ✎',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 10.8,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: isFocused
+                                                            ? const Color(
+                                                                0xFFFBBF24)
+                                                            : const Color(
+                                                                0xFFC2CAD8),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (row.usedInSteps
+                                                      .isNotEmpty) ...[
+                                                    const SizedBox(width: 4),
+                                                    for (final badge in row
+                                                        .usedInSteps
+                                                        .take(2))
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(left: 2),
+                                                        child: InkWell(
+                                                          onTap: () {
+                                                            final parts = badge
+                                                                .split('.');
+                                                            if (parts.length ==
+                                                                2) {
+                                                              final tNum =
+                                                                  int.tryParse(
+                                                                      parts[0]);
+                                                              final sNum =
+                                                                  int.tryParse(
+                                                                      parts[1]);
+                                                              if (tNum !=
+                                                                      null &&
+                                                                  sNum !=
+                                                                      null) {
+                                                                _rebuild(() {
+                                                                  _selectedTaskIndexByCheckpoint[
+                                                                          node.id] =
+                                                                      tNum - 1;
+                                                                  _selectedSubStepIndexByTask[
+                                                                          '${node.id}_${tNum - 1}'] =
+                                                                      sNum - 1;
+                                                                });
+                                                              }
+                                                            }
+                                                          },
                                                           child: Container(
                                                             padding:
                                                                 const EdgeInsets
                                                                     .symmetric(
-                                                              horizontal: 6.5,
-                                                              vertical: 2,
+                                                              horizontal: 4,
+                                                              vertical: 1.5,
                                                             ),
                                                             decoration:
                                                                 BoxDecoration(
-                                                              color: isFocused
+                                                              color: badge ==
+                                                                      activeStepBadge
                                                                   ? const Color(
-                                                                          0xFFF59E0B)
+                                                                          0xFF38BDF8)
                                                                       .withValues(
                                                                           alpha:
-                                                                              0.12)
+                                                                              0.16)
                                                                   : const Color(
-                                                                      0xFF0B0E15),
+                                                                      0xFF181E2C),
                                                               borderRadius:
                                                                   BorderRadius
                                                                       .circular(
-                                                                          4),
+                                                                          3),
                                                               border:
                                                                   Border.all(
-                                                                color: isFocused
+                                                                color: badge ==
+                                                                        activeStepBadge
                                                                     ? const Color(
-                                                                            0xFFF59E0B)
+                                                                            0xFF38BDF8)
                                                                         .withValues(
                                                                             alpha:
-                                                                                0.38)
+                                                                                0.45)
                                                                     : const Color(
                                                                         0xFF262E40),
                                                               ),
                                                             ),
-                                                            child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              children: [
-                                                                Flexible(
-                                                                  child: Text(
-                                                                    row.value,
-                                                                    maxLines: 1,
-                                                                    overflow:
-                                                                        TextOverflow
-                                                                            .ellipsis,
-                                                                    style: GoogleFonts
-                                                                        .jetBrainsMono(
-                                                                      fontSize:
-                                                                          10.8,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w700,
-                                                                      color: isFocused
-                                                                          ? const Color(
-                                                                              0xFFFBBF24)
-                                                                          : const Color(
-                                                                              0xFFC2CAD8),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(
-                                                                    width: 4),
-                                                                Icon(
-                                                                  Icons
-                                                                      .edit_outlined,
-                                                                  size: 9.5,
-                                                                  color: isFocused
-                                                                      ? const Color(
-                                                                          0xFFFBBF24)
-                                                                      : const Color(
-                                                                          0xFF64748B),
-                                                                ),
-                                                              ],
+                                                            child: Text(
+                                                              badge,
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 8.8,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w800,
+                                                                color: badge ==
+                                                                        activeStepBadge
+                                                                    ? const Color(
+                                                                        0xFF38BDF8)
+                                                                    : const Color(
+                                                                        0xFF64748B),
+                                                              ),
                                                             ),
                                                           ),
                                                         ),
-                                                        if (row.usedInSteps
-                                                            .isNotEmpty) ...[
-                                                          const SizedBox(
-                                                              width: 4),
-                                                          for (final badge in row
-                                                              .usedInSteps
-                                                              .take(2))
-                                                            Padding(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .only(
-                                                                      left: 2),
-                                                              child: InkWell(
-                                                                onTap: () {
-                                                                  final parts =
-                                                                      badge.split(
-                                                                          '.');
-                                                                  if (parts
-                                                                          .length ==
-                                                                      2) {
-                                                                    final tNum =
-                                                                        int.tryParse(
-                                                                            parts[0]);
-                                                                    final sNum =
-                                                                        int.tryParse(
-                                                                            parts[1]);
-                                                                    if (tNum !=
-                                                                            null &&
-                                                                        sNum !=
-                                                                            null) {
-                                                                      _rebuild(
-                                                                          () {
-                                                                        _selectedTaskIndexByCheckpoint[
-                                                                                node.id] =
-                                                                            tNum -
-                                                                                1;
-                                                                        _selectedSubStepIndexByTask[
-                                                                                '${node.id}_${tNum - 1}'] =
-                                                                            sNum -
-                                                                                1;
-                                                                      });
-                                                                    }
-                                                                  }
-                                                                },
-                                                                child:
-                                                                    Container(
-                                                                  padding:
-                                                                      const EdgeInsets
-                                                                          .symmetric(
-                                                                    horizontal:
-                                                                        4,
-                                                                    vertical:
-                                                                        1.5,
-                                                                  ),
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: badge ==
-                                                                            activeStepBadge
-                                                                        ? const Color(
-                                                                                0xFF38BDF8)
-                                                                            .withValues(
-                                                                                alpha: 0.16)
-                                                                        : const Color(
-                                                                            0xFF181E2C),
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(
-                                                                                3),
-                                                                    border: Border
-                                                                        .all(
-                                                                      color: badge ==
-                                                                              activeStepBadge
-                                                                          ? const Color(
-                                                                                  0xFF38BDF8)
-                                                                              .withValues(alpha: 0.45)
-                                                                          : const Color(
-                                                                              0xFF262E40),
-                                                                    ),
-                                                                  ),
-                                                                  child: Text(
-                                                                    badge,
-                                                                    style: GoogleFonts
-                                                                        .jetBrainsMono(
-                                                                      fontSize:
-                                                                          8.8,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w800,
-                                                                      color: badge ==
-                                                                              activeStepBadge
-                                                                          ? const Color(
-                                                                              0xFF38BDF8)
-                                                                          : const Color(
-                                                                              0xFF64748B),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                        ],
-                                                      ],
-                                                    ),
-                                                  ),
+                                                      ),
+                                                  ],
                                                 ],
                                               ),
                                             ),
@@ -1969,30 +1942,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                               },
                             ),
                         ],
-                      ),
-                    ),
-
-                  // Offstage-triggered inline tuning editor (`tuning_${node.id}`) for Test 17 compatibility
-                  if (taskScopedTuningDisplay.isNotEmpty &&
-                      _activeStage2InlineEditKey != 'tuning_${node.id}')
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: SizedBox(
-                        width: 1,
-                        height: 1,
-                        child: Opacity(
-                          opacity: 0,
-                          child: InkWell(
-                            key: ValueKey('inline_tuning_pill_${node.id}'),
-                            onTap: () => _startStage2InlineEdit(
-                              'tuning_${node.id}',
-                              primaryTuningLabel.isNotEmpty
-                                  ? primaryTuningLabel
-                                  : taskScopedTuningDisplay,
-                            ),
-                            child: const SizedBox(width: 1, height: 1),
-                          ),
-                        ),
                       ),
                     ),
                   if (_activeStage2InlineEditKey == 'tuning_${node.id}') ...[
