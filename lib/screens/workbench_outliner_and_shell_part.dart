@@ -2695,7 +2695,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   : null,
                               borderRadius: BorderRadius.circular(4),
                               onTap: () => _startStage2InlineEdit(
-                                'add_task_${activeCp!.id}',
+                                'add_task_${activeCp.id}',
                                 '',
                               ),
                               child: Padding(

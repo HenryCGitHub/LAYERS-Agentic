@@ -1288,67 +1288,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  /// Extracts up to 2 short, scannable bullet items for a left-column `02 BUILD TASKS` card
-  /// so the card lists concrete items instead of a truncated prose sentence.
-  List<String> _extractTaskCardBullets(
-    TaskHowToBlueprint bp,
-    String groupTitle,
-  ) {
-    final bullets = <String>[];
-    final lowerTitle = groupTitle.trim().toLowerCase();
-
-    // 1. Prefer distinct sub-step titles if the task has multiple sub-steps
-    for (final s in bp.subSteps) {
-      final clean = s.shortTitle.trim();
-      if (clean.isNotEmpty &&
-          clean.toLowerCase() != lowerTitle &&
-          !bullets.any((b) => b.toLowerCase() == clean.toLowerCase())) {
-        bullets.add(clean);
-        if (bullets.length >= 2) return bullets;
-      }
-    }
-
-    // 2. Otherwise split the task goal sentence into 2 concise clause bullets (stripping prose verbs & trailing asset suffix)
-    final strippedGoal = bp.taskGoalSentence
-        .replaceAll(
-          RegExp(
-            r'^(?:configure|implement|create|add|build|wire|setup|set up|bind|establish|define|update)\s+(?:the\s+)?',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceAll(
-          RegExp(
-            r'\s+in\s+(?:BP_|WBP_|A|U)?[A-Za-z0-9_.]+\.?\s*$',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .replaceAll(RegExp(r'\.\s*$'), '')
-        .trim();
-
-    if (strippedGoal.isNotEmpty) {
-      final rawParts = strippedGoal
-          .split(RegExp(r',\s*(?:and\s+)?|\s+and\s+'))
-          .map((p) => p.trim())
-          .where((p) => p.isNotEmpty)
-          .toList();
-      for (final part in rawParts) {
-        final capitalized =
-            part[0].toUpperCase() + (part.length > 1 ? part.substring(1) : '');
-        if (capitalized.toLowerCase() != lowerTitle &&
-            !bullets.any((b) => b.toLowerCase() == capitalized.toLowerCase())) {
-          bullets.add(capitalized);
-          if (bullets.length >= 2) break;
-        }
-      }
-    }
-
-    if (bullets.isEmpty && bp.subSteps.isNotEmpty) {
-      bullets.add(bp.subSteps.first.shortTitle);
-    }
-    return bullets;
-  }
 
   /// Infers the specific owning component name and engine Details/Inspector category for a property row
   /// so Capsule, Camera, and Movement properties are never misattributed to a single component.

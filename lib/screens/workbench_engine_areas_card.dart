@@ -27,31 +27,6 @@ class _ComponentInspectorVarRow {
 }
 
 extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
-  /// Strips redundant location preambles (`In Components, `, `In Event Graph, `, etc.)
-  /// and repeated step-title echoes so `STEPS` rows stay ~55% shorter without losing context.
-  String _compactStepInstructionForDisplay(
-    String rawInstruction,
-    String shortTitle,
-  ) {
-    var s = rawInstruction.trim();
-    if (s.isEmpty) return s;
-    final prefixRegex = RegExp(
-      r'^(?:In\s+(?:the\s+)?(?:Components(?:\s+panel)?|Details(?:\s+panel)?|Event\s+Graph|World\s+Outliner|Content\s+Browser|Place\s+Actors|Hierarchy|Inspector(?:\s+Window|\s+Dock)?|Scene\s+Dock|CharacterMovement|constructor|header)\s*,\s*)',
-      caseSensitive: false,
-    );
-    s = s.replaceFirst(prefixRegex, '');
-    s = s
-        .replaceAll('click + Add and attach ', '+ Add ')
-        .replaceAll('click + Add → ', '+ Add ')
-        .replaceAll('Right-click in ', '')
-        .replaceAll(' and set ', ' → ')
-        .replaceAll(' then set ', ' → ');
-    if (s.isNotEmpty) {
-      s = s[0].toUpperCase() + s.substring(1);
-    }
-    return s;
-  }
-
   /// Builds the component-scoped persistent variable list for `activeTargetComp`.
   /// - Only collects variables belonging to `activeTargetComp` (tasks targeting this component).
   /// - Variables belonging to other components in `components` are excluded so selecting a different
