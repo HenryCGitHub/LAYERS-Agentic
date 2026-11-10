@@ -1085,7 +1085,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
               (
                 label: 'Configure Defaults',
                 detail:
-                    'Select ${activeTargetComp.componentKey} → Apply Details values (02) and Event Graph (03)',
+                    'Select ${activeTargetComp.componentKey} → Apply Details values and Event Graph',
               ),
           ]);
         } else if (isUnrealCpp) {

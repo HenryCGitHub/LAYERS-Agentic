@@ -911,33 +911,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ── SECTION 01 · COMPONENTS / WORLD OUTLINER (Top of Left Panel) ──
+                  // ── COMPONENTS / WORLD OUTLINER (Top of Left Panel) ──
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              const Color(0xFF38BDF8).withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: const Color(0xFF38BDF8)
-                                .withValues(alpha: 0.36),
-                          ),
-                        ),
-                        child: Text(
-                          '01',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF7DD3FC),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 9),
                       Expanded(
                         child: Text(
                           assetSpec.sec1Title,
@@ -1141,32 +1117,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ),
                   const SizedBox(height: 16),
 
-                  // ── SECTION 02 · DETAILS PANEL VALUES (Bottom of Left Panel) ──
+                  // ── DETAILS PANEL VALUES (Bottom of Left Panel) ──
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color:
-                                const Color(0xFFF59E0B).withValues(alpha: 0.36),
-                          ),
-                        ),
-                        child: Text(
-                          '02',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFFFCD34D),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 9),
                       Expanded(
                         child: Text(
                           assetSpec.sec2Title,
@@ -1667,7 +1620,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ),
                   const SizedBox(height: 12),
 
-                  // ── FLOW DIVIDER (STEPS → SECTION 03) ──
+                  // ── FLOW DIVIDER (STEPS → IMPLEMENTATION & LEVEL SETUP) ──
                   Row(
                     children: [
                       const Expanded(
@@ -1679,7 +1632,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         child: Text(
-                          '▼ FLOWS INTO SECTION 03',
+                          '▼ IMPLEMENTATION & LEVEL SETUP',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w700,
@@ -1697,7 +1650,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ),
                   const SizedBox(height: 12),
 
-                  // ── BOTTOM OF RIGHT PANEL · SECTION 03 ──
+                  // ── BOTTOM OF RIGHT PANEL · IMPLEMENTATION & LEVEL SETUP ──
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -1707,30 +1660,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF5E6AD2)
-                                  .withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: const Color(0xFF6875F5)
-                                    .withValues(alpha: 0.40),
-                              ),
-                            ),
-                            child: Text(
-                              '03',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFFA5B4FC),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 9),
                           Flexible(
                             child: Text(
                               assetSpec.sec3Title,
