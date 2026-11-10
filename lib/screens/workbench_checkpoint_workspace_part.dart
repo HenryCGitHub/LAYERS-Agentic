@@ -2737,7 +2737,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         )
                       : Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1680),
+                            constraints: const BoxConstraints(maxWidth: 940),
                             child: Builder(
                               builder: (context) {
                                 int totalDoneSteps = 0;
@@ -3738,130 +3738,34 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.stretch,
                                                 children: [
-                                                  // 1. Sheet Header (Fixed Row 1 · 42px · #161B26)
+                                                  // 1. Option A Unified Compact Header (#0B0F17 · Task Title + Actions on Row 1, Embedded Verify Strip on Row 2)
                                                   Container(
                                                     padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 14,
-                                                      vertical: 9,
+                                                        .fromLTRB(
+                                                      14,
+                                                      12,
+                                                      14,
+                                                      12,
                                                     ),
                                                     decoration:
                                                         const BoxDecoration(
-                                                      color: Color(0xFF161B26),
+                                                      color: Color(0xFF0E131D),
                                                       border: Border(
                                                         bottom: BorderSide(
                                                           color:
-                                                              Color(0x14FFFFFF),
+                                                              Color(0xFF1E293B),
                                                         ),
                                                       ),
                                                     ),
-                                                    child: Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .spaceBetween,
-                                                      children: [
-                                                        Expanded(
-                                                          child: Row(
-                                                            children: [
-                                                              Container(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal: 6,
-                                                                  vertical: 2,
-                                                                ),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: const Color(
-                                                                    0xFF38BDF8,
-                                                                  ).withValues(
-                                                                    alpha: 0.14,
-                                                                  ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                    4,
-                                                                  ),
-                                                                  border: Border
-                                                                      .all(
-                                                                    color: const Color(
-                                                                      0xFF38BDF8,
-                                                                    ).withValues(
-                                                                      alpha:
-                                                                          0.40,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                child: Text(
-                                                                  'T${selectedTaskIdx + 1}',
-                                                                  style: GoogleFonts
-                                                                      .jetBrainsMono(
-                                                                    fontSize:
-                                                                        10.5,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w800,
-                                                                    color: const Color(
-                                                                      0xFF38BDF8,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              SizedBox(
-                                                                width: 1,
-                                                                height: 1,
-                                                                child: Opacity(
-                                                                  opacity: 0,
-                                                                  child: Text(
-                                                                    'DO · STEP ${effectiveSubStepIdx + 1} OF $totalSubCount',
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              const SizedBox(
-                                                                width: 10,
-                                                              ),
-                                                              Flexible(
-                                                                child: Text(
-                                                                  selectedHowTo
-                                                                      .shortTaskTitle,
-                                                                  maxLines: 1,
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                  style:
-                                                                      GoogleFonts
-                                                                          .inter(
-                                                                    fontSize:
-                                                                        14.5,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w700,
-                                                                    color: const Color(
-                                                                      0xFFF8FAFC,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                        Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            if (!isHalfScreenOverlayMode &&
-                                                                unrealToggleWidget !=
-                                                                    null) ...[
-                                                              unrealToggleWidget,
-                                                              const SizedBox(
-                                                                width: 8,
-                                                              ),
-                                                            ],
+                                                    child: Builder(
+                                                      builder: (context) {
+                                                        final prevStepBtn =
                                                             InkWell(
-                                                              key: ValueKey(
-                                                                'engine_dock_prev_step_${node.id}',
-                                                              ),
-                                                              onTap: canGoToPreviousStep
+                                                          key: ValueKey(
+                                                            'engine_dock_prev_step_${node.id}',
+                                                          ),
+                                                          onTap:
+                                                              canGoToPreviousStep
                                                                   ? () =>
                                                                       _retreatToPreviousStep(
                                                                         states,
@@ -3872,543 +3776,578 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                         effectiveSubStepIdx,
                                                                       )
                                                                   : null,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(5),
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 3.5,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: canGoToPreviousStep
+                                                                  ? const Color(
+                                                                      0xFF0E131D,
+                                                                    )
+                                                                  : Colors
+                                                                      .transparent,
                                                               borderRadius:
                                                                   BorderRadius
                                                                       .circular(
                                                                 5,
                                                               ),
-                                                              child: Container(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 3.5,
-                                                                ),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: canGoToPreviousStep
-                                                                      ? const Color(
-                                                                          0xFF21293A,
-                                                                        )
-                                                                      : Colors
-                                                                          .transparent,
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                    5,
-                                                                  ),
-                                                                  border: Border
-                                                                      .all(
-                                                                    color: canGoToPreviousStep
-                                                                        ? const Color(
-                                                                            0x21FFFFFF,
-                                                                          )
-                                                                        : const Color(
-                                                                            0x0DFFFFFF,
-                                                                          ),
-                                                                  ),
-                                                                ),
-                                                                child: Text(
-                                                                  '‹ Prev',
-                                                                  style: GoogleFonts
-                                                                      .jetBrainsMono(
-                                                                    fontSize:
-                                                                        11,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w600,
-                                                                    color: canGoToPreviousStep
-                                                                        ? const Color(
-                                                                            0xFFCBD5E1,
-                                                                          )
-                                                                        : const Color(
-                                                                            0xFF475569,
-                                                                          ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 6,
-                                                            ),
-                                                            InkWell(
-                                                              key: ValueKey(
-                                                                'engine_dock_next_step_${node.id}',
-                                                              ),
-                                                              onTap: (activeSubStep
-                                                                          .subtask
-                                                                          .completed ||
-                                                                      !isLastTaskInFeature)
-                                                                  ? () =>
-                                                                      _advanceToNextStep(
-                                                                        feat,
-                                                                        states,
-                                                                        node,
-                                                                        selectedTaskIdx,
-                                                                        effectiveSubStepIdx,
+                                                              border:
+                                                                  Border.all(
+                                                                color: canGoToPreviousStep
+                                                                    ? const Color(
+                                                                        0xFF243046,
                                                                       )
-                                                                  : null,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                5,
-                                                              ),
-                                                              child: Container(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 3.5,
-                                                                ),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: (activeSubStep
-                                                                              .subtask
-                                                                              .completed ||
-                                                                          !isLastTaskInFeature)
-                                                                      ? const Color(
-                                                                          0xFF21293A,
-                                                                        )
-                                                                      : Colors
-                                                                          .transparent,
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                    5,
-                                                                  ),
-                                                                  border: Border
-                                                                      .all(
-                                                                    color: (activeSubStep
-                                                                                .subtask
-                                                                                .completed ||
-                                                                            !isLastTaskInFeature)
-                                                                        ? const Color(
-                                                                            0x21FFFFFF,
-                                                                          )
-                                                                        : const Color(
-                                                                            0x0DFFFFFF,
-                                                                          ),
-                                                                  ),
-                                                                ),
-                                                                child: Text(
-                                                                  'Next ›',
-                                                                  style: GoogleFonts
-                                                                      .jetBrainsMono(
-                                                                    fontSize:
-                                                                        11,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w600,
-                                                                    color: (activeSubStep
-                                                                                .subtask
-                                                                                .completed ||
-                                                                            !isLastTaskInFeature)
-                                                                        ? const Color(
-                                                                            0xFFCBD5E1,
-                                                                          )
-                                                                        : const Color(
-                                                                            0xFF475569,
-                                                                          ),
-                                                                  ),
-                                                                ),
+                                                                    : const Color(
+                                                                        0x14FFFFFF,
+                                                                      ),
                                                               ),
                                                             ),
-                                                          ],
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-
-                                                  // 2. Fixed Top Verify in Engine Bar (Row 2 · #121620 · 0px Vertical Jump)
-                                                  Container(
-                                                    key: ValueKey(
-                                                      'task_overview_goal_box_${node.id}_$selectedTaskIdx',
-                                                    ),
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 14,
-                                                      vertical: 8,
-                                                    ),
-                                                    decoration:
-                                                        const BoxDecoration(
-                                                      color: Color(0xFF121620),
-                                                      border: Border(
-                                                        bottom: BorderSide(
-                                                          color:
-                                                              Color(0xFF262E40),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .stretch,
-                                                      children: [
-                                                        const SizedBox(
-                                                          width: 1,
-                                                          height: 1,
-                                                          child: Opacity(
-                                                            opacity: 0,
-                                                            child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              children: [
-                                                                Text('GOAL'),
-                                                                Text('DONE'),
-                                                                Text('Done'),
-                                                              ],
+                                                            child: Text(
+                                                              '‹ Prev',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 11,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: canGoToPreviousStep
+                                                                    ? const Color(
+                                                                        0xFFCBD5E1,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFF475569,
+                                                                      ),
+                                                              ),
                                                             ),
                                                           ),
-                                                        ),
-                                                        LayoutBuilder(
-                                                          builder: (
-                                                            context,
-                                                            barCons,
-                                                          ) {
-                                                            final isCompactBar =
-                                                                isHalfScreenOverlayMode ||
-                                                                    barCons.maxWidth <
-                                                                        520;
-                                                            final verifyRow =
-                                                                Row(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .center,
-                                                              children: [
-                                                                Container(
-                                                                  padding:
-                                                                      const EdgeInsets
-                                                                          .symmetric(
-                                                                    horizontal:
-                                                                        6,
-                                                                    vertical: 2,
-                                                                  ),
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: const Color(
-                                                                      0xFF10B981,
-                                                                    ).withValues(
-                                                                      alpha:
-                                                                          0.14,
-                                                                    ),
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(
-                                                                      4,
-                                                                    ),
-                                                                    border: Border
-                                                                        .all(
-                                                                      color: const Color(
-                                                                        0xFF10B981,
-                                                                      ).withValues(
-                                                                        alpha:
-                                                                            0.38,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  child: Text(
-                                                                    '✓ Verify in engine',
-                                                                    style: GoogleFonts
-                                                                        .jetBrainsMono(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w700,
-                                                                      color: const Color(
-                                                                        0xFF34D399,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(
-                                                                  width: 8,
-                                                                ),
-                                                                Expanded(
-                                                                  child: Text
-                                                                      .rich(
-                                                                    _buildSemanticStepSpan(
-                                                                      text:
-                                                                          verifySentenceText,
-                                                                      baseStyle:
-                                                                          GoogleFonts
-                                                                              .inter(
-                                                                        fontSize:
-                                                                            12.5,
-                                                                        fontWeight:
-                                                                            FontWeight
-                                                                                .w500,
-                                                                        height:
-                                                                            1.35,
-                                                                        color: const Color(
-                                                                          0xFFD1FAE5,
-                                                                        ),
-                                                                      ),
-                                                                      tuningItems:
-                                                                          tuningItems,
-                                                                      edgeItems:
-                                                                          edgeItems,
-                                                                      isCodeBlock:
-                                                                          false,
-                                                                    ),
-                                                                    maxLines: 2,
-                                                                    overflow:
-                                                                        TextOverflow
-                                                                            .ellipsis,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            );
+                                                        );
 
-                                                            final issueBtn =
-                                                                InkWell(
-                                                              key: ValueKey(
-                                                                'feature_gate_log_bug_btn_${node.id}',
-                                                              ),
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                6,
-                                                              ),
-                                                              onTap: () {
-                                                                _rebuild(() {
-                                                                  if (isDrawerOpen) {
-                                                                    _inlineBugDrawerNodeId =
-                                                                        null;
-                                                                  } else {
-                                                                    _inlineBugDrawerNodeId =
-                                                                        node.id;
-                                                                    _inlineBugInputCtrl
-                                                                        .clear();
-                                                                  }
-                                                                });
-                                                              },
-                                                              child: Container(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal:
-                                                                      10,
-                                                                  vertical: 6,
-                                                                ),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: isDrawerOpen
-                                                                      ? const Color(
-                                                                          0xFFFBBF24,
-                                                                        ).withValues(
-                                                                          alpha:
-                                                                              0.14,
-                                                                        )
-                                                                      : const Color(
-                                                                          0xFF181E2C,
-                                                                        ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                    6,
-                                                                  ),
-                                                                  border:
-                                                                      Border.all(
-                                                                    color: isDrawerOpen
-                                                                        ? const Color(
-                                                                            0xFFFBBF24,
-                                                                          ).withValues(
-                                                                            alpha:
-                                                                                0.45,
-                                                                          )
-                                                                        : const Color(
-                                                                            0xFF262E40,
-                                                                          ),
-                                                                  ),
-                                                                ),
-                                                                child: Text(
-                                                                  '⚑ Issue',
-                                                                  style: GoogleFonts
-                                                                      .inter(
-                                                                    fontSize:
-                                                                        11.5,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w600,
-                                                                    color: isDrawerOpen
-                                                                        ? const Color(
-                                                                            0xFFFBBF24,
-                                                                          )
-                                                                        : const Color(
-                                                                            0xFF94A3B8,
-                                                                          ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            );
-
-                                                            final doneBtn =
-                                                                InkWell(
-                                                              key: ValueKey(
-                                                                'one_click_complete_next_btn_${node.id}',
-                                                              ),
-                                                              onTap: () {
-                                                                if (activeSubStep
-                                                                    .subtask
-                                                                    .completed) {
-                                                                  _toggleHowToSubStepCompletion(
-                                                                    feat,
-                                                                    states,
-                                                                    node,
-                                                                    selectedTaskIdx,
-                                                                    effectiveSubStepIdx,
-                                                                  );
-                                                                } else {
-                                                                  _toggleHowToSubStepCompletion(
-                                                                    feat,
-                                                                    states,
-                                                                    node,
-                                                                    selectedTaskIdx,
-                                                                    effectiveSubStepIdx,
-                                                                  );
+                                                        final nextStepBtn =
+                                                            InkWell(
+                                                          key: ValueKey(
+                                                            'engine_dock_next_step_${node.id}',
+                                                          ),
+                                                          onTap: (activeSubStep
+                                                                      .subtask
+                                                                      .completed ||
+                                                                  !isLastTaskInFeature)
+                                                              ? () =>
                                                                   _advanceToNextStep(
                                                                     feat,
                                                                     states,
                                                                     node,
                                                                     selectedTaskIdx,
                                                                     effectiveSubStepIdx,
-                                                                  );
-                                                                }
-                                                              },
+                                                                  )
+                                                              : null,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(5),
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 3.5,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: (activeSubStep
+                                                                          .subtask
+                                                                          .completed ||
+                                                                      !isLastTaskInFeature)
+                                                                  ? const Color(
+                                                                      0xFF0E131D,
+                                                                    )
+                                                                  : Colors
+                                                                      .transparent,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                5,
+                                                              ),
+                                                              border:
+                                                                  Border.all(
+                                                                color: (activeSubStep
+                                                                            .subtask
+                                                                            .completed ||
+                                                                        !isLastTaskInFeature)
+                                                                    ? const Color(
+                                                                        0xFF243046,
+                                                                      )
+                                                                    : const Color(
+                                                                        0x14FFFFFF,
+                                                                      ),
+                                                              ),
+                                                            ),
+                                                            child: Text(
+                                                              'Next ›',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 11,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: (activeSubStep
+                                                                            .subtask
+                                                                            .completed ||
+                                                                        !isLastTaskInFeature)
+                                                                    ? const Color(
+                                                                        0xFFCBD5E1,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFF475569,
+                                                                      ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        );
+
+                                                        final issueBtn =
+                                                            InkWell(
+                                                          key: ValueKey(
+                                                            'feature_gate_log_bug_btn_${node.id}',
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(6),
+                                                          onTap: () {
+                                                            _rebuild(() {
+                                                              if (isDrawerOpen) {
+                                                                _inlineBugDrawerNodeId =
+                                                                    null;
+                                                              } else {
+                                                                _inlineBugDrawerNodeId =
+                                                                    node.id;
+                                                                _inlineBugInputCtrl
+                                                                    .clear();
+                                                              }
+                                                            });
+                                                          },
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 10,
+                                                              vertical: 5.5,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: isDrawerOpen
+                                                                  ? const Color(
+                                                                      0xFFFBBF24,
+                                                                    ).withValues(
+                                                                      alpha:
+                                                                          0.14,
+                                                                    )
+                                                                  : const Color(
+                                                                      0xFF181E2C,
+                                                                    ),
                                                               borderRadius:
                                                                   BorderRadius
                                                                       .circular(
                                                                 6,
                                                               ),
-                                                              child: Container(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal:
-                                                                      13,
-                                                                  vertical: 6,
-                                                                ),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: (activeSubStep
-                                                                              .subtask
-                                                                              .completed ||
-                                                                          isSelectedTaskCompleted)
-                                                                      ? const Color(
-                                                                          0xFF10B981,
-                                                                        ).withValues(
-                                                                          alpha:
-                                                                              0.18,
-                                                                        )
-                                                                      : const Color(
-                                                                          0xFF10B981,
+                                                              border:
+                                                                  Border.all(
+                                                                color: isDrawerOpen
+                                                                    ? const Color(
+                                                                        0xFFFBBF24,
+                                                                      ).withValues(
+                                                                        alpha:
+                                                                            0.45,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFF262E40,
+                                                                      ),
+                                                              ),
+                                                            ),
+                                                            child: Text(
+                                                              '⚑ Issue',
+                                                              style: GoogleFonts
+                                                                  .inter(
+                                                                fontSize: 11.5,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: isDrawerOpen
+                                                                    ? const Color(
+                                                                        0xFFFBBF24,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFF94A3B8,
+                                                                      ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        );
+
+                                                        final doneBtn = InkWell(
+                                                          key: ValueKey(
+                                                            'one_click_complete_next_btn_${node.id}',
+                                                          ),
+                                                          onTap: () {
+                                                            if (activeSubStep
+                                                                .subtask
+                                                                .completed) {
+                                                              _toggleHowToSubStepCompletion(
+                                                                feat,
+                                                                states,
+                                                                node,
+                                                                selectedTaskIdx,
+                                                                effectiveSubStepIdx,
+                                                              );
+                                                            } else {
+                                                              _toggleHowToSubStepCompletion(
+                                                                feat,
+                                                                states,
+                                                                node,
+                                                                selectedTaskIdx,
+                                                                effectiveSubStepIdx,
+                                                              );
+                                                              _advanceToNextStep(
+                                                                feat,
+                                                                states,
+                                                                node,
+                                                                selectedTaskIdx,
+                                                                effectiveSubStepIdx,
+                                                              );
+                                                            }
+                                                          },
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(6),
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 13,
+                                                              vertical: 5.5,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: (activeSubStep
+                                                                          .subtask
+                                                                          .completed ||
+                                                                      isSelectedTaskCompleted)
+                                                                  ? const Color(
+                                                                      0xFF10B981,
+                                                                    ).withValues(
+                                                                      alpha:
+                                                                          0.18,
+                                                                    )
+                                                                  : const Color(
+                                                                      0xFF10B981,
+                                                                    ),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                6,
+                                                              ),
+                                                              border:
+                                                                  Border.all(
+                                                                color: (activeSubStep
+                                                                            .subtask
+                                                                            .completed ||
+                                                                        isSelectedTaskCompleted)
+                                                                    ? const Color(
+                                                                        0xFF10B981,
+                                                                      ).withValues(
+                                                                        alpha:
+                                                                            0.45,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFF34D399,
+                                                                      ),
+                                                              ),
+                                                            ),
+                                                            child: Text(
+                                                              (activeSubStep
+                                                                          .subtask
+                                                                          .completed ||
+                                                                      isSelectedTaskCompleted)
+                                                                  ? '✓ Verified'
+                                                                  : (isHalfScreenOverlayMode
+                                                                      ? 'Done & Next →'
+                                                                      : (isLastTaskInFeature
+                                                                          ? '✓ Complete Feature & Next →'
+                                                                          : 'Done & Next Task →')),
+                                                              style: GoogleFonts
+                                                                  .inter(
+                                                                fontSize: 12,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                color: (activeSubStep
+                                                                            .subtask
+                                                                            .completed ||
+                                                                        isSelectedTaskCompleted)
+                                                                    ? const Color(
+                                                                        0xFF6EE7B7,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFF042F2E,
+                                                                      ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        );
+
+                                                        return Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .stretch,
+                                                          children: [
+                                                            // Row 1: Task Title on Left + [Blueprint | C++] + [⚑ Issue] + [Done & Next Task →] on Right
+                                                            Row(
+                                                              mainAxisAlignment:
+                                                                  MainAxisAlignment
+                                                                      .spaceBetween,
+                                                              children: [
+                                                                Expanded(
+                                                                  child: Row(
+                                                                    children: [
+                                                                      Container(
+                                                                        padding:
+                                                                            const EdgeInsets.symmetric(
+                                                                          horizontal:
+                                                                              6,
+                                                                          vertical:
+                                                                              2,
                                                                         ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                    6,
-                                                                  ),
-                                                                  border:
-                                                                      Border.all(
-                                                                    color: (activeSubStep
-                                                                                .subtask
-                                                                                .completed ||
-                                                                            isSelectedTaskCompleted)
-                                                                        ? const Color(
-                                                                            0xFF10B981,
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: const Color(
+                                                                            0xFF38BDF8,
                                                                           ).withValues(
                                                                             alpha:
-                                                                                0.45,
-                                                                          )
-                                                                        : const Color(
-                                                                            0xFF34D399,
+                                                                                0.14,
                                                                           ),
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(
+                                                                            4,
+                                                                          ),
+                                                                          border:
+                                                                              Border.all(
+                                                                            color: const Color(
+                                                                              0xFF38BDF8,
+                                                                            ).withValues(
+                                                                              alpha: 0.40,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        child:
+                                                                            Text(
+                                                                          'T${selectedTaskIdx + 1}',
+                                                                          style:
+                                                                              GoogleFonts.jetBrainsMono(
+                                                                            fontSize:
+                                                                                10.5,
+                                                                            fontWeight:
+                                                                                FontWeight.w800,
+                                                                            color:
+                                                                                const Color(0xFF38BDF8),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      SizedBox(
+                                                                        width:
+                                                                            1,
+                                                                        height:
+                                                                            1,
+                                                                        child:
+                                                                            Opacity(
+                                                                          opacity:
+                                                                              0,
+                                                                          child:
+                                                                              Text(
+                                                                            'DO · STEP ${effectiveSubStepIdx + 1} OF $totalSubCount',
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            10,
+                                                                      ),
+                                                                      Flexible(
+                                                                        child:
+                                                                            Text(
+                                                                          selectedHowTo
+                                                                              .shortTaskTitle,
+                                                                          maxLines:
+                                                                              1,
+                                                                          overflow:
+                                                                              TextOverflow.ellipsis,
+                                                                          style:
+                                                                              GoogleFonts.inter(
+                                                                            fontSize:
+                                                                                15.0,
+                                                                            fontWeight:
+                                                                                FontWeight.w700,
+                                                                            color:
+                                                                                const Color(0xFFF8FAFC),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
                                                                 ),
-                                                                child: Text(
-                                                                  (activeSubStep
-                                                                              .subtask
-                                                                              .completed ||
-                                                                          isSelectedTaskCompleted)
-                                                                      ? '✓ Verified'
-                                                                      : (isHalfScreenOverlayMode
-                                                                          ? 'Done & Next →'
-                                                                          : (isLastTaskInFeature
-                                                                              ? '✓ Complete Feature & Next →'
-                                                                              : 'Done & Next Task →')),
-                                                                  style: GoogleFonts
-                                                                      .inter(
-                                                                    fontSize:
-                                                                        12,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w700,
-                                                                    color: (activeSubStep
-                                                                                .subtask
-                                                                                .completed ||
-                                                                            isSelectedTaskCompleted)
-                                                                        ? const Color(
-                                                                            0xFF6EE7B7,
-                                                                          )
-                                                                        : const Color(
-                                                                            0xFF042F2E,
-                                                                          ),
-                                                                  ),
+                                                                const SizedBox(
+                                                                  width: 8,
                                                                 ),
-                                                              ),
-                                                            );
-
-                                                            if (isCompactBar) {
-                                                              return Column(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .stretch,
-                                                                children: [
-                                                                  verifyRow,
-                                                                  const SizedBox(
-                                                                    height: 8,
-                                                                  ),
-                                                                  Row(
-                                                                    mainAxisAlignment:
-                                                                        MainAxisAlignment
-                                                                            .end,
-                                                                    children: [
-                                                                      issueBtn,
+                                                                Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    if (!isHalfScreenOverlayMode &&
+                                                                        unrealToggleWidget !=
+                                                                            null) ...[
+                                                                      unrealToggleWidget,
                                                                       const SizedBox(
                                                                         width:
                                                                             8,
                                                                       ),
-                                                                      doneBtn,
                                                                     ],
-                                                                  ),
-                                                                ],
-                                                              );
-                                                            }
-
-                                                            return Row(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .center,
-                                                              children: [
-                                                                Expanded(
-                                                                  child:
-                                                                      verifyRow,
+                                                                    issueBtn,
+                                                                    const SizedBox(
+                                                                      width: 8,
+                                                                    ),
+                                                                    doneBtn,
+                                                                  ],
                                                                 ),
-                                                                const SizedBox(
-                                                                  width: 12,
-                                                                ),
-                                                                issueBtn,
-                                                                const SizedBox(
-                                                                  width: 8,
-                                                                ),
-                                                                doneBtn,
                                                               ],
-                                                            );
-                                                          },
-                                                        ),
-                                                      ],
+                                                            ),
+                                                            const SizedBox(
+                                                              height: 10,
+                                                            ),
+
+                                                            // Row 2: Embedded Emerald Verify in Engine Strip + [‹ Prev] [Next ›]
+                                                            Container(
+                                                              key: ValueKey(
+                                                                'task_overview_goal_box_${node.id}_$selectedTaskIdx',
+                                                              ),
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 11,
+                                                                vertical: 7.5,
+                                                              ),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: const Color(
+                                                                  0xFF10B981,
+                                                                ).withValues(
+                                                                  alpha: 0.08,
+                                                                ),
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  7,
+                                                                ),
+                                                                border:
+                                                                    Border.all(
+                                                                  color: const Color(
+                                                                    0xFF10B981,
+                                                                  ).withValues(
+                                                                    alpha: 0.26,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              child: Row(
+                                                                children: [
+                                                                  const SizedBox(
+                                                                    width: 1,
+                                                                    height: 1,
+                                                                    child:
+                                                                        Opacity(
+                                                                      opacity:
+                                                                          0,
+                                                                      child:
+                                                                          Row(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.min,
+                                                                        children: [
+                                                                          Text(
+                                                                              'GOAL'),
+                                                                          Text(
+                                                                              'DONE'),
+                                                                          Text(
+                                                                              'Done'),
+                                                                        ],
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  Text(
+                                                                    '✓ VERIFY IN ENGINE:',
+                                                                    style: GoogleFonts
+                                                                        .jetBrainsMono(
+                                                                      fontSize:
+                                                                          10.2,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w800,
+                                                                      color: const Color(
+                                                                        0xFF34D399,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 8,
+                                                                  ),
+                                                                  Expanded(
+                                                                    child: Text
+                                                                        .rich(
+                                                                      _buildSemanticStepSpan(
+                                                                        text:
+                                                                            verifySentenceText,
+                                                                        baseStyle:
+                                                                            GoogleFonts.inter(
+                                                                          fontSize:
+                                                                              12.4,
+                                                                          fontWeight:
+                                                                              FontWeight.w500,
+                                                                          height:
+                                                                              1.35,
+                                                                          color:
+                                                                              const Color(0xFFE2E8F0),
+                                                                        ),
+                                                                        tuningItems:
+                                                                            tuningItems,
+                                                                        edgeItems:
+                                                                            edgeItems,
+                                                                        isCodeBlock:
+                                                                            false,
+                                                                      ),
+                                                                      maxLines:
+                                                                          2,
+                                                                      overflow:
+                                                                          TextOverflow
+                                                                              .ellipsis,
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 10,
+                                                                  ),
+                                                                  prevStepBtn,
+                                                                  const SizedBox(
+                                                                    width: 5,
+                                                                  ),
+                                                                  nextStepBtn,
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        );
+                                                      },
                                                     ),
                                                   ),
 

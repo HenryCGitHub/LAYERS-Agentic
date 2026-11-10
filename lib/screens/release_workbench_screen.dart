@@ -51,8 +51,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   String? _manualCheckpointFocusFeatureId;
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
+  final Set<String> _collapsedSubStepKeys = {};
   bool _unrealCppMode = false;
-  double _outlinerWidth = 360.0;
+  double _outlinerWidth = 320.0;
   final int _engineAreaFilter = 0;
   final Set<String> _collapsedBeatIds = {};
   String? _accordionInitReleaseId;

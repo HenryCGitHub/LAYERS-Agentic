@@ -974,169 +974,197 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             is2D: assetSpec.is2D,
           ).categoryLabel;
 
-    // ── INITIAL SETUP WIDGET (Only visible when assetSpec.isNewAssetOnTask == true) ──
+    // ── INITIAL SETUP WIDGET (Option A: 3-Column Horizontal Strip · Only visible when assetSpec.isNewAssetOnTask == true) ──
     final Widget initialSetupWidget = assetSpec.isNewAssetOnTask
         ? Container(
             key: ValueKey('initial_setup_area_${node.id}'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B0E15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: const Color(0xFF1E293B),
+              ),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF181E2C),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: const Color(0xFF262E40),
-                        ),
-                      ),
-                      child: Text(
-                        'INITIAL SETUP',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.8,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${assetSpec.assetIcon} ${assetSpec.assetName}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12.2,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFF8FAFC),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF181E2C),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: const Color(0xFF262E40),
-                        ),
-                      ),
-                      child: Text(
-                        assetSpec.parentClassLabel,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.2,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF181E2C),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: const Color(0xFF262E40),
-                        ),
-                      ),
-                      child: Text(
-                        '+ Create in ${assetSpec.folderPath}',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.2,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0B0E15),
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(
-                      color: const Color(0xFF1E2534),
+                  padding: const EdgeInsets.only(bottom: 9),
+                  margin: const EdgeInsets.only(bottom: 9),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Color(0xFF161F2E),
+                      ),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      for (int stIdx = 0;
-                          stIdx < assetSpec.setupSteps.length;
-                          stIdx++)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            bottom: stIdx == assetSpec.setupSteps.length - 1
-                                ? 0
-                                : 5,
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'INITIAL SETUP',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              color: const Color(0xFF94A3B8),
+                            ),
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 18,
-                                child: Text(
-                                  '${stIdx + 1}.',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.4,
-                                    color: const Color(0xFF64748B),
-                                  ),
-                                ),
+                          Text(
+                            '·',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              color: const Color(0xFF475569),
+                            ),
+                          ),
+                          Text(
+                            '${assetSpec.assetIcon} ${assetSpec.assetName}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11.8,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF38BDF8),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF131B28),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: const Color(0xFF243046),
                               ),
-                              Expanded(
-                                child: Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text:
-                                            '${assetSpec.setupSteps[stIdx].label}: ',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12.2,
-                                          fontWeight: FontWeight.w700,
-                                          height: 1.4,
-                                          color: const Color(0xFFE2E8F0),
-                                        ),
-                                      ),
-                                      _buildSemanticStepSpan(
-                                        text: assetSpec.setupSteps[stIdx].detail,
-                                        baseStyle: GoogleFonts.inter(
-                                          fontSize: 12.2,
-                                          height: 1.4,
-                                          color: const Color(0xFF94A3B8),
-                                        ),
-                                        tuningItems: tuningItems,
-                                        edgeItems: edgeItems,
-                                        isCodeBlock: false,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                            ),
+                            child: Text(
+                              assetSpec.parentClassLabel,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.0,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF94A3B8),
                               ),
-                            ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF131B28),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(0xFF243046),
                           ),
                         ),
+                        child: Text(
+                          '+ Create in ${assetSpec.folderPath}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF38BDF8),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
+                ),
+                LayoutBuilder(
+                  builder: (context, setupCons) {
+                    final useHorizontalGrid =
+                        setupCons.maxWidth >= 560 &&
+                        assetSpec.setupSteps.length > 1;
+                    Widget buildSetupStepCard(int stIdx) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0E1420),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFF182234),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${stIdx + 1}. ${assetSpec.setupSteps[stIdx].label}:',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.8,
+                                fontWeight: FontWeight.w700,
+                                height: 1.35,
+                                color: const Color(0xFFF8FAFC),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text.rich(
+                              _buildSemanticStepSpan(
+                                text: assetSpec.setupSteps[stIdx].detail,
+                                baseStyle: GoogleFonts.inter(
+                                  fontSize: 11.8,
+                                  height: 1.35,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                                tuningItems: tuningItems,
+                                edgeItems: edgeItems,
+                                isCodeBlock: false,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (useHorizontalGrid) {
+                      return IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (int stIdx = 0;
+                                stIdx < assetSpec.setupSteps.length;
+                                stIdx++) ...[
+                              if (stIdx > 0) const SizedBox(width: 8),
+                              Expanded(child: buildSetupStepCard(stIdx)),
+                            ],
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (int stIdx = 0;
+                            stIdx < assetSpec.setupSteps.length;
+                            stIdx++)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              bottom: stIdx == assetSpec.setupSteps.length - 1
+                                  ? 0
+                                  : 6,
+                            ),
+                            child: buildSetupStepCard(stIdx),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -1212,20 +1240,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     ),
                     child: const Text('Edit'),
                   ),
-                  if (activeSubStepIdx != 1)
-                    InkWell(
-                      key: ValueKey(
-                        'copy_howto_code_${node.id}_${selectedTaskIdx}_1',
-                      ),
-                      onTap: () => _copySubStepCodeFormula(
-                        selectedTaskIdx,
-                        1,
-                        selectedHowTo.subSteps.length > 1
-                            ? selectedHowTo.subSteps[1].codeFormula
-                            : activeSubStep.codeFormula,
-                      ),
-                      child: const SizedBox.shrink(),
-                    ),
                 ],
               ),
             ),
@@ -1536,7 +1550,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               ),
               const SizedBox(height: 8),
 
-              // ── 3. TITLE-ONLY STEP → CODE ACCORDION (`1.1`, `1.2`, `1.3`) ──
+              // ── 3. OPTION A: ALL-STEPS-OPEN STEP → CODE STACK (`1.1`, `1.2`, `1.3`) ──
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1548,30 +1562,39 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         final subStep = selectedHowTo.subSteps[sIdx];
                         final bool isSubActive = sIdx == activeSubStepIdx;
                         final bool isSubDone = subStep.subtask.completed;
+                        final String stepCollapseKey =
+                            '${node.id}_${selectedTaskIdx}_$sIdx';
+                        final bool isStepExpanded =
+                            !_collapsedSubStepKeys.contains(stepCollapseKey);
+                        final String stepRawCode = subStep.codeFormula.trim();
+                        final List<String> stepCodeLines =
+                            stepRawCode.isNotEmpty
+                                ? stepRawCode.split('\n')
+                                : codeLines;
                         return Padding(
                           padding: EdgeInsets.only(
                             bottom: sIdx == selectedHowTo.subSteps.length - 1
                                 ? 0
-                                : 7,
+                                : 10,
                           ),
                           child: Container(
                             decoration: BoxDecoration(
                               color: isSubActive
-                                  ? const Color(0xFF181E2C)
-                                  : const Color(0xFF0B0E15),
-                              borderRadius: BorderRadius.circular(7),
+                                  ? const Color(0xFF141B29)
+                                  : const Color(0xFF0D131F),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: isSubActive
                                     ? const Color(0xFF38BDF8)
-                                        .withValues(alpha: 0.5)
-                                    : const Color(0xFF1E2534),
+                                        .withValues(alpha: 0.48)
+                                    : const Color(0xFF24324B),
                               ),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Step Header Row (Checkbox + 1.X + Short Title + [Copy code] + Chevron)
+                                // Step Header Row (Checkbox + 1.X + Short Title + [Copy code] + Fold Chevron)
                                 InkWell(
                                   key: ValueKey(
                                     'task_sheet_step_row_${node.id}_${selectedTaskIdx}_$sIdx',
@@ -1580,12 +1603,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                     _rebuild(() {
                                       _selectedSubStepIndexByTask[
                                           '${node.id}_$selectedTaskIdx'] = sIdx;
+                                      _collapsedSubStepKeys
+                                          .remove(stepCollapseKey);
                                     });
                                   },
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 11,
-                                      vertical: 8.5,
+                                      horizontal: 12,
+                                      vertical: 9,
                                     ),
                                     child: Row(
                                       children: [
@@ -1665,9 +1690,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             style: GoogleFonts.jetBrainsMono(
                                               fontSize: 11.8,
                                               fontWeight: FontWeight.w800,
-                                              color: isSubActive
-                                                  ? const Color(0xFF38BDF8)
-                                                  : const Color(0xFF64748B),
+                                              color: const Color(0xFF38BDF8),
                                             ),
                                           ),
                                         ),
@@ -1678,65 +1701,82 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.inter(
                                               fontSize: 12.8,
-                                              fontWeight: isSubActive
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w600,
+                                              fontWeight: FontWeight.w700,
                                               color: isSubActive
                                                   ? const Color(0xFFF8FAFC)
-                                                  : const Color(0xFFCBD5E1),
+                                                  : const Color(0xFFE2E8F0),
                                             ),
                                           ),
                                         ),
-                                        if (isSubActive) ...[
-                                          const SizedBox(width: 8),
-                                          InkWell(
-                                            key: ValueKey(
-                                              'copy_howto_code_${node.id}_${selectedTaskIdx}_$sIdx',
+                                        const SizedBox(width: 8),
+                                        InkWell(
+                                          key: ValueKey(
+                                            'copy_howto_code_${node.id}_${selectedTaskIdx}_$sIdx',
+                                          ),
+                                          onTap: () =>
+                                              _copySubStepCodeFormula(
+                                            selectedTaskIdx,
+                                            sIdx,
+                                            subStep.codeFormula,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          child: Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3.5,
                                             ),
-                                            onTap: () =>
-                                                _copySubStepCodeFormula(
-                                              selectedTaskIdx,
-                                              sIdx,
-                                              subStep.codeFormula,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF162032),
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color:
+                                                    const Color(0xFF283854),
+                                              ),
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(5),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 3.5,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF0B0E15),
-                                                borderRadius:
-                                                    BorderRadius.circular(5),
-                                                border: Border.all(
-                                                  color:
-                                                      const Color(0xFF262E40),
-                                                ),
-                                              ),
-                                              child: Text(
-                                                '⧉ Copy code',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 10.6,
-                                                  fontWeight: FontWeight.w600,
-                                                  color:
-                                                      const Color(0xFFCBD5E1),
-                                                ),
+                                            child: Text(
+                                              '⧉ Copy code',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 10.6,
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    const Color(0xFFCBD5E1),
                                               ),
                                             ),
                                           ),
-                                        ],
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          isSubActive ? '▾' : '▸',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: isSubActive
-                                                ? const Color(0xFF38BDF8)
-                                                : const Color(0xFF64748B),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          onTap: () {
+                                            _rebuild(() {
+                                              if (isStepExpanded) {
+                                                _collapsedSubStepKeys
+                                                    .add(stepCollapseKey);
+                                              } else {
+                                                _collapsedSubStepKeys
+                                                    .remove(stepCollapseKey);
+                                              }
+                                            });
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                              vertical: 2,
+                                            ),
+                                            child: Text(
+                                              isStepExpanded ? '▴' : '▾',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: isSubActive
+                                                    ? const Color(0xFF38BDF8)
+                                                    : const Color(0xFF64748B),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -1745,7 +1785,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                 ),
 
                                 // Expanded Implementation Drawer (Direct Numbered Code / Node Lines)
-                                if (isSubActive && showCode)
+                                if (isStepExpanded &&
+                                    showCode &&
+                                    stepCodeLines.isNotEmpty)
                                   Container(
                                     padding: const EdgeInsets.fromLTRB(
                                       14,
@@ -1757,7 +1799,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       color: Color(0xFF07090E),
                                       border: Border(
                                         top: BorderSide(
-                                          color: Color(0xFF262E40),
+                                          color: Color(0xFF182234),
                                         ),
                                       ),
                                     ),
@@ -1766,12 +1808,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           CrossAxisAlignment.stretch,
                                       children: [
                                         for (int lineIdx = 0;
-                                            lineIdx < codeLines.length;
+                                            lineIdx < stepCodeLines.length;
                                             lineIdx++)
                                           Padding(
                                             padding: EdgeInsets.only(
                                               bottom: lineIdx ==
-                                                      codeLines.length - 1
+                                                      stepCodeLines.length - 1
                                                   ? 0
                                                   : 4,
                                             ),
@@ -1798,7 +1840,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                 Expanded(
                                                   child: Text.rich(
                                                     _buildSemanticStepSpan(
-                                                      text: codeLines[lineIdx],
+                                                      text:
+                                                          stepCodeLines[lineIdx],
                                                       baseStyle: GoogleFonts
                                                           .jetBrainsMono(
                                                         fontSize: 12.6,
