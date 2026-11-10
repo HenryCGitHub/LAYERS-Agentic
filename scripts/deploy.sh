@@ -53,6 +53,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+git branch -D gh-pages 2>/dev/null || true
 git worktree add --detach "$WORKTREE_DIR"
 (cd "$WORKTREE_DIR" && git checkout --orphan gh-pages && git rm -rf --cached . >/dev/null 2>&1 || true)
 
@@ -66,7 +67,7 @@ echo "=== [4/4] Committing and pushing orphan branch to origin/gh-pages ==="
 cd "$WORKTREE_DIR"
 git add -A
 git commit -m "Deploy: ${CURRENT_COMMIT} ($(date -u +'%Y-%m-%d %H:%M:%S UTC'))"
-git push --force -u origin gh-pages
+git push --force origin HEAD:gh-pages
 echo "Successfully published clean orphan commit to origin/gh-pages!"
 
 cd "$PROJECT_ROOT"
