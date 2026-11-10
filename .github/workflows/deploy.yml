@@ -31,8 +31,8 @@ jobs:
       - name: Run unit & widget tests
         run: |
           set -o pipefail
-          flutter test --reporter expanded 2>&1 | tee test_output.log || {
-            grep -E "FAILED|Exception|Expected:|Actual:|When the exception|workbench_flow_test\.dart:" test_output.log | tail -n 15 | while IFS= read -r line; do
+          flutter test --reporter compact 2>&1 | tee test_output.log || {
+            grep -E "EXCEPTION CAUGHT BY|The following .* was thrown|A RenderFlex overflowed|Expected:|Actual:|-\s+[0-9]+:.*\[E\]|workbench_flow_test\.dart:[0-9]+" test_output.log | head -n 9 | while IFS= read -r line; do
               echo "::error::$line"
             done
             exit 1

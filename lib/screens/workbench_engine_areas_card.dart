@@ -2394,23 +2394,36 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               );
             }
 
-            return IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: sec2DynamicWidth,
-                    child: section02Widget,
-                  ),
-                  Container(
-                    width: 1,
-                    color: const Color(0xFF262E40),
-                  ),
-                  Expanded(
-                    child: section03Widget,
-                  ),
-                ],
-              ),
+            return Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: sec2DynamicWidth,
+                  child: const ColoredBox(color: Color(0xFF0B0E15)),
+                ),
+                Positioned(
+                  left: sec2DynamicWidth,
+                  top: 0,
+                  bottom: 0,
+                  width: 1,
+                  child: const ColoredBox(color: Color(0xFF262E40)),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: sec2DynamicWidth,
+                      child: section02Widget,
+                    ),
+                    const SizedBox(width: 1),
+                    Expanded(
+                      child: section03Widget,
+                    ),
+                  ],
+                ),
+              ],
             );
           },
         ),
