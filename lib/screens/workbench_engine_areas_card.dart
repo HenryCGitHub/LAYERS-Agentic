@@ -1146,12 +1146,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           );
 
     // Count completed sub-steps for the active task
-    int activeTaskDoneSteps = 0;
-    for (int sIdx = 0; sIdx < selectedHowTo.subSteps.length; sIdx++) {
-      if (_isHowToSubStepDone(node.id, selectedTaskIdx, sIdx)) {
-        activeTaskDoneSteps++;
-      }
-    }
+    final int activeTaskDoneSteps = selectedHowTo.subSteps
+        .where((s) => s.subtask.completed)
+        .length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
