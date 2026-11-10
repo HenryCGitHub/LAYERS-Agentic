@@ -26,7 +26,14 @@ jobs:
         run: flutter pub get
 
       - name: Run static analysis
-        run: dart analyze
+        run: |
+          set -o pipefail
+          dart analyze 2>&1 | tee analyze_output.log || {
+            grep -E "error -|warning -|info -" analyze_output.log | head -n 9 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          }
 
       - name: Run unit & widget tests
         run: |
