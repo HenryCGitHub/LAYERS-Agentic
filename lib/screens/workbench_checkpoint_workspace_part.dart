@@ -3432,7 +3432,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     mainAxisSize:
                                                         MainAxisSize.min,
                                                     children: [
-                                                      featureBriefCardWidget,
+                                                      SizedBox(
+                                                        width: 260,
+                                                        child:
+                                                            featureBriefCardWidget,
+                                                      ),
                                                       for (int tIdx = 0;
                                                           tIdx <
                                                               howToBlueprints
