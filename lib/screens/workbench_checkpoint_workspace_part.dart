@@ -391,7 +391,76 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       }
     }
 
-    // 0b. Check task title for Arena / Floor / Ramp / Blockout geometry so it never falls through to IMC_Default or CharacterMovement
+    // 1. Check if any subStep has an explicit area1Hierarchy child component noun (prioritizing ← SELECTED / [ACTIVE])
+    //    Checked before generic Floor/Arena fallbacks so synthesized World Outliner actors (e.g. Floor_Greenhouse) win.
+    final isInputTaskTitle =
+        titleLower.contains('input') || titleLower.contains('mapping');
+    for (final step in bp.subSteps) {
+      final rawH = step.area1Hierarchy?.trim() ?? '';
+      if (rawH.isNotEmpty) {
+        final lines = rawH.split('\n');
+        final orderedLines = <String>[
+          ...lines.where(
+            (l) => l.contains('← SELECTED') || l.contains('[ACTIVE]'),
+          ),
+          ...lines.reversed,
+        ];
+        for (final rawLine in orderedLines) {
+          final clean = rawLine
+              .replaceAll(RegExp(r'^[├└│─\s•\-🎯📦⚙️📷🦴🧩📁⚡🗺]+'), '')
+              .replaceAll('[ACTIVE]', '')
+              .replaceAll('← SELECTED', '')
+              .trim();
+          if (clean.isEmpty ||
+              clean.startsWith('[Root]') ||
+              clean.toLowerCase().startsWith('class ')) {
+            continue;
+          }
+          final cleanLower = clean.toLowerCase();
+          if (cleanLower.startsWith('l_') ||
+              cleanLower.contains('(world)') ||
+              cleanLower.contains('(level')) {
+            continue;
+          }
+          if (!isInputTaskTitle &&
+              (cleanLower.startsWith('imc_') ||
+                  cleanLower.contains('input mapping context') ||
+                  cleanLower.startsWith('ia_') ||
+                  cleanLower.contains('input action'))) {
+            continue;
+          }
+          if (!verbPrefixRegex.hasMatch(clean)) {
+            final key = clean.split('(').first.trim();
+            final lower = cleanLower;
+            final icon = lower.contains('camera')
+                ? '📷'
+                : (lower.contains('box') ||
+                        lower.contains('capsule') ||
+                        lower.contains('trigger') ||
+                        lower.contains('collision') ||
+                        lower.contains('area') ||
+                        lower.contains('ray') ||
+                        lower.contains('floor') ||
+                        lower.contains('wall') ||
+                        lower.contains('volume')
+                    ? '📦'
+                    : (lower.contains('mesh') ||
+                            lower.contains('sprite') ||
+                            lower.contains('visual') ||
+                            lower.contains('ramp')
+                        ? '🦴'
+                        : '⚙️'));
+            return (
+              icon: icon,
+              componentKey: key.isNotEmpty ? key : clean,
+              displayLabel: clean,
+            );
+          }
+        }
+      }
+    }
+
+    // 1b. Check task title for Arena / Floor / Ramp / Blockout geometry so offline tasks never fall through to IMC_Default or CharacterMovement
     if (titleLower.contains('floor') ||
         titleLower.contains('arena') ||
         titleLower.contains('geometry') ||
@@ -447,68 +516,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
               ? 'RampInclineMesh (StaticBody2D)'
               : 'RampInclineMesh (StaticBody3D)',
         );
-      }
-    }
-
-    // 1. Check if any subStep has an explicit area1Hierarchy child component noun (prioritizing ← SELECTED / [ACTIVE])
-    final isInputTaskTitle =
-        titleLower.contains('input') || titleLower.contains('mapping');
-    for (final step in bp.subSteps) {
-      final rawH = step.area1Hierarchy?.trim() ?? '';
-      if (rawH.isNotEmpty) {
-        final lines = rawH.split('\n');
-        final orderedLines = <String>[
-          ...lines.where(
-            (l) => l.contains('← SELECTED') || l.contains('[ACTIVE]'),
-          ),
-          ...lines.reversed,
-        ];
-        for (final rawLine in orderedLines) {
-          final clean = rawLine
-              .replaceAll(RegExp(r'^[├└│─\s•\-🎯📦⚙️📷🦴🧩📁⚡]+'), '')
-              .replaceAll('[ACTIVE]', '')
-              .replaceAll('← SELECTED', '')
-              .trim();
-          if (clean.isEmpty ||
-              clean.startsWith('[Root]') ||
-              clean.toLowerCase().startsWith('class ')) {
-            continue;
-          }
-          final cleanLower = clean.toLowerCase();
-          if (!isInputTaskTitle &&
-              (cleanLower.startsWith('imc_') ||
-                  cleanLower.contains('input mapping context') ||
-                  cleanLower.startsWith('ia_') ||
-                  cleanLower.contains('input action'))) {
-            continue;
-          }
-          if (!verbPrefixRegex.hasMatch(clean)) {
-            final key = clean.split('(').first.trim();
-            final lower = cleanLower;
-            final icon = lower.contains('camera')
-                ? '📷'
-                : (lower.contains('box') ||
-                        lower.contains('capsule') ||
-                        lower.contains('trigger') ||
-                        lower.contains('collision') ||
-                        lower.contains('area') ||
-                        lower.contains('ray') ||
-                        lower.contains('floor') ||
-                        lower.contains('volume')
-                    ? '📦'
-                    : (lower.contains('mesh') ||
-                            lower.contains('sprite') ||
-                            lower.contains('visual') ||
-                            lower.contains('ramp')
-                        ? '🦴'
-                        : '⚙️'));
-            return (
-              icon: icon,
-              componentKey: key.isNotEmpty ? key : clean,
-              displayLabel: clean,
-            );
-          }
-        }
       }
     }
 
@@ -656,6 +663,24 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     );
   }
 
+  String _classifyFeatureArchetype(String title) {
+    final lowerTitle = title.toLowerCase();
+    if (RegExp(
+      r'\b(?:hud|ui|widget|hotbar|menu|crosshair|selector|health\s*bar|inventory\s*bar|radar|minimap)\b',
+    ).hasMatch(lowerTitle)) {
+      return 'ui';
+    } else if (RegExp(
+      r'\b(?:player|character|pawn|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
+    ).hasMatch(lowerTitle)) {
+      return 'character';
+    } else if (RegExp(
+      r'\b(?:arena|blockout|greybox|graybox|level|map|compound|sector|courtyard|room|world|stage|zone|biome|terrain)\b',
+    ).hasMatch(lowerTitle)) {
+      return 'level';
+    }
+    return 'actor';
+  }
+
   /// Resolves engine-native asset metadata, parent/root class, folder path, listed-out setup steps,
   /// and listed-out level/scene setup steps for Design C (Single Calm Card) across Unreal 5 BP, Unreal 5 C++, Unity C#, and Godot 4.
   ({
@@ -699,23 +724,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         specCombined.contains('sprite') ||
         specCombined.contains('side-scroller');
 
-    final lowerTitle = feat.title.toLowerCase();
-    final String archetype;
-    if (RegExp(
-      r'\b(?:hud|ui|widget|hotbar|menu|crosshair|selector|health\s*bar|inventory\s*bar|radar|minimap)\b',
-    ).hasMatch(lowerTitle)) {
-      archetype = 'ui';
-    } else if (RegExp(
-      r'\b(?:player|character|pawn|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
-    ).hasMatch(lowerTitle)) {
-      archetype = 'character';
-    } else if (RegExp(
-      r'\b(?:arena|blockout|greybox|graybox|level|map|compound|sector|courtyard|room|world|stage|zone|biome|terrain)\b',
-    ).hasMatch(lowerTitle)) {
-      archetype = 'level';
-    } else {
-      archetype = 'actor';
-    }
+    final archetype = _classifyFeatureArchetype(feat.title);
 
     final derivedNames = TaskHowToBlueprint.deriveConcreteAssetName(feat.title);
     final pascalName = derivedNames.pascalName.isNotEmpty
@@ -1031,8 +1040,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             ),
             (
               label: 'Pawn',
-              detail:
-                  'World Settings → Default Pawn Class = BP_PlayerCharacter',
+              detail: hasPrecedingCharacter
+                  ? 'World Settings → Default Pawn Class = BP_PlayerCharacter'
+                  : 'World Settings → Default Pawn Class = DefaultPawn',
             ),
             (
               label: 'Spawn',
@@ -1049,8 +1059,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             ),
             (
               label: 'Player',
-              detail:
-                  'Place PlayerCharacter (${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController + gravity'})',
+              detail: hasPrecedingCharacter
+                  ? 'Place PlayerCharacter (${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController + gravity'})'
+                  : 'Add Test Capsule (${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'Rigidbody + CapsuleCollider'})',
             ),
             (
               label: 'Spawn',
@@ -1068,8 +1079,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             ),
             (
               label: 'Player',
-              detail:
-                  'Instantiate player_character.tscn ($bodyNode + gravity)',
+              detail: hasPrecedingCharacter
+                  ? 'Instantiate player_character.tscn ($bodyNode + gravity)'
+                  : 'Add Test Capsule (${is2D ? 'RigidBody2D + CollisionShape2D' : 'RigidBody3D + CollisionShape3D'})',
             ),
             (
               label: 'Spawn',
@@ -1091,8 +1103,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             if (needsPlayerSpawnSetup)
               (
                 label: 'Spawn',
-                detail:
-                    'Default Pawn = BP_PlayerCharacter · PlayerStart at (0, 0, 120)',
+                detail: hasPrecedingCharacter
+                    ? 'Default Pawn = BP_PlayerCharacter · PlayerStart at (0, 0, 120)'
+                    : 'Default Pawn = DefaultPawn · PlayerStart at (0, 0, 120)',
               )
             else
               (
@@ -1224,18 +1237,24 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         if (isUnreal) {
           levelHookupSteps.addAll([
             'World Outliner ($assetName) → Place ${activeTargetComp.componentKey} at Location = (0, 0, 0) with BlockAll collision',
-            'World Settings → GameMode Override → Set Default Pawn Class = BP_PlayerCharacter (ACharacter with CapsuleComponent & gravity)',
-            'Place Actors → Position PlayerStart at Location = (0, 0, 120) above ${activeTargetComp.componentKey} so the player character lands firm on Play',
+            hasPrecedingCharacter
+                ? 'World Settings → GameMode Override → Set Default Pawn Class = BP_PlayerCharacter (ACharacter with CapsuleComponent & gravity)'
+                : 'World Settings → GameMode Override → Set Default Pawn Class = DefaultPawn (built-in WASD fly/collision; upgrades to BP_PlayerCharacter in Movement)',
+            'Place Actors → Position PlayerStart at Location = (0, 0, 120) above ${activeTargetComp.componentKey} so the pawn spawns cleanly on Play',
           ]);
         } else if (isUnity) {
           levelHookupSteps.addAll([
             'Scene Hierarchy ($assetName) → Verify ${activeTargetComp.componentKey} is at Position = (0, 0, 0) with Collider attached',
-            'Hierarchy → Place PlayerCharacter with CharacterController / Rigidbody at Position = (0, 2, 0) above the floor',
+            hasPrecedingCharacter
+                ? 'Hierarchy → Place PlayerCharacter with CharacterController / Rigidbody at Position = (0, 2, 0) above the floor'
+                : 'Hierarchy → Add temporary Test Capsule (Rigidbody + CapsuleCollider) at Position = (0, 2, 0) above the floor',
           ]);
         } else {
           levelHookupSteps.addAll([
             'Scene Tree ($assetName) → Verify ${activeTargetComp.componentKey} is at Position = (0, 0, 0) with CollisionShape attached',
-            'Scene Tree → Instantiate player_character.tscn at Position = (0, 2, 0) above the floor so the character lands firm on Play',
+            hasPrecedingCharacter
+                ? 'Scene Tree → Instantiate player_character.tscn at Position = (0, 2, 0) above the floor so the character lands firm on Play'
+                : 'Scene Tree → Add temporary Test Capsule (RigidBody + CollisionShape) at Position = (0, 2, 0) above the floor',
           ]);
         }
       } else {
@@ -1244,7 +1263,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             'Content Browser ($folderPath) → Drag $assetName into the Level Viewport',
             'Details Panel → Transform → Set Location = (0, 0, 0)',
             if (needsPlayerSpawnSetup)
-              'World Settings → Set Default Pawn Class = BP_PlayerCharacter and place PlayerStart at Location = (0, 0, 120) above $assetName',
+              hasPrecedingCharacter
+                  ? 'World Settings → Set Default Pawn Class = BP_PlayerCharacter and place PlayerStart at Location = (0, 0, 120) above $assetName'
+                  : 'World Settings → Set Default Pawn Class = DefaultPawn and place PlayerStart at Location = (0, 0, 120) above $assetName',
           ]);
         } else if (isUnrealCpp) {
           levelHookupSteps.addAll([
@@ -1468,6 +1489,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
     // Resolve Checkable How-To Blueprints for all parent tasks in this checkpoint
     final engineHint = _engineHint;
+    final isLevelFeature = _classifyFeatureArchetype(feat.title) == 'level';
+    final effectiveUnrealCppMode = _unrealCppMode && !isLevelFeature;
     final currentPhase = widget.workbench.currentPhase;
     final howToBlueprints = <TaskHowToBlueprint>[
       for (int tIdx = 0; tIdx < node.checklist.length; tIdx++)
@@ -1476,7 +1499,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           taskIndex: tIdx,
           checkpointNode: node,
           engineHint: engineHint,
-          unrealCppMode: _unrealCppMode,
+          unrealCppMode: effectiveUnrealCppMode,
           phase: currentPhase,
         ),
     ];
@@ -2737,7 +2760,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         )
                       : Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 940),
+                            constraints: const BoxConstraints(maxWidth: 1080),
                             child: Builder(
                               builder: (context) {
                                 int totalDoneSteps = 0;
@@ -2761,7 +2784,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                     feat.sections['lifecycle'] == 'upgrade';
 
                                 final Widget? unrealToggleWidget =
-                                    selectedHowTo.engineLabel == 'UNREAL 5'
+                                    selectedHowTo.engineLabel == 'UNREAL 5' &&
+                                            !isLevelFeature
                                         ? Container(
                                             key: ValueKey(
                                               'unreal_mode_toggle_${node.id}',
@@ -3757,51 +3781,62 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                     child: Builder(
                                                       builder: (context) {
+                                                        final canGoPrevTask =
+                                                            selectedTaskIdx > 0;
+                                                        final canGoNextTask =
+                                                            selectedTaskIdx <
+                                                                howToBlueprints
+                                                                        .length -
+                                                                    1;
+
                                                         final prevStepBtn =
                                                             InkWell(
                                                           key: ValueKey(
                                                             'engine_dock_prev_step_${node.id}',
                                                           ),
-                                                          onTap:
-                                                              canGoToPreviousStep
-                                                                  ? () =>
-                                                                      _retreatToPreviousStep(
-                                                                        states,
-                                                                        index,
-                                                                        node,
-                                                                        howToBlueprints,
-                                                                        selectedTaskIdx,
-                                                                        effectiveSubStepIdx,
-                                                                      )
-                                                                  : null,
+                                                          onTap: canGoPrevTask
+                                                              ? () {
+                                                                  final prevTask =
+                                                                      selectedTaskIdx -
+                                                                          1;
+                                                                  _rebuild(() {
+                                                                    _selectedTaskIndexByCheckpoint[
+                                                                            node.id] =
+                                                                        prevTask;
+                                                                    _selectedSubStepIndexByTask[
+                                                                            '${node.id}_$prevTask'] =
+                                                                        0;
+                                                                  });
+                                                                }
+                                                              : null,
                                                           borderRadius:
                                                               BorderRadius
-                                                                  .circular(5),
+                                                                  .circular(6),
                                                           child: Container(
                                                             padding:
                                                                 const EdgeInsets
                                                                     .symmetric(
                                                               horizontal: 8,
-                                                              vertical: 3.5,
+                                                              vertical: 5,
                                                             ),
                                                             decoration:
                                                                 BoxDecoration(
-                                                              color: canGoToPreviousStep
+                                                              color: canGoPrevTask
                                                                   ? const Color(
-                                                                      0xFF0E131D,
+                                                                      0xFF181E2C,
                                                                     )
                                                                   : Colors
                                                                       .transparent,
                                                               borderRadius:
                                                                   BorderRadius
                                                                       .circular(
-                                                                5,
+                                                                6,
                                                               ),
                                                               border:
                                                                   Border.all(
-                                                                color: canGoToPreviousStep
+                                                                color: canGoPrevTask
                                                                     ? const Color(
-                                                                        0xFF243046,
+                                                                        0xFF262E40,
                                                                       )
                                                                     : const Color(
                                                                         0x14FFFFFF,
@@ -3809,14 +3844,15 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               ),
                                                             ),
                                                             child: Text(
-                                                              '‹ Prev',
+                                                              '‹',
                                                               style: GoogleFonts
                                                                   .jetBrainsMono(
                                                                 fontSize:
-                                                                    fontMicro,
+                                                                    fontBody,
                                                                 fontWeight:
-                                                                    weightSemi,
-                                                                color: canGoToPreviousStep
+                                                                    weightBold,
+                                                                height: 1.0,
+                                                                color: canGoPrevTask
                                                                     ? const Color(
                                                                         0xFFCBD5E1,
                                                                       )
@@ -3833,53 +3869,49 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                           key: ValueKey(
                                                             'engine_dock_next_step_${node.id}',
                                                           ),
-                                                          onTap: (activeSubStep
-                                                                      .subtask
-                                                                      .completed ||
-                                                                  !isLastTaskInFeature)
-                                                              ? () =>
-                                                                  _advanceToNextStep(
-                                                                    feat,
-                                                                    states,
-                                                                    node,
-                                                                    selectedTaskIdx,
-                                                                    effectiveSubStepIdx,
-                                                                  )
+                                                          onTap: canGoNextTask
+                                                              ? () {
+                                                                  final nextTask =
+                                                                      selectedTaskIdx +
+                                                                          1;
+                                                                  _rebuild(() {
+                                                                    _selectedTaskIndexByCheckpoint[
+                                                                            node.id] =
+                                                                        nextTask;
+                                                                    _selectedSubStepIndexByTask[
+                                                                            '${node.id}_$nextTask'] =
+                                                                        0;
+                                                                  });
+                                                                }
                                                               : null,
                                                           borderRadius:
                                                               BorderRadius
-                                                                  .circular(5),
+                                                                  .circular(6),
                                                           child: Container(
                                                             padding:
                                                                 const EdgeInsets
                                                                     .symmetric(
                                                               horizontal: 8,
-                                                              vertical: 3.5,
+                                                              vertical: 5,
                                                             ),
                                                             decoration:
                                                                 BoxDecoration(
-                                                              color: (activeSubStep
-                                                                          .subtask
-                                                                          .completed ||
-                                                                      !isLastTaskInFeature)
+                                                              color: canGoNextTask
                                                                   ? const Color(
-                                                                      0xFF0E131D,
+                                                                      0xFF181E2C,
                                                                     )
                                                                   : Colors
                                                                       .transparent,
                                                               borderRadius:
                                                                   BorderRadius
                                                                       .circular(
-                                                                5,
+                                                                6,
                                                               ),
                                                               border:
                                                                   Border.all(
-                                                                color: (activeSubStep
-                                                                            .subtask
-                                                                            .completed ||
-                                                                        !isLastTaskInFeature)
+                                                                color: canGoNextTask
                                                                     ? const Color(
-                                                                        0xFF243046,
+                                                                        0xFF262E40,
                                                                       )
                                                                     : const Color(
                                                                         0x14FFFFFF,
@@ -3887,17 +3919,15 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               ),
                                                             ),
                                                             child: Text(
-                                                              'Next ›',
+                                                              '›',
                                                               style: GoogleFonts
                                                                   .jetBrainsMono(
                                                                 fontSize:
-                                                                    fontMicro,
+                                                                    fontBody,
                                                                 fontWeight:
-                                                                    weightSemi,
-                                                                color: (activeSubStep
-                                                                            .subtask
-                                                                            .completed ||
-                                                                        !isLastTaskInFeature)
+                                                                    weightBold,
+                                                                height: 1.0,
+                                                                color: canGoNextTask
                                                                     ? const Color(
                                                                         0xFFCBD5E1,
                                                                       )
@@ -4215,6 +4245,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                             8,
                                                                       ),
                                                                     ],
+                                                                    prevStepBtn,
+                                                                    const SizedBox(
+                                                                      width: 4,
+                                                                    ),
+                                                                    nextStepBtn,
+                                                                    const SizedBox(
+                                                                      width: 8,
+                                                                    ),
                                                                     issueBtn,
                                                                     const SizedBox(
                                                                       width: 8,
@@ -4228,7 +4266,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               height: 10,
                                                             ),
 
-                                                            // Row 2: Embedded Emerald Verify in Engine Strip + [‹ Prev] [Next ›]
+                                                            // Row 2: Full-Width Embedded Emerald Verify in Engine Strip
                                                             Container(
                                                               key: ValueKey(
                                                                 'task_overview_goal_box_${node.id}_$selectedTaskIdx',
@@ -4237,7 +4275,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                   const EdgeInsets
                                                                       .symmetric(
                                                                 horizontal: 11,
-                                                                vertical: 7.5,
+                                                                vertical: 8,
                                                               ),
                                                               decoration:
                                                                   BoxDecoration(
@@ -4261,6 +4299,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 ),
                                                               ),
                                                               child: Row(
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .start,
                                                                 children: [
                                                                   const SizedBox(
                                                                     width: 1,
@@ -4284,16 +4325,23 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                       ),
                                                                     ),
                                                                   ),
-                                                                  Text(
-                                                                    '✓ VERIFY IN ENGINE:',
-                                                                    style: GoogleFonts
-                                                                        .jetBrainsMono(
-                                                                      fontSize:
-                                                                          fontMicro,
-                                                                      fontWeight:
-                                                                          weightBold,
-                                                                      color: const Color(
-                                                                        0xFF34D399,
+                                                                  Padding(
+                                                                    padding:
+                                                                        const EdgeInsets
+                                                                            .only(
+                                                                      top: 1.5,
+                                                                    ),
+                                                                    child: Text(
+                                                                      '✓ VERIFY IN ENGINE:',
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            fontMicro,
+                                                                        fontWeight:
+                                                                            weightBold,
+                                                                        color: const Color(
+                                                                          0xFF34D399,
+                                                                        ),
                                                                       ),
                                                                     ),
                                                                   ),
@@ -4324,21 +4372,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                         isCodeBlock:
                                                                             false,
                                                                       ),
-                                                                      maxLines:
-                                                                          2,
-                                                                      overflow:
-                                                                          TextOverflow
-                                                                              .ellipsis,
+                                                                      softWrap:
+                                                                          true,
                                                                     ),
                                                                   ),
-                                                                  const SizedBox(
-                                                                    width: 10,
-                                                                  ),
-                                                                  prevStepBtn,
-                                                                  const SizedBox(
-                                                                    width: 5,
-                                                                  ),
-                                                                  nextStepBtn,
                                                                 ],
                                                               ),
                                                             ),

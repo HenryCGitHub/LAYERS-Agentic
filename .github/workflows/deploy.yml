@@ -46,18 +46,9 @@ jobs:
           }
 
       - name: Build Flutter Web (Release)
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          DART_DEFINES=""
-          if [ -n "$GEMINI_API_KEY" ]; then
-            GEMINI_API_KEY_B64=$(printf '%s' "$GEMINI_API_KEY" | base64 | tr -d '\n\r ')
-            DART_DEFINES="--dart-define=GEMINI_API_KEY_B64=$GEMINI_API_KEY_B64"
-            echo "Injecting base64-encoded GEMINI_API_KEY_B64 into web build."
-          else
-            echo "No GEMINI_API_KEY secret set; building without baked key (users can enter key in AI Settings)."
-          fi
-          flutter build web --release --base-href "/LAYERS-Agentic/" $DART_DEFINES
+          echo "Building clean public web bundle (users enter API key locally in AI Settings)."
+          flutter build web --release --base-href "/LAYERS-Agentic/"
           touch build/web/.nojekyll
 
       - name: Deploy to gh-pages

@@ -749,9 +749,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       }
     }
 
+    final effectiveCardUnrealCpp =
+        _unrealCppMode && _classifyFeatureArchetype(feat.title) != 'level';
     final activeTargetComp = _resolveTaskTargetComponent(
       selectedHowTo,
-      unrealCppMode: _unrealCppMode,
+      unrealCppMode: effectiveCardUnrealCpp,
     );
     final assetSpec = _resolveFeatureAssetSpec(
       feat: feat,
@@ -759,7 +761,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       selectedTaskIdx: selectedTaskIdx,
       selectedHowTo: selectedHowTo,
       activeSubStep: activeSubStep,
-      unrealCppMode: _unrealCppMode,
+      unrealCppMode: effectiveCardUnrealCpp,
       activeTargetComp: activeTargetComp,
     );
 
@@ -788,7 +790,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         if (tIdx != selectedTaskIdx)
           _resolveTaskTargetComponent(
             howToBlueprints[tIdx],
-            unrealCppMode: _unrealCppMode,
+            unrealCppMode: effectiveCardUnrealCpp,
           ).componentKey.toLowerCase(),
     }..remove(activeCompLower);
 
@@ -903,7 +905,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     final rawComponents = _buildPersistentSceneTreeComponents(
       howToBlueprints,
-      unrealCppMode: _unrealCppMode,
+      unrealCppMode: effectiveCardUnrealCpp,
     );
     final components = <({
       String icon,
@@ -1739,7 +1741,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               ),
                                             ),
                                             child: Text(
-                                              '⧉ Copy code',
+                                              assetSpec.archetype == 'level'
+                                                  ? '⧉ Copy steps'
+                                                  : '⧉ Copy code',
                                               style: GoogleFonts.inter(
                                                 fontSize: fontMicro,
                                                 fontWeight: weightSemi,
@@ -1752,7 +1756,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                         const SizedBox(width: 6),
                                         InkWell(
                                           borderRadius:
-                                              BorderRadius.circular(4),
+                                              BorderRadius.circular(5),
                                           onTap: () {
                                             _rebuild(() {
                                               if (isStepExpanded) {
@@ -1764,20 +1768,20 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               }
                                             });
                                           },
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                              vertical: 2,
-                                            ),
-                                            child: Text(
-                                              isStepExpanded ? '▴' : '▾',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: fontMicro,
-                                                fontWeight: weightBold,
-                                                color: isSubActive
-                                                    ? const Color(0xFF38BDF8)
-                                                    : const Color(0xFF64748B),
-                                              ),
+                                          child: Container(
+                                            width: 24,
+                                            height: 24,
+                                            alignment: Alignment.center,
+                                            child: Icon(
+                                              isStepExpanded
+                                                  ? Icons
+                                                      .keyboard_arrow_up_rounded
+                                                  : Icons
+                                                      .keyboard_arrow_down_rounded,
+                                              size: 18,
+                                              color: isSubActive
+                                                  ? const Color(0xFF38BDF8)
+                                                  : const Color(0xFF94A3B8),
                                             ),
                                           ),
                                         ),
@@ -1786,7 +1790,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                   ),
                                 ),
 
-                                // Expanded Implementation Drawer (Direct Numbered Code / Node Lines)
+                                // Expanded Implementation Drawer (Direct Numbered Code / Node Lines with Hanging Indent)
                                 if (isStepExpanded &&
                                     showCode &&
                                     stepCodeLines.isNotEmpty)
@@ -1812,55 +1816,98 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                         for (int lineIdx = 0;
                                             lineIdx < stepCodeLines.length;
                                             lineIdx++)
-                                          Padding(
-                                            padding: EdgeInsets.only(
-                                              bottom: lineIdx ==
-                                                      stepCodeLines.length - 1
-                                                  ? 0
-                                                  : 4,
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                SizedBox(
-                                                  width: 32,
-                                                  child: Text(
-                                                    (lineIdx + 1)
-                                                        .toString()
-                                                        .padLeft(2, '0'),
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: fontMicro,
-                                                      fontWeight: weightRegular,
-                                                      height: 1.75,
-                                                      color: const Color(
-                                                        0xFF475569,
+                                          Builder(
+                                            builder: (context) {
+                                              final rawCodeLine =
+                                                  stepCodeLines[lineIdx];
+                                              final prefixMatch = RegExp(
+                                                r'^(\s*(?:[└├]──►\s+|──►\s+|•\s+)?)',
+                                              ).firstMatch(rawCodeLine);
+                                              final leadingPrefix =
+                                                  prefixMatch?.group(1) ?? '';
+                                              final bodyCodeLine =
+                                                  leadingPrefix.isNotEmpty &&
+                                                          leadingPrefix.length <
+                                                              rawCodeLine.length
+                                                      ? rawCodeLine.substring(
+                                                          leadingPrefix.length,
+                                                        )
+                                                      : rawCodeLine;
+                                              final effectivePrefix =
+                                                  leadingPrefix.isNotEmpty &&
+                                                          leadingPrefix.length <
+                                                              rawCodeLine.length
+                                                      ? leadingPrefix
+                                                      : '';
+                                              return Padding(
+                                                padding: EdgeInsets.only(
+                                                  bottom: lineIdx ==
+                                                          stepCodeLines.length -
+                                                              1
+                                                      ? 0
+                                                      : 4,
+                                                ),
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 32,
+                                                      child: Text(
+                                                        (lineIdx + 1)
+                                                            .toString()
+                                                            .padLeft(2, '0'),
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: fontMicro,
+                                                          fontWeight:
+                                                              weightRegular,
+                                                          height: 1.75,
+                                                          color: const Color(
+                                                            0xFF475569,
+                                                          ),
+                                                        ),
                                                       ),
                                                     ),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  child: Text.rich(
-                                                    _buildSemanticStepSpan(
-                                                      text:
-                                                          stepCodeLines[lineIdx],
-                                                      baseStyle: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: fontBody,
-                                                        fontWeight: weightRegular,
-                                                        height: 1.75,
-                                                        color: textPrimary,
+                                                    if (effectivePrefix
+                                                        .isNotEmpty)
+                                                      Text(
+                                                        effectivePrefix,
+                                                        style: GoogleFonts
+                                                            .jetBrainsMono(
+                                                          fontSize: fontBody,
+                                                          fontWeight:
+                                                              weightRegular,
+                                                          height: 1.75,
+                                                          color: const Color(
+                                                            0xFF64748B,
+                                                          ),
+                                                        ),
                                                       ),
-                                                      tuningItems: tuningItems,
-                                                      edgeItems: edgeItems,
-                                                      isCodeBlock: true,
+                                                    Expanded(
+                                                      child: Text.rich(
+                                                        _buildSemanticStepSpan(
+                                                          text: bodyCodeLine,
+                                                          baseStyle: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: fontBody,
+                                                            fontWeight:
+                                                                weightRegular,
+                                                            height: 1.75,
+                                                            color: textPrimary,
+                                                          ),
+                                                          tuningItems:
+                                                              tuningItems,
+                                                          edgeItems: edgeItems,
+                                                          isCodeBlock: true,
+                                                        ),
+                                                        softWrap: true,
+                                                      ),
                                                     ),
-                                                    softWrap: true,
-                                                  ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
+                                              );
+                                            },
                                           ),
                                       ],
                                     ),

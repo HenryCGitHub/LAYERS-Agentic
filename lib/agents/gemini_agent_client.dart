@@ -4,13 +4,11 @@ import '../constants/text_style_guide.dart';
 
 /// Lightweight, resilient Gemini JSON client for LAYERS-Agentic.
 /// Supports:
-/// - Base64 build-time key decoding (`GEMINI_API_KEY_B64`) so GitHub Push Protection
-///   never blocks public `gh-pages` deployments.
-/// - Runtime API key and Model override (`gemini-2.5-flash` default, `gemini-2.5-pro`, `gemini-2.0-flash`).
-/// - Automatic model fallback if a model quota/availability error occurs.
+/// - Explicit live model pinning to `gemini-3.8-flash` (never auto-upgrading to Argon/Pro).
+/// - User-entered local browser API key via AI Settings (no keys baked into public `gh-pages`).
 class GeminiAgentClient {
   static const String _rawEnvKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const String _b64EnvKey = String.fromEnvironment('GEMINI_API_KEY_B64');
+  static const String pinnedLiveFlashModel = 'gemini-3.8-flash';
   static String? _cachedDefaultKey;
 
   static const Map<String, String> _jsonHeaders = {
@@ -76,12 +74,6 @@ class GeminiAgentClient {
     if (_cachedDefaultKey != null) return _cachedDefaultKey!;
     if (_rawEnvKey.trim().isNotEmpty) {
       return _cachedDefaultKey = _rawEnvKey.trim();
-    }
-    if (_b64EnvKey.trim().isNotEmpty) {
-      try {
-        return _cachedDefaultKey =
-            utf8.decode(base64Decode(_b64EnvKey.trim())).trim();
-      } catch (_) {}
     }
     return _cachedDefaultKey = '';
   }
@@ -276,9 +268,9 @@ class GeminiAgentClient {
       return null;
     }
 
-    await _ensureModelCapabilitiesLoaded(resolvedModel, key);
+    await _ensureModelCapabilitiesLoaded(pinnedLiveFlashModel, key);
 
-    const modelsToTry = <String>[resolvedModel];
+    const modelsToTry = <String>[pinnedLiveFlashModel];
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
     final hasTools =

@@ -5411,10 +5411,16 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
                 ? '${featPascal}Canvas.prefab / ${featPascal}UI.cs (PlayerController.cs / MonoBehaviour Prefab UI)'
                 : '${featSnake}_hud.tscn (Control / CanvasLayer) + ${featSnake}_hud.gd'),
         'level' => engineLabel == 'UNREAL 5'
-            ? 'Level Map L_$featPascal (/Game/Maps/) with World Outliner Actors (StaticMeshActor floor/ramps, BoxCollision / KillZVolume, PhysicalMaterial, and PlayerStart + BP_PlayerCharacter for playtest)'
+            ? (hasPrecedingCharacterFeature
+                ? 'Level Map L_$featPascal (/Game/Maps/) with World Outliner Actors (Floor_*, Wall_*, BoxCollision / KillZVolume, and PlayerStart at (0, 0, 120) + BP_PlayerCharacter)'
+                : 'Level Map L_$featPascal (/Game/Maps/) with World Outliner Actors (Floor_*, Wall_*, BoxCollision / KillZVolume, and PlayerStart at (0, 0, 120) with DefaultPawn in World Settings until BP_PlayerCharacter is built)')
             : (engineLabel == 'UNITY C#'
-                ? 'Scene $featPascal.unity (Assets/Scenes/) with Floor/Ramp GameObjects, Colliders, PhysicMaterial, and PlayerController.cs / MonoBehaviour Prefab spawn'
-                : 'Level Scene $featSnake.tscn (res://scenes/levels/) with StaticBody/CollisionShape floor/ramps and player_character spawn'),
+                ? (hasPrecedingCharacterFeature
+                    ? 'Scene $featPascal.unity (Assets/Scenes/) with Floor/Wall GameObjects, Colliders, and PlayerController.cs / MonoBehaviour Prefab spawn at (0, 2, 0)'
+                    : 'Scene $featPascal.unity (Assets/Scenes/) with Floor/Wall GameObjects, Colliders, and temporary test Capsule (Rigidbody + CapsuleCollider) at (0, 2, 0)')
+                : (hasPrecedingCharacterFeature
+                    ? 'Level Scene $featSnake.tscn (res://scenes/levels/) with StaticBody/CollisionShape floor/walls and player_character spawn at (0, 2, 0)'
+                    : 'Level Scene $featSnake.tscn (res://scenes/levels/) with StaticBody/CollisionShape floor/walls and temporary test RigidBody + CollisionShape at (0, 2, 0)')),
         _ => engineLabel == 'UNREAL 5'
             ? 'BP_$featPascal (AActor) with StaticMeshComponent and Collision Component'
             : (engineLabel == 'UNITY C#'
@@ -5426,10 +5432,16 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               !hasPrecedingCharacterFeature &&
               effectiveCpIndex == 0;
       final playerBootstrapLabel = engineLabel == 'UNREAL 5'
-          ? 'PlayerStart spawn point above the floor with BP_PlayerCharacter / Default Pawn assigned in World Settings (do NOT make IMC_Default a floor component)'
+          ? (hasPrecedingCharacterFeature
+              ? 'PlayerStart spawn point at (0, 0, 120) above the floor with BP_PlayerCharacter assigned in World Settings (do NOT make IMC_Default a floor component)'
+              : 'PlayerStart spawn point at (0, 0, 120) above the floor with DefaultPawn assigned in World Settings so the map can be tested immediately before BP_PlayerCharacter exists (keep PlayerStart at (0, 0, 120); do NOT make IMC_Default a floor component)')
           : (engineLabel == 'UNITY C#'
-              ? 'PlayerCharacter spawn point above the floor in the Scene Hierarchy'
-              : 'PlayerStart / player_character spawn node above the floor in the Main Scene');
+              ? (hasPrecedingCharacterFeature
+                  ? 'PlayerCharacter spawn point at (0, 2, 0) above the floor in the Scene Hierarchy'
+                  : 'temporary test Capsule (Rigidbody + CapsuleCollider) at (0, 2, 0) above the floor in the Scene Hierarchy')
+              : (hasPrecedingCharacterFeature
+                  ? 'PlayerStart / player_character spawn node at (0, 2, 0) above the floor in the Main Scene'
+                  : 'temporary test RigidBody + CollisionShape node at (0, 2, 0) above the floor in the Main Scene'));
       final projectBuildStateContext = isGreenfieldFirstFeature
           ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Setup). On Task 1, explicitly instruct how to set up ${currentArchetype == 'level' ? 'the Level Map & World Outliner geometry' : (currentArchetype == 'character' ? 'the Character Blueprint / Prefab / Scene' : (currentArchetype == 'ui' ? 'the UI Widget / Canvas / Control Scene' : 'the Actor Blueprint / Prefab / Scene'))} ($engineAssetHint), specify its exact folder path, and ${needsFirstFeaturePlayerBootstrap ? 'include placing a $playerBootstrapLabel so pressing Play spawns the player landing on the floor.' : 'explain how to place or spawn it in the active level.'}'
           : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
@@ -5560,7 +5572,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
 
       final phaseInstructionBlock = switch (_currentPhase) {
         ProductionPhase.prototype =>
-          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes, greybox shapes/sprites, and direct Inspector/Details variables.\n- Focus strictly on proving the core mechanic feel and playtest loop.',
+          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes, greybox shapes/sprites, and direct Inspector/Details variables.\n- Focus strictly on proving the core mechanic feel and playtest loop.\n- Keep greybox steps lean and cohesive (~2-3 sub-steps per task, ~6-9 total steps per feature; avoid 20-step bloat).',
         ProductionPhase.mvp =>
           'ACTIVE PRODUCTION PHASE: 02 · MVP (FUNCTIONAL DELTA UPGRADE)\n- Extend the existing v0.1 prototype script/Actor in-place (NEVER recreate from scratch).\n- Wire cross-system state, HUD counters, or progression loops.',
         ProductionPhase.verticalSlice =>
@@ -5588,11 +5600,15 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           'Checkpoint Playtest Gate: "${cpNode.playtestCondition}"',
       ].join('\n');
 
-      final codeFormulaModeGuide = engineLabel == 'UNREAL 5'
-          ? (unrealCppMode
-              ? '2-6 lines of concrete Unreal 5 C++ (.h / .cpp) code using `->`, `FTransform`, `FVector`, `CreateDefaultSubobject`, or `UPROPERTY` with the exact tuning variables and guard checks (NEVER Blueprint node arrows)'
-              : '2-6 lines of concrete Unreal 5 Blueprint Event Graph node wiring formatted as `[Event / Input Node] ──► [Function Node (Target: ..., Pin: Value)]` using `──►` / `└──►` arrows and exact tuning variables (NEVER C++ `->` pointer syntax or `FTransform`/`FVector` C++ constructors)')
-          : '2-6 lines of concrete $targetEngineMode code using the exact tuning variables and guard checks';
+      final codeFormulaModeGuide = currentArchetype == 'level'
+          ? (engineLabel == 'UNREAL 5'
+              ? '2-5 lines of World Outliner placement & Details Panel setup (e.g. `Place Actors → Cylinder ("Floor_Greenhouse")\\nStatic Mesh: /Engine/BasicShapes/Cylinder\\nTransform: Location = (0, 0, 0), Scale = (20.0, 20.0, 0.2)\\nCollision Preset: BlockAll`). NEVER wire `[Event BeginPlay] ──► [Set Actor Location / Set Actor Relative Scale3D]` to place static blockout floors/walls, NEVER prefix placed World Outliner Actor names with `SM_` (reserve `SM_` strictly for Static Mesh assets), pre-calculate literal numeric Location/Scale values from Active Tuning Parameters instead of undefined math expressions (`radius / 50.0`), and keep `PlayerStart` at `(0, 0, 120)` without conflicting coordinates'
+              : '2-5 lines of Scene Hierarchy / Scene Tree placement & Inspector setup with literal numeric Position/Scale values derived from Active Tuning Parameters (do NOT write runtime Start()/_ready() code just to place static blockout floors/walls, and keep spawn at `(0, 2, 0)` without conflicting coordinates)')
+          : (engineLabel == 'UNREAL 5'
+              ? (unrealCppMode
+                  ? '2-6 lines of concrete Unreal 5 C++ (.h / .cpp) code using `->`, `FTransform`, `FVector`, `CreateDefaultSubobject`, or `UPROPERTY` with the exact tuning variables and guard checks (NEVER Blueprint node arrows)'
+                  : '2-6 lines of concrete Unreal 5 Blueprint Event Graph node wiring formatted as `[Event / Input Node] ──► [Function Node (Target: ..., Pin: Value)]` using `──►` / `└──►` arrows and exact tuning variables (NEVER C++ `->` pointer syntax or `FTransform`/`FVector` C++ constructors)')
+              : '2-6 lines of concrete $targetEngineMode code using the exact tuning variables and guard checks');
 
       final prompt = '''
 You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
@@ -5610,12 +5626,13 @@ ${priorCheckpointSnapshot.isNotEmpty ? 'Previous Checkpoints Structural Snapshot
 
 CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
 - ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
-- STRICT TASK-ROLE ALIGNMENT & CUMULATIVE HAND-OFF (ACROSS ALL ${cpNode.checklist.length} TASKS):
-  * First Task (Task 1) builds the primary scene/node/actor/prefab hierarchy and collision foundation in the level.
-  * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) bind input/signals and wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
-  * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add observable feedback cues and enforce the boundary guards (${cleanEdgeCases.join(', ')}) so the Checkpoint Playtest Gate passes.
+- STRICT TASK-ROLE ALIGNMENT & NON-OVERLAPPING SLICES (ACROSS ALL ${cpNode.checklist.length} TASKS):
+  * Each task MUST own a strictly non-overlapping slice of the feature—NEVER implement Task 2's perimeter walls or logic inside Task 1.
+  * First Task (Task 1) builds ONLY the primary floor/scene/node/actor/prefab foundation in the level.
+  * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) add secondary structural bounds or wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
+  * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add a concrete trigger volume, state guard, clamp, or observable feedback cue (${cleanEdgeCases.join(', ')})—NEVER emit a passive "Verification" or "Testing" task title.
 
-For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI widget, data resource, or gameplay calculation—never generic phrases like "Body & Collision", "Action & Math", or "Cue & Boundary Clamp") and return the sequential 3-Area sub-steps needed to implement and verify that task (zero artificial step count limits):
+For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI widget, data resource, or gameplay calculation—never generic phrases like "Body & Collision", "Action & Math", "Cue & Boundary Clamp", or passive "Verification" titles) and return the sequential 3-Area sub-steps needed to implement and verify that task (zero artificial step count limits; in 01 · PROTOTYPE prefer 2-3 cohesive sub-steps per task so greybox features stay around 6-9 total steps):
 - In `area2Inspector`, list ONLY the 1-3 properties modified in THIS specific task's component (never dump CharacterMovement properties onto a Capsule/Collider task).
 - In `codeFormula`, emit $codeFormulaModeGuide.
 

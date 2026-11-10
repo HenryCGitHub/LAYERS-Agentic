@@ -33,12 +33,7 @@ BUILD_ARGS=(
     "--pwa-strategy=none"
 )
 
-if [ -n "$GEMINI_API_KEY" ]; then
-    B64_KEY=$(printf "%s" "$GEMINI_API_KEY" | base64 | tr -d '\n')
-    echo "Injecting GEMINI_API_KEY_B64 from environment..."
-    BUILD_ARGS+=("--dart-define=GEMINI_API_KEY_B64=$B64_KEY")
-fi
-
+echo "Building clean public web bundle (no API keys embedded; users enter key locally in AI Settings)..."
 flutter build "${BUILD_ARGS[@]}"
 
 if [ ! -d "build/web" ]; then

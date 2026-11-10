@@ -9007,5 +9007,146 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
       },
     );
+
+    testWidgets(
+      'Level Blockout Engine Accuracy: Pinned gemini-3.8-flash, DefaultPawn before Character, Static Outliner Steps, Hidden C++ Toggle & Task Switchers',
+      (WidgetTester tester) async {
+        expect(
+          GeminiAgentClient.pinnedLiveFlashModel,
+          equals('gemini-3.8-flash'),
+        );
+
+        await tester.binding.setSurfaceSize(const Size(1440, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        final provider = WorkbenchProvider();
+        await tester.runAsync(
+          () => provider.startConceptInterview('Bloomfire Arena'),
+        );
+        provider.updateConceptDraft((d) {
+          d.techSpec = [
+            'Engine: Unreal Engine 5 (Blueprints / C++)',
+            'Dimension: 3D First-Person',
+          ];
+          d.coreLoopBeats = [
+            'Greybox Arena Traversal — Walk across greenhouse and combat arena sectors.',
+            'Crop Cultivation — Plant and harvest crops.',
+          ];
+        });
+        await tester.runAsync(() => provider.approveConceptAndBuildRelease());
+
+        // Ensure Feature #1 is a Level Blockout before First Person Movement at Feature #2
+        final beat1 = provider.activeReleaseBeats.first;
+        final beat1Feats = provider.featuresForBeat(beat1.id);
+        expect(beat1Feats, isNotEmpty);
+        final levelFeat = beat1Feats.first;
+        provider.renameLiveFeature(levelFeat.id, 'Greybox Arena Blockout');
+        if (beat1Feats.length > 1) {
+          provider.renameLiveFeature(
+            beat1Feats[1].id,
+            'First Person Movement',
+          );
+        }
+
+        String? capturedLevelPrompt;
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          capturedLevelPrompt = prompt;
+          return {
+            'primarySharedScriptOrScene': 'L_GreyboxArena',
+            'tasks': [
+              {
+                'taskIndex': 0,
+                'taskTitle': 'Arena Floor Sectors',
+                'subSteps': [
+                  {
+                    'shortTitle': 'Place Greenhouse Floor Cylinder',
+                    'stepPath': '/Game/Maps/L_GreyboxArena',
+                    'doInstruction':
+                        'Place Cylinder Floor_Greenhouse at (0, 0, 0) with BlockAll collision.',
+                    'area1Hierarchy':
+                        'L_GreyboxArena (Level)\n └─ Floor_Greenhouse (StaticMeshActor) ← SELECTED',
+                    'area2Inspector': 'Location: (0, 0, 0)\nScale: (20, 20, 0.2)',
+                    'codeFormula':
+                        'Place Actors → Cylinder ("Floor_Greenhouse")\n  └──► Static Mesh: /Engine/BasicShapes/Cylinder',
+                    'verifyResult':
+                        'Press Play → DefaultPawn spawns at (0, 0, 120) above Floor_Greenhouse.',
+                  },
+                ],
+              },
+              {
+                'taskIndex': 1,
+                'taskTitle': 'Perimeter Blocker Walls',
+                'subSteps': [
+                  {
+                    'shortTitle': 'Place Perimeter Wall Shell',
+                    'stepPath': '/Game/Maps/L_GreyboxArena',
+                    'doInstruction':
+                        'Place Wall_Arena_Perimeter around the outer ring.',
+                    'area1Hierarchy':
+                        'L_GreyboxArena (Level)\n └─ Wall_Arena_Perimeter (StaticMeshActor) ← SELECTED',
+                    'area2Inspector': 'Collision Preset: BlockAll',
+                    'codeFormula':
+                        'Place Actors → Cylinder ("Wall_Arena_Perimeter")',
+                    'verifyResult':
+                        'Fly outward → Wall_Arena_Perimeter blocks outward traversal.',
+                  },
+                ],
+              },
+            ],
+          };
+        };
+        try {
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              levelFeat.id,
+              forceRefresh: true,
+            ),
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+
+        expect(capturedLevelPrompt, isNotNull);
+        expect(capturedLevelPrompt, contains('DefaultPawn'));
+        expect(capturedLevelPrompt, contains('PlayerStart'));
+        expect(capturedLevelPrompt, contains('(0, 0, 120)'));
+        expect(
+          capturedLevelPrompt,
+          contains('NEVER prefix placed World Outliner Actor names with `SM_`'),
+        );
+
+        provider.selectFeature(levelFeat.id);
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        final cp0Id = FeatureStateNode.getStatesForDocument(
+          provider.documents[levelFeat.id]!,
+        ).first.id;
+
+        // 1. Blueprint | C++ toggle is hidden on .umap Level Map features
+        expect(
+          find.byKey(ValueKey('unreal_mode_toggle_$cp0Id')),
+          findsNothing,
+        );
+        // 2. Initial Setup shows DefaultPawn (no chicken-and-egg BP_PlayerCharacter before Movement)
+        expect(find.textContaining('DefaultPawn'), findsWidgets);
+        // 3. Copy button reads "⧉ Copy steps" for static level blockouts & TARGET resolves Floor_Greenhouse
+        expect(find.text('⧉ Copy steps'), findsWidgets);
+        expect(find.textContaining('Floor_Greenhouse'), findsWidgets);
+        // 4. Header Row 1 task switchers advance cleanly from T1 -> T2 -> T1
+        expect(find.text('T1'), findsWidgets);
+        await tester.tap(
+          find.byKey(ValueKey('engine_dock_next_step_$cp0Id')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Wall_Arena_Perimeter'), findsWidgets);
+        await tester.tap(
+          find.byKey(ValueKey('engine_dock_prev_step_$cp0Id')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Floor_Greenhouse'), findsWidgets);
+      },
+    );
   });
 }
