@@ -1225,6 +1225,19 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   Text('Scene hierarchy'),
                   Text('Inspector details'),
                   Text('Script implementation'),
+                  Text(
+                    'Task Steps (T${selectedTaskIdx + 1} · ${selectedHowTo.shortTaskTitle})',
+                  ),
+                  Text('▼ IMPLEMENTATION & LEVEL SETUP'),
+                  if (assetSpec.levelHookupTitle.isNotEmpty)
+                    Text(assetSpec.levelHookupTitle),
+                  for (final lvStep in assetSpec.levelHookupSteps) Text(lvStep),
+                  for (final stStep in assetSpec.setupSteps) ...[
+                    Text('${stStep.label}: '),
+                    Text(stStep.detail),
+                  ],
+                  for (final subStep in selectedHowTo.subSteps)
+                    Text('${subStep.shortTitle}: ${subStep.instruction}'),
                   if (rawHierarchy.isNotEmpty) Text(rawHierarchy),
                   for (final comp in components) ...[
                     InkWell(

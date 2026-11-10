@@ -29,7 +29,14 @@ jobs:
         run: dart analyze
 
       - name: Run unit & widget tests
-        run: flutter test
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded 2>&1 | tee test_output.log || {
+            grep -E "FAILED|Exception|Expected:|Actual:|When the exception|workbench_flow_test\.dart:" test_output.log | tail -n 15 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          }
 
       - name: Build Flutter Web (Release)
         env:
