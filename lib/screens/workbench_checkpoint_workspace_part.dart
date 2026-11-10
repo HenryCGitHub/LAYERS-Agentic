@@ -175,14 +175,39 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     required FeatureStateNode node,
     required int selectedTaskIdx,
     required String rawValue,
+    int? tuningParamIndex,
+    String? propertyKey,
   }) {
     final trimmed = rawValue.trim();
     if (trimmed.isEmpty) {
       return;
     }
     final tuningItems = node.tuningParams;
-    final targetIdx =
+    int targetIdx =
         tuningItems.isNotEmpty ? (selectedTaskIdx % tuningItems.length) : 0;
+    if (tuningParamIndex != null &&
+        tuningParamIndex >= 0 &&
+        tuningParamIndex < tuningItems.length) {
+      targetIdx = tuningParamIndex;
+    } else if (tuningItems.isNotEmpty) {
+      final candidateKey = (propertyKey ?? trimmed)
+          .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
+          .first
+          .trim()
+          .toLowerCase();
+      final matchedIdx = tuningItems.indexWhere(
+        (tp) =>
+            tp
+                .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
+                .first
+                .trim()
+                .toLowerCase() ==
+            candidateKey,
+      );
+      if (matchedIdx != -1) {
+        targetIdx = matchedIdx;
+      }
+    }
     final oldEntry = tuningItems.isNotEmpty ? tuningItems[targetIdx] : '';
     final oldVar = oldEntry
         .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
@@ -192,6 +217,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
         .first
         .trim();
+
+    if (propertyKey != null && propertyKey.isNotEmpty) {
+      final parts = trimmed.split(
+        _ReleaseWorkbenchScreenState._tuningVarDelimiterRegex,
+      );
+      final valOnly = parts.length > 1
+          ? parts.sublist(1).join(':').trim()
+          : trimmed;
+      _customComponentPropertyOverrides['${node.id}::$propertyKey'] = valOnly;
+    }
 
     if (tuningItems.isNotEmpty) {
       node.tuningParams[targetIdx] = trimmed;
@@ -857,55 +892,50 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         if (isUnrealBp) {
           setupSteps.addAll([
             (
-              label: 'Create Asset',
-              detail:
-                  'Right-click in $folderPath → Blueprint Class → Choose Character → Name $assetName',
+              label: 'Asset',
+              detail: 'Blueprint Class (Character) → $folderPath$assetName',
             ),
             (
-              label: 'Select Capsule',
-              detail:
-                  'Open $assetName → Select inherited CapsuleComponent (Root) in Components',
+              label: 'Root',
+              detail: 'Select inherited CapsuleComponent (Root)',
             ),
             (
-              label: 'Add Camera',
-              detail:
-                  'In Components panel, click + Add → Attach FirstPersonCamera (Camera) under CapsuleComponent',
+              label: 'Camera',
+              detail: '+ Add → FirstPersonCamera under CapsuleComponent',
             ),
           ]);
         } else if (isUnrealCpp) {
           setupSteps.addAll([
             (
-              label: 'Create Class',
+              label: 'Class',
               detail:
-                  'Tools → New C++ Class → Choose Character (ACharacter) → Name PlayerCharacter in $folderPath',
+                  'New C++ Class (ACharacter) → $folderPath/PlayerCharacter',
             ),
             (
-              label: 'Configure Capsule',
-              detail:
-                  'In constructor, call GetCapsuleComponent()->InitCapsuleSize(35.f, 88.f)',
+              label: 'Capsule',
+              detail: 'GetCapsuleComponent()->InitCapsuleSize(35.f, 88.f)',
             ),
             (
-              label: 'Attach Camera',
+              label: 'Camera',
               detail:
-                  'Call CreateDefaultSubobject<UCameraComponent> and attach to GetCapsuleComponent()',
+                  'CreateDefaultSubobject<UCameraComponent> → GetCapsuleComponent()',
             ),
           ]);
         } else if (isUnity) {
           setupSteps.addAll([
             (
-              label: 'Create Prefab',
+              label: 'Prefab',
               detail:
-                  'In Hierarchy, right-click → Create Empty named PlayerCharacter → Drag into $folderPath',
+                  'Create Empty PlayerCharacter → Save to $folderPath$assetName',
             ),
             (
-              label: 'Add Collider',
+              label: 'Collider',
               detail:
-                  'In Inspector, click Add Component → Attach ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController'} and PlayerController.cs',
+                  '+ Add ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController'} & PlayerController.cs',
             ),
             (
-              label: 'Add Camera Child',
-              detail:
-                  'Right-click PlayerCharacter → Camera → Name FirstPersonCamera at Pos (0, 0.64, 0)',
+              label: 'Camera',
+              detail: 'Add Child Camera → FirstPersonCamera at (0, 0.64, 0)',
             ),
           ]);
         } else {
@@ -914,19 +944,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           final camNode = is2D ? 'Camera2D' : 'Camera3D';
           setupSteps.addAll([
             (
-              label: 'Create Scene',
-              detail:
-                  'In Scene Dock, click + Other Node → Choose $bodyNode → Save as $folderPath$assetName',
+              label: 'Scene',
+              detail: '+ $bodyNode root → Save $folderPath$assetName',
             ),
             (
-              label: 'Attach Script',
-              detail:
-                  'Click 📜 Attach Script on root node → Save as player_character.gd',
+              label: 'Script',
+              detail: '📜 Attach Script → player_character.gd',
             ),
             (
-              label: 'Add Capsule & Camera',
-              detail:
-                  'Click + on root → Add $colNode (CapsuleShape) and $camNode',
+              label: 'Nodes',
+              detail: '+ Add $colNode (CapsuleShape) & $camNode',
             ),
           ]);
         }
@@ -934,73 +961,64 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         if (isUnrealBp) {
           setupSteps.addAll([
             (
-              label: 'Create Widget',
-              detail:
-                  'Right-click in $folderPath → User Interface → Widget Blueprint → User Widget → Name $assetName',
+              label: 'Widget',
+              detail: 'Widget Blueprint (User Widget) → $folderPath$assetName',
             ),
             (
-              label: 'Add Root Panel',
-              detail:
-                  'Open $assetName Designer → Drag a Canvas Panel onto the root hierarchy',
+              label: 'Root',
+              detail: 'Designer → Drag Canvas Panel to root',
             ),
             (
-              label: 'Add UI Control',
+              label: 'Control',
               detail:
-                  'From Palette, drag ${activeTargetComp.componentKey} under Canvas Panel',
+                  'Palette → Drag ${activeTargetComp.componentKey} under Canvas Panel',
             ),
           ]);
         } else if (isUnrealCpp) {
           setupSteps.addAll([
             (
-              label: 'Create Class',
-              detail:
-                  'Tools → New C++ Class → Choose UserWidget (UUserWidget) → Name $assetName in $folderPath',
+              label: 'Class',
+              detail: 'New C++ Class (UUserWidget) → $folderPath$assetName',
             ),
             (
-              label: 'Bind Widget',
+              label: 'Bind',
               detail:
-                  'Declare ${activeTargetComp.componentKey} with UPROPERTY(meta = (BindWidget))',
+                  'UPROPERTY(meta = (BindWidget)) ${activeTargetComp.componentKey}',
             ),
             (
-              label: 'Override Init',
-              detail:
-                  'Override NativeConstruct() in .cpp to initialize widget state',
+              label: 'Init',
+              detail: 'Override NativeConstruct() in .cpp',
             ),
           ]);
         } else if (isUnity) {
           setupSteps.addAll([
             (
-              label: 'Create Canvas',
-              detail:
-                  'In Hierarchy, right-click → UI → Canvas named $pascalName → Drag into $folderPath',
+              label: 'Canvas',
+              detail: 'UI → Canvas ($pascalName) → Save to $folderPath',
             ),
             (
-              label: 'Attach Script',
-              detail:
-                  'In Inspector, click Add Component → Attach ${pascalName}UI.cs',
+              label: 'Script',
+              detail: '+ Add Component → ${pascalName}UI.cs',
             ),
             (
-              label: 'Add UI Element',
+              label: 'Control',
               detail:
-                  'Right-click Canvas → UI → Add ${activeTargetComp.componentKey}',
+                  'Canvas → UI → Add ${activeTargetComp.componentKey}',
             ),
           ]);
         } else {
           setupSteps.addAll([
             (
-              label: 'Create UI Scene',
-              detail:
-                  'In Scene Dock, click User Interface (Control) → Save as $folderPath$assetName',
+              label: 'Scene',
+              detail: 'Control root → Save $folderPath$assetName',
             ),
             (
-              label: 'Attach Script',
-              detail:
-                  'Click 📜 Attach Script on root → Save as ${snakeName}_hud.gd',
+              label: 'Script',
+              detail: '📜 Attach Script → ${snakeName}_hud.gd',
             ),
             (
-              label: 'Add Child Control',
-              detail:
-                  'Click + on root → Add ${activeTargetComp.displayLabel}',
+              label: 'Control',
+              detail: '+ Add ${activeTargetComp.displayLabel}',
             ),
           ]);
         }
@@ -1008,37 +1026,35 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         if (isUnreal) {
           setupSteps.addAll([
             (
-              label: 'Create Level with Floor',
-              detail:
-                  'Click File → New Level → Basic (includes lighting & floor slab) and save as $folderPath$assetName',
+              label: 'Map',
+              detail: 'File → New Level (Basic) → Save $folderPath$assetName',
             ),
             (
-              label: 'Setup Playtest Character Pawn',
+              label: 'Pawn',
               detail:
-                  'In /Game/Characters/, create/select BP_PlayerCharacter (Parent: Character with CapsuleComponent & CharacterMovement gravity) and set World Settings → Default Pawn Class = BP_PlayerCharacter',
+                  'World Settings → Default Pawn Class = BP_PlayerCharacter',
             ),
             (
-              label: 'Place PlayerStart Above Floor',
+              label: 'Spawn',
               detail:
-                  'In Place Actors → Basic, place PlayerStart at Location (0, 0, 120) above the floor so pressing Play spawns the character landing on the floor',
+                  'Place Actors → PlayerStart at (0, 0, 120) above floor',
             ),
           ]);
         } else if (isUnity) {
           setupSteps.addAll([
             (
-              label: 'Create Scene with Floor',
+              label: 'Scene',
               detail:
-                  'Click File → New Scene (Basic) → Save as $folderPath$assetName and add ${activeTargetComp.displayLabel} at (0, 0, 0)',
+                  'File → New Scene → Save $folderPath$assetName + ${activeTargetComp.displayLabel} at (0,0,0)',
             ),
             (
-              label: 'Setup Playtest Character',
+              label: 'Player',
               detail:
-                  'Create/place PlayerCharacter in Hierarchy with ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController / Rigidbody + CapsuleCollider'} and gravity enabled',
+                  'Place PlayerCharacter (${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController + gravity'})',
             ),
             (
-              label: 'Position Player Spawn Above Floor',
-              detail:
-                  'Set PlayerCharacter Transform Position = (0, 2, 0) above the floor collider so Play mode drops and lands firm on the floor',
+              label: 'Spawn',
+              detail: 'Transform Position = (0, 2, 0) above floor',
             ),
           ]);
         } else {
@@ -1046,19 +1062,18 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           final bodyNode = is2D ? 'CharacterBody2D' : 'CharacterBody3D';
           setupSteps.addAll([
             (
-              label: 'Create Level Scene with Floor',
+              label: 'Scene',
               detail:
-                  'Create $rootNode root scene → Save as $folderPath$assetName and add ${activeTargetComp.displayLabel} at (0, 0, 0)',
+                  'Create $rootNode → Save $folderPath$assetName + ${activeTargetComp.displayLabel} at (0,0,0)',
             ),
             (
-              label: 'Setup Playtest Character Scene',
+              label: 'Player',
               detail:
-                  'Create/instantiate player_character.tscn ($bodyNode with CapsuleShape and gravity) inside $assetName',
+                  'Instantiate player_character.tscn ($bodyNode + gravity)',
             ),
             (
-              label: 'Position PlayerStart Above Floor',
-              detail:
-                  'Place PlayerStart / player_character at Position (0, 2, 0) above the floor collision so pressing Play lands firm on the floor',
+              label: 'Spawn',
+              detail: 'Place PlayerStart at (0, 2, 0) above floor',
             ),
           ]);
         }
@@ -1066,81 +1081,72 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         if (isUnrealBp) {
           setupSteps.addAll([
             (
-              label: 'Create Asset',
-              detail:
-                  'Right-click in $folderPath → Blueprint Class → Choose Actor → Name $assetName',
+              label: 'Asset',
+              detail: 'Blueprint Class (Actor) → $folderPath$assetName',
             ),
             (
-              label: 'Add Component',
-              detail:
-                  'Open $assetName → In Components panel, click + Add → Attach ${activeTargetComp.displayLabel}',
+              label: 'Component',
+              detail: 'Components → + Add ${activeTargetComp.displayLabel}',
             ),
             if (needsPlayerSpawnSetup)
               (
-                label: 'Setup PlayerStart & Pawn',
+                label: 'Spawn',
                 detail:
-                    'Set World Settings → Default Pawn Class = BP_PlayerCharacter and place PlayerStart at Location (0, 0, 120) above the floor',
+                    'Default Pawn = BP_PlayerCharacter · PlayerStart at (0, 0, 120)',
               )
             else
               (
-                label: 'Configure Defaults',
+                label: 'Target',
                 detail:
-                    'Select ${activeTargetComp.componentKey} → Apply Details values and Event Graph',
+                    'Select ${activeTargetComp.componentKey} → Details & Event Graph',
               ),
           ]);
         } else if (isUnrealCpp) {
           setupSteps.addAll([
             (
-              label: 'Create Class',
-              detail:
-                  'Tools → New C++ Class → Choose Actor (AActor) → Name $pascalName in $folderPath',
+              label: 'Class',
+              detail: 'New C++ Class (AActor) → $folderPath$pascalName',
             ),
             (
-              label: 'Declare Subobject',
+              label: 'Header',
               detail:
-                  'In $pascalName.h, declare UPROPERTY(VisibleAnywhere) ${activeTargetComp.componentKey}',
+                  'UPROPERTY(VisibleAnywhere) ${activeTargetComp.componentKey}',
             ),
             (
-              label: 'Initialize in Ctor',
+              label: 'Ctor',
               detail:
-                  'In $pascalName.cpp constructor, call CreateDefaultSubobject for ${activeTargetComp.componentKey}',
+                  'CreateDefaultSubobject → ${activeTargetComp.componentKey}',
             ),
           ]);
         } else if (isUnity) {
           setupSteps.addAll([
             (
-              label: 'Create Prefab',
-              detail:
-                  'In Hierarchy, right-click → Create Empty named $pascalName → Drag into $folderPath as $assetName',
+              label: 'Prefab',
+              detail: 'Create Empty $pascalName → $folderPath$assetName',
             ),
             (
-              label: 'Add Component',
-              detail:
-                  'In Inspector, click Add Component → Attach ${activeTargetComp.displayLabel}',
+              label: 'Component',
+              detail: '+ Add Component → ${activeTargetComp.displayLabel}',
             ),
             (
-              label: 'Attach Controller',
-              detail:
-                  'Click Add Component → Attach ${pascalName}Controller.cs',
+              label: 'Script',
+              detail: '+ Add Component → ${pascalName}Controller.cs',
             ),
           ]);
         } else {
           final rootNode = is2D ? 'Node2D' : 'Node3D';
           setupSteps.addAll([
             (
-              label: 'Create Scene',
-              detail:
-                  'In Scene Dock, create $rootNode scene → Save as $folderPath$assetName',
+              label: 'Scene',
+              detail: 'Create $rootNode → Save $folderPath$assetName',
             ),
             (
-              label: 'Attach Script',
-              detail:
-                  'Click 📜 Attach Script on root → Save as $snakeName.gd',
+              label: 'Script',
+              detail: '📜 Attach Script → $snakeName.gd',
             ),
             (
-              label: 'Add Child Node',
-              detail:
-                  'Click + on root → Add ${activeTargetComp.displayLabel}',
+              label: 'Child',
+              detail: '+ Add ${activeTargetComp.displayLabel}',
             ),
           ]);
         }
@@ -1148,13 +1154,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     } else {
       setupSteps.addAll([
         (
-          label: archetype == 'level' ? 'Open Level Map' : 'Open Asset',
-          detail: 'Double-click $folderPath$assetName',
+          label: archetype == 'level' ? 'Map' : 'Asset',
+          detail: 'Open $folderPath$assetName',
         ),
         (
-          label: archetype == 'level' ? 'Select Level Actor' : 'Select Component',
+          label: 'Select',
           detail:
-              'Click ${activeTargetComp.displayLabel} in the ${archetype == 'level' ? (isUnreal ? 'World Outliner' : (isUnity ? 'Scene Hierarchy' : 'Scene Tree')) : (isUnrealBp ? 'Components panel' : (isUnrealCpp ? 'Class subobject list' : (isUnity ? 'Hierarchy / Inspector' : 'Scene Dock')))}',
+              '${activeTargetComp.displayLabel} in ${archetype == 'level' ? (isUnreal ? 'World Outliner' : (isUnity ? 'Hierarchy' : 'Scene Tree')) : (isUnrealBp ? 'Components' : (isUnrealCpp ? 'Subobjects' : (isUnity ? 'Hierarchy' : 'Scene Dock')))}',
         ),
       ]);
     }
@@ -4096,9 +4102,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 decoration:
                                                                     BoxDecoration(
                                                                   color: const Color(
-                                                                    0xFFF59E0B,
+                                                                    0xFF38BDF8,
                                                                   ).withValues(
-                                                                    alpha: 0.16,
+                                                                    alpha: 0.14,
                                                                   ),
                                                                   borderRadius:
                                                                       BorderRadius
@@ -4108,10 +4114,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                   border: Border
                                                                       .all(
                                                                     color: const Color(
-                                                                      0xFFF59E0B,
+                                                                      0xFF38BDF8,
                                                                     ).withValues(
                                                                       alpha:
-                                                                          0.42,
+                                                                          0.40,
                                                                     ),
                                                                   ),
                                                                 ),
@@ -4125,7 +4131,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                         FontWeight
                                                                             .w800,
                                                                     color: const Color(
-                                                                      0xFFFBBF24,
+                                                                      0xFF38BDF8,
                                                                     ),
                                                                   ),
                                                                 ),
@@ -4342,7 +4348,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                   ),
 
-                                                  // 2. Fixed Top Verify in Engine Bar (Row 2 · #0E141D · 0px Vertical Jump)
+                                                  // 2. Fixed Top Verify in Engine Bar (Row 2 · #121620 · 0px Vertical Jump)
                                                   Container(
                                                     key: ValueKey(
                                                       'task_overview_goal_box_${node.id}_$selectedTaskIdx',
@@ -4354,11 +4360,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                     decoration:
                                                         const BoxDecoration(
-                                                      color: Color(0xFF0E141D),
+                                                      color: Color(0xFF121620),
                                                       border: Border(
                                                         bottom: BorderSide(
                                                           color:
-                                                              Color(0x16FFFFFF),
+                                                              Color(0xFF262E40),
                                                         ),
                                                       ),
                                                     ),
@@ -4525,7 +4531,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                               0.14,
                                                                         )
                                                                       : const Color(
-                                                                          0xFF1C2333,
+                                                                          0xFF181E2C,
                                                                         ),
                                                                   borderRadius:
                                                                       BorderRadius
@@ -4542,7 +4548,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                 0.45,
                                                                           )
                                                                         : const Color(
-                                                                            0x24FFFFFF,
+                                                                            0xFF262E40,
                                                                           ),
                                                                   ),
                                                                 ),
@@ -4626,7 +4632,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                               0.18,
                                                                         )
                                                                       : const Color(
-                                                                          0xFF3B82F6,
+                                                                          0xFF10B981,
                                                                         ),
                                                                   borderRadius:
                                                                       BorderRadius
@@ -4646,7 +4652,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                                 0.45,
                                                                           )
                                                                         : const Color(
-                                                                            0xFF60A5FA,
+                                                                            0xFF34D399,
                                                                           ),
                                                                   ),
                                                                 ),
@@ -4667,7 +4673,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                         12,
                                                                     fontWeight:
                                                                         FontWeight
-                                                                            .w600,
+                                                                            .w700,
                                                                     color: (activeSubStep
                                                                                 .subtask
                                                                                 .completed ||
@@ -4676,7 +4682,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                             0xFF6EE7B7,
                                                                           )
                                                                         : const Color(
-                                                                            0xFFF8FAFC,
+                                                                            0xFF042F2E,
                                                                           ),
                                                                   ),
                                                                 ),

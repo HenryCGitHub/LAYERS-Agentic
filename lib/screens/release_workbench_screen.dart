@@ -72,6 +72,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   String? _activeStage2InlineEditKey;
   final TextEditingController _stage2InlineEditController =
       TextEditingController();
+  final Map<String, String> _customComponentPropertyOverrides = {};
   final TextEditingController _inboxCaptureCtrl = TextEditingController();
   String? _inlineBugDrawerNodeId;
   final TextEditingController _inlineBugInputCtrl = TextEditingController();

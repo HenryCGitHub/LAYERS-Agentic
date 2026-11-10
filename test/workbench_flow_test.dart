@@ -4312,6 +4312,19 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               .tuningParams,
           contains('parryWindowSec: 0.35'),
         );
+
+        // Verify INITIAL SETUP is positioned inside the right column (Section 03)
+        final initialSetupArea = find.byKey(
+          ValueKey('initial_setup_area_${node.id}'),
+        );
+        expect(initialSetupArea, findsOneWidget);
+        final initRect = tester.getRect(initialSetupArea);
+        expect(
+          initRect.left,
+          greaterThanOrEqualTo(sec3Rect.left),
+          reason:
+              'INITIAL SETUP must be placed inside the right column (Section 03) so Outliner + Details Panel Values move up to the top of the left column.',
+        );
       },
     );
 
