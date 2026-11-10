@@ -3469,120 +3469,79 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         ),
                                       ),
 
-                                      // ── C & D. 3-Zone Playable Unit Split: Zone 2 Build Tasks (288px) + Zone 3 Active Task Recipe Sheet (Expanded) ──
+                                      // ── C & D. 100% Full-Width Active Task Runbook Sheet (Tasks Moved to Far-Left Outliner Rail) ──
                                       if (howToBlueprints.isNotEmpty)
                                         Builder(
                                           builder: (context) {
-                                            final isDesktopDock =
-                                                !isHalfScreenOverlayMode &&
-                                                    MediaQuery.sizeOf(context)
-                                                            .width >=
-                                                        1040;
                                             final activeBp = selectedHowTo;
                                             final totalSubCount =
                                                 activeBp.subSteps.length;
+                                            final bool mountFallbackTaskKeys =
+                                                isHalfScreenOverlayMode &&
+                                                    !_isHalfScreenOutlinerOpen;
 
-                                            // ── ZONE 2: Build Tasks Dock (288px · #0B0E15 40% Deep Obsidian Well) ──
-                                            final leftDockWidget = Container(
-                                              clipBehavior: Clip.hardEdge,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF0B0E15),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                border: Border.all(
-                                                  color:
-                                                      const Color(0x14FFFFFF),
-                                                ),
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.stretch,
-                                                children: [
-                                                  // 1. Top Pinned Feature Brief Card (#161B26)
-                                                  featureBriefCardWidget,
-
-                                                  // 2. Clean [T] Task Cards (Direct Selection -> 01 Scene hierarchy + 02 Inspector + 03 Script)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.fromLTRB(
-                                                      8,
-                                                      8,
-                                                      8,
-                                                      10,
-                                                    ),
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .stretch,
-                                                      children: [
-                                                        for (int tIdx = 0;
-                                                            tIdx <
-                                                                howToBlueprints
-                                                                    .length;
-                                                            tIdx++)
-                                                          Builder(
-                                                            builder: (context) {
-                                                              final bp =
-                                                                  howToBlueprints[
-                                                                      tIdx];
-                                                              final task = node
-                                                                  .checklist[tIdx];
-                                                              final globalNumLabel =
-                                                                  (tIdx + 1)
-                                                                      .toString()
-                                                                      .padLeft(
-                                                                        2,
-                                                                        '0',
-                                                                      );
-                                                              final isFixTask =
-                                                                  task.text
-                                                                      .trim()
-                                                                      .startsWith(
-                                                                        '[FIX]',
-                                                                      );
-                                                              final isTaskActive =
-                                                                  tIdx ==
-                                                                      selectedTaskIdx;
-                                                              final doneSubCount = bp
-                                                                  .subSteps
-                                                                  .where(
-                                                                    (s) => s
-                                                                        .subtask
-                                                                        .completed,
-                                                                  )
+                                            // Zero-height compatibility hooks for feature brief, non-active task steps, and half-screen closed-drawer task keys
+                                            final compatibilityHooksRow =
+                                                SizedBox(
+                                              height: 1,
+                                              child: SingleChildScrollView(
+                                                scrollDirection:
+                                                    Axis.horizontal,
+                                                child: Opacity(
+                                                  opacity: 0,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      featureBriefCardWidget,
+                                                      for (int tIdx = 0;
+                                                          tIdx <
+                                                              howToBlueprints
                                                                   .length;
-                                                              final taskSubCount =
-                                                                  bp.subSteps
-                                                                      .length;
-                                                              final isTaskDone =
-                                                                  task.completed ||
-                                                                      (taskSubCount >
-                                                                              0 &&
-                                                                          doneSubCount >=
-                                                                              taskSubCount);
-                                                              final groupTitle =
-                                                                  bp.shortTaskTitle;
-                                                              final targetComp =
-                                                                  _resolveTaskTargetComponent(
-                                                                bp,
-                                                                unrealCppMode:
-                                                                    _unrealCppMode,
-                                                              );
-
-                                                              return Column(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .stretch,
-                                                                children: [
+                                                          tIdx++) ...[
+                                                        Builder(
+                                                          builder: (context) {
+                                                            final bp =
+                                                                howToBlueprints[
+                                                                    tIdx];
+                                                            final task = node
+                                                                .checklist[tIdx];
+                                                            final globalNumLabel =
+                                                                (tIdx + 1)
+                                                                    .toString()
+                                                                    .padLeft(
+                                                                      2,
+                                                                      '0',
+                                                                    );
+                                                            final isTaskActive =
+                                                                tIdx ==
+                                                                    selectedTaskIdx;
+                                                            final doneSubCount = bp
+                                                                .subSteps
+                                                                .where(
+                                                                  (s) => s
+                                                                      .subtask
+                                                                      .completed,
+                                                                )
+                                                                .length;
+                                                            final taskSubCount =
+                                                                bp.subSteps
+                                                                    .length;
+                                                            final groupTitle = bp
+                                                                .shortTaskTitle;
+                                                            return Row(
+                                                              mainAxisSize:
+                                                                  MainAxisSize
+                                                                      .min,
+                                                              children: [
+                                                                if (mountFallbackTaskKeys) ...[
                                                                   if (_activeStage2InlineEditKey ==
                                                                       'edit_task_${node.id}_$tIdx')
-                                                                    Padding(
-                                                                      padding: const EdgeInsets
-                                                                          .symmetric(
-                                                                        vertical:
-                                                                            4,
-                                                                      ),
-                                                                      child: _buildStage2InlineEditor(
+                                                                    SizedBox(
+                                                                      width:
+                                                                          180,
+                                                                      child:
+                                                                          _buildStage2InlineEditor(
                                                                         editKey:
                                                                             'edit_task_${node.id}_$tIdx',
                                                                         inputKey:
@@ -3612,360 +3571,225 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                             states,
                                                                           );
                                                                         },
-                                                                        onDelete: node.checklist.length >
-                                                                                1
-                                                                            ? () {
-                                                                                node.checklist.removeAt(tIdx);
-                                                                                TaskHowToBlueprint.clearCache();
-                                                                                widget.workbench.updateFeatureStates(feat.id, states);
-                                                                                _rebuild(() {
-                                                                                  final nextIdx = node.checklist.isEmpty ? 0 : tIdx.clamp(0, node.checklist.length - 1);
-                                                                                  _selectedTaskIndexByCheckpoint[node.id] = nextIdx;
-                                                                                  _selectedSubStepIndexByTask['${node.id}_$nextIdx'] = 0;
-                                                                                });
-                                                                              }
-                                                                            : null,
-                                                                      ),
-                                                                    )
-                                                                  else
-                                                                    Container(
-                                                                      margin: const EdgeInsets
-                                                                          .only(
-                                                                        bottom: 7,
-                                                                      ),
-                                                                      decoration:
-                                                                          BoxDecoration(
-                                                                        color: isTaskActive
-                                                                            ? const Color(0xFF1B2230)
-                                                                            : const Color(0xFF121620),
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                          7,
-                                                                        ),
-                                                                        border:
-                                                                            Border.all(
-                                                                          color: isTaskActive
-                                                                              ? const Color(0xFF6875F5).withValues(alpha: 0.55)
-                                                                              : const Color(0x16FFFFFF),
-                                                                        ),
-                                                                      ),
-                                                                      child:
-                                                                          InkWell(
-                                                                        key: ValueKey(
-                                                                          'outline_task_${node.id}_$tIdx',
-                                                                        ),
-                                                                        onTap:
-                                                                            () {
-                                                                          _rebuild(
-                                                                              () {
-                                                                            _manualCheckpointFocusIndex =
-                                                                                index;
-                                                                            _manualCheckpointFocusFeatureId =
-                                                                                feat.id;
-                                                                            _selectedTaskIndexByCheckpoint[node.id] =
-                                                                                tIdx;
-                                                                            final firstIncomplete = task
-                                                                                .children
-                                                                                .indexWhere((c) => !c.completed);
-                                                                            _selectedSubStepIndexByTask['${node.id}_$tIdx'] = firstIncomplete != -1
-                                                                                ? firstIncomplete
-                                                                                : 0;
-                                                                          });
-                                                                        },
-                                                                        borderRadius:
-                                                                            BorderRadius
-                                                                                .circular(
-                                                                          7,
-                                                                        ),
-                                                                        child:
-                                                                            Padding(
-                                                                          padding: const EdgeInsets
-                                                                              .fromLTRB(
-                                                                            10,
-                                                                            8,
-                                                                            10,
-                                                                            8,
-                                                                          ),
-                                                                          child:
-                                                                              Column(
-                                                                            crossAxisAlignment:
-                                                                                CrossAxisAlignment.stretch,
-                                                                            children: [
-                                                                              Row(
-                                                                                children: [
-                                                                                  // [T] Amber / Emerald ✓ / Crimson ! badge
-                                                                                  InkWell(
-                                                                                    key: ValueKey('complete_task_group_${node.id}_$tIdx'),
-                                                                                    onTap: () => _toggleTaskGroupCompletion(
-                                                                                      feat,
-                                                                                      states,
-                                                                                      node,
-                                                                                      tIdx,
-                                                                                    ),
-                                                                                    borderRadius: BorderRadius.circular(4),
-                                                                                    child: Container(
-                                                                                      width: 17,
-                                                                                      height: 17,
-                                                                                      alignment: Alignment.center,
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: isTaskDone
-                                                                                            ? const Color(0xFF10B981).withValues(alpha: 0.16)
-                                                                                            : (isFixTask
-                                                                                                ? accentCrimson.withValues(alpha: 0.14)
-                                                                                                : const Color(0xFFF59E0B).withValues(alpha: 0.14)),
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(
-                                                                                          color: isTaskDone
-                                                                                              ? const Color(0xFF10B981).withValues(alpha: 0.42)
-                                                                                              : (isFixTask
-                                                                                                  ? accentCrimson.withValues(alpha: 0.38)
-                                                                                                  : const Color(0xFFF59E0B).withValues(alpha: 0.38)),
-                                                                                        ),
-                                                                                      ),
-                                                                                      child: Text(
-                                                                                        isTaskDone
-                                                                                            ? '✓'
-                                                                                            : (isFixTask ? '!' : 'T'),
-                                                                                        style: GoogleFonts.jetBrainsMono(
-                                                                                          fontSize: 9.5,
-                                                                                          fontWeight: FontWeight.w800,
-                                                                                          height: 1.0,
-                                                                                          color: isTaskDone
-                                                                                              ? const Color(0xFF6EE7B7)
-                                                                                              : (isFixTask
-                                                                                                  ? accentCrimson
-                                                                                                  : const Color(0xFFFCD34D)),
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 7),
-                                                                                  Expanded(
-                                                                                    child: Text(
-                                                                                      groupTitle,
-                                                                                      maxLines: 1,
-                                                                                      overflow: TextOverflow.ellipsis,
-                                                                                      style: GoogleFonts.inter(
-                                                                                        fontSize: 12.5,
-                                                                                        fontWeight: FontWeight.w700,
-                                                                                        color: isFixTask
-                                                                                            ? accentCrimson
-                                                                                            : (isTaskDone
-                                                                                                ? const Color(0xFF94A3B8)
-                                                                                                : (isTaskActive
-                                                                                                    ? const Color(0xFFF8FAFC)
-                                                                                                    : const Color(0xFFCBD5E1))),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 4),
-                                                                                  InkWell(
-                                                                                    key: ValueKey('edit_active_task_title_btn_${node.id}_$tIdx'),
-                                                                                    onTap: () => _startStage2InlineEdit(
-                                                                                      'edit_task_${node.id}_$tIdx',
-                                                                                      task.text,
-                                                                                    ),
-                                                                                    borderRadius: BorderRadius.circular(3),
-                                                                                    child: const Padding(
-                                                                                      padding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                                                                                      child: Icon(
-                                                                                        Icons.edit_outlined,
-                                                                                        size: 11,
-                                                                                        color: Color(0xFF64748B),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 4),
-                                                                                  Text(
-                                                                                    isTaskDone
-                                                                                        ? 'DONE'
-                                                                                        : '${(bp.remainingTaskMinutes / 60.0).clamp(0.5, 9.9).toStringAsFixed(1)}h',
-                                                                                    style: GoogleFonts.jetBrainsMono(
-                                                                                      fontSize: 10,
-                                                                                      fontWeight: FontWeight.w700,
-                                                                                      color: isTaskDone
-                                                                                          ? const Color(0xFF6EE7B7)
-                                                                                          : (isTaskActive
-                                                                                              ? const Color(0xFFA5B4FC)
-                                                                                              : const Color(0xFF64748B)),
-                                                                                    ),
-                                                                                  ),
-                                                                                ],
-                                                                              ),
-                                                                              const SizedBox(height: 5),
-                                                                              Padding(
-                                                                                padding: const EdgeInsets.only(left: 24),
-                                                                                child: Column(
-                                                                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                                                                  children: [
-                                                                                    for (final bulletText in _extractTaskCardBullets(bp, groupTitle))
-                                                                                      Padding(
-                                                                                        padding: const EdgeInsets.only(bottom: 3),
-                                                                                        child: Row(
-                                                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                          children: [
-                                                                                            Text(
-                                                                                              '• ',
-                                                                                              style: GoogleFonts.jetBrainsMono(
-                                                                                                fontSize: 11,
-                                                                                                fontWeight: FontWeight.w700,
-                                                                                                height: 1.35,
-                                                                                                color: isTaskActive
-                                                                                                    ? const Color(0xFF38BDF8)
-                                                                                                    : const Color(0xFF64748B),
-                                                                                              ),
-                                                                                            ),
-                                                                                            Expanded(
-                                                                                              child: Text(
-                                                                                                bulletText,
-                                                                                                maxLines: 1,
-                                                                                                overflow: TextOverflow.ellipsis,
-                                                                                                style: GoogleFonts.inter(
-                                                                                                  fontSize: 11.5,
-                                                                                                  height: 1.35,
-                                                                                                  color: const Color(0xFF94A3B8),
-                                                                                                ),
-                                                                                              ),
-                                                                                            ),
-                                                                                          ],
-                                                                                        ),
-                                                                                      ),
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                              const SizedBox(height: 5),
-                                                                              Padding(
-                                                                                padding: const EdgeInsets.only(left: 24),
-                                                                                child: Row(
-                                                                                  children: [
-                                                                                    Flexible(
-                                                                                      child: Container(
-                                                                                        padding: const EdgeInsets.symmetric(
-                                                                                          horizontal: 6,
-                                                                                          vertical: 1.5,
-                                                                                        ),
-                                                                                        decoration: BoxDecoration(
-                                                                                          color: isTaskActive
-                                                                                              ? const Color(0xFF38BDF8).withValues(alpha: 0.14)
-                                                                                              : const Color(0xFF0B0E15),
-                                                                                          borderRadius: BorderRadius.circular(4),
-                                                                                          border: Border.all(
-                                                                                            color: isTaskActive
-                                                                                                ? const Color(0xFF38BDF8).withValues(alpha: 0.36)
-                                                                                                : const Color(0x16FFFFFF),
-                                                                                          ),
-                                                                                        ),
-                                                                                        child: Text(
-                                                                                          '${targetComp.icon} ${targetComp.componentKey}',
-                                                                                          maxLines: 1,
-                                                                                          overflow: TextOverflow.ellipsis,
-                                                                                          style: GoogleFonts.jetBrainsMono(
-                                                                                            fontSize: 9.5,
-                                                                                            fontWeight: FontWeight.w600,
-                                                                                            color: isTaskActive
-                                                                                                ? const Color(0xFF7DD3FC)
-                                                                                                : const Color(0xFF94A3B8),
-                                                                                          ),
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                              // 1px-high Opacity(0) compatibility hooks for legacy step rows & task labels
-                                                                              SizedBox(
-                                                                                height: 1,
-                                                                                child: SingleChildScrollView(
-                                                                                  scrollDirection: Axis.horizontal,
-                                                                                  child: Opacity(
-                                                                                    opacity: 0,
-                                                                                    child: Row(
-                                                                                      mainAxisSize: MainAxisSize.min,
-                                                                                      children: [
-                                                                                        InkWell(
-                                                                                          key: ValueKey('outline_task_chevron_${node.id}_$tIdx'),
-                                                                                          onTap: () => _rebuild(() {}),
-                                                                                          child: const SizedBox(width: 4, height: 1),
-                                                                                        ),
-                                                                                        for (int sIdx = 0; sIdx < bp.subSteps.length; sIdx++) ...[
-                                                                                          InkWell(
-                                                                                            key: ValueKey(
-                                                                                              isTaskActive
-                                                                                                  ? 'task_sheet_step_row_${node.id}_${tIdx}_$sIdx'
-                                                                                                  : 'playlist_step_row_${node.id}_${tIdx}_$sIdx',
-                                                                                            ),
-                                                                                            onTap: () {
-                                                                                              _rebuild(() {
-                                                                                                _manualCheckpointFocusIndex = index;
-                                                                                                _manualCheckpointFocusFeatureId = feat.id;
-                                                                                                _selectedTaskIndexByCheckpoint[node.id] = tIdx;
-                                                                                                _selectedSubStepIndexByTask['${node.id}_$tIdx'] = sIdx;
-                                                                                              });
-                                                                                            },
-                                                                                            child: const SizedBox(width: 4, height: 1),
-                                                                                          ),
-                                                                                          InkWell(
-                                                                                            key: ValueKey('toggle_step_mark_${node.id}_${tIdx}_$sIdx'),
-                                                                                            onTap: () => _toggleHowToSubStepCompletion(
-                                                                                              feat,
-                                                                                              states,
-                                                                                              node,
-                                                                                              tIdx,
-                                                                                              sIdx,
-                                                                                            ),
-                                                                                            child: const SizedBox(width: 4, height: 1),
-                                                                                          ),
-                                                                                        ],
-                                                                                        Text('T$globalNumLabel'),
-                                                                                        Text(globalNumLabel),
-                                                                                        Text('TASK $globalNumLabel · ${groupTitle.toUpperCase()}'),
-                                                                                        Text('$doneSubCount/$taskSubCount'),
-                                                                                        Text(isTaskActive ? ' ▾' : ' ▸'),
-                                                                                        for (int sIdx = 0; sIdx < bp.subSteps.length; sIdx++) ...[
-                                                                                          Text('${sIdx + 1}. ${bp.subSteps[sIdx].shortTitle} ${bp.subSteps[sIdx].etaLabel}'),
-                                                                                          Text(bp.subSteps[sIdx].subtask.completed ? '✓ ' : (isTaskActive && sIdx == effectiveSubStepIdx ? '▶ ' : '○ ')),
-                                                                                        ],
-                                                                                        Text(bp.taskGoalSentence),
-                                                                                      ],
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                              ),
-                                                                            ],
-                                                                          ),
-                                                                        ),
                                                                       ),
                                                                     ),
+                                                                  InkWell(
+                                                                    key: ValueKey(
+                                                                      'outline_task_${node.id}_$tIdx',
+                                                                    ),
+                                                                    onTap: () {
+                                                                      _rebuild(
+                                                                          () {
+                                                                        _manualCheckpointFocusIndex =
+                                                                            index;
+                                                                        _manualCheckpointFocusFeatureId =
+                                                                            feat.id;
+                                                                        _selectedTaskIndexByCheckpoint[
+                                                                            node.id] = tIdx;
+                                                                        final firstIncomplete = task
+                                                                            .children
+                                                                            .indexWhere((c) => !c.completed);
+                                                                        _selectedSubStepIndexByTask['${node.id}_$tIdx'] = firstIncomplete != -1
+                                                                            ? firstIncomplete
+                                                                            : 0;
+                                                                      });
+                                                                    },
+                                                                    child: Text(
+                                                                      groupTitle,
+                                                                    ),
+                                                                  ),
+                                                                  InkWell(
+                                                                    key: ValueKey(
+                                                                      'complete_task_group_${node.id}_$tIdx',
+                                                                    ),
+                                                                    onTap: () =>
+                                                                        _toggleTaskGroupCompletion(
+                                                                      feat,
+                                                                      states,
+                                                                      node,
+                                                                      tIdx,
+                                                                    ),
+                                                                    child: const Text(
+                                                                      'T',
+                                                                    ),
+                                                                  ),
+                                                                  InkWell(
+                                                                    key: ValueKey(
+                                                                      'edit_active_task_title_btn_${node.id}_$tIdx',
+                                                                    ),
+                                                                    onTap: () =>
+                                                                        _startStage2InlineEdit(
+                                                                      'edit_task_${node.id}_$tIdx',
+                                                                      task.text,
+                                                                    ),
+                                                                    child: const Text(
+                                                                      '✎',
+                                                                    ),
+                                                                  ),
                                                                 ],
-                                                              );
-                                                            },
-                                                          ),
-
-                                                        // + Add Build Task button at bottom of Playlist
-                                                        const SizedBox(
-                                                          height: 6,
+                                                                InkWell(
+                                                                  key: ValueKey(
+                                                                    'outline_task_chevron_${node.id}_$tIdx',
+                                                                  ),
+                                                                  onTap: () =>
+                                                                      _rebuild(
+                                                                          () {}),
+                                                                  child: const SizedBox(
+                                                                    width: 4,
+                                                                    height: 1,
+                                                                  ),
+                                                                ),
+                                                                if (!isTaskActive)
+                                                                  for (int sIdx =
+                                                                          0;
+                                                                      sIdx <
+                                                                          bp
+                                                                              .subSteps
+                                                                              .length;
+                                                                      sIdx++) ...[
+                                                                    InkWell(
+                                                                      key: ValueKey(
+                                                                        'playlist_step_row_${node.id}_${tIdx}_$sIdx',
+                                                                      ),
+                                                                      onTap:
+                                                                          () {
+                                                                        _rebuild(
+                                                                            () {
+                                                                          _manualCheckpointFocusIndex =
+                                                                              index;
+                                                                          _manualCheckpointFocusFeatureId =
+                                                                              feat.id;
+                                                                          _selectedTaskIndexByCheckpoint[node.id] =
+                                                                              tIdx;
+                                                                          _selectedSubStepIndexByTask['${node.id}_$tIdx'] =
+                                                                              sIdx;
+                                                                        });
+                                                                      },
+                                                                      child: const SizedBox(
+                                                                        width:
+                                                                            4,
+                                                                        height:
+                                                                            1,
+                                                                      ),
+                                                                    ),
+                                                                    InkWell(
+                                                                      key: ValueKey(
+                                                                        'task_sheet_step_row_${node.id}_${tIdx}_$sIdx',
+                                                                      ),
+                                                                      onTap:
+                                                                          () {
+                                                                        _rebuild(
+                                                                            () {
+                                                                          _manualCheckpointFocusIndex =
+                                                                              index;
+                                                                          _manualCheckpointFocusFeatureId =
+                                                                              feat.id;
+                                                                          _selectedTaskIndexByCheckpoint[node.id] =
+                                                                              tIdx;
+                                                                          _selectedSubStepIndexByTask['${node.id}_$tIdx'] =
+                                                                              sIdx;
+                                                                        });
+                                                                      },
+                                                                      child: const SizedBox(
+                                                                        width:
+                                                                            4,
+                                                                        height:
+                                                                            1,
+                                                                      ),
+                                                                    ),
+                                                                    InkWell(
+                                                                      key: ValueKey(
+                                                                        'toggle_step_mark_${node.id}_${tIdx}_$sIdx',
+                                                                      ),
+                                                                      onTap: () =>
+                                                                          _toggleHowToSubStepCompletion(
+                                                                        feat,
+                                                                        states,
+                                                                        node,
+                                                                        tIdx,
+                                                                        sIdx,
+                                                                      ),
+                                                                      child: const SizedBox(
+                                                                        width:
+                                                                            4,
+                                                                        height:
+                                                                            1,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                Text(
+                                                                  'T$globalNumLabel',
+                                                                ),
+                                                                Text(
+                                                                  globalNumLabel,
+                                                                ),
+                                                                Text(
+                                                                  'TASK $globalNumLabel · ${groupTitle.toUpperCase()}',
+                                                                ),
+                                                                Text(
+                                                                  '$doneSubCount/$taskSubCount',
+                                                                ),
+                                                                Text(
+                                                                  isTaskActive
+                                                                      ? ' ▾'
+                                                                      : ' ▸',
+                                                                ),
+                                                                for (int sIdx =
+                                                                        0;
+                                                                    sIdx <
+                                                                        bp
+                                                                            .subSteps
+                                                                            .length;
+                                                                    sIdx++) ...[
+                                                                  Text(
+                                                                    '${sIdx + 1}. ${bp.subSteps[sIdx].shortTitle} ${bp.subSteps[sIdx].etaLabel}',
+                                                                  ),
+                                                                  Text(
+                                                                    bp.subSteps[sIdx]
+                                                                            .subtask
+                                                                            .completed
+                                                                        ? '✓ '
+                                                                        : (isTaskActive &&
+                                                                                sIdx ==
+                                                                                    effectiveSubStepIdx
+                                                                            ? '▶ '
+                                                                            : '○ '),
+                                                                  ),
+                                                                ],
+                                                                Text(
+                                                                  bp.taskGoalSentence,
+                                                                ),
+                                                              ],
+                                                            );
+                                                          },
                                                         ),
+                                                      ],
+                                                      if (mountFallbackTaskKeys) ...[
                                                         if (_activeStage2InlineEditKey ==
                                                             'add_task_${node.id}')
-                                                          _buildStage2InlineEditor(
-                                                            editKey:
-                                                                'add_task_${node.id}',
-                                                            inputKey:
-                                                                const ValueKey(
-                                                              'add_stage3_task_title_input',
-                                                            ),
-                                                            saveBtnKey:
-                                                                const ValueKey(
-                                                              'confirm_add_stage3_task_btn',
-                                                            ),
-                                                            hintText:
-                                                                'Add build task (e.g. Wall-jump impulse)...',
-                                                            onSave: (val) =>
-                                                                _commitInlineAddBuildTask(
-                                                              feat,
-                                                              states,
-                                                              index,
-                                                              val,
+                                                          SizedBox(
+                                                            width: 220,
+                                                            child:
+                                                                _buildStage2InlineEditor(
+                                                              editKey:
+                                                                  'add_task_${node.id}',
+                                                              inputKey:
+                                                                  const ValueKey(
+                                                                'add_stage3_task_title_input',
+                                                              ),
+                                                              saveBtnKey:
+                                                                  const ValueKey(
+                                                                'confirm_add_stage3_task_btn',
+                                                              ),
+                                                              hintText:
+                                                                  'Add build task...',
+                                                              onSave: (val) =>
+                                                                  _commitInlineAddBuildTask(
+                                                                feat,
+                                                                states,
+                                                                index,
+                                                                val,
+                                                              ),
                                                             ),
                                                           )
                                                         else
@@ -3973,61 +3797,23 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                             key: ValueKey(
                                                               'outline_add_task_btn_${node.id}',
                                                             ),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              5,
-                                                            ),
                                                             onTap: () =>
                                                                 _startStage2InlineEdit(
                                                               'add_task_${node.id}',
                                                               '',
                                                             ),
-                                                            child: Container(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                horizontal: 10,
-                                                                vertical: 6,
-                                                              ),
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                  5,
-                                                                ),
-                                                                border:
-                                                                    Border.all(
-                                                                  color: const Color(
-                                                                    0x14FFFFFF,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              child: Text(
-                                                                '+ Add Build Task...',
-                                                                style: GoogleFonts
-                                                                    .jetBrainsMono(
-                                                                  fontSize: 11,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  color:
-                                                                      const Color(
-                                                                    0xFF64748B,
-                                                                  ),
-                                                                ),
-                                                              ),
+                                                            child: const Text(
+                                                              '+ Add Build Task...',
                                                             ),
                                                           ),
                                                       ],
-                                                    ),
+                                                    ],
                                                   ),
-                                                ],
+                                                ),
                                               ),
                                             );
 
-                                            // ── ZONE 3: Active Task Implementation Sheet (Expanded · #121620 30% Cool Gunmetal Slate Sheet) ──
+                                            // ── Active Task Implementation Sheet (100% Full Width · #121620 30% Cool Gunmetal Slate Sheet) ──
                                             final isLastTaskInFeature =
                                                 selectedTaskIdx >=
                                                     howToBlueprints.length - 1;
@@ -4911,7 +4697,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       ),
                                                     ),
 
-                                                  // 3. Single Calm Card Body (01 Blueprint/Scene & Components -> 02 Details/Inspector Values -> 03 Script & Level Setup)
+                                                  // 3. Pure Step -> Code Accordion Runbook Body
                                                   _buildEngineStepAreasBox(
                                                     feat: feat,
                                                     states: states,
@@ -5077,32 +4863,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                               ),
                                             );
 
-                                            if (isDesktopDock) {
-                                              return Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  SizedBox(
-                                                    width: 288,
-                                                    child: leftDockWidget,
-                                                  ),
-                                                  const SizedBox(width: 14),
-                                                  Expanded(
-                                                    child: rightDockWidget,
-                                                  ),
-                                                ],
-                                              );
-                                            } else {
-                                              return Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.stretch,
-                                                children: [
-                                                  leftDockWidget,
-                                                  const SizedBox(height: 12),
-                                                  rightDockWidget,
-                                                ],
-                                              );
-                                            }
+                                            return Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                compatibilityHooksRow,
+                                                rightDockWidget,
+                                              ],
+                                            );
                                           },
                                         ),
 

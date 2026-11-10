@@ -4261,7 +4261,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals(initialTaskCount + 1),
         );
 
-        // ── 5. Audit Item 4: Dynamic Compact 2-Column Layout (Section 02 + Section 03) & Click-to-Tune Row ──
+        // ── 5. Audit Item 4: 100% Full-Width Step Accordion Runbook & Click-to-Tune Row ──
         final area2Header = find.byKey(
           ValueKey('area2_selected_component_header_${node.id}'),
         );
@@ -4270,22 +4270,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(area2Header, findsOneWidget);
         expect(area3Panel, findsOneWidget);
-        final sec2Rect = tester.getRect(area2Header);
         final sec3Rect = tester.getRect(area3Panel);
         expect(
-          sec2Rect.top,
-          closeTo(sec3Rect.top, 1.0),
-          reason: 'Section 02 and Section 03 must sit side-by-side in a 2-column Row on desktop viewports.',
-        );
-        expect(
-          sec2Rect.width,
-          inInclusiveRange(250.0, 350.0),
-          reason: 'Section 02 must use a compact content-hugging dynamic width (250px–350px).',
-        );
-        expect(
           sec3Rect.width,
-          greaterThan(sec2Rect.width),
-          reason: 'Section 03 (Script & Main Scene Setup) must expand to take the majority of the horizontal width.',
+          greaterThan(600.0),
+          reason:
+              'Section 03 (Step Accordion Runbook) must expand to 100% of the main canvas width on desktop viewports.',
         );
 
         final area2Row0 = find.byKey(
