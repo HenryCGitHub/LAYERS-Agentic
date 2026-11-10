@@ -1254,12 +1254,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(assetSpec.sec1Title),
-                    Text(assetSpec.sec2Title),
-                    Text(activeInspectorCategory),
-                    Text(
-                      '▾ ${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
-                    ),
                     if (taskScopedTuningDisplay.isNotEmpty &&
                         _activeStage2InlineEditKey != 'tuning_${node.id}')
                       InkWell(
@@ -1270,7 +1264,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                               ? primaryTuningLabel
                               : taskScopedTuningDisplay,
                         ),
-                        child: const SizedBox(width: 2, height: 2),
+                        child: const SizedBox(width: 8, height: 2),
                       ),
                     if (_activeStage2InlineEditKey == 'tuning_${node.id}')
                       SizedBox(
@@ -1292,6 +1286,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                       ),
+                    Text(assetSpec.sec1Title),
+                    Text(assetSpec.sec2Title),
+                    Text(activeInspectorCategory),
+                    Text(
+                      '▾ ${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
+                    ),
                     if (showInsp)
                       for (int rIdx = 0;
                           rIdx < componentInspectorRows.length;
